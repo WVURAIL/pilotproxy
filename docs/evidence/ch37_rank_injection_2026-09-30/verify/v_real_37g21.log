@@ -1,0 +1,7 @@
+37g21 frames 40477 bulk 125 split_match True data_match True near 20240 20237 2s
+table 19s
+37g21 cal 0.001 best I/R 74 124 L41 I/R 3.087 6.213 L63 I/R 0.116 4.67 FA(eta_I) 41/63 0.0046 0.0159 46s
+37g21 cal 0.01 best I/R 72 120 L41 I/R 0.242 1.167 L63 I/R 0.021 0.708 FA(eta_I) 41/63 0.0354 0.0422 74s
+37g21 eval 0.001 best I/R 75 125 L41 I/R 3.999 8.879 L63 I/R 0.696 7.831 FA(eta_I) 41/63 0.0155 0.0313 100s
+37g21 eval 0.01 best I/R 71 122 L41 I/R 2.999 5.509 L63 I/R 0.12 3.954 FA(eta_I) 41/63 0.0237 0.0646 127s
+boot {'B': 40, 'ref_rank': 125, 'se': {41: {'se_sI_minus_ref': 0.3912241221997814, 'se_sR_minus_ref': 1.1880015564884503}, 63: {'se_sI_minus_ref': 0.041055449440080015, 'se_sR_minus_ref': 1.0278775082796974}, 75: {'se_sI_minus_ref': 0.04206826613948209, 'se_sR_minus_ref': 1.0188664744397244}, 125: {'se_sI_minus_ref': 0.0, 'se_sR_minus_ref': 0.0}}}

@@ -1,0 +1,335 @@
+{
+  "schema_version": 1,
+  "snapshot_id": "dissertation-draft-2026-08-19",
+  "scope_note": "Curated values for the completed August 2026 trawl: all 23 ATSC allocations (channels 14-36), each complete against its archive holdings, under one detector-kernel cohort. Every measured channel carries survey-, epoch-, and residual-chain evidence; channels 14 and 15 (completed 2026-08-19) are kept-and-masked under the channel-36 inclusive-for-now rule pending its sign-off. This snapshot is still not a final 23-channel verdict: the transfer, estimator, and blocked holdout gates remain open.",
+  "epoch_operating_points": [
+    {
+      "channel": 32,
+      "epoch_key": "ch32_pre_2021",
+      "epoch_group": 0,
+      "epoch_label": "station era",
+      "survey_mask_fraction": 0.998,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": 7,
+      "status": "failure",
+      "evidence_state": "measured",
+      "note": "Fine calibration retains seven frames; no defensible operating point."
+    },
+    {
+      "channel": 32,
+      "epoch_key": "ch32_post_2021",
+      "epoch_group": 1,
+      "epoch_label": "modern era",
+      "survey_mask_fraction": 0.59,
+      "fine_mask_fraction": 0.433,
+      "residual_ratio": 0.0155,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured+modeled",
+      "note": "Fine operating point remains conditional on transfer and estimator validation."
+    },
+    {
+      "channel": 35,
+      "epoch_key": "ch35_pre_2021",
+      "epoch_group": 0,
+      "epoch_label": "early era",
+      "survey_mask_fraction": 0.461,
+      "fine_mask_fraction": 0.181,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured+modeled",
+      "note": "Early epoch has a feasible fine-mask fraction under the current model."
+    },
+    {
+      "channel": 35,
+      "epoch_key": "ch35_post_2021",
+      "epoch_group": 1,
+      "epoch_label": "switch-on era",
+      "survey_mask_fraction": 0.942,
+      "fine_mask_fraction": 0.988,
+      "residual_ratio": 0.237,
+      "retained_frames": null,
+      "status": "failure",
+      "evidence_state": "measured+modeled",
+      "note": "Post-switch-on epoch is occupancy-pinned under the current policy."
+    },
+    {
+      "channel": 19,
+      "epoch_key": "ch19_on_through_2024_11",
+      "epoch_group": 0,
+      "epoch_label": "on epoch",
+      "survey_mask_fraction": 0.997,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "failure",
+      "evidence_state": "measured",
+      "note": "Transmitter on through November 2024; occupancy-pinned at the survey rule."
+    },
+    {
+      "channel": 19,
+      "epoch_key": "ch19_off_from_2024_12",
+      "epoch_group": 1,
+      "epoch_label": "off epoch",
+      "survey_mask_fraction": 0.865,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured",
+      "note": "Sign-off December 2024; the survey rule still fires on faint residual excess. Off-epoch shelf floor -33.5 dB (p90); fine calibration pending."
+    },
+    {
+      "channel": 20,
+      "epoch_key": "ch20_on_through_2022_08",
+      "epoch_group": 0,
+      "epoch_label": "on epoch",
+      "survey_mask_fraction": 1.0,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "failure",
+      "evidence_state": "measured",
+      "note": "Transmitter on through August 2022; occupancy-pinned at the survey rule."
+    },
+    {
+      "channel": 20,
+      "epoch_key": "ch20_off_from_2022_09",
+      "epoch_group": 1,
+      "epoch_label": "off epoch",
+      "survey_mask_fraction": 0.997,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured",
+      "note": "Two-stage step-down September 2022; the survey rule still fires on faint residual excess. Off-epoch shelf floor -26.1 dB (p90); fine calibration pending."
+    },
+    {
+      "channel": 26,
+      "epoch_key": "ch26_on_through_2023_03",
+      "epoch_group": 0,
+      "epoch_label": "on epoch",
+      "survey_mask_fraction": 0.999,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "failure",
+      "evidence_state": "measured",
+      "note": "Transmitter on through March 2023; occupancy-pinned at the survey rule."
+    },
+    {
+      "channel": 26,
+      "epoch_key": "ch26_off_from_2023_04",
+      "epoch_group": 1,
+      "epoch_label": "off epoch",
+      "survey_mask_fraction": 0.927,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured",
+      "note": "Sign-off April 2023; the survey rule still fires on faint residual excess. Off-epoch shelf floor -32.3 dB (p90); fine calibration pending."
+    },
+    {
+      "channel": 27,
+      "epoch_key": "ch27_on_through_2020_11",
+      "epoch_group": 0,
+      "epoch_label": "station era",
+      "survey_mask_fraction": 1.0,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "failure",
+      "evidence_state": "measured",
+      "note": "Strong through November 2020; the transition is bounded inside the 2021-22 collection gap."
+    },
+    {
+      "channel": 27,
+      "epoch_key": "ch27_off_from_2022_10",
+      "epoch_group": 1,
+      "epoch_label": "post-station era",
+      "survey_mask_fraction": 0.974,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured",
+      "note": "Trace-level from October 2022 onward; the survey rule still fires on faint residual excess. Off-epoch shelf floor -24.4 dB (p90); chain re-evaluation pending."
+    }
+  ],
+  "channel_status_groups": [
+    {
+      "channels": [
+        14,
+        15
+      ],
+      "status": "measurement_bound",
+      "secondary_status": "",
+      "epoch_scope": "current epoch",
+      "evidence_state": "screening",
+      "note": "Band-edge pair completed 2026-08-19: faint episodic carriers at the synthesized pilot (94.8%/99.9% masked at the survey rule, 25%/27% at the working threshold); chain evaluated: verdicts controlled by refused correlation times; channel 14 carries a measured -48.8 dB floor from 1,151 null frames, channel 15's floor is unmeasured; kept-and-masked under the channel-36 inclusive-for-now rule, flagged pending the coherence measurement."
+    },
+    {
+      "channels": [
+        16
+      ],
+      "status": "measurement_bound",
+      "secondary_status": "",
+      "epoch_scope": "current epoch",
+      "evidence_state": "screening",
+      "note": "Trace-level occupancy with warm-season propagation; chain evaluated: kept-frame floor and correlation time both pending measurement."
+    },
+    {
+      "channels": [
+        18,
+        21,
+        23,
+        25
+      ],
+      "status": "measurement_bound",
+      "secondary_status": "",
+      "epoch_scope": "current epoch",
+      "evidence_state": "screening",
+      "note": "Trace occupancy; chain evaluated: verdicts controlled by refused correlation times and, on 23 and 25, unmeasured kept-frame floors; channel 21 carries the archive's largest null population."
+    },
+    {
+      "channels": [
+        17,
+        22
+      ],
+      "status": "excision_candidate",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Near-continuous occupancy at the survey rule; chain confirms occupancy-pinned excision."
+    },
+    {
+      "channels": [
+        24
+      ],
+      "status": "excision_candidate",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Near-continuous occupancy; archive thinned by the instrument's collection curtailment on the strongest carriers."
+    },
+    {
+      "channels": [
+        19,
+        20,
+        26
+      ],
+      "status": "measurement_bound",
+      "secondary_status": "excision_candidate",
+      "epoch_scope": "off-epoch|on-epoch",
+      "evidence_state": "screening",
+      "note": "Transmitter sign-off measured to the month; off-epoch chain rows evaluated at conservative era floors; verdicts controlled by off-epoch coherence (19, 26) or the kept-frame floor basis (20)."
+    },
+    {
+      "channels": [
+        27
+      ],
+      "status": "measurement_bound",
+      "secondary_status": "excision_candidate",
+      "epoch_scope": "post-2022|station era",
+      "evidence_state": "screening",
+      "note": "Sign-off bounded inside the 2021-22 collection gap; off-epoch floor available; chain re-evaluation pending."
+    },
+    {
+      "channels": [
+        28,
+        31,
+        36
+      ],
+      "status": "excision_candidate",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Always-on or occupancy-pinned in the current screening result."
+    },
+    {
+      "channels": [
+        30
+      ],
+      "status": "excision_candidate",
+      "secondary_status": "",
+      "epoch_scope": "through September 2023",
+      "evidence_state": "screening",
+      "note": "Shelf at system noise in the screening result; baseband collection ceased September 2023, so the later state is unmonitored."
+    },
+    {
+      "channels": [
+        32,
+        33
+      ],
+      "status": "conditional_recovery",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Conditionally recoverable under the current residual model."
+    },
+    {
+      "channels": [
+        29,
+        34
+      ],
+      "status": "measurement_bound",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Verdict is limited by the currently available floor or coherence measurement."
+    },
+    {
+      "channels": [
+        35
+      ],
+      "status": "conditional_recovery",
+      "secondary_status": "excision_candidate",
+      "epoch_scope": "pre-2021|post-2021",
+      "evidence_state": "screening",
+      "note": "Epoch split: conditional recovery before switch-on and occupancy-pinned afterward."
+    }
+  ],
+  "bao_policy_case": {
+    "channel": 33,
+    "residual_tolerance": 0.0015,
+    "correlation_time_limit_minutes": 5.0,
+    "policies": [
+      {
+        "policy_key": "keep_everything",
+        "label": "keep everything",
+        "residual_multiple": 1566,
+        "time_multiple": 3.35,
+        "evidence_state": "measured+modeled",
+        "note": "Incurs no masking penalty but leaves a large residual; evaluated on the same acquisitions>=8 population as the other policies."
+      },
+      {
+        "policy_key": "mad_1p8",
+        "label": "MAD 1.8x (incumbent)",
+        "residual_multiple": 1587,
+        "time_multiple": 3.6,
+        "evidence_state": "measured+modeled",
+        "note": "Incumbent time-domain policy under the current comparison."
+      },
+      {
+        "policy_key": "spectral_kurtosis",
+        "label": "spectral kurtosis (incumbent)",
+        "residual_multiple": 382,
+        "time_multiple": 1.9,
+        "evidence_state": "measured+modeled",
+        "note": "Incumbent higher-order-statistic policy under the current comparison."
+      },
+      {
+        "policy_key": "pilot_proxy",
+        "label": "pilot proxy",
+        "residual_multiple": 24,
+        "time_multiple": 3.4,
+        "evidence_state": "measured+modeled",
+        "note": "Best of the compared keep-and-mask policies, but still above the stated bias tolerance."
+      }
+    ]
+  }
+}

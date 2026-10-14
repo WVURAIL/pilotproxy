@@ -1,0 +1,21 @@
+{
+ "name": "32",
+ "channel": 32,
+ "screen": "w",
+ "c": 1.0002319869068628,
+ "ndraw": 4,
+ "replicates": 200,
+ "halves": {
+  "cal": {
+   "frames": 7924,
+   "months": 28,
+   "boot_seconds": 538.4
+  },
+  "eval": {
+   "frames": 7526,
+   "months": 9,
+   "boot_seconds": 530.6
+  }
+ },
+ "seconds": 1075.9
+}

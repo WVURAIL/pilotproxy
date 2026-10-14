@@ -1,0 +1,14 @@
+{
+  "completed_events": 1980,
+  "detector_output_calibration": {
+    "bin_enbw_hz": 3051.7578125,
+    "dtv_bandwidth_hz": 6000000.0,
+    "pilot_below_data_db": 11.918446870168612,
+    "pilot_capture_efficiency": 1.0
+  },
+  "quantization_scale": 4.3965905008602215,
+  "quantization_scale_source": "resumed",
+  "schema_version": "sdr_transfer_v1",
+  "transmitted_spectral_pilot_below_data_db": 11.227558481044813,
+  "updated_utc": "2026-08-26T02:34:18.659949+00:00"
+}

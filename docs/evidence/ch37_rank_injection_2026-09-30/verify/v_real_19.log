@@ -1,0 +1,6 @@
+19 frames 12900 bulk 125 split_match True data_match True near 5009 5097 1s
+table 18s
+19 cal 0.001 best I/R 72 60 L41 I/R 3.78 1.163 L63 I/R 0.294 0.007 FA(eta_I) 41/63 0.0182 0.2384 24s
+19 cal 0.01 best I/R 69 90 L41 I/R 0.392 0.163 L63 I/R 0.046 0.032 FA(eta_I) 41/63 0.3168 0.3715 30s
+19 eval 0.001 best I/R 69 64 L41 I/R 2.035 0.564 L63 I/R 0.029 0.016 FA(eta_I) 41/63 0.0644 0.1734 36s
+19 eval 0.01 best I/R 66 68 L41 I/R 0.363 0.162 L63 I/R 0.011 0.031 FA(eta_I) 41/63 0.2242 0.276 43s

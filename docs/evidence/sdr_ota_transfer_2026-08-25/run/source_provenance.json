@@ -1,0 +1,53 @@
+{
+  "experiment": "sdr_ota",
+  "publication_export": {
+    "historical_post_update_revision": "c36bf672ce59b0828f43f0fffa41a43c4c9602a5",
+    "pdf_rendering": {
+      "byte_note": "The release hashes pin the delivered PDF. A rebuild can differ at the byte level because embedded-font subset identifiers vary, even when the vector content and extracted text match.",
+      "content": "vector",
+      "text": "LaTeX T1 Latin Modern"
+    },
+    "repository_dirty": true,
+    "repository_revision": "c36bf672ce59b0828f43f0fffa41a43c4c9602a5",
+    "source_files": {
+      "freezer": {
+        "archival_blob": "a1ca642463b3e794f7cfad56cba5d0f6a61a5cf7",
+        "archival_commit": "ea3c4ad79c7b732b582af41468c33938d457e6ec",
+        "archival_tag": "estimator-transfer-publication-source-20260826",
+        "archival_tag_object": "77c6ed64184c88adc206678d668bb2dc2e4dad9b",
+        "path": "tools/freeze_estimator_transfer.py",
+        "sha256": "c6c1631d38043dd50f61ec36a315c451c9dc26a8c055cd392a8dab21eaa1fd00"
+      },
+      "publication_plot_source": {
+        "archival_blob": "3d35e82a865b952bbe5466023eed385c1677b329",
+        "archival_commit": "ea3c4ad79c7b732b582af41468c33938d457e6ec",
+        "archival_tag": "estimator-transfer-publication-source-20260826",
+        "archival_tag_object": "77c6ed64184c88adc206678d668bb2dc2e4dad9b",
+        "path": "src/pilot_proxy/testbench/plot_results.py",
+        "sha256": "845f2653feb4511810bcbe1e11dcf40ce473e68d1c53e31b41f8e6304f98a98a"
+      }
+    },
+    "state": "post-run archival regeneration from frozen raw results"
+  },
+  "result_root_label": "sdr_ch16_ota_tx38_rx8",
+  "run_worktree": {
+    "archival_snapshot_tracked_tree": "6551a441613b16196e724e739c380fd823becfff",
+    "archival_snapshot_untracked_tree": "78e0987f49f5c7031a36091c944d5c68823cef2d",
+    "archival_stash_object": "4317198f159db110a42d18befe73b8be2ffa48db",
+    "base_revision": "e2f9f7fa0d2013822274b2f34a3420d26ca8225b",
+    "post_run_plotter_archival_blob": "46c07acef30c6b1f6c907ea4cd07f9706186ca33",
+    "post_run_plotter_archival_commit": "3b42f879adf04cd8ac7071960948f296f3f801e8",
+    "post_run_plotter_archival_snapshot_sha256": "20fe2102d02eea32f276422fdcbbead06931fc86266d2472245be20fd7a514fd",
+    "post_run_plotter_archival_tag": "estimator-transfer-post-run-source-20260825",
+    "recovered_runtime_package_digest_sha256": "e602959854082763a8504cfd6f7bdc862611d6e1651a5f6970b83a21b8fcc023",
+    "run_source_archival_commit": "c216e497ca3239a63b728b049ee9174eb18c8913",
+    "run_source_archival_tag": "estimator-transfer-run-source-20260825",
+    "runner_archival_snapshot_blob": "8fb258868b6ef28c2e9ac66831be197ace5db4f7",
+    "runner_archival_snapshot_sha256": "9190098cfcbe8d705a8f196f5e474676e71b1334fe1498fda628eda922cdf1f5",
+    "runner_note": "The run plan pins the worker source and binary. The Python runner was archived after the run and was not hashed by the run plan.",
+    "state": "uncommitted tracked and untracked source",
+    "stream_worker_source_blob": "a6756b4c2ee0b7a2a615e00e900dc35a89469e7f",
+    "stream_worker_source_sha256": "612a042609a8a9d16b9cecff1f10177e73548cd9daad41f4e88af38ef2e56db6"
+  },
+  "schema_version": "estimator_transfer_source_provenance_v1"
+}

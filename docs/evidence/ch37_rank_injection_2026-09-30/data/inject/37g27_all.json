@@ -1,0 +1,26 @@
+{
+ "name": "37g27",
+ "channel": 37,
+ "screen": "all",
+ "bulk_size": 125,
+ "frames": 40477,
+ "selected": 40477,
+ "replicates": 200,
+ "halves": {
+  "cal": {
+   "frames": 20240,
+   "months": 66,
+   "eta_grid_fallbacks": 93,
+   "boot_seconds": 1665.5,
+   "boot_nan": 7128
+  },
+  "eval": {
+   "frames": 20237,
+   "months": 25,
+   "eta_grid_fallbacks": 2860,
+   "boot_seconds": 3499.6,
+   "boot_nan": 15621
+  }
+ },
+ "seconds": 5750.5
+}

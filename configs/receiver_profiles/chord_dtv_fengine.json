@@ -1,0 +1,118 @@
+{
+  "schema_version": "pilotproxy_receiver_profile_v1",
+  "receiver_profile_id": "chord_dtv_fengine",
+  "instrument_name": "CHORD",
+  "rf_band": {
+    "lower_hz": 0.0,
+    "upper_hz": 1600000000.0
+  },
+  "channelizer": {
+    "type": "pfb",
+    "input_sample_rate_hz": 3200000000.0,
+    "pfb_fft_size": 16384,
+    "taps": 4,
+    "response": "implementation_specific",
+    "num_coarse_channels": 8192,
+    "coarse_channel_center_offset_hz": 0.0,
+    "frequency_axis": {
+      "spectral_sense": "normal",
+      "order": "ascending_rf"
+    }
+  },
+  "framing": {
+    "frame_size_samples": 8192
+  },
+  "input_streams": {
+    "num_input_streams": 1024,
+    "stream_unit": "dish_polarization",
+    "stream_map_required": true,
+    "combine_default": "incoherent_power_sum_over_streams"
+  },
+  "quantization": {
+    "native_channelized_sample_format": "int4x2_swapped_withoffset",
+    "adapter_output_format": "complex_int4_packed_int8",
+    "bits_per_component": 4,
+    "scale_mode_default": "provided",
+    "clip_sigma_default": 3.0,
+    "record_scale_by_stream": false,
+    "record_clip_fraction_by_stream": false
+  },
+  "detector_adapter": {
+    "compatible_detector_core_id": "pilotproxy_cuda_local_reference_power_ratio",
+    "detector_window_samples": 64,
+    "fine_bin_enbw_hz": 3051.7578125,
+    "dtv_bandwidth_hz": 6000000.0,
+    "pilot_below_data_db": 11.3,
+    "pilot_capture_efficiency": 1.0,
+    "time_reverse_detector_windows_before_kernel": true
+  },
+  "baseband_frame": {
+    "channel_center_normalized": 0.0,
+    "physical_dc_normalized": 0.0
+  },
+  "metadata": {
+    "channel_id_map": {
+      "namespace": "chord_freq_id",
+      "offset_from_coarse_channel_index": 0,
+      "note": "The kotekan chordMetadata coarse_freq entries are CHORDTelescope::to_freq_id values; with nyquist_zone=1 these equal this profile's coarse_channel_index directly (freq_id = coarse_channel_index). Populates chord_channel_id / receiver_channel_id in exported runtime bundles."
+    },
+    "science_band": {
+      "min_science_freq_hz": 300000000.0,
+      "max_science_freq_hz": 1499804687.5,
+      "min_science_channel": 1536,
+      "max_science_channel": 7679,
+      "note": "The channelizer grid spans the full first Nyquist zone (0-1600 MHz, 8192 channels); CHORD science channels are 1536-7679. All ATSC 14-36 pilots (470.309-602.309 MHz, channels 2408-3084) fall inside the science band."
+    },
+    "kotekan_binding": {
+      "voltage_buffer_layout": "[T, F, P, D] int4x2_swapped_withoffset (time, coarse channel, polarization, dish)",
+      "channel_id_metadata_field": "chordMetadata coarse_freq (vector<int>, one entry per local frequency)",
+      "frame_identity_metadata_field": "chordMetadata fpga_seq_num plus ring-buffer read offset in channelized samples",
+      "stream_index_formula": "stream_index = polarization_index * num_dishes + dish_index",
+      "num_dishes": 512,
+      "num_polarizations": 2
+    },
+    "profile_status": "example_requires_data_product_verification",
+    "digitizer": {
+      "adc_sample_rate_hz": 3200000000.0,
+      "nyquist_zone": 1,
+      "num_adc_inputs": 1024,
+      "input_unit": "dish_polarization"
+    },
+    "annotations": {
+      "rf_band": {
+        "center_hz": 800000000.0,
+        "bandwidth_hz": 1600000000.0
+      },
+      "channelizer": {
+        "architecture": "fx_f_engine",
+        "coarse_channel_width_hz": 195312.5,
+        "output_sample_rate_hz": 195312.5,
+        "spectral_sense": "normal"
+      },
+      "channelizer_frequency_axis": {
+        "channel_index_to_rf_hz": "rf_hz = coarse_channel_index * adc_sample_rate_hz / pfb_fft_size",
+        "verification_required": true,
+        "source_note": "Matches the kotekan chord branch CHORD frequency-ID convention: CHORDTelescope FreqParams with nyquist_zone=1 gives freq0=0 Hz and df=+195312.5 Hz, so freq_id == coarse_channel_index and channel 1536 = 300 MHz, channel 7680 = 1500 MHz. Verify against the operational CRS F-engine data product before an operational run."
+      },
+      "framing": {
+        "frame_size_unit": "channelized complex samples per input stream",
+        "frame_size_samples_may_be_overridden_per_run": true,
+        "kotekan_frame_note": "The kotekan chord configs advance the voltage ring buffer in GPU frames of num_times=8192 samples (41.94304 ms). One detector block is one GPU frame: 8192 samples at K=64 yield windows_per_stream = 128, the frozen fine-reduction transform length (FSTAT_FINE_WINDOWS_PER_STREAM), and the block aligns 1:1 with the 8192-sample n2k visibility integration."
+      },
+      "quantization": {
+        "native_format_note": "kotekan chord DataType: one byte per complex sample, offset-binary (stored = value + 8), imaginary component in the low nibble, real component in the high nibble. Conversion to the kernel's two's-complement re-high/im-low layout is a per-byte XOR with 0x88 (subtract 8 per nibble); no nibble swap and no requantization.",
+        "scale_note": "CHORD F-engine output is already 4+4-bit quantized upstream (FPGA gains); the receiver adapter performs a lossless encoding conversion only."
+      },
+      "detector_adapter": {
+        "windows_per_stream_formula": "frame_size_samples / detector_window_samples",
+        "detector_rows_per_frame_formula": "num_input_streams * num_selected_channels * windows_per_stream",
+        "fine_bin_width_hz": 3051.7578125
+      },
+      "baseband_frame": {
+        "convention": "coarse_channel_center_at_dft_dc",
+        "verification_required": true,
+        "note": "Assumed from the kotekan chord branch F-engine convention (channel RF center = coarse_channel_index * 195312.5 Hz at the per-channel DFT DC, first Nyquist zone, upright spectral sense). Unlike CHIME this profile has not yet been verified against measured pilot lines in an operational data product; verify frame convention, sense, and any per-parity decimation twiddle against CRS F-engine baseband before an operational run. channel_center_normalized_odd_channels remains available if a per-parity half-band shift is ever demonstrated."
+      }
+    }
+  }
+}

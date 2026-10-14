@@ -1,0 +1,500 @@
+schema_version,rf_channel,callsign,service_class,detectability_db,distance_km,bearing_deg,frequency_tolerance,chime_ch_index,nominal_pilot_mhz,city,state_prov,erp_kw,evidence_status
+dtv_transmitter_census_v1,30,CHKL-1,Relay,79.31,37.8,5.6,±1 kHz,598,566.309441,Penticton,BC,3.000,reported_on_air_licensed
+dtv_transmitter_census_v1,24,CHKL-DT+CHBC-DT,Full-power,84.51,72.1,5.4,±1 kHz,690,530.309441,Kelowna,BC,35.000,reported_on_air_licensed
+dtv_transmitter_census_v1,31,CH4491-DT,Relay,55.12,86.2,9.5,±1 kHz,583,572.309441,Winfield,BC,0.049,reported_on_air_licensed
+dtv_transmitter_census_v1,34,CH4490-DT,Relay,55.12,86.2,9.5,±1 kHz,537,590.309441,Winfield,BC,0.049,reported_on_air_licensed
+dtv_transmitter_census_v1,17,K17KR-D,Translator (LPTV),45.13,99.8,215.4,None specified,798,488.309441,MAZAMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19JC-D,Translator (LPTV),45.13,99.8,215.4,None specified,767,500.309441,MAZAMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21LD-D,Translator (LPTV),45.13,99.8,215.4,None specified,736,512.309441,MAZAMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17EV-D,Translator (LPTV),30.38,101.4,176.0,None specified,798,488.309441,OMAK,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19AU-D,Translator (LPTV),30.38,101.4,176.0,None specified,767,500.309441,"OMAK, OKANOGAN, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26GV-D,Translator (LPTV),31.12,101.4,176.0,None specified,660,542.309441,OMAK,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31AH-D,Translator (LPTV),30.38,101.4,176.0,None specified,583,572.309441,"OMAK, ETC",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33NM-D,Translator (LPTV),30.38,101.4,176.0,None specified,552,584.309441,"OMAK, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35MN-D,Translator (LPTV),30.38,101.4,176.0,None specified,521,596.309441,"OMAK, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,CHKL-2,Relay,70.67,108.8,11.6,±1 kHz,721,518.309441,Vernon,BC,4.000,reported_on_air_licensed
+dtv_transmitter_census_v1,36,K36PH-D,Translator (LPTV),56.00,135.2,192.0,None specified,506,602.309441,METHOW,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,K14SF-D,Translator (LPTV),49.45,136.8,184.9,None specified,844,470.309441,BREWSTER & PATEROS,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34NN-D,Translator (LPTV),49.45,136.8,184.9,None specified,537,590.309441,BREWSTER & PATEROS,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22MO-D,Translator (LPTV),57.71,143.2,188.4,None specified,721,518.309441,PATEROS,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23MU-D,Translator (LPTV),43.06,146.5,181.4,None specified,706,524.309441,BRIDGEPORT,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24LM-D,Translator (LPTV),43.06,146.5,181.4,None specified,690,530.309441,BRIDGEPORT,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25NY-D,Translator (LPTV),43.06,146.5,181.4,None specified,675,536.309441,BRIDGEPORT,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,CHCV-DT,Full-power,18.16,151.5,82.2,±1 kHz,690,530.309441,Crescent Valley,BC,0.305,reported_on_air_licensed
+dtv_transmitter_census_v1,16,CHWW-DT,Full-power,39.22,148.9,79.1,±1 kHz,813,482.309441,Winlaw,BC,0.500,reported_on_air_licensed
+dtv_transmitter_census_v1,14,CH2516-DT,Relay,53.72,156.4,327.5,±1 kHz,844,470.309441,Logan Lake,BC,0.260,reported_on_air_licensed
+dtv_transmitter_census_v1,16,CH5530-DT,Relay,52.79,156.4,327.5,±1 kHz,813,482.309441,Logan Lake,BC,0.228,reported_on_air_licensed
+dtv_transmitter_census_v1,18,CH2518-DT,Relay,53.72,156.4,327.5,±1 kHz,783,494.309441,Logan Lake,BC,0.260,reported_on_air_licensed
+dtv_transmitter_census_v1,20,CH5531-DT,Relay,52.86,156.4,327.5,±1 kHz,752,506.309441,Logan Lake,BC,0.228,reported_on_air_licensed
+dtv_transmitter_census_v1,24,CH5532-DT,Relay,52.76,156.4,327.5,±1 kHz,690,530.309441,Logan Lake,BC,0.228,reported_on_air_licensed
+dtv_transmitter_census_v1,26,CH2519-DT,Relay,53.88,156.4,327.5,±1 kHz,660,542.309441,Logan Lake,BC,0.270,reported_on_air_licensed
+dtv_transmitter_census_v1,28,CH5533-DT,Relay,53.72,156.4,327.5,±1 kHz,629,554.309441,Logan Lake,BC,0.260,reported_on_air_licensed
+dtv_transmitter_census_v1,30,CH2520-DT,Relay,53.88,156.4,327.5,±1 kHz,598,566.309441,Logan Lake,BC,0.270,reported_on_air_licensed
+dtv_transmitter_census_v1,32,CH5534-DT,Relay,52.10,156.4,327.5,±1 kHz,568,578.309441,Logan Lake,BC,0.227,reported_on_air_licensed
+dtv_transmitter_census_v1,34,CH3083-DT,Relay,52.10,156.4,327.5,±1 kHz,537,590.309441,Logan Lake,BC,0.227,reported_on_air_licensed
+dtv_transmitter_census_v1,22,CHKM-DT,Full-power,67.91,160.0,340.0,±1 kHz,721,518.309441,Kamloops,BC,30.000,reported_on_air_licensed
+dtv_transmitter_census_v1,32,K32MC-D,Translator (LPTV),,167.4,190.1,None specified,568,578.309441,BAKER FLATS AREA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,CHAN-1,Relay,47.53,176.8,261.8,±1 kHz,583,572.309441,Chilliwack,BC,0.428,reported_on_air_licensed
+dtv_transmitter_census_v1,24,CHNU-DT,Full-power,,241.6,272.2,±1 kHz,690,530.309441,Fraser Valley,BC,35.000,reported_on_air_licensed
+dtv_transmitter_census_v1,28,CFEG-TV,Full-power,,199.5,262.5,±1 kHz,629,554.309441,Abbotsford,BC,0.475,reported_on_air_licensed
+dtv_transmitter_census_v1,14,KVOS-TV,Full-power,,217.3,254.4,±1 kHz,844,470.309441,BELLINGHAM,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15MW-D,Translator (LPTV),,217.3,254.4,None specified,829,476.309441,BELLINGHAM,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18NJ-D,Translator (LPTV),,217.3,254.4,None specified,783,494.309441,BELLINGHAM,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18AD-D,Translator (LPTV),,217.3,193.4,None specified,783,494.309441,"EAST WENATCHEE, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30RC-D,Translator (LPTV),,217.3,254.4,None specified,598,566.309441,BELLINGHAM,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36PW-D,Translator (LPTV),,217.3,111.0,None specified,506,602.309441,PRIEST LAKE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36KY-D,Translator (LPTV),,217.3,193.8,None specified,506,602.309441,WENATCHEE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,KBCB,Full-power,,217.3,254.4,±1 kHz,767,500.309441,BELLINGHAM,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31DS-D,Translator (LPTV),,223.7,113.7,None specified,583,572.309441,COOLIN,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32OA-D,Translator (LPTV),,223.7,113.7,None specified,568,578.309441,COOLIN,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33QB-D,Translator (LPTV),,223.7,113.7,None specified,552,584.309441,COOLIN,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29ED-D,Translator (LPTV),59.50,241.4,232.7,None specified,614,560.309441,EVERETT,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19NN-D,Translator (LPTV),,244.6,173.9,None specified,767,500.309441,"MOSES LAKE, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34ND-D,Translator (LPTV),,244.6,173.9,None specified,537,590.309441,MOSES LAKE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,KHQ-TV,Full-power,,246.2,138.0,±1 kHz,829,476.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,KQUP-LD,Low-power (LPTV),69.99,246.2,138.0,None specified,844,470.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29NM-D,Translator (LPTV),,246.2,138.0,None specified,614,560.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,KDYS-LD,Low-power (LPTV),66.36,246.2,138.0,None specified,568,578.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,KHBA-LD,Low-power (LPTV),,246.2,138.0,None specified,521,596.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,KREM,Full-power,87.78,246.2,138.0,±1 kHz,752,506.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,KAYU-TV,Full-power,,246.2,138.0,±1 kHz,629,554.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,KGPX-TV,Full-power,75.94,246.2,138.0,±1 kHz,537,590.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,KSKN,Full-power,88.70,246.2,138.0,±1 kHz,506,602.309441,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KXLY-TV,Full-power,,246.2,138.0,±1 kHz,,nan,SPOKANE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,KQAH-LD,Low-power (LPTV),,249.4,228.3,None specified,521,596.309441,MALTBY,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17NZ-D,Translator (LPTV),,251.1,104.9,None specified,798,488.309441,BONNERS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24NO-D,Translator (LPTV),,251.1,104.9,None specified,690,530.309441,BONNERS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25MP-D,Translator (LPTV),,251.1,104.9,None specified,675,536.309441,BONNERS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26OO-D,Translator (LPTV),,251.1,104.9,None specified,660,542.309441,BONNERS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31NL-D,Translator (LPTV),,251.1,104.9,None specified,583,572.309441,BONNERS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32HA-D,Translator (LPTV),,251.1,104.9,None specified,568,578.309441,BONNERS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35IC-D,Translator (LPTV),,251.1,104.9,None specified,521,596.309441,BONNERS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19LE-D,Translator (LPTV),,252.7,116.1,None specified,767,500.309441,SANDPOINT,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21NG-D,Translator (LPTV),,252.7,116.1,None specified,736,512.309441,SANDPOINT,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23NM-D,Translator (LPTV),,252.7,116.1,None specified,706,524.309441,SANDPOINT,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30LS-D,Translator (LPTV),,252.7,116.1,None specified,598,566.309441,SANDPOINT,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33LW-D,Translator (LPTV),,252.7,116.1,None specified,552,584.309441,SANDPOINT,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,CIVI-2,Relay,,241.6,272.2,±1 kHz,798,488.309441,Vancouver,BC,35.000,reported_on_air_licensed
+dtv_transmitter_census_v1,20,CHNM-DT,Full-power,,241.3,272.2,±1 kHz,752,506.309441,Vancouver,BC,8.300,reported_on_air_licensed
+dtv_transmitter_census_v1,22,CHAN-DT,Full-power,,242.7,271.9,±1 kHz,721,518.309441,Vancouver,BC,125.000,reported_on_air_licensed
+dtv_transmitter_census_v1,26,CBUFT-DT,Full-power,,241.5,272.1,±1 kHz,660,542.309441,Vancouver,BC,27.520,reported_on_air_licensed
+dtv_transmitter_census_v1,32,CIVT-DT,Full-power,,241.6,272.2,±1 kHz,568,578.309441,Vancouver,BC,50.000,reported_on_air_licensed
+dtv_transmitter_census_v1,33,CKVU-DT,Full-power,,241.3,272.2,±1 kHz,552,584.309441,Vancouver,BC,8.300,reported_on_air_licensed
+dtv_transmitter_census_v1,35,CBUT-DT,Full-power,,241.5,272.1,±1 kHz,521,596.309441,Vancouver,BC,88.500,reported_on_air_licensed
+dtv_transmitter_census_v1,17,K17IL-D,Translator (LPTV),,267.2,195.2,None specified,798,488.309441,"ELLENSBURG, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20JL-D,Translator (LPTV),,267.2,195.2,None specified,752,506.309441,"ELLENSBURG, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23NE-D,Translator (LPTV),,267.2,195.2,None specified,706,524.309441,ELLENSBURG,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25FP-D,Translator (LPTV),,267.2,195.2,None specified,675,536.309441,ELLENSBURG,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26NF-D,Translator (LPTV),,267.2,195.2,None specified,660,542.309441,ELLENSBURG,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27OO-D,Translator (LPTV),,267.2,195.2,None specified,644,548.309441,ELLENSBURG,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32IG-D,Translator (LPTV),,267.2,195.2,None specified,568,578.309441,"ELLENSBURG, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,KWPX-TV,Full-power,,268.8,225.9,±1 kHz,552,584.309441,BELLEVUE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,KFFV,Full-power,,276.8,227.3,±1 kHz,813,482.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,KUSE-LD,Low-power (LPTV),,276.8,227.3,None specified,829,476.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,KYMU-LD,Low-power (LPTV),,276.8,227.3,None specified,798,488.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20NF-D,Translator (LPTV),,276.8,227.3,None specified,752,506.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,KRUM-LD,Low-power (LPTV),,276.8,227.3,None specified,568,578.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,KING-TV,Full-power,,276.8,227.3,±1 kHz,675,536.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,KOMO-TV,Full-power,,276.8,227.3,±1 kHz,598,566.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,KZJO,Full-power,,276.8,227.3,±1 kHz,506,602.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,KIRO-TV,Full-power,,276.8,227.3,±1 kHz,706,524.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,KIRO-TV,Full-power,,276.8,227.3,±1 kHz,706,524.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,KIRO-TV,Full-power,,276.8,227.3,±1 kHz,706,524.309441,SEATTLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,KCDT,Full-power,,278.4,130.0,±1 kHz,783,494.309441,COEUR D'ALENE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16NR-D,Translator (LPTV),,278.4,130.0,None specified,813,482.309441,COEUR D'ALENE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26LJ-D,Translator (LPTV),,278.4,130.0,None specified,660,542.309441,COEUR D'ALENE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27NC-D,Translator (LPTV),,278.4,130.0,None specified,644,548.309441,COEUR D'ALENE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30QA-D,Translator (LPTV),,278.4,130.0,None specified,598,566.309441,COEUR D'ALENE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31QK-D,Translator (LPTV),,278.4,130.0,None specified,583,572.309441,COEUR D'ALENE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18NI-D,Translator (LPTV),,288.1,225.2,None specified,783,494.309441,"POINT PULLEY, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,CHEK-DT,Full-power,,265.5,258.1,±1 kHz,813,482.309441,Victoria,BC,16.400,reported_on_air_licensed
+dtv_transmitter_census_v1,21,CHNU-1,Relay,,289.2,251.3,±1 kHz,736,512.309441,Victoria,BC,3.500,reported_on_air_licensed
+dtv_transmitter_census_v1,27,CKVU-2,Relay,,289.2,251.3,±1 kHz,644,548.309441,Victoria,BC,2.750,reported_on_air_licensed
+dtv_transmitter_census_v1,28,CIVI-DT,Full-power,,289.2,251.3,±1 kHz,629,554.309441,Victoria,BC,1.670,reported_on_air_licensed
+dtv_transmitter_census_v1,29,CHNM-1,Relay,,289.2,251.3,±1 kHz,614,560.309441,Victoria,BC,2.750,reported_on_air_licensed
+dtv_transmitter_census_v1,14,KAPP,Full-power,,309.0,192.6,±1 kHz,844,470.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,KNDO,Full-power,,309.0,192.6,±1 kHz,813,482.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15KC-D,Translator (LPTV),,309.0,192.6,None specified,829,476.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18NH-D,Translator (LPTV),,309.0,220.8,None specified,783,494.309441,PUYALLUP,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20LQ-D,Translator (LPTV),,309.0,192.6,None specified,752,506.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25PV-D,Translator (LPTV),,309.0,192.6,None specified,675,536.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,KCYU-LD,Low-power (LPTV),,309.0,192.6,None specified,614,560.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,KYPK-LD,Low-power (LPTV),,309.0,192.6,None specified,568,578.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,KWYT-LD,Low-power (LPTV),,309.0,192.6,None specified,506,602.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,KYVE,Full-power,,309.0,192.6,±1 kHz,736,512.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,KUNW-CD,Class A,,309.0,192.6,±1 kHz,598,566.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,KIMA-TV,Full-power,,309.0,192.6,±1 kHz,552,584.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,KDHW-CD,Class A,,309.0,192.6,±1 kHz,521,596.309441,YAKIMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,KTBW-TV,Full-power,,310.6,223.3,±1 kHz,736,512.309441,TACOMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,KWDK,Full-power,,310.6,223.3,±1 kHz,537,590.309441,TACOMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KCPQ,Full-power,,310.6,223.3,±1 kHz,,nan,TACOMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,KBTC-TV,Full-power,,310.6,223.3,±1 kHz,644,548.309441,TACOMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,KBTC-TV,Full-power,,310.6,223.3,±1 kHz,644,548.309441,TACOMA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23HT-D,Translator (LPTV),,317.0,133.4,None specified,706,524.309441,ST. MARIES,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25OP-D,Translator (LPTV),,325.1,126.2,None specified,675,536.309441,KELLOGG,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K13ABZ-D,Translator (LPTV),,334.7,185.1,None specified,690,530.309441,SUNNYSIDE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K08QZ-D,Translator (LPTV),,334.7,185.1,None specified,583,572.309441,SUNNYSIDE-GRANDVIEW,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,KRLB-LD,Low-power (LPTV),,338.0,175.6,None specified,614,560.309441,"RICHLAND, ETC",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31KW-D,Translator (LPTV),,338.0,175.6,None specified,583,572.309441,RICHLAND,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,KBWU-LD,Low-power (LPTV),,338.0,175.6,None specified,506,602.309441,"RICHLAND, ETC.,",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KTNW,Full-power,,338.0,175.6,±1 kHz,721,518.309441,RICHLAND,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,KNDU,Full-power,,338.0,175.6,±1 kHz,660,542.309441,RICHLAND,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26NM-D,Translator (LPTV),,341.2,146.8,None specified,660,542.309441,PULLMAN,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,KQUP,Full-power,,341.2,146.8,±1 kHz,690,530.309441,PULLMAN,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,KEPR-TV,Full-power,,344.4,173.3,±1 kHz,783,494.309441,PASCO,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21OT-D,Translator (LPTV),,344.4,173.3,None specified,736,512.309441,PASCO-KENNEWICK,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28QK-D,Translator (LPTV),,344.4,173.3,None specified,629,554.309441,PASCO,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32KY-D,Translator (LPTV),,344.4,173.3,None specified,568,578.309441,PASCO,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23JU-D,Translator (LPTV),,346.0,181.9,None specified,706,524.309441,PROSSER,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34MZ-D,Translator (LPTV),,346.0,181.9,None specified,537,590.309441,PROSSER,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,KVVK-CD,Class A,,347.6,173.8,±1 kHz,829,476.309441,"KENNEWICK, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,KVEW,Full-power,,347.6,173.8,±1 kHz,644,548.309441,KENNEWICK,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K17PA-D,Translator (LPTV),,349.2,124.7,None specified,736,512.309441,MULLAN,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KHPN-LD,Low-power (LPTV),,350.8,225.0,None specified,721,518.309441,Olympia,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,CFCN-14,Relay,,362.6,54.7,±1 kHz,660,542.309441,Canmore,AB,0.137,reported_on_air_licensed
+dtv_transmitter_census_v1,15,CFCN-13,Relay,,367.5,57.1,±1 kHz,829,476.309441,Pigeon Mountain,AB,0.045,reported_on_air_licensed
+dtv_transmitter_census_v1,16,KORX-CD,Class A,,375.0,164.7,±1 kHz,813,482.309441,WALLA WALLA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,K14HT-D,Translator (LPTV),,375.0,164.7,None specified,844,470.309441,"WALLA WALLA, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16LX-D,Translator (LPTV),,375.0,143.4,None specified,813,482.309441,JULIAETTA,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19KU-D,Translator (LPTV),,375.0,164.7,None specified,767,500.309441,WALLA WALLA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21JQ-D,Translator (LPTV),,375.0,164.7,None specified,736,512.309441,WALLA WALLA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22NX-D,Translator (LPTV),,375.0,143.4,None specified,721,518.309441,JULIAETTA,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23OT-D,Translator (LPTV),,375.0,143.4,None specified,706,524.309441,JULIAETTA,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31KL-D,Translator (LPTV),,375.0,164.7,None specified,583,572.309441,WALLA WALLA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,KWWO-LD,Low-power (LPTV),,375.0,164.7,None specified,568,578.309441,WALLA WALLA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33EJ-D,Translator (LPTV),,375.0,164.7,None specified,552,584.309441,WALLA WALLA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36EW-D,Translator (LPTV),,375.0,165.3,None specified,506,602.309441,COLLEGE PLACE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18LH-D,Translator (LPTV),,376.6,148.0,None specified,783,494.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21CC-D,Translator (LPTV),,376.6,148.0,None specified,736,512.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23NQ-D,Translator (LPTV),,376.6,148.0,None specified,706,524.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24JN-D,Translator (LPTV),,376.6,148.0,None specified,690,530.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25NZ-D,Translator (LPTV),,376.6,148.0,None specified,675,536.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30MC-D,Translator (LPTV),,376.6,148.0,None specified,598,566.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34QC-D,Translator (LPTV),,376.6,148.0,None specified,537,590.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35BW-D,Translator (LPTV),,376.6,148.0,None specified,521,596.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36NZ-D,Translator (LPTV),,376.6,148.3,None specified,506,602.309441,CLARKSTON,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,KLEW-TV,Full-power,,376.6,148.0,±1 kHz,568,578.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KLEW-TV,Full-power,,376.6,148.0,±1 kHz,568,578.309441,LEWISTON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,KCKA,Full-power,,381.4,221.8,±1 kHz,767,500.309441,CENTRALIA,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15MI-D,Translator (LPTV),,381.4,221.8,None specified,829,476.309441,CENTRALIA/CHELASIS,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17NX-D,Translator (LPTV),,381.4,221.8,None specified,798,488.309441,CENTRALIA/CHEHALIS,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19KP-D,Translator (LPTV),,387.9,176.2,None specified,767,500.309441,HERMISTON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20MJ-D,Translator (LPTV),,387.9,165.7,None specified,752,506.309441,MILTON-FREEWATER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23FH-D,Translator (LPTV),,387.9,165.7,None specified,706,524.309441,MILTON-FREEWATER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24ME-D,Translator (LPTV),,387.9,165.7,None specified,690,530.309441,MILTON-FREEWATER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28FT-D,Translator (LPTV),,387.9,165.7,None specified,629,554.309441,MILTON-FREEWATER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29EG-D,Translator (LPTV),,387.9,165.7,None specified,614,560.309441,"MILTON, ETC",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30OA-D,Translator (LPTV),,387.9,165.7,None specified,598,566.309441,MILTON-FREEWATER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34NS-D,Translator (LPTV),,387.9,165.7,None specified,537,590.309441,MILTON-FREEWATER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35FO-D,Translator (LPTV),,387.9,165.7,None specified,521,596.309441,MILTON-FREEWATER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,CHAN-4,Relay,,408.6,278.8,±1 kHz,675,536.309441,Courtenay,BC,4.450,reported_on_air_licensed
+dtv_transmitter_census_v1,17,K17GK-D,Translator (LPTV),,402.3,186.4,None specified,798,488.309441,ARLINGTON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25CG-D,Translator (LPTV),,405.6,231.6,None specified,675,536.309441,ABERDEEN,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17OY-D,Translator (LPTV),,408.8,194.1,None specified,798,488.309441,CENTERVILLE,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16LN-D,Translator (LPTV),,410.4,170.9,None specified,813,482.309441,PENDLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25OO-D,Translator (LPTV),,410.4,170.9,None specified,675,536.309441,PENDLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32DE-D,Translator (LPTV),,410.4,170.9,None specified,568,578.309441,PENDLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34DI-D,Translator (LPTV),,410.4,170.9,None specified,537,590.309441,PENDLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36DP-D,Translator (LPTV),,410.4,170.9,None specified,506,602.309441,PENDLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20EH-D,Translator (LPTV),,426.5,200.2,None specified,752,506.309441,HOOD RIVER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23OV-D,Translator (LPTV),,426.5,200.2,None specified,706,524.309441,Hood River,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26NQ-D,Translator (LPTV),,426.5,200.2,None specified,660,542.309441,Hood River,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28CQ-D,Translator (LPTV),,426.5,200.2,None specified,629,554.309441,HOOD RIVER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34KE-D,Translator (LPTV),,426.5,200.2,None specified,537,590.309441,HOOD RIVER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36FG-D,Translator (LPTV),,426.5,200.2,None specified,506,602.309441,"HOOD RIVER, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,KRHP-CD,Class A,,429.7,196.3,±1 kHz,844,470.309441,THE DALLES,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18HH-D,Translator (LPTV),,429.7,196.3,None specified,783,494.309441,THE DALLES,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22KC-D,Translator (LPTV),,429.7,196.3,None specified,721,518.309441,THE DALLES,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25KS-D,Translator (LPTV),,429.7,196.3,None specified,675,536.309441,THE DALLES,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31HZ-D,Translator (LPTV),,429.7,196.3,None specified,583,572.309441,"THE DALLES, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27NZ-D,Translator (LPTV),,431.3,216.3,None specified,644,548.309441,LONGVIEW,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15IX-D,Translator (LPTV),,436.1,215.8,None specified,829,476.309441,RAINIER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17GV-D,Translator (LPTV),,436.1,215.8,None specified,798,488.309441,RAINIER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K11KO-D,Translator (LPTV),,436.1,140.7,None specified,629,554.309441,KAMIAH,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28IH-D,Translator (LPTV),,436.1,215.8,None specified,629,554.309441,RAINIER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31HK-D,Translator (LPTV),,436.1,215.8,None specified,583,572.309441,RAINIER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36OJ-D,Translator (LPTV),,436.1,215.8,None specified,506,602.309441,Rainier,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23NL-D,Translator (LPTV),,437.7,144.8,None specified,706,524.309441,COTTONWOOD/GRANGEVIL,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26CK-D,Translator (LPTV),,437.7,144.8,None specified,660,542.309441,COTTONWOOD/GRANGEVIL,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,CKAL-DT,Full-power,,428.4,60.9,±1 kHz,752,506.309441,Calgary,AB,112.000,reported_on_air_licensed
+dtv_transmitter_census_v1,21,CBRT-DT,Full-power,,431.0,61.2,±1 kHz,736,512.309441,Calgary,AB,373.400,reported_on_air_licensed
+dtv_transmitter_census_v1,25,CICT-DT,Full-power,,428.4,60.9,±1 kHz,675,536.309441,Calgary,AB,36.000,reported_on_air_licensed
+dtv_transmitter_census_v1,29,CFCN-DT,Full-power,,433.5,61.4,±1 kHz,614,560.309441,Calgary,AB,220.000,reported_on_air_licensed
+dtv_transmitter_census_v1,32,CKCS-DT,Full-power,,433.5,61.4,±1 kHz,568,578.309441,Calgary,AB,36.000,reported_on_air_licensed
+dtv_transmitter_census_v1,34,CJCO-DT,Full-power,,428.4,60.9,±1 kHz,537,590.309441,Calgary,AB,23.100,reported_on_air_licensed
+dtv_transmitter_census_v1,28,K28GD-D,Translator (LPTV),,441.0,179.3,None specified,629,554.309441,"HEPPNER, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,CH5412,Relay,,442.4,354.7,±1 kHz,798,488.309441,McBride,BC,0.159,reported_on_air_licensed
+dtv_transmitter_census_v1,19,CH5796,Relay,,442.4,354.7,±1 kHz,767,500.309441,McBride,BC,0.159,reported_on_air_licensed
+dtv_transmitter_census_v1,21,CH5798,Relay,,442.4,354.7,±1 kHz,736,512.309441,McBride,BC,0.159,reported_on_air_licensed
+dtv_transmitter_census_v1,23,CH5797,Relay,,442.4,354.7,±1 kHz,706,524.309441,McBride,BC,0.159,reported_on_air_licensed
+dtv_transmitter_census_v1,16,K16LV-D,Translator (LPTV),,444.2,223.6,None specified,813,482.309441,GRAYS RIVER,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20NL-D,Translator (LPTV),,444.2,223.6,None specified,752,506.309441,"GRAYS RIVER, LEBAM",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29IB-D,Translator (LPTV),,444.2,223.6,None specified,614,560.309441,"GRAYS RIVER, ETC.",WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31IR-D,Translator (LPTV),,444.2,223.6,None specified,583,572.309441,GRAYS RIVER,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35HU-D,Translator (LPTV),,444.2,223.6,None specified,521,596.309441,GRAYS RIVER,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,KUNP,Full-power,,458.7,164.8,±1 kHz,813,482.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21MS-D,Translator (LPTV),,458.7,164.8,None specified,736,512.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23DB-D,Translator (LPTV),,458.7,164.8,None specified,706,524.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25OJ-D,Translator (LPTV),,458.7,164.8,None specified,675,536.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26FV-D,Translator (LPTV),,458.7,164.8,None specified,660,542.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28NY-D,Translator (LPTV),,458.7,164.8,None specified,629,554.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29EL-D,Translator (LPTV),,458.7,164.8,None specified,614,560.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30OG-D,Translator (LPTV),,458.7,164.8,None specified,598,566.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31GN-D,Translator (LPTV),,458.7,164.8,None specified,583,572.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32LY-D,Translator (LPTV),,458.7,164.8,None specified,568,578.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33FS-D,Translator (LPTV),,458.7,164.8,None specified,552,584.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34NG-D,Translator (LPTV),,458.7,164.8,None specified,537,590.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35GA-D,Translator (LPTV),,458.7,164.8,None specified,521,596.309441,LA GRANDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16LS-D,Translator (LPTV),,460.3,143.9,None specified,813,482.309441,"GRANGEVILLE, ETC.",ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19BY-D,Translator (LPTV),,460.3,143.9,None specified,767,500.309441,"GRANGEVILLE, ETC,",ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35MJ-D,Translator (LPTV),,460.3,143.9,None specified,521,596.309441,GRANGEVILLE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28JC-D,Translator (LPTV),,468.3,156.9,None specified,629,554.309441,ENTERPRISE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,KEVE-LD,Low-power (LPTV),,468.3,210.3,None specified,583,572.309441,VANCOUVER,WA,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17HA-D,Translator (LPTV),,469.9,223.7,None specified,798,488.309441,ASTORIA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23GK-D,Translator (LPTV),,469.9,223.7,None specified,706,524.309441,ASTORIA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26DB-D,Translator (LPTV),,469.9,223.7,None specified,660,542.309441,ASTORIA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34DC-D,Translator (LPTV),,469.9,223.7,None specified,537,590.309441,ASTORIA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36LI-D,Translator (LPTV),,469.9,223.7,None specified,506,602.309441,ASTORIA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,KPME-CD,Class A,,481.2,209.7,±1 kHz,829,476.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,KOXI-CD,Class A,,481.2,209.7,±1 kHz,752,506.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,KATU,Full-power,,481.2,209.7,±1 kHz,690,530.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,KOIN,Full-power,,481.2,209.7,±1 kHz,675,536.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,KGWZ-LD,Low-power (LPTV),,481.2,209.7,None specified,706,524.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27PI-D,Translator (LPTV),,481.2,209.7,None specified,644,548.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,KJYY-LD+KOPB-TV,Full-power,,481.2,209.7,None specified,614,560.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,KUNP-LD,Low-power (LPTV),,481.2,209.7,None specified,537,590.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,KGW,Full-power,,481.2,209.7,±1 kHz,660,542.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,KNMT,Full-power,,481.2,209.7,±1 kHz,568,578.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,KORK-CD,Class A,,481.2,209.7,±1 kHz,521,596.309441,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,KOPB-TV,Full-power,,481.2,209.7,±1 kHz,,nan,PORTLAND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21DE-D,Translator (LPTV),,490.8,222.6,None specified,736,512.309441,SEASIDE-ASTORIA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,CJIL-DT,Full-power,,489.6,81.5,±1 kHz,798,488.309441,Lethbridge,AB,8.600,reported_on_air_licensed
+dtv_transmitter_census_v1,29,CKAL-1,Relay,,485.1,82.7,±1 kHz,614,560.309441,Lethbridge,AB,58.500,reported_on_air_licensed
+dtv_transmitter_census_v1,18,K18EL-D,Translator (LPTV),,513.4,210.7,None specified,783,494.309441,NEWBERG/TIGARD,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18KI-D,Translator (LPTV),,523.0,164.3,None specified,783,494.309441,BAKER CITY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20IV-D,Translator (LPTV),,523.0,164.3,None specified,752,506.309441,"BAKER CITY, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22LY-D,Translator (LPTV),,523.0,164.3,None specified,721,518.309441,BAKER VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24MC-D,Translator (LPTV),,523.0,164.3,None specified,690,530.309441,BAKER VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27MX-D,Translator (LPTV),,523.0,164.3,None specified,644,548.309441,BAKER VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30OF-D,Translator (LPTV),,523.0,164.3,None specified,598,566.309441,BAKER VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36NP-D,Translator (LPTV),,523.0,164.3,None specified,506,602.309441,BAKER VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,CKEM-1,Relay,,530.4,50.1,±1 kHz,829,476.309441,Red Deer,AB,35.000,reported_on_air_licensed
+dtv_transmitter_census_v1,15,K15KV-D,Translator (LPTV),,524.6,219.8,None specified,829,476.309441,ROCKAWAY BEACH,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17NJ-D,Translator (LPTV),,524.6,219.8,None specified,798,488.309441,Rockaway Beach,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20HT-D,Translator (LPTV),,524.6,219.8,None specified,752,506.309441,ROCKAWAY BEACH,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23NS-D,Translator (LPTV),,524.6,219.8,None specified,706,524.309441,ROCKAWAY BEACH,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29LW-D,Translator (LPTV),,524.6,219.8,None specified,614,560.309441,ROCKAWAY BEACH,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36GU-D,Translator (LPTV),,524.6,219.8,None specified,506,602.309441,ROCKAWAY BEACH,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,CITV-1,Relay,,530.7,49.5,±1 kHz,629,554.309441,Red Deer,AB,132.000,reported_on_air_licensed
+dtv_transmitter_census_v1,24,K24KG-D,Translator (LPTV),,534.3,192.9,None specified,690,530.309441,MADRAS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26NX-D,Translator (LPTV),,534.3,192.9,None specified,660,542.309441,MADRAS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28OV-D,Translator (LPTV),,534.3,192.9,None specified,629,554.309441,MADRAS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28MJ-D,Translator (LPTV),,534.3,218.1,None specified,629,554.309441,TILLAMOOK,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34JR-D,Translator (LPTV),,534.3,192.9,None specified,537,590.309441,MADRAS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34PJ-D,Translator (LPTV),,534.3,218.1,None specified,537,590.309441,TILLAMOOK,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35CR-D,Translator (LPTV),,534.3,218.1,None specified,521,596.309441,"TILLAMOOK, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26FQ-D,Translator (LPTV),,547.2,174.4,None specified,660,542.309441,JOHN DAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KPXG-TV,Full-power,,550.4,209.2,±1 kHz,721,518.309441,SALEM,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16JS-D,Translator (LPTV),,550.4,209.2,None specified,813,482.309441,Salem,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19MI-D,Translator (LPTV),,550.4,209.2,None specified,767,500.309441,SALEM,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36QX-D,Translator (LPTV),,550.4,209.2,None specified,506,602.309441,SALEM,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,CIFG-DT,Full-power,,546.7,340.2,±1 kHz,614,560.309441,Prince George,BC,30.000,reported_on_air_licensed
+dtv_transmitter_census_v1,15,K15IO-D,Translator (LPTV),,558.4,150.1,None specified,829,476.309441,MCCALL & NEW MEADOWS,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25OR-D,Translator (LPTV),,558.4,150.1,None specified,675,536.309441,MCCALL,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27DX-D,Translator (LPTV),,558.4,150.1,None specified,644,548.309441,MCCALL,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K11WT-D,Translator (LPTV),,558.4,150.1,None specified,583,572.309441,MCCALL,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19EI-D,Translator (LPTV),,563.3,217.2,None specified,767,500.309441,PACIFIC C/CLOVERDALE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,KSLM-LD,Low-power (LPTV),,563.3,211.1,None specified,644,548.309441,DALLAS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K11WR-D,Translator (LPTV),,564.9,153.5,None specified,660,542.309441,COUNCIL,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33RC-D,Translator (LPTV),,564.9,153.5,None specified,552,584.309441,COUNCIL,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16EM-D,Translator (LPTV),,566.5,189.8,None specified,813,482.309441,"PRINEVILLE, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19LT-D,Translator (LPTV),,566.5,189.8,None specified,767,500.309441,"PRINEVILLE, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22IL-D,Translator (LPTV),,566.5,189.8,None specified,721,518.309441,"PRINEVILLE, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23CU-D,Translator (LPTV),,566.5,189.8,None specified,706,524.309441,PRINEVILLE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35LD-D,Translator (LPTV),,566.5,189.8,None specified,521,596.309441,PRINEVILLE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32KP-D,Translator (LPTV),,569.7,196.4,None specified,568,578.309441,BLACK BUTTE RANCH,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17KF-D,Translator (LPTV),,572.9,155.9,None specified,798,488.309441,CAMBRIDGE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K11PB-D,Translator (LPTV),,572.9,155.9,None specified,767,500.309441,CAMBRIDGE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34LS-D,Translator (LPTV),,579.4,174.8,None specified,537,590.309441,SENECA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20DD-D,Translator (LPTV),,584.2,208.2,None specified,752,506.309441,"ALBANY, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,KVDO-LD,Low-power (LPTV),,584.2,208.2,None specified,537,590.309441,ALBANY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21LB-D,Translator (LPTV),,587.4,216.0,None specified,736,512.309441,LINCOLN CITY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23OC-D,Translator (LPTV),,587.4,216.0,None specified,706,524.309441,LINCOLN CITY/NEWPORT,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32NK-D,Translator (LPTV),,587.4,216.0,None specified,568,578.309441,"LINCOLN CITY, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,K14GW-D,Translator (LPTV),,597.1,208.9,None specified,844,470.309441,CORVALLIS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16ML-D,Translator (LPTV),,597.1,208.9,None specified,813,482.309441,CORVALLIS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,KFXO-CD,Class A,,598.7,193.1,±1 kHz,829,476.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,KOHD,Full-power,,598.7,193.1,±1 kHz,783,494.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,KQRE-CD,Class A,,598.7,193.1,±1 kHz,752,506.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,KTVZ,Full-power,,598.7,193.1,±1 kHz,736,512.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,KBND-LD,Low-power (LPTV),,598.7,193.1,None specified,844,470.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27DO-D,Translator (LPTV),,598.7,193.1,None specified,644,548.309441,"BEND, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28MH-D,Translator (LPTV),,598.7,193.1,None specified,629,554.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29NB-D,Translator (LPTV),,598.7,151.7,None specified,614,560.309441,CASCADE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31NO-D,Translator (LPTV),,598.7,193.1,None specified,583,572.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32CC-D,Translator (LPTV),,598.7,193.1,None specified,568,578.309441,"MONTGOMERY RANCH,ETC",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36OG-D,Translator (LPTV),,598.7,193.1,None specified,506,602.309441,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,KOAB-TV,Full-power,,598.7,193.1,±1 kHz,,nan,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,KOAB-TV,Full-power,,598.7,193.1,±1 kHz,,nan,BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17ED-D,Translator (LPTV),,618.0,159.6,None specified,798,488.309441,PAYETTE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15DS-D,Translator (LPTV),,619.6,214.5,None specified,829,476.309441,"NEWPORT, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18FR-D,Translator (LPTV),,619.6,214.5,None specified,783,494.309441,NEWPORT,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24JE-D,Translator (LPTV),,619.6,193.6,None specified,690,530.309441,SUNRIVER,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29AZ-D,Translator (LPTV),,619.6,214.5,None specified,614,560.309441,NEWPORT,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,KCES-LD,Low-power (LPTV),,622.8,207.0,None specified,783,494.309441,HARRISBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,WPNB680,Low-power (LPTV),,622.8,193.6,None specified,675,536.309441,Spring River Butte,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30QD-D,Translator (LPTV),,622.8,160.0,None specified,598,566.309441,"ONTARIO, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KRID-LD,Low-power (LPTV),,626.0,159.7,None specified,721,518.309441,FRUITLAND,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15ME-D,Translator (LPTV),,630.9,134.7,None specified,829,476.309441,SALMON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29LY-D,Translator (LPTV),,630.9,134.7,None specified,614,560.309441,SALMON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30PW-D,Translator (LPTV),,630.9,134.7,None specified,598,566.309441,SALMON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32NQ-D,Translator (LPTV),,630.9,134.7,None specified,568,578.309441,SALMON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36PM-D,Translator (LPTV),,630.9,134.7,None specified,506,602.309441,SALMON,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,CJEO-DT,Full-power,,618.7,38.6,±1 kHz,813,482.309441,Edmonton,AB,32.000,reported_on_air_licensed
+dtv_transmitter_census_v1,17,CKEM-DT,Full-power,,618.7,38.6,±1 kHz,798,488.309441,Edmonton,AB,107.000,reported_on_air_licensed
+dtv_transmitter_census_v1,25,CBXT-DT,Full-power,,640.3,40.9,±1 kHz,675,536.309441,Edmonton,AB,90.800,reported_on_air_licensed
+dtv_transmitter_census_v1,27,CBXFT-DT,Full-power,,640.3,40.9,±1 kHz,644,548.309441,Edmonton,AB,17.480,reported_on_air_licensed
+dtv_transmitter_census_v1,30,CKES-DT,Full-power,,634.0,41.0,±1 kHz,598,566.309441,Edmonton,AB,42.000,reported_on_air_licensed
+dtv_transmitter_census_v1,14,K14SB-D,Translator (LPTV),,637.3,152.9,None specified,844,470.309441,TERRACE LAKES,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36BA-D,Translator (LPTV),,638.9,175.9,None specified,506,602.309441,BURNS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,KORY-CD,Class A,,642.1,205.5,±1 kHz,829,476.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,KMTR,Full-power,,642.1,205.5,±1 kHz,798,488.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,KEVU-CD+KEZI,Full-power,,642.1,205.5,±1 kHz,706,524.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,KVAL-TV,Full-power,,642.1,205.5,±1 kHz,629,554.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,KEPB-TV,Full-power,,642.1,205.5,±1 kHz,614,560.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K08QB-D,Translator (LPTV),,642.1,153.0,None specified,813,482.309441,CROUCH/GARDEN VALLEY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19GH-D,Translator (LPTV),,642.1,205.5,None specified,767,500.309441,"EUGENE, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21FS-D,Translator (LPTV),,642.1,205.5,None specified,736,512.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,KLSR-TV,Full-power,,642.1,205.5,±1 kHz,583,572.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,KCKW-LD+KEZI,Full-power,,642.1,205.5,None specified,675,536.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K03IM-D,Translator (LPTV),,642.1,205.5,None specified,644,548.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K06QR-D,Translator (LPTV),,642.1,205.5,None specified,521,596.309441,EUGENE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23PN-D,Translator (LPTV),,643.7,193.6,None specified,706,524.309441,LA PINE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28QR-D,Translator (LPTV),,643.7,193.6,None specified,629,554.309441,LA PINE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30JT-D,Translator (LPTV),,643.7,193.6,None specified,598,566.309441,LA PINE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34AI-D,Translator (LPTV),,643.7,193.6,None specified,537,590.309441,LA PINE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36OD-D,Translator (LPTV),,643.7,193.6,None specified,506,602.309441,NORTH LA PINE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K26OW-D,Translator (LPTV),,645.3,153.0,None specified,783,494.309441,GARDEN VALLEY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25QX-D,Translator (LPTV),,645.3,153.0,None specified,675,536.309441,GARDEN VALLEY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32KO-D,Translator (LPTV),,645.3,153.0,None specified,568,578.309441,GARDEN VALLEY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34MG-D,Translator (LPTV),,645.3,153.0,None specified,537,590.309441,GARDEN VALLEY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36LZ-D,Translator (LPTV),,645.3,153.0,None specified,506,602.309441,GARDEN VALLEY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,CH2927,Relay,,661.1,331.2,±1 kHz,844,470.309441,Fort St James,BC,0.084,reported_on_air_licensed
+dtv_transmitter_census_v1,18,CH6459,Relay,,651.0,332.8,±1 kHz,783,494.309441,Fort St James,BC,0.039,reported_on_air_licensed
+dtv_transmitter_census_v1,24,CH6496-DT,Relay,,651.0,332.8,±1 kHz,690,530.309441,Fort St. James,BC,0.039,reported_on_air_licensed
+dtv_transmitter_census_v1,26,CH6461,Relay,,651.0,332.8,±1 kHz,660,542.309441,Fort St James,BC,0.039,reported_on_air_licensed
+dtv_transmitter_census_v1,28,CH6497-DT,Relay,,651.0,332.8,±1 kHz,629,554.309441,Fort St. James,BC,0.039,reported_on_air_licensed
+dtv_transmitter_census_v1,31,CH6498-DT,Relay,,651.0,332.8,±1 kHz,583,572.309441,Fort St. James,BC,0.039,reported_on_air_licensed
+dtv_transmitter_census_v1,33,CH6499,Relay,,651.0,332.8,±1 kHz,552,584.309441,Fort St James,BC,0.039,reported_on_air_licensed
+dtv_transmitter_census_v1,35,CH6457-DT,Relay,,651.0,332.8,±1 kHz,521,596.309441,Fort St. James,BC,0.039,reported_on_air_licensed
+dtv_transmitter_census_v1,27,K27MM-D,Translator (LPTV),,663.0,134.8,None specified,644,548.309441,TENDOY / LEADORE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,K14LP-D,Translator (LPTV),,667.9,204.4,None specified,844,470.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16LL-D,Translator (LPTV),,667.9,204.4,None specified,813,482.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18OJ-D,Translator (LPTV),,667.9,204.4,None specified,783,494.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20IR-D,Translator (LPTV),,667.9,204.4,None specified,752,506.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22HO-D,Translator (LPTV),,667.9,204.4,None specified,721,518.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23OS-D,Translator (LPTV),,667.9,204.4,None specified,706,524.309441,LONDON SPRINGS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24LY-D,Translator (LPTV),,667.9,204.4,None specified,690,530.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26MZ-D,Translator (LPTV),,667.9,204.4,None specified,660,542.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27JY-D,Translator (LPTV),,667.9,204.4,None specified,644,548.309441,LONDON SPRINGS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30OC-D,Translator (LPTV),,667.9,204.4,None specified,598,566.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31PI-D,Translator (LPTV),,667.9,204.4,None specified,583,572.309441,LONDON SPRINGS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32LW-D,Translator (LPTV),,667.9,204.4,None specified,568,578.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33KD-D,Translator (LPTV),,667.9,204.4,None specified,552,584.309441,LONDON SPRINGS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35JH-D,Translator (LPTV),,667.9,204.4,None specified,521,596.309441,LONDON SPRINGS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36NL-D,Translator (LPTV),,667.9,204.4,None specified,506,602.309441,COTTAGE GROVE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19EC-D,Translator (LPTV),,671.1,210.3,None specified,767,500.309441,MAPLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21LY-D,Translator (LPTV),,671.1,210.3,None specified,736,512.309441,MAPLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25NI-D,Translator (LPTV),,671.1,210.3,None specified,675,536.309441,MAPLETON,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34CB-D,Translator (LPTV),,672.7,135.3,None specified,537,590.309441,"LEMHI, ETC.",ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K12LS-D,Translator (LPTV),,674.3,140.6,None specified,783,494.309441,CHALLIS,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22IM-D,Translator (LPTV),,674.3,140.6,None specified,721,518.309441,CHALLIS,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,K17DU-D,Translator (LPTV),,680.8,187.2,None specified,798,488.309441,CHRISTMAS VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26KQ-D,Translator (LPTV),,680.8,187.2,None specified,660,542.309441,CHRISTMAS VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,KIVI-TV,Full-power,,684.0,158.8,±1 kHz,690,530.309441,NAMPA,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24MF-D,Translator (LPTV),,684.0,211.6,None specified,690,530.309441,FLORENCE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26NE-D,Translator (LPTV),,684.0,211.6,None specified,660,542.309441,FLORENCE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28NZ-D,Translator (LPTV),,684.0,211.6,None specified,629,554.309441,FLORENCE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32HF-D,Translator (LPTV),,684.0,211.6,None specified,568,578.309441,FLORENCE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35HW-D,Translator (LPTV),,684.0,211.6,None specified,521,596.309441,FLORENCE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,KKJB,Full-power,,685.6,156.3,±1 kHz,829,476.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,KBOI-TV,Full-power,,685.6,156.3,±1 kHz,752,506.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,KTVB,Full-power,,685.6,156.3,±1 kHz,706,524.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,KKIC-LD,Low-power (LPTV),,685.6,156.3,None specified,813,482.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,KCBB-LD,Low-power (LPTV),,685.6,156.3,None specified,767,500.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,KFLL-LD,Low-power (LPTV),,685.6,156.3,None specified,675,536.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,KTVJ-LD,Low-power (LPTV),,685.6,156.3,None specified,660,542.309441,Boise,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,KBKI-LD,Low-power (LPTV),,685.6,156.3,None specified,644,548.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,KYUU-LD,Low-power (LPTV),,685.6,156.3,None specified,629,554.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,KIWB-LD,Low-power (LPTV),,685.6,156.3,None specified,614,560.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31FD-D,Translator (LPTV),,685.6,156.3,None specified,583,572.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,KBSE-LD,Low-power (LPTV),,685.6,156.3,None specified,552,584.309441,"BOISE, ETC.",ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,KEVA-LD,Low-power (LPTV),,685.6,156.3,None specified,537,590.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,KZAK-LD,Low-power (LPTV),,685.6,156.3,None specified,521,596.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,KAID,Full-power,,685.6,156.3,±1 kHz,736,512.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,KAID,Full-power,,685.6,156.3,±1 kHz,736,512.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,17,KAID,Full-power,,685.6,156.3,±1 kHz,736,512.309441,BOISE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25OK-D,Translator (LPTV),,695.2,205.1,None specified,675,536.309441,YONCALLA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32FI-D,Translator (LPTV),,695.2,205.1,None specified,568,578.309441,YONCALLA,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,K14IJ-D,Translator (LPTV),,701.7,135.0,None specified,844,470.309441,LEADORE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16KO-D,Translator (LPTV),,701.7,135.0,None specified,813,482.309441,LEADORE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23JH-D,Translator (LPTV),,701.7,135.0,None specified,706,524.309441,LEADORE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25PY-D,Translator (LPTV),,701.7,135.0,None specified,675,536.309441,LEADORE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30BU-D,Translator (LPTV),,701.7,135.0,None specified,598,566.309441,LEADORE,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15JG-D,Translator (LPTV),,706.5,208.5,None specified,829,476.309441,SCOTTSBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,21,K21MB-D,Translator (LPTV),,706.5,208.5,None specified,736,512.309441,SCOTTSBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20LL-D,Translator (LPTV),,711.3,210.4,None specified,752,506.309441,REEDSPORT,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31AE-D,Translator (LPTV),,717.8,204.6,None specified,583,572.309441,SUTHERLIN,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24FH-D,Translator (LPTV),,721.0,203.0,None specified,690,530.309441,"GLIDE, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26HO-D,Translator (LPTV),,721.0,203.0,None specified,660,542.309441,GLIDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,K34IC-D,Translator (LPTV),,721.0,203.0,None specified,537,590.309441,GLIDE,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,CH4148,Relay,,718.1,350.1,±1 kHz,690,530.309441,Chetwynd,BC,0.041,reported_on_air_licensed
+dtv_transmitter_census_v1,28,CHET-TV,Full-power,,718.1,350.1,±1 kHz,629,554.309441,Chetwynd,BC,0.042,reported_on_air_licensed
+dtv_transmitter_census_v1,30,CH4334,Relay,,718.1,350.1,±1 kHz,598,566.309441,Chetwynd,BC,0.049,reported_on_air_licensed
+dtv_transmitter_census_v1,18,KTVC,Full-power,,735.5,204.2,±1 kHz,783,494.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15KN-D,Translator (LPTV),,735.5,204.2,None specified,829,476.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,20,K20MK-D,Translator (LPTV),,735.5,204.2,None specified,752,506.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22MB-D,Translator (LPTV),,735.5,204.2,None specified,721,518.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33NY-D,Translator (LPTV),,735.5,204.2,None specified,552,584.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,KTCW,Full-power,,735.5,204.2,±1 kHz,506,602.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,KPIC,Full-power,,735.5,204.2,±1 kHz,767,500.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,KPIC,Full-power,,735.5,204.2,±1 kHz,767,500.309441,ROSEBURG,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28LO-D,Translator (LPTV),,740.3,185.9,None specified,629,554.309441,PAISLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,KMCB,Full-power,,750.0,209.7,±1 kHz,721,518.309441,COOS BAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,34,KCBY-TV,Full-power,,750.0,209.7,±1 kHz,537,590.309441,COOS BAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,K14MQ-D,Translator (LPTV),,750.0,209.7,None specified,844,470.309441,COOS BAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15KF-D,Translator (LPTV),,750.0,209.7,None specified,829,476.309441,COOS BAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16IE-D,Translator (LPTV),,750.0,209.7,None specified,813,482.309441,COOS BAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23KD-D,Translator (LPTV),,750.0,209.7,None specified,706,524.309441,"COOS BAY, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,27,K27CL-D,Translator (LPTV),,750.0,209.7,None specified,644,548.309441,COOS BAY/NORTH BEND,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,30,K30BN-D,Translator (LPTV),,750.0,209.7,None specified,598,566.309441,COOS BAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,36,K36BX-D,Translator (LPTV),,750.0,209.7,None specified,506,602.309441,COOS BAY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15HR-D,Translator (LPTV),,756.4,140.4,None specified,829,476.309441,MACKAY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,22,K22GX-D,Translator (LPTV),,759.6,203.4,None specified,721,518.309441,TRI CITY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35MS-D,Translator (LPTV),,764.4,203.0,None specified,521,596.309441,"CANYONVILLE, ETC",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,K23ME-D,Translator (LPTV),,766.0,205.5,None specified,706,524.309441,CAMAS VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,29,K29KR-D,Translator (LPTV),,766.0,205.5,None specified,614,560.309441,CAMAS VALLEY,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,33,K33LZ-D,Translator (LPTV),,777.3,208.2,None specified,552,584.309441,MYRTLE POINT,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,16,K16JE-D,Translator (LPTV),,782.1,153.2,None specified,813,482.309441,GLENNS FERRY,ID,,reported_on_air_unverified
+dtv_transmitter_census_v1,14,K14QH-D,Translator (LPTV),,787.0,197.9,None specified,844,470.309441,BUTTE FALLS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,18,K18LU-D,Translator (LPTV),,788.6,203.2,None specified,783,494.309441,"GLENDALE, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,24,K24MH-D,Translator (LPTV),,793.4,207.2,None specified,690,530.309441,POWERS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,26,K26NJ-D,Translator (LPTV),,793.4,207.2,None specified,660,542.309441,POWERS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,28,K28OD-D,Translator (LPTV),,793.4,207.2,None specified,629,554.309441,POWERS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,32,K32JL-D,Translator (LPTV),,793.4,207.2,None specified,568,578.309441,POWERS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,35,K35PQ-D,Translator (LPTV),,793.4,207.2,None specified,521,596.309441,POWERS,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,15,K15HU-D,Translator (LPTV),,795.0,184.3,None specified,829,476.309441,LAKEVIEW,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,19,K19BK-D,Translator (LPTV),,795.0,184.3,None specified,767,500.309441,LAKEVIEW,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,31,K31KZ-D,Translator (LPTV),,795.0,184.3,None specified,583,572.309441,LAKEVIEW,OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,25,K25JW-D,Translator (LPTV),,803.1,202.7,None specified,675,536.309441,"HUGO, ETC.",OR,,reported_on_air_unverified
+dtv_transmitter_census_v1,23,CH2024,Relay,,627.1,328.6,±0.003%,706,524.309441,Fort Fraser,BC,0.090,licensed_candidate
+dtv_transmitter_census_v1,30,CH2025,Relay,,627.1,328.6,±0.003%,598,566.309441,Fort Fraser,BC,0.100,licensed_candidate
+dtv_transmitter_census_v1,15,CH2308,Relay,,627.1,328.6,±0.003%,829,476.309441,Fraser Lake,BC,0.080,licensed_candidate
+dtv_transmitter_census_v1,17,CH2309,Relay,,627.1,328.6,±0.003%,798,488.309441,Fraser Lake,BC,0.080,licensed_candidate
+dtv_transmitter_census_v1,21,CH2031,Relay,,646.1,326.4,±0.003%,736,512.309441,Endako,BC,0.100,licensed_candidate
+dtv_transmitter_census_v1,29,CH4303,Relay,,646.1,326.4,±0.003%,614,560.309441,Endako,BC,0.100,licensed_candidate
+dtv_transmitter_census_v1,31,CH4304,Relay,,646.1,326.4,±0.003%,583,572.309441,Endako,BC,0.100,licensed_candidate
+dtv_transmitter_census_v1,33,CH4337,Relay,,646.1,326.4,±0.003%,552,584.309441,Endako,BC,0.100,licensed_candidate
+dtv_transmitter_census_v1,35,CH2032,Relay,,646.1,326.4,±0.003%,521,596.309441,Endako,BC,0.100,licensed_candidate
+dtv_transmitter_census_v1,19,CH4433-DT,LPTV,,627.1,328.6,None specified,767,500.309441,Fraser Lake,BC,0.085,licensed_candidate
+dtv_transmitter_census_v1,22,CH6460-DT,LPTV,,651.0,332.8,None specified,721,518.309441,Fort St. James,BC,0.039,licensed_candidate

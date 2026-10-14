@@ -1,0 +1,12 @@
+{
+  "input_iq": "generated/atsc/atsc_8vsb_stationary.cfile",
+  "output_iq": "generated/atsc/atsc_8vsb_stationary_trimmed.cfile",
+  "n_samples": 468928,
+  "pilot_frequency_hz": -2690559.491412449,
+  "pilot_power_before": 0.009722380796500422,
+  "data_power_direct": 0.12711004007436238,
+  "pilot_below_data_direct_db_before": 11.164072285578474,
+  "target_below_data_db": 11.3,
+  "amplitude_gain_applied": 0.9844725569088081,
+  "gain_db": -0.1359277144215258
+}

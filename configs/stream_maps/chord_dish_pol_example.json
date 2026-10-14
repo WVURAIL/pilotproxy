@@ -1,0 +1,6164 @@
+{
+  "schema_version": "pilotproxy_stream_map_v1",
+  "receiver_profile_id": "chord_dtv_fengine",
+  "stream_unit": "dish_polarization",
+  "num_dishes": 512,
+  "num_polarizations": 2,
+  "num_streams": 1024,
+  "profile_status": "example_requires_data_product_verification",
+  "indexing_convention": {
+    "formula": "stream_index = polarization_index * num_dishes + dish_index",
+    "source_note": "Matches the kotekan chord voltage buffer inner axes [P, D]: the receiver adapter flattens one coarse channel's [T, P, D] slice stream-major with polarization outer and dish inner. The detector sums powers incoherently over rows, so this order is bookkeeping for per-stream diagnostics and debug taps, not detector physics.",
+    "verification_required": true
+  },
+  "polarization_labels": {
+    "0": "X",
+    "1": "Y"
+  },
+  "streams": [
+    {
+      "stream_index": 0,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 0
+    },
+    {
+      "stream_index": 1,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 1
+    },
+    {
+      "stream_index": 2,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 2
+    },
+    {
+      "stream_index": 3,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 3
+    },
+    {
+      "stream_index": 4,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 4
+    },
+    {
+      "stream_index": 5,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 5
+    },
+    {
+      "stream_index": 6,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 6
+    },
+    {
+      "stream_index": 7,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 7
+    },
+    {
+      "stream_index": 8,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 8
+    },
+    {
+      "stream_index": 9,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 9
+    },
+    {
+      "stream_index": 10,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 10
+    },
+    {
+      "stream_index": 11,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 11
+    },
+    {
+      "stream_index": 12,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 12
+    },
+    {
+      "stream_index": 13,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 13
+    },
+    {
+      "stream_index": 14,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 14
+    },
+    {
+      "stream_index": 15,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 15
+    },
+    {
+      "stream_index": 16,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 16
+    },
+    {
+      "stream_index": 17,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 17
+    },
+    {
+      "stream_index": 18,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 18
+    },
+    {
+      "stream_index": 19,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 19
+    },
+    {
+      "stream_index": 20,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 20
+    },
+    {
+      "stream_index": 21,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 21
+    },
+    {
+      "stream_index": 22,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 22
+    },
+    {
+      "stream_index": 23,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 23
+    },
+    {
+      "stream_index": 24,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 24
+    },
+    {
+      "stream_index": 25,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 25
+    },
+    {
+      "stream_index": 26,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 26
+    },
+    {
+      "stream_index": 27,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 27
+    },
+    {
+      "stream_index": 28,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 28
+    },
+    {
+      "stream_index": 29,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 29
+    },
+    {
+      "stream_index": 30,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 30
+    },
+    {
+      "stream_index": 31,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 31
+    },
+    {
+      "stream_index": 32,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 32
+    },
+    {
+      "stream_index": 33,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 33
+    },
+    {
+      "stream_index": 34,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 34
+    },
+    {
+      "stream_index": 35,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 35
+    },
+    {
+      "stream_index": 36,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 36
+    },
+    {
+      "stream_index": 37,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 37
+    },
+    {
+      "stream_index": 38,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 38
+    },
+    {
+      "stream_index": 39,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 39
+    },
+    {
+      "stream_index": 40,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 40
+    },
+    {
+      "stream_index": 41,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 41
+    },
+    {
+      "stream_index": 42,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 42
+    },
+    {
+      "stream_index": 43,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 43
+    },
+    {
+      "stream_index": 44,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 44
+    },
+    {
+      "stream_index": 45,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 45
+    },
+    {
+      "stream_index": 46,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 46
+    },
+    {
+      "stream_index": 47,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 47
+    },
+    {
+      "stream_index": 48,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 48
+    },
+    {
+      "stream_index": 49,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 49
+    },
+    {
+      "stream_index": 50,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 50
+    },
+    {
+      "stream_index": 51,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 51
+    },
+    {
+      "stream_index": 52,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 52
+    },
+    {
+      "stream_index": 53,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 53
+    },
+    {
+      "stream_index": 54,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 54
+    },
+    {
+      "stream_index": 55,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 55
+    },
+    {
+      "stream_index": 56,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 56
+    },
+    {
+      "stream_index": 57,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 57
+    },
+    {
+      "stream_index": 58,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 58
+    },
+    {
+      "stream_index": 59,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 59
+    },
+    {
+      "stream_index": 60,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 60
+    },
+    {
+      "stream_index": 61,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 61
+    },
+    {
+      "stream_index": 62,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 62
+    },
+    {
+      "stream_index": 63,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 63
+    },
+    {
+      "stream_index": 64,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 64
+    },
+    {
+      "stream_index": 65,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 65
+    },
+    {
+      "stream_index": 66,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 66
+    },
+    {
+      "stream_index": 67,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 67
+    },
+    {
+      "stream_index": 68,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 68
+    },
+    {
+      "stream_index": 69,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 69
+    },
+    {
+      "stream_index": 70,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 70
+    },
+    {
+      "stream_index": 71,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 71
+    },
+    {
+      "stream_index": 72,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 72
+    },
+    {
+      "stream_index": 73,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 73
+    },
+    {
+      "stream_index": 74,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 74
+    },
+    {
+      "stream_index": 75,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 75
+    },
+    {
+      "stream_index": 76,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 76
+    },
+    {
+      "stream_index": 77,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 77
+    },
+    {
+      "stream_index": 78,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 78
+    },
+    {
+      "stream_index": 79,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 79
+    },
+    {
+      "stream_index": 80,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 80
+    },
+    {
+      "stream_index": 81,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 81
+    },
+    {
+      "stream_index": 82,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 82
+    },
+    {
+      "stream_index": 83,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 83
+    },
+    {
+      "stream_index": 84,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 84
+    },
+    {
+      "stream_index": 85,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 85
+    },
+    {
+      "stream_index": 86,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 86
+    },
+    {
+      "stream_index": 87,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 87
+    },
+    {
+      "stream_index": 88,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 88
+    },
+    {
+      "stream_index": 89,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 89
+    },
+    {
+      "stream_index": 90,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 90
+    },
+    {
+      "stream_index": 91,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 91
+    },
+    {
+      "stream_index": 92,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 92
+    },
+    {
+      "stream_index": 93,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 93
+    },
+    {
+      "stream_index": 94,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 94
+    },
+    {
+      "stream_index": 95,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 95
+    },
+    {
+      "stream_index": 96,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 96
+    },
+    {
+      "stream_index": 97,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 97
+    },
+    {
+      "stream_index": 98,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 98
+    },
+    {
+      "stream_index": 99,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 99
+    },
+    {
+      "stream_index": 100,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 100
+    },
+    {
+      "stream_index": 101,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 101
+    },
+    {
+      "stream_index": 102,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 102
+    },
+    {
+      "stream_index": 103,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 103
+    },
+    {
+      "stream_index": 104,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 104
+    },
+    {
+      "stream_index": 105,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 105
+    },
+    {
+      "stream_index": 106,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 106
+    },
+    {
+      "stream_index": 107,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 107
+    },
+    {
+      "stream_index": 108,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 108
+    },
+    {
+      "stream_index": 109,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 109
+    },
+    {
+      "stream_index": 110,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 110
+    },
+    {
+      "stream_index": 111,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 111
+    },
+    {
+      "stream_index": 112,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 112
+    },
+    {
+      "stream_index": 113,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 113
+    },
+    {
+      "stream_index": 114,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 114
+    },
+    {
+      "stream_index": 115,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 115
+    },
+    {
+      "stream_index": 116,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 116
+    },
+    {
+      "stream_index": 117,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 117
+    },
+    {
+      "stream_index": 118,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 118
+    },
+    {
+      "stream_index": 119,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 119
+    },
+    {
+      "stream_index": 120,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 120
+    },
+    {
+      "stream_index": 121,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 121
+    },
+    {
+      "stream_index": 122,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 122
+    },
+    {
+      "stream_index": 123,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 123
+    },
+    {
+      "stream_index": 124,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 124
+    },
+    {
+      "stream_index": 125,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 125
+    },
+    {
+      "stream_index": 126,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 126
+    },
+    {
+      "stream_index": 127,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 127
+    },
+    {
+      "stream_index": 128,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 128
+    },
+    {
+      "stream_index": 129,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 129
+    },
+    {
+      "stream_index": 130,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 130
+    },
+    {
+      "stream_index": 131,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 131
+    },
+    {
+      "stream_index": 132,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 132
+    },
+    {
+      "stream_index": 133,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 133
+    },
+    {
+      "stream_index": 134,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 134
+    },
+    {
+      "stream_index": 135,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 135
+    },
+    {
+      "stream_index": 136,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 136
+    },
+    {
+      "stream_index": 137,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 137
+    },
+    {
+      "stream_index": 138,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 138
+    },
+    {
+      "stream_index": 139,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 139
+    },
+    {
+      "stream_index": 140,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 140
+    },
+    {
+      "stream_index": 141,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 141
+    },
+    {
+      "stream_index": 142,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 142
+    },
+    {
+      "stream_index": 143,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 143
+    },
+    {
+      "stream_index": 144,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 144
+    },
+    {
+      "stream_index": 145,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 145
+    },
+    {
+      "stream_index": 146,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 146
+    },
+    {
+      "stream_index": 147,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 147
+    },
+    {
+      "stream_index": 148,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 148
+    },
+    {
+      "stream_index": 149,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 149
+    },
+    {
+      "stream_index": 150,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 150
+    },
+    {
+      "stream_index": 151,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 151
+    },
+    {
+      "stream_index": 152,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 152
+    },
+    {
+      "stream_index": 153,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 153
+    },
+    {
+      "stream_index": 154,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 154
+    },
+    {
+      "stream_index": 155,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 155
+    },
+    {
+      "stream_index": 156,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 156
+    },
+    {
+      "stream_index": 157,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 157
+    },
+    {
+      "stream_index": 158,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 158
+    },
+    {
+      "stream_index": 159,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 159
+    },
+    {
+      "stream_index": 160,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 160
+    },
+    {
+      "stream_index": 161,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 161
+    },
+    {
+      "stream_index": 162,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 162
+    },
+    {
+      "stream_index": 163,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 163
+    },
+    {
+      "stream_index": 164,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 164
+    },
+    {
+      "stream_index": 165,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 165
+    },
+    {
+      "stream_index": 166,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 166
+    },
+    {
+      "stream_index": 167,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 167
+    },
+    {
+      "stream_index": 168,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 168
+    },
+    {
+      "stream_index": 169,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 169
+    },
+    {
+      "stream_index": 170,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 170
+    },
+    {
+      "stream_index": 171,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 171
+    },
+    {
+      "stream_index": 172,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 172
+    },
+    {
+      "stream_index": 173,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 173
+    },
+    {
+      "stream_index": 174,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 174
+    },
+    {
+      "stream_index": 175,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 175
+    },
+    {
+      "stream_index": 176,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 176
+    },
+    {
+      "stream_index": 177,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 177
+    },
+    {
+      "stream_index": 178,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 178
+    },
+    {
+      "stream_index": 179,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 179
+    },
+    {
+      "stream_index": 180,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 180
+    },
+    {
+      "stream_index": 181,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 181
+    },
+    {
+      "stream_index": 182,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 182
+    },
+    {
+      "stream_index": 183,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 183
+    },
+    {
+      "stream_index": 184,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 184
+    },
+    {
+      "stream_index": 185,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 185
+    },
+    {
+      "stream_index": 186,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 186
+    },
+    {
+      "stream_index": 187,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 187
+    },
+    {
+      "stream_index": 188,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 188
+    },
+    {
+      "stream_index": 189,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 189
+    },
+    {
+      "stream_index": 190,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 190
+    },
+    {
+      "stream_index": 191,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 191
+    },
+    {
+      "stream_index": 192,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 192
+    },
+    {
+      "stream_index": 193,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 193
+    },
+    {
+      "stream_index": 194,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 194
+    },
+    {
+      "stream_index": 195,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 195
+    },
+    {
+      "stream_index": 196,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 196
+    },
+    {
+      "stream_index": 197,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 197
+    },
+    {
+      "stream_index": 198,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 198
+    },
+    {
+      "stream_index": 199,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 199
+    },
+    {
+      "stream_index": 200,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 200
+    },
+    {
+      "stream_index": 201,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 201
+    },
+    {
+      "stream_index": 202,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 202
+    },
+    {
+      "stream_index": 203,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 203
+    },
+    {
+      "stream_index": 204,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 204
+    },
+    {
+      "stream_index": 205,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 205
+    },
+    {
+      "stream_index": 206,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 206
+    },
+    {
+      "stream_index": 207,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 207
+    },
+    {
+      "stream_index": 208,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 208
+    },
+    {
+      "stream_index": 209,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 209
+    },
+    {
+      "stream_index": 210,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 210
+    },
+    {
+      "stream_index": 211,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 211
+    },
+    {
+      "stream_index": 212,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 212
+    },
+    {
+      "stream_index": 213,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 213
+    },
+    {
+      "stream_index": 214,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 214
+    },
+    {
+      "stream_index": 215,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 215
+    },
+    {
+      "stream_index": 216,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 216
+    },
+    {
+      "stream_index": 217,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 217
+    },
+    {
+      "stream_index": 218,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 218
+    },
+    {
+      "stream_index": 219,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 219
+    },
+    {
+      "stream_index": 220,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 220
+    },
+    {
+      "stream_index": 221,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 221
+    },
+    {
+      "stream_index": 222,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 222
+    },
+    {
+      "stream_index": 223,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 223
+    },
+    {
+      "stream_index": 224,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 224
+    },
+    {
+      "stream_index": 225,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 225
+    },
+    {
+      "stream_index": 226,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 226
+    },
+    {
+      "stream_index": 227,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 227
+    },
+    {
+      "stream_index": 228,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 228
+    },
+    {
+      "stream_index": 229,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 229
+    },
+    {
+      "stream_index": 230,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 230
+    },
+    {
+      "stream_index": 231,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 231
+    },
+    {
+      "stream_index": 232,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 232
+    },
+    {
+      "stream_index": 233,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 233
+    },
+    {
+      "stream_index": 234,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 234
+    },
+    {
+      "stream_index": 235,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 235
+    },
+    {
+      "stream_index": 236,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 236
+    },
+    {
+      "stream_index": 237,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 237
+    },
+    {
+      "stream_index": 238,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 238
+    },
+    {
+      "stream_index": 239,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 239
+    },
+    {
+      "stream_index": 240,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 240
+    },
+    {
+      "stream_index": 241,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 241
+    },
+    {
+      "stream_index": 242,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 242
+    },
+    {
+      "stream_index": 243,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 243
+    },
+    {
+      "stream_index": 244,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 244
+    },
+    {
+      "stream_index": 245,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 245
+    },
+    {
+      "stream_index": 246,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 246
+    },
+    {
+      "stream_index": 247,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 247
+    },
+    {
+      "stream_index": 248,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 248
+    },
+    {
+      "stream_index": 249,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 249
+    },
+    {
+      "stream_index": 250,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 250
+    },
+    {
+      "stream_index": 251,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 251
+    },
+    {
+      "stream_index": 252,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 252
+    },
+    {
+      "stream_index": 253,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 253
+    },
+    {
+      "stream_index": 254,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 254
+    },
+    {
+      "stream_index": 255,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 255
+    },
+    {
+      "stream_index": 256,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 256
+    },
+    {
+      "stream_index": 257,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 257
+    },
+    {
+      "stream_index": 258,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 258
+    },
+    {
+      "stream_index": 259,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 259
+    },
+    {
+      "stream_index": 260,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 260
+    },
+    {
+      "stream_index": 261,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 261
+    },
+    {
+      "stream_index": 262,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 262
+    },
+    {
+      "stream_index": 263,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 263
+    },
+    {
+      "stream_index": 264,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 264
+    },
+    {
+      "stream_index": 265,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 265
+    },
+    {
+      "stream_index": 266,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 266
+    },
+    {
+      "stream_index": 267,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 267
+    },
+    {
+      "stream_index": 268,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 268
+    },
+    {
+      "stream_index": 269,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 269
+    },
+    {
+      "stream_index": 270,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 270
+    },
+    {
+      "stream_index": 271,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 271
+    },
+    {
+      "stream_index": 272,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 272
+    },
+    {
+      "stream_index": 273,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 273
+    },
+    {
+      "stream_index": 274,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 274
+    },
+    {
+      "stream_index": 275,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 275
+    },
+    {
+      "stream_index": 276,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 276
+    },
+    {
+      "stream_index": 277,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 277
+    },
+    {
+      "stream_index": 278,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 278
+    },
+    {
+      "stream_index": 279,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 279
+    },
+    {
+      "stream_index": 280,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 280
+    },
+    {
+      "stream_index": 281,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 281
+    },
+    {
+      "stream_index": 282,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 282
+    },
+    {
+      "stream_index": 283,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 283
+    },
+    {
+      "stream_index": 284,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 284
+    },
+    {
+      "stream_index": 285,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 285
+    },
+    {
+      "stream_index": 286,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 286
+    },
+    {
+      "stream_index": 287,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 287
+    },
+    {
+      "stream_index": 288,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 288
+    },
+    {
+      "stream_index": 289,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 289
+    },
+    {
+      "stream_index": 290,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 290
+    },
+    {
+      "stream_index": 291,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 291
+    },
+    {
+      "stream_index": 292,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 292
+    },
+    {
+      "stream_index": 293,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 293
+    },
+    {
+      "stream_index": 294,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 294
+    },
+    {
+      "stream_index": 295,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 295
+    },
+    {
+      "stream_index": 296,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 296
+    },
+    {
+      "stream_index": 297,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 297
+    },
+    {
+      "stream_index": 298,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 298
+    },
+    {
+      "stream_index": 299,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 299
+    },
+    {
+      "stream_index": 300,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 300
+    },
+    {
+      "stream_index": 301,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 301
+    },
+    {
+      "stream_index": 302,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 302
+    },
+    {
+      "stream_index": 303,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 303
+    },
+    {
+      "stream_index": 304,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 304
+    },
+    {
+      "stream_index": 305,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 305
+    },
+    {
+      "stream_index": 306,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 306
+    },
+    {
+      "stream_index": 307,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 307
+    },
+    {
+      "stream_index": 308,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 308
+    },
+    {
+      "stream_index": 309,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 309
+    },
+    {
+      "stream_index": 310,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 310
+    },
+    {
+      "stream_index": 311,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 311
+    },
+    {
+      "stream_index": 312,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 312
+    },
+    {
+      "stream_index": 313,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 313
+    },
+    {
+      "stream_index": 314,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 314
+    },
+    {
+      "stream_index": 315,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 315
+    },
+    {
+      "stream_index": 316,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 316
+    },
+    {
+      "stream_index": 317,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 317
+    },
+    {
+      "stream_index": 318,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 318
+    },
+    {
+      "stream_index": 319,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 319
+    },
+    {
+      "stream_index": 320,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 320
+    },
+    {
+      "stream_index": 321,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 321
+    },
+    {
+      "stream_index": 322,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 322
+    },
+    {
+      "stream_index": 323,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 323
+    },
+    {
+      "stream_index": 324,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 324
+    },
+    {
+      "stream_index": 325,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 325
+    },
+    {
+      "stream_index": 326,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 326
+    },
+    {
+      "stream_index": 327,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 327
+    },
+    {
+      "stream_index": 328,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 328
+    },
+    {
+      "stream_index": 329,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 329
+    },
+    {
+      "stream_index": 330,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 330
+    },
+    {
+      "stream_index": 331,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 331
+    },
+    {
+      "stream_index": 332,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 332
+    },
+    {
+      "stream_index": 333,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 333
+    },
+    {
+      "stream_index": 334,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 334
+    },
+    {
+      "stream_index": 335,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 335
+    },
+    {
+      "stream_index": 336,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 336
+    },
+    {
+      "stream_index": 337,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 337
+    },
+    {
+      "stream_index": 338,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 338
+    },
+    {
+      "stream_index": 339,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 339
+    },
+    {
+      "stream_index": 340,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 340
+    },
+    {
+      "stream_index": 341,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 341
+    },
+    {
+      "stream_index": 342,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 342
+    },
+    {
+      "stream_index": 343,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 343
+    },
+    {
+      "stream_index": 344,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 344
+    },
+    {
+      "stream_index": 345,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 345
+    },
+    {
+      "stream_index": 346,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 346
+    },
+    {
+      "stream_index": 347,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 347
+    },
+    {
+      "stream_index": 348,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 348
+    },
+    {
+      "stream_index": 349,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 349
+    },
+    {
+      "stream_index": 350,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 350
+    },
+    {
+      "stream_index": 351,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 351
+    },
+    {
+      "stream_index": 352,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 352
+    },
+    {
+      "stream_index": 353,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 353
+    },
+    {
+      "stream_index": 354,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 354
+    },
+    {
+      "stream_index": 355,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 355
+    },
+    {
+      "stream_index": 356,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 356
+    },
+    {
+      "stream_index": 357,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 357
+    },
+    {
+      "stream_index": 358,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 358
+    },
+    {
+      "stream_index": 359,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 359
+    },
+    {
+      "stream_index": 360,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 360
+    },
+    {
+      "stream_index": 361,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 361
+    },
+    {
+      "stream_index": 362,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 362
+    },
+    {
+      "stream_index": 363,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 363
+    },
+    {
+      "stream_index": 364,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 364
+    },
+    {
+      "stream_index": 365,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 365
+    },
+    {
+      "stream_index": 366,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 366
+    },
+    {
+      "stream_index": 367,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 367
+    },
+    {
+      "stream_index": 368,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 368
+    },
+    {
+      "stream_index": 369,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 369
+    },
+    {
+      "stream_index": 370,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 370
+    },
+    {
+      "stream_index": 371,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 371
+    },
+    {
+      "stream_index": 372,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 372
+    },
+    {
+      "stream_index": 373,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 373
+    },
+    {
+      "stream_index": 374,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 374
+    },
+    {
+      "stream_index": 375,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 375
+    },
+    {
+      "stream_index": 376,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 376
+    },
+    {
+      "stream_index": 377,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 377
+    },
+    {
+      "stream_index": 378,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 378
+    },
+    {
+      "stream_index": 379,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 379
+    },
+    {
+      "stream_index": 380,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 380
+    },
+    {
+      "stream_index": 381,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 381
+    },
+    {
+      "stream_index": 382,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 382
+    },
+    {
+      "stream_index": 383,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 383
+    },
+    {
+      "stream_index": 384,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 384
+    },
+    {
+      "stream_index": 385,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 385
+    },
+    {
+      "stream_index": 386,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 386
+    },
+    {
+      "stream_index": 387,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 387
+    },
+    {
+      "stream_index": 388,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 388
+    },
+    {
+      "stream_index": 389,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 389
+    },
+    {
+      "stream_index": 390,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 390
+    },
+    {
+      "stream_index": 391,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 391
+    },
+    {
+      "stream_index": 392,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 392
+    },
+    {
+      "stream_index": 393,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 393
+    },
+    {
+      "stream_index": 394,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 394
+    },
+    {
+      "stream_index": 395,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 395
+    },
+    {
+      "stream_index": 396,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 396
+    },
+    {
+      "stream_index": 397,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 397
+    },
+    {
+      "stream_index": 398,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 398
+    },
+    {
+      "stream_index": 399,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 399
+    },
+    {
+      "stream_index": 400,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 400
+    },
+    {
+      "stream_index": 401,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 401
+    },
+    {
+      "stream_index": 402,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 402
+    },
+    {
+      "stream_index": 403,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 403
+    },
+    {
+      "stream_index": 404,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 404
+    },
+    {
+      "stream_index": 405,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 405
+    },
+    {
+      "stream_index": 406,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 406
+    },
+    {
+      "stream_index": 407,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 407
+    },
+    {
+      "stream_index": 408,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 408
+    },
+    {
+      "stream_index": 409,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 409
+    },
+    {
+      "stream_index": 410,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 410
+    },
+    {
+      "stream_index": 411,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 411
+    },
+    {
+      "stream_index": 412,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 412
+    },
+    {
+      "stream_index": 413,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 413
+    },
+    {
+      "stream_index": 414,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 414
+    },
+    {
+      "stream_index": 415,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 415
+    },
+    {
+      "stream_index": 416,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 416
+    },
+    {
+      "stream_index": 417,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 417
+    },
+    {
+      "stream_index": 418,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 418
+    },
+    {
+      "stream_index": 419,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 419
+    },
+    {
+      "stream_index": 420,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 420
+    },
+    {
+      "stream_index": 421,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 421
+    },
+    {
+      "stream_index": 422,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 422
+    },
+    {
+      "stream_index": 423,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 423
+    },
+    {
+      "stream_index": 424,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 424
+    },
+    {
+      "stream_index": 425,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 425
+    },
+    {
+      "stream_index": 426,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 426
+    },
+    {
+      "stream_index": 427,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 427
+    },
+    {
+      "stream_index": 428,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 428
+    },
+    {
+      "stream_index": 429,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 429
+    },
+    {
+      "stream_index": 430,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 430
+    },
+    {
+      "stream_index": 431,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 431
+    },
+    {
+      "stream_index": 432,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 432
+    },
+    {
+      "stream_index": 433,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 433
+    },
+    {
+      "stream_index": 434,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 434
+    },
+    {
+      "stream_index": 435,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 435
+    },
+    {
+      "stream_index": 436,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 436
+    },
+    {
+      "stream_index": 437,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 437
+    },
+    {
+      "stream_index": 438,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 438
+    },
+    {
+      "stream_index": 439,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 439
+    },
+    {
+      "stream_index": 440,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 440
+    },
+    {
+      "stream_index": 441,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 441
+    },
+    {
+      "stream_index": 442,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 442
+    },
+    {
+      "stream_index": 443,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 443
+    },
+    {
+      "stream_index": 444,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 444
+    },
+    {
+      "stream_index": 445,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 445
+    },
+    {
+      "stream_index": 446,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 446
+    },
+    {
+      "stream_index": 447,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 447
+    },
+    {
+      "stream_index": 448,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 448
+    },
+    {
+      "stream_index": 449,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 449
+    },
+    {
+      "stream_index": 450,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 450
+    },
+    {
+      "stream_index": 451,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 451
+    },
+    {
+      "stream_index": 452,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 452
+    },
+    {
+      "stream_index": 453,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 453
+    },
+    {
+      "stream_index": 454,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 454
+    },
+    {
+      "stream_index": 455,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 455
+    },
+    {
+      "stream_index": 456,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 456
+    },
+    {
+      "stream_index": 457,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 457
+    },
+    {
+      "stream_index": 458,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 458
+    },
+    {
+      "stream_index": 459,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 459
+    },
+    {
+      "stream_index": 460,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 460
+    },
+    {
+      "stream_index": 461,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 461
+    },
+    {
+      "stream_index": 462,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 462
+    },
+    {
+      "stream_index": 463,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 463
+    },
+    {
+      "stream_index": 464,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 464
+    },
+    {
+      "stream_index": 465,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 465
+    },
+    {
+      "stream_index": 466,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 466
+    },
+    {
+      "stream_index": 467,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 467
+    },
+    {
+      "stream_index": 468,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 468
+    },
+    {
+      "stream_index": 469,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 469
+    },
+    {
+      "stream_index": 470,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 470
+    },
+    {
+      "stream_index": 471,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 471
+    },
+    {
+      "stream_index": 472,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 472
+    },
+    {
+      "stream_index": 473,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 473
+    },
+    {
+      "stream_index": 474,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 474
+    },
+    {
+      "stream_index": 475,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 475
+    },
+    {
+      "stream_index": 476,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 476
+    },
+    {
+      "stream_index": 477,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 477
+    },
+    {
+      "stream_index": 478,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 478
+    },
+    {
+      "stream_index": 479,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 479
+    },
+    {
+      "stream_index": 480,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 480
+    },
+    {
+      "stream_index": 481,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 481
+    },
+    {
+      "stream_index": 482,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 482
+    },
+    {
+      "stream_index": 483,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 483
+    },
+    {
+      "stream_index": 484,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 484
+    },
+    {
+      "stream_index": 485,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 485
+    },
+    {
+      "stream_index": 486,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 486
+    },
+    {
+      "stream_index": 487,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 487
+    },
+    {
+      "stream_index": 488,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 488
+    },
+    {
+      "stream_index": 489,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 489
+    },
+    {
+      "stream_index": 490,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 490
+    },
+    {
+      "stream_index": 491,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 491
+    },
+    {
+      "stream_index": 492,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 492
+    },
+    {
+      "stream_index": 493,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 493
+    },
+    {
+      "stream_index": 494,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 494
+    },
+    {
+      "stream_index": 495,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 495
+    },
+    {
+      "stream_index": 496,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 496
+    },
+    {
+      "stream_index": 497,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 497
+    },
+    {
+      "stream_index": 498,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 498
+    },
+    {
+      "stream_index": 499,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 499
+    },
+    {
+      "stream_index": 500,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 500
+    },
+    {
+      "stream_index": 501,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 501
+    },
+    {
+      "stream_index": 502,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 502
+    },
+    {
+      "stream_index": 503,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 503
+    },
+    {
+      "stream_index": 504,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 504
+    },
+    {
+      "stream_index": 505,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 505
+    },
+    {
+      "stream_index": 506,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 506
+    },
+    {
+      "stream_index": 507,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 507
+    },
+    {
+      "stream_index": 508,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 508
+    },
+    {
+      "stream_index": 509,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 509
+    },
+    {
+      "stream_index": 510,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 510
+    },
+    {
+      "stream_index": 511,
+      "polarization_index": 0,
+      "polarization_label": "X",
+      "dish_index": 511
+    },
+    {
+      "stream_index": 512,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 0
+    },
+    {
+      "stream_index": 513,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 1
+    },
+    {
+      "stream_index": 514,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 2
+    },
+    {
+      "stream_index": 515,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 3
+    },
+    {
+      "stream_index": 516,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 4
+    },
+    {
+      "stream_index": 517,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 5
+    },
+    {
+      "stream_index": 518,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 6
+    },
+    {
+      "stream_index": 519,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 7
+    },
+    {
+      "stream_index": 520,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 8
+    },
+    {
+      "stream_index": 521,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 9
+    },
+    {
+      "stream_index": 522,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 10
+    },
+    {
+      "stream_index": 523,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 11
+    },
+    {
+      "stream_index": 524,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 12
+    },
+    {
+      "stream_index": 525,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 13
+    },
+    {
+      "stream_index": 526,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 14
+    },
+    {
+      "stream_index": 527,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 15
+    },
+    {
+      "stream_index": 528,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 16
+    },
+    {
+      "stream_index": 529,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 17
+    },
+    {
+      "stream_index": 530,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 18
+    },
+    {
+      "stream_index": 531,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 19
+    },
+    {
+      "stream_index": 532,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 20
+    },
+    {
+      "stream_index": 533,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 21
+    },
+    {
+      "stream_index": 534,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 22
+    },
+    {
+      "stream_index": 535,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 23
+    },
+    {
+      "stream_index": 536,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 24
+    },
+    {
+      "stream_index": 537,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 25
+    },
+    {
+      "stream_index": 538,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 26
+    },
+    {
+      "stream_index": 539,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 27
+    },
+    {
+      "stream_index": 540,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 28
+    },
+    {
+      "stream_index": 541,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 29
+    },
+    {
+      "stream_index": 542,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 30
+    },
+    {
+      "stream_index": 543,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 31
+    },
+    {
+      "stream_index": 544,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 32
+    },
+    {
+      "stream_index": 545,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 33
+    },
+    {
+      "stream_index": 546,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 34
+    },
+    {
+      "stream_index": 547,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 35
+    },
+    {
+      "stream_index": 548,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 36
+    },
+    {
+      "stream_index": 549,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 37
+    },
+    {
+      "stream_index": 550,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 38
+    },
+    {
+      "stream_index": 551,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 39
+    },
+    {
+      "stream_index": 552,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 40
+    },
+    {
+      "stream_index": 553,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 41
+    },
+    {
+      "stream_index": 554,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 42
+    },
+    {
+      "stream_index": 555,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 43
+    },
+    {
+      "stream_index": 556,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 44
+    },
+    {
+      "stream_index": 557,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 45
+    },
+    {
+      "stream_index": 558,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 46
+    },
+    {
+      "stream_index": 559,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 47
+    },
+    {
+      "stream_index": 560,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 48
+    },
+    {
+      "stream_index": 561,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 49
+    },
+    {
+      "stream_index": 562,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 50
+    },
+    {
+      "stream_index": 563,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 51
+    },
+    {
+      "stream_index": 564,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 52
+    },
+    {
+      "stream_index": 565,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 53
+    },
+    {
+      "stream_index": 566,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 54
+    },
+    {
+      "stream_index": 567,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 55
+    },
+    {
+      "stream_index": 568,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 56
+    },
+    {
+      "stream_index": 569,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 57
+    },
+    {
+      "stream_index": 570,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 58
+    },
+    {
+      "stream_index": 571,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 59
+    },
+    {
+      "stream_index": 572,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 60
+    },
+    {
+      "stream_index": 573,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 61
+    },
+    {
+      "stream_index": 574,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 62
+    },
+    {
+      "stream_index": 575,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 63
+    },
+    {
+      "stream_index": 576,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 64
+    },
+    {
+      "stream_index": 577,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 65
+    },
+    {
+      "stream_index": 578,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 66
+    },
+    {
+      "stream_index": 579,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 67
+    },
+    {
+      "stream_index": 580,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 68
+    },
+    {
+      "stream_index": 581,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 69
+    },
+    {
+      "stream_index": 582,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 70
+    },
+    {
+      "stream_index": 583,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 71
+    },
+    {
+      "stream_index": 584,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 72
+    },
+    {
+      "stream_index": 585,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 73
+    },
+    {
+      "stream_index": 586,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 74
+    },
+    {
+      "stream_index": 587,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 75
+    },
+    {
+      "stream_index": 588,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 76
+    },
+    {
+      "stream_index": 589,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 77
+    },
+    {
+      "stream_index": 590,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 78
+    },
+    {
+      "stream_index": 591,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 79
+    },
+    {
+      "stream_index": 592,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 80
+    },
+    {
+      "stream_index": 593,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 81
+    },
+    {
+      "stream_index": 594,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 82
+    },
+    {
+      "stream_index": 595,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 83
+    },
+    {
+      "stream_index": 596,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 84
+    },
+    {
+      "stream_index": 597,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 85
+    },
+    {
+      "stream_index": 598,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 86
+    },
+    {
+      "stream_index": 599,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 87
+    },
+    {
+      "stream_index": 600,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 88
+    },
+    {
+      "stream_index": 601,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 89
+    },
+    {
+      "stream_index": 602,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 90
+    },
+    {
+      "stream_index": 603,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 91
+    },
+    {
+      "stream_index": 604,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 92
+    },
+    {
+      "stream_index": 605,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 93
+    },
+    {
+      "stream_index": 606,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 94
+    },
+    {
+      "stream_index": 607,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 95
+    },
+    {
+      "stream_index": 608,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 96
+    },
+    {
+      "stream_index": 609,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 97
+    },
+    {
+      "stream_index": 610,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 98
+    },
+    {
+      "stream_index": 611,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 99
+    },
+    {
+      "stream_index": 612,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 100
+    },
+    {
+      "stream_index": 613,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 101
+    },
+    {
+      "stream_index": 614,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 102
+    },
+    {
+      "stream_index": 615,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 103
+    },
+    {
+      "stream_index": 616,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 104
+    },
+    {
+      "stream_index": 617,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 105
+    },
+    {
+      "stream_index": 618,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 106
+    },
+    {
+      "stream_index": 619,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 107
+    },
+    {
+      "stream_index": 620,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 108
+    },
+    {
+      "stream_index": 621,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 109
+    },
+    {
+      "stream_index": 622,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 110
+    },
+    {
+      "stream_index": 623,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 111
+    },
+    {
+      "stream_index": 624,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 112
+    },
+    {
+      "stream_index": 625,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 113
+    },
+    {
+      "stream_index": 626,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 114
+    },
+    {
+      "stream_index": 627,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 115
+    },
+    {
+      "stream_index": 628,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 116
+    },
+    {
+      "stream_index": 629,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 117
+    },
+    {
+      "stream_index": 630,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 118
+    },
+    {
+      "stream_index": 631,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 119
+    },
+    {
+      "stream_index": 632,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 120
+    },
+    {
+      "stream_index": 633,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 121
+    },
+    {
+      "stream_index": 634,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 122
+    },
+    {
+      "stream_index": 635,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 123
+    },
+    {
+      "stream_index": 636,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 124
+    },
+    {
+      "stream_index": 637,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 125
+    },
+    {
+      "stream_index": 638,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 126
+    },
+    {
+      "stream_index": 639,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 127
+    },
+    {
+      "stream_index": 640,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 128
+    },
+    {
+      "stream_index": 641,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 129
+    },
+    {
+      "stream_index": 642,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 130
+    },
+    {
+      "stream_index": 643,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 131
+    },
+    {
+      "stream_index": 644,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 132
+    },
+    {
+      "stream_index": 645,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 133
+    },
+    {
+      "stream_index": 646,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 134
+    },
+    {
+      "stream_index": 647,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 135
+    },
+    {
+      "stream_index": 648,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 136
+    },
+    {
+      "stream_index": 649,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 137
+    },
+    {
+      "stream_index": 650,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 138
+    },
+    {
+      "stream_index": 651,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 139
+    },
+    {
+      "stream_index": 652,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 140
+    },
+    {
+      "stream_index": 653,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 141
+    },
+    {
+      "stream_index": 654,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 142
+    },
+    {
+      "stream_index": 655,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 143
+    },
+    {
+      "stream_index": 656,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 144
+    },
+    {
+      "stream_index": 657,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 145
+    },
+    {
+      "stream_index": 658,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 146
+    },
+    {
+      "stream_index": 659,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 147
+    },
+    {
+      "stream_index": 660,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 148
+    },
+    {
+      "stream_index": 661,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 149
+    },
+    {
+      "stream_index": 662,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 150
+    },
+    {
+      "stream_index": 663,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 151
+    },
+    {
+      "stream_index": 664,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 152
+    },
+    {
+      "stream_index": 665,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 153
+    },
+    {
+      "stream_index": 666,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 154
+    },
+    {
+      "stream_index": 667,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 155
+    },
+    {
+      "stream_index": 668,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 156
+    },
+    {
+      "stream_index": 669,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 157
+    },
+    {
+      "stream_index": 670,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 158
+    },
+    {
+      "stream_index": 671,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 159
+    },
+    {
+      "stream_index": 672,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 160
+    },
+    {
+      "stream_index": 673,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 161
+    },
+    {
+      "stream_index": 674,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 162
+    },
+    {
+      "stream_index": 675,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 163
+    },
+    {
+      "stream_index": 676,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 164
+    },
+    {
+      "stream_index": 677,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 165
+    },
+    {
+      "stream_index": 678,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 166
+    },
+    {
+      "stream_index": 679,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 167
+    },
+    {
+      "stream_index": 680,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 168
+    },
+    {
+      "stream_index": 681,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 169
+    },
+    {
+      "stream_index": 682,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 170
+    },
+    {
+      "stream_index": 683,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 171
+    },
+    {
+      "stream_index": 684,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 172
+    },
+    {
+      "stream_index": 685,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 173
+    },
+    {
+      "stream_index": 686,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 174
+    },
+    {
+      "stream_index": 687,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 175
+    },
+    {
+      "stream_index": 688,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 176
+    },
+    {
+      "stream_index": 689,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 177
+    },
+    {
+      "stream_index": 690,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 178
+    },
+    {
+      "stream_index": 691,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 179
+    },
+    {
+      "stream_index": 692,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 180
+    },
+    {
+      "stream_index": 693,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 181
+    },
+    {
+      "stream_index": 694,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 182
+    },
+    {
+      "stream_index": 695,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 183
+    },
+    {
+      "stream_index": 696,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 184
+    },
+    {
+      "stream_index": 697,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 185
+    },
+    {
+      "stream_index": 698,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 186
+    },
+    {
+      "stream_index": 699,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 187
+    },
+    {
+      "stream_index": 700,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 188
+    },
+    {
+      "stream_index": 701,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 189
+    },
+    {
+      "stream_index": 702,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 190
+    },
+    {
+      "stream_index": 703,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 191
+    },
+    {
+      "stream_index": 704,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 192
+    },
+    {
+      "stream_index": 705,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 193
+    },
+    {
+      "stream_index": 706,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 194
+    },
+    {
+      "stream_index": 707,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 195
+    },
+    {
+      "stream_index": 708,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 196
+    },
+    {
+      "stream_index": 709,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 197
+    },
+    {
+      "stream_index": 710,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 198
+    },
+    {
+      "stream_index": 711,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 199
+    },
+    {
+      "stream_index": 712,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 200
+    },
+    {
+      "stream_index": 713,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 201
+    },
+    {
+      "stream_index": 714,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 202
+    },
+    {
+      "stream_index": 715,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 203
+    },
+    {
+      "stream_index": 716,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 204
+    },
+    {
+      "stream_index": 717,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 205
+    },
+    {
+      "stream_index": 718,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 206
+    },
+    {
+      "stream_index": 719,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 207
+    },
+    {
+      "stream_index": 720,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 208
+    },
+    {
+      "stream_index": 721,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 209
+    },
+    {
+      "stream_index": 722,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 210
+    },
+    {
+      "stream_index": 723,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 211
+    },
+    {
+      "stream_index": 724,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 212
+    },
+    {
+      "stream_index": 725,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 213
+    },
+    {
+      "stream_index": 726,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 214
+    },
+    {
+      "stream_index": 727,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 215
+    },
+    {
+      "stream_index": 728,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 216
+    },
+    {
+      "stream_index": 729,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 217
+    },
+    {
+      "stream_index": 730,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 218
+    },
+    {
+      "stream_index": 731,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 219
+    },
+    {
+      "stream_index": 732,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 220
+    },
+    {
+      "stream_index": 733,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 221
+    },
+    {
+      "stream_index": 734,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 222
+    },
+    {
+      "stream_index": 735,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 223
+    },
+    {
+      "stream_index": 736,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 224
+    },
+    {
+      "stream_index": 737,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 225
+    },
+    {
+      "stream_index": 738,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 226
+    },
+    {
+      "stream_index": 739,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 227
+    },
+    {
+      "stream_index": 740,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 228
+    },
+    {
+      "stream_index": 741,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 229
+    },
+    {
+      "stream_index": 742,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 230
+    },
+    {
+      "stream_index": 743,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 231
+    },
+    {
+      "stream_index": 744,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 232
+    },
+    {
+      "stream_index": 745,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 233
+    },
+    {
+      "stream_index": 746,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 234
+    },
+    {
+      "stream_index": 747,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 235
+    },
+    {
+      "stream_index": 748,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 236
+    },
+    {
+      "stream_index": 749,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 237
+    },
+    {
+      "stream_index": 750,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 238
+    },
+    {
+      "stream_index": 751,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 239
+    },
+    {
+      "stream_index": 752,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 240
+    },
+    {
+      "stream_index": 753,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 241
+    },
+    {
+      "stream_index": 754,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 242
+    },
+    {
+      "stream_index": 755,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 243
+    },
+    {
+      "stream_index": 756,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 244
+    },
+    {
+      "stream_index": 757,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 245
+    },
+    {
+      "stream_index": 758,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 246
+    },
+    {
+      "stream_index": 759,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 247
+    },
+    {
+      "stream_index": 760,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 248
+    },
+    {
+      "stream_index": 761,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 249
+    },
+    {
+      "stream_index": 762,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 250
+    },
+    {
+      "stream_index": 763,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 251
+    },
+    {
+      "stream_index": 764,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 252
+    },
+    {
+      "stream_index": 765,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 253
+    },
+    {
+      "stream_index": 766,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 254
+    },
+    {
+      "stream_index": 767,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 255
+    },
+    {
+      "stream_index": 768,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 256
+    },
+    {
+      "stream_index": 769,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 257
+    },
+    {
+      "stream_index": 770,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 258
+    },
+    {
+      "stream_index": 771,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 259
+    },
+    {
+      "stream_index": 772,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 260
+    },
+    {
+      "stream_index": 773,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 261
+    },
+    {
+      "stream_index": 774,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 262
+    },
+    {
+      "stream_index": 775,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 263
+    },
+    {
+      "stream_index": 776,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 264
+    },
+    {
+      "stream_index": 777,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 265
+    },
+    {
+      "stream_index": 778,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 266
+    },
+    {
+      "stream_index": 779,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 267
+    },
+    {
+      "stream_index": 780,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 268
+    },
+    {
+      "stream_index": 781,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 269
+    },
+    {
+      "stream_index": 782,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 270
+    },
+    {
+      "stream_index": 783,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 271
+    },
+    {
+      "stream_index": 784,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 272
+    },
+    {
+      "stream_index": 785,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 273
+    },
+    {
+      "stream_index": 786,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 274
+    },
+    {
+      "stream_index": 787,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 275
+    },
+    {
+      "stream_index": 788,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 276
+    },
+    {
+      "stream_index": 789,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 277
+    },
+    {
+      "stream_index": 790,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 278
+    },
+    {
+      "stream_index": 791,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 279
+    },
+    {
+      "stream_index": 792,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 280
+    },
+    {
+      "stream_index": 793,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 281
+    },
+    {
+      "stream_index": 794,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 282
+    },
+    {
+      "stream_index": 795,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 283
+    },
+    {
+      "stream_index": 796,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 284
+    },
+    {
+      "stream_index": 797,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 285
+    },
+    {
+      "stream_index": 798,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 286
+    },
+    {
+      "stream_index": 799,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 287
+    },
+    {
+      "stream_index": 800,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 288
+    },
+    {
+      "stream_index": 801,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 289
+    },
+    {
+      "stream_index": 802,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 290
+    },
+    {
+      "stream_index": 803,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 291
+    },
+    {
+      "stream_index": 804,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 292
+    },
+    {
+      "stream_index": 805,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 293
+    },
+    {
+      "stream_index": 806,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 294
+    },
+    {
+      "stream_index": 807,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 295
+    },
+    {
+      "stream_index": 808,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 296
+    },
+    {
+      "stream_index": 809,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 297
+    },
+    {
+      "stream_index": 810,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 298
+    },
+    {
+      "stream_index": 811,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 299
+    },
+    {
+      "stream_index": 812,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 300
+    },
+    {
+      "stream_index": 813,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 301
+    },
+    {
+      "stream_index": 814,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 302
+    },
+    {
+      "stream_index": 815,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 303
+    },
+    {
+      "stream_index": 816,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 304
+    },
+    {
+      "stream_index": 817,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 305
+    },
+    {
+      "stream_index": 818,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 306
+    },
+    {
+      "stream_index": 819,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 307
+    },
+    {
+      "stream_index": 820,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 308
+    },
+    {
+      "stream_index": 821,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 309
+    },
+    {
+      "stream_index": 822,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 310
+    },
+    {
+      "stream_index": 823,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 311
+    },
+    {
+      "stream_index": 824,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 312
+    },
+    {
+      "stream_index": 825,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 313
+    },
+    {
+      "stream_index": 826,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 314
+    },
+    {
+      "stream_index": 827,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 315
+    },
+    {
+      "stream_index": 828,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 316
+    },
+    {
+      "stream_index": 829,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 317
+    },
+    {
+      "stream_index": 830,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 318
+    },
+    {
+      "stream_index": 831,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 319
+    },
+    {
+      "stream_index": 832,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 320
+    },
+    {
+      "stream_index": 833,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 321
+    },
+    {
+      "stream_index": 834,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 322
+    },
+    {
+      "stream_index": 835,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 323
+    },
+    {
+      "stream_index": 836,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 324
+    },
+    {
+      "stream_index": 837,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 325
+    },
+    {
+      "stream_index": 838,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 326
+    },
+    {
+      "stream_index": 839,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 327
+    },
+    {
+      "stream_index": 840,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 328
+    },
+    {
+      "stream_index": 841,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 329
+    },
+    {
+      "stream_index": 842,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 330
+    },
+    {
+      "stream_index": 843,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 331
+    },
+    {
+      "stream_index": 844,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 332
+    },
+    {
+      "stream_index": 845,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 333
+    },
+    {
+      "stream_index": 846,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 334
+    },
+    {
+      "stream_index": 847,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 335
+    },
+    {
+      "stream_index": 848,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 336
+    },
+    {
+      "stream_index": 849,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 337
+    },
+    {
+      "stream_index": 850,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 338
+    },
+    {
+      "stream_index": 851,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 339
+    },
+    {
+      "stream_index": 852,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 340
+    },
+    {
+      "stream_index": 853,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 341
+    },
+    {
+      "stream_index": 854,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 342
+    },
+    {
+      "stream_index": 855,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 343
+    },
+    {
+      "stream_index": 856,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 344
+    },
+    {
+      "stream_index": 857,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 345
+    },
+    {
+      "stream_index": 858,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 346
+    },
+    {
+      "stream_index": 859,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 347
+    },
+    {
+      "stream_index": 860,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 348
+    },
+    {
+      "stream_index": 861,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 349
+    },
+    {
+      "stream_index": 862,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 350
+    },
+    {
+      "stream_index": 863,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 351
+    },
+    {
+      "stream_index": 864,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 352
+    },
+    {
+      "stream_index": 865,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 353
+    },
+    {
+      "stream_index": 866,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 354
+    },
+    {
+      "stream_index": 867,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 355
+    },
+    {
+      "stream_index": 868,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 356
+    },
+    {
+      "stream_index": 869,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 357
+    },
+    {
+      "stream_index": 870,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 358
+    },
+    {
+      "stream_index": 871,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 359
+    },
+    {
+      "stream_index": 872,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 360
+    },
+    {
+      "stream_index": 873,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 361
+    },
+    {
+      "stream_index": 874,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 362
+    },
+    {
+      "stream_index": 875,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 363
+    },
+    {
+      "stream_index": 876,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 364
+    },
+    {
+      "stream_index": 877,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 365
+    },
+    {
+      "stream_index": 878,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 366
+    },
+    {
+      "stream_index": 879,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 367
+    },
+    {
+      "stream_index": 880,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 368
+    },
+    {
+      "stream_index": 881,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 369
+    },
+    {
+      "stream_index": 882,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 370
+    },
+    {
+      "stream_index": 883,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 371
+    },
+    {
+      "stream_index": 884,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 372
+    },
+    {
+      "stream_index": 885,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 373
+    },
+    {
+      "stream_index": 886,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 374
+    },
+    {
+      "stream_index": 887,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 375
+    },
+    {
+      "stream_index": 888,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 376
+    },
+    {
+      "stream_index": 889,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 377
+    },
+    {
+      "stream_index": 890,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 378
+    },
+    {
+      "stream_index": 891,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 379
+    },
+    {
+      "stream_index": 892,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 380
+    },
+    {
+      "stream_index": 893,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 381
+    },
+    {
+      "stream_index": 894,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 382
+    },
+    {
+      "stream_index": 895,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 383
+    },
+    {
+      "stream_index": 896,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 384
+    },
+    {
+      "stream_index": 897,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 385
+    },
+    {
+      "stream_index": 898,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 386
+    },
+    {
+      "stream_index": 899,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 387
+    },
+    {
+      "stream_index": 900,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 388
+    },
+    {
+      "stream_index": 901,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 389
+    },
+    {
+      "stream_index": 902,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 390
+    },
+    {
+      "stream_index": 903,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 391
+    },
+    {
+      "stream_index": 904,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 392
+    },
+    {
+      "stream_index": 905,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 393
+    },
+    {
+      "stream_index": 906,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 394
+    },
+    {
+      "stream_index": 907,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 395
+    },
+    {
+      "stream_index": 908,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 396
+    },
+    {
+      "stream_index": 909,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 397
+    },
+    {
+      "stream_index": 910,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 398
+    },
+    {
+      "stream_index": 911,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 399
+    },
+    {
+      "stream_index": 912,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 400
+    },
+    {
+      "stream_index": 913,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 401
+    },
+    {
+      "stream_index": 914,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 402
+    },
+    {
+      "stream_index": 915,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 403
+    },
+    {
+      "stream_index": 916,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 404
+    },
+    {
+      "stream_index": 917,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 405
+    },
+    {
+      "stream_index": 918,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 406
+    },
+    {
+      "stream_index": 919,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 407
+    },
+    {
+      "stream_index": 920,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 408
+    },
+    {
+      "stream_index": 921,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 409
+    },
+    {
+      "stream_index": 922,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 410
+    },
+    {
+      "stream_index": 923,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 411
+    },
+    {
+      "stream_index": 924,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 412
+    },
+    {
+      "stream_index": 925,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 413
+    },
+    {
+      "stream_index": 926,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 414
+    },
+    {
+      "stream_index": 927,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 415
+    },
+    {
+      "stream_index": 928,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 416
+    },
+    {
+      "stream_index": 929,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 417
+    },
+    {
+      "stream_index": 930,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 418
+    },
+    {
+      "stream_index": 931,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 419
+    },
+    {
+      "stream_index": 932,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 420
+    },
+    {
+      "stream_index": 933,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 421
+    },
+    {
+      "stream_index": 934,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 422
+    },
+    {
+      "stream_index": 935,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 423
+    },
+    {
+      "stream_index": 936,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 424
+    },
+    {
+      "stream_index": 937,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 425
+    },
+    {
+      "stream_index": 938,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 426
+    },
+    {
+      "stream_index": 939,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 427
+    },
+    {
+      "stream_index": 940,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 428
+    },
+    {
+      "stream_index": 941,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 429
+    },
+    {
+      "stream_index": 942,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 430
+    },
+    {
+      "stream_index": 943,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 431
+    },
+    {
+      "stream_index": 944,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 432
+    },
+    {
+      "stream_index": 945,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 433
+    },
+    {
+      "stream_index": 946,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 434
+    },
+    {
+      "stream_index": 947,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 435
+    },
+    {
+      "stream_index": 948,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 436
+    },
+    {
+      "stream_index": 949,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 437
+    },
+    {
+      "stream_index": 950,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 438
+    },
+    {
+      "stream_index": 951,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 439
+    },
+    {
+      "stream_index": 952,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 440
+    },
+    {
+      "stream_index": 953,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 441
+    },
+    {
+      "stream_index": 954,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 442
+    },
+    {
+      "stream_index": 955,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 443
+    },
+    {
+      "stream_index": 956,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 444
+    },
+    {
+      "stream_index": 957,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 445
+    },
+    {
+      "stream_index": 958,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 446
+    },
+    {
+      "stream_index": 959,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 447
+    },
+    {
+      "stream_index": 960,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 448
+    },
+    {
+      "stream_index": 961,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 449
+    },
+    {
+      "stream_index": 962,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 450
+    },
+    {
+      "stream_index": 963,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 451
+    },
+    {
+      "stream_index": 964,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 452
+    },
+    {
+      "stream_index": 965,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 453
+    },
+    {
+      "stream_index": 966,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 454
+    },
+    {
+      "stream_index": 967,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 455
+    },
+    {
+      "stream_index": 968,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 456
+    },
+    {
+      "stream_index": 969,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 457
+    },
+    {
+      "stream_index": 970,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 458
+    },
+    {
+      "stream_index": 971,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 459
+    },
+    {
+      "stream_index": 972,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 460
+    },
+    {
+      "stream_index": 973,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 461
+    },
+    {
+      "stream_index": 974,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 462
+    },
+    {
+      "stream_index": 975,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 463
+    },
+    {
+      "stream_index": 976,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 464
+    },
+    {
+      "stream_index": 977,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 465
+    },
+    {
+      "stream_index": 978,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 466
+    },
+    {
+      "stream_index": 979,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 467
+    },
+    {
+      "stream_index": 980,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 468
+    },
+    {
+      "stream_index": 981,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 469
+    },
+    {
+      "stream_index": 982,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 470
+    },
+    {
+      "stream_index": 983,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 471
+    },
+    {
+      "stream_index": 984,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 472
+    },
+    {
+      "stream_index": 985,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 473
+    },
+    {
+      "stream_index": 986,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 474
+    },
+    {
+      "stream_index": 987,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 475
+    },
+    {
+      "stream_index": 988,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 476
+    },
+    {
+      "stream_index": 989,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 477
+    },
+    {
+      "stream_index": 990,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 478
+    },
+    {
+      "stream_index": 991,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 479
+    },
+    {
+      "stream_index": 992,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 480
+    },
+    {
+      "stream_index": 993,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 481
+    },
+    {
+      "stream_index": 994,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 482
+    },
+    {
+      "stream_index": 995,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 483
+    },
+    {
+      "stream_index": 996,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 484
+    },
+    {
+      "stream_index": 997,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 485
+    },
+    {
+      "stream_index": 998,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 486
+    },
+    {
+      "stream_index": 999,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 487
+    },
+    {
+      "stream_index": 1000,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 488
+    },
+    {
+      "stream_index": 1001,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 489
+    },
+    {
+      "stream_index": 1002,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 490
+    },
+    {
+      "stream_index": 1003,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 491
+    },
+    {
+      "stream_index": 1004,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 492
+    },
+    {
+      "stream_index": 1005,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 493
+    },
+    {
+      "stream_index": 1006,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 494
+    },
+    {
+      "stream_index": 1007,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 495
+    },
+    {
+      "stream_index": 1008,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 496
+    },
+    {
+      "stream_index": 1009,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 497
+    },
+    {
+      "stream_index": 1010,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 498
+    },
+    {
+      "stream_index": 1011,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 499
+    },
+    {
+      "stream_index": 1012,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 500
+    },
+    {
+      "stream_index": 1013,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 501
+    },
+    {
+      "stream_index": 1014,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 502
+    },
+    {
+      "stream_index": 1015,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 503
+    },
+    {
+      "stream_index": 1016,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 504
+    },
+    {
+      "stream_index": 1017,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 505
+    },
+    {
+      "stream_index": 1018,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 506
+    },
+    {
+      "stream_index": 1019,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 507
+    },
+    {
+      "stream_index": 1020,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 508
+    },
+    {
+      "stream_index": 1021,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 509
+    },
+    {
+      "stream_index": 1022,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 510
+    },
+    {
+      "stream_index": 1023,
+      "polarization_index": 1,
+      "polarization_label": "Y",
+      "dish_index": 511
+    }
+  ]
+}

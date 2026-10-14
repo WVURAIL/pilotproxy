@@ -1,0 +1,15 @@
+% Standalone wrapper for rendering the shared system-context diagram to an
+% image (svg for markdown use). The Data Sheet and User Guide \input the
+% .tikz fragment directly; this wrapper exists only for the rendered copy.
+%   pdflatex system_context_standalone.tex
+%   pdftocairo -svg system_context_standalone.pdf system_context.svg
+\documentclass[tikz,border=6pt]{standalone}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\definecolor{FStatBlue}{HTML}{144E8C}
+\definecolor{FStatRed}{HTML}{A00000}
+\definecolor{FStatGray}{HTML}{555555}
+\definecolor{LightGray}{HTML}{F3F3F3}
+\setlength{\linewidth}{12cm}
+\begin{document}
+\input{system_context.tikz}
+\end{document}

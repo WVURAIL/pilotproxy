@@ -1,0 +1,98 @@
+{
+  "schema_version": "pilotproxy_receiver_profile_v1",
+  "receiver_profile_id": "chime_dtv_fengine",
+  "instrument_name": "CHIME",
+  "rf_band": {
+    "lower_hz": 400000000.0,
+    "upper_hz": 800000000.0
+  },
+  "channelizer": {
+    "type": "pfb",
+    "input_sample_rate_hz": 800000000.0,
+    "pfb_fft_size": 2048,
+    "taps": 4,
+    "response": "implementation_specific",
+    "num_coarse_channels": 1024,
+    "coarse_channel_center_offset_hz": 390625.0,
+    "frequency_axis": {
+      "spectral_sense": "inverted",
+      "order": "descending_rf"
+    }
+  },
+  "framing": {
+    "frame_size_samples": 16384
+  },
+  "input_streams": {
+    "num_input_streams": 2048,
+    "stream_unit": "feed_polarization",
+    "stream_map_required": true,
+    "combine_default": "incoherent_power_sum_over_streams"
+  },
+  "quantization": {
+    "native_channelized_sample_format": "implementation_specific",
+    "adapter_output_format": "complex_int4_packed_int8",
+    "bits_per_component": 4,
+    "scale_mode_default": "per_stream",
+    "clip_sigma_default": 3.0,
+    "record_scale_by_stream": true,
+    "record_clip_fraction_by_stream": true
+  },
+  "detector_adapter": {
+    "compatible_detector_core_id": "pilotproxy_cuda_local_reference_power_ratio",
+    "detector_window_samples": 128,
+    "fine_bin_enbw_hz": 3051.7578125,
+    "dtv_bandwidth_hz": 6000000.0,
+    "pilot_below_data_db": 11.3,
+    "pilot_capture_efficiency": 1.0,
+    "time_reverse_detector_windows_before_kernel": true
+  },
+  "baseband_frame": {
+    "channel_center_normalized": 0.0,
+    "physical_dc_normalized": 0.0
+  },
+  "metadata": {
+    "channel_id_map": {
+      "namespace": "chime_freq_id",
+      "offset_from_coarse_channel_index": 1,
+      "note": "CHIME freq_id f is centred at 800 MHz - f * 390625 Hz, and this profile's coarse_channel_index i at 800 MHz - (i + 1) * 390625 Hz, so freq_id = coarse_channel_index + 1. Populates chime_channel_id / receiver_channel_id in exported runtime bundles."
+    },
+    "profile_status": "baseband_frame_verified_2026_07_29",
+    "digitizer": {
+      "adc_sample_rate_hz": 800000000.0,
+      "adc_bits": 8,
+      "num_adc_inputs": 2048,
+      "input_unit": "feed_polarization"
+    },
+    "annotations": {
+      "rf_band": {
+        "center_hz": 600000000.0,
+        "bandwidth_hz": 400000000.0
+      },
+      "channelizer": {
+        "architecture": "fx_f_engine",
+        "coarse_channel_width_hz": 390625.0,
+        "output_sample_rate_hz": 390625.0,
+        "spectral_sense": "inverted"
+      },
+      "channelizer_frequency_axis": {
+        "channel_index_to_rf_hz": "rf_hz = upper_hz - (coarse_channel_index + 1) * coarse_channel_width_hz, with coarse_channel_width_hz = bandwidth_hz / num_coarse_channels = 390625 Hz",
+        "verification_required": false,
+        "verified_note": "frame + sense verified against measured pilot ensemble, 2026-07-29"
+      },
+      "framing": {
+        "frame_size_unit": "channelized complex samples per input stream",
+        "frame_size_samples_may_be_overridden_per_run": true
+      },
+      "detector_adapter": {
+        "windows_per_stream_formula": "frame_size_samples / detector_window_samples",
+        "detector_rows_per_frame_formula": "num_input_streams * num_selected_channels * windows_per_stream",
+        "fine_bin_width_hz": 3051.7578125
+      },
+      "baseband_frame": {
+        "convention": "coarse_channel_center_at_dft_dc",
+        "verified_against": "CHIME/FRB baseband raw (NT_3.1.0): event 68399317 freq_id 844 full-band spectrum; chime-pilots scan integrated_spectrum products (2018-2026), 2026-07-29",
+        "note": "Pilot transmitter ensemble measured within +-1.3 kHz of nominal ATSC pilot under center-at-DC framing; legacy center-at-Nyquist (+0.5) assumption disconfirmed on this data lineage. channel_center_normalized_odd_channels is available if a per-parity PFB decimation twiddle is ever demonstrated; parity is defined on this profile's coarse_channel_index convention (index = CHIME freq_id - 1)."
+      }
+    }
+  }
+}

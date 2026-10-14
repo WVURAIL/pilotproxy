@@ -1,0 +1,6 @@
+$ /home/djg/rail/venvs/rfisher-bank-280d194/bin/python selector_cross_check.py
+required-multiplier frames compared: 300 bulk ranks: 124 mismatches: 0
+candidate staircase identical at rho in {1, 62, 124}
+keep rule identical at four multipliers
+frontier points compared: 271  max |dm| = 0.000e+00  max |dr_sys| = 0.000e+00
+CROSS-CHECK OK

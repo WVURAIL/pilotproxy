@@ -1,0 +1,56 @@
+{
+  "experiment": "digital_synthetic",
+  "publication_export": {
+    "historical_post_update_revision": "c36bf672ce59b0828f43f0fffa41a43c4c9602a5",
+    "pdf_rendering": {
+      "byte_note": "The release hashes pin the delivered PDF. A rebuild can differ at the byte level because embedded-font subset identifiers vary, even when the vector content and extracted text match.",
+      "content": "vector",
+      "text": "LaTeX T1 Latin Modern"
+    },
+    "repository_dirty": true,
+    "repository_revision": "c36bf672ce59b0828f43f0fffa41a43c4c9602a5",
+    "source_files": {
+      "freezer": {
+        "archival_blob": "a1ca642463b3e794f7cfad56cba5d0f6a61a5cf7",
+        "archival_commit": "ea3c4ad79c7b732b582af41468c33938d457e6ec",
+        "archival_tag": "estimator-transfer-publication-source-20260826",
+        "archival_tag_object": "77c6ed64184c88adc206678d668bb2dc2e4dad9b",
+        "path": "tools/freeze_estimator_transfer.py",
+        "sha256": "c6c1631d38043dd50f61ec36a315c451c9dc26a8c055cd392a8dab21eaa1fd00"
+      },
+      "publication_plot_source": {
+        "archival_blob": "3d35e82a865b952bbe5466023eed385c1677b329",
+        "archival_commit": "ea3c4ad79c7b732b582af41468c33938d457e6ec",
+        "archival_tag": "estimator-transfer-publication-source-20260826",
+        "archival_tag_object": "77c6ed64184c88adc206678d668bb2dc2e4dad9b",
+        "path": "src/pilot_proxy/testbench/plot_results.py",
+        "sha256": "845f2653feb4511810bcbe1e11dcf40ce473e68d1c53e31b41f8e6304f98a98a"
+      }
+    },
+    "state": "post-run archival regeneration from frozen raw results"
+  },
+  "result_root_label": "estimator_transfer_2026-08-25",
+  "run_worktree": {
+    "archival_snapshot_tracked_tree": "6551a441613b16196e724e739c380fd823becfff",
+    "archival_snapshot_untracked_tree": "78e0987f49f5c7031a36091c944d5c68823cef2d",
+    "archival_stash_object": "4317198f159db110a42d18befe73b8be2ffa48db",
+    "base_revision": "e2f9f7fa0d2013822274b2f34a3420d26ca8225b",
+    "conditioning_record_note": "This hash is embedded in the completed conditioning record. It identifies the plotter that wrote that record, not every raw shard producer.",
+    "conditioning_record_plot_source_archival_commit": "33f4b725301a9a793609870cd7c0c00877a3a5e8",
+    "conditioning_record_plot_source_archival_tag": "estimator-transfer-source-20260825",
+    "conditioning_record_plot_source_blob": "e061a0cc373688cca6846a9565b4703bc67962c1",
+    "conditioning_record_plot_source_sha256": "17ab05a1232a544580214b470c9a22bf50069aa9dd7e1a4ec5491ae4cd9ed60b",
+    "post_run_plotter_archival_blob": "46c07acef30c6b1f6c907ea4cd07f9706186ca33",
+    "post_run_plotter_archival_commit": "3b42f879adf04cd8ac7071960948f296f3f801e8",
+    "post_run_plotter_archival_snapshot_sha256": "20fe2102d02eea32f276422fdcbbead06931fc86266d2472245be20fd7a514fd",
+    "post_run_plotter_archival_tag": "estimator-transfer-post-run-source-20260825",
+    "recovered_runtime_package_digest_sha256": "e602959854082763a8504cfd6f7bdc862611d6e1651a5f6970b83a21b8fcc023",
+    "run_script_archival_snapshot_blob": "01fc5f4d5148b597cf95743717ff7ff43f70c250",
+    "run_script_archival_snapshot_sha256": "33508fc3a405d84e8d1a1dd659374116321cbe8569955d49a826e7a600428d27",
+    "run_script_note": "The completed sweep was extended in stages. The later shell snapshot records the layout but was not itself pinned by every shard.",
+    "run_source_archival_commit": "c216e497ca3239a63b728b049ee9174eb18c8913",
+    "run_source_archival_tag": "estimator-transfer-run-source-20260825",
+    "state": "uncommitted tracked and untracked source"
+  },
+  "schema_version": "estimator_transfer_source_provenance_v1"
+}

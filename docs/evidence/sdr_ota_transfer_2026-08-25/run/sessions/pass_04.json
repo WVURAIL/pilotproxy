@@ -1,0 +1,1082 @@
+{
+  "alignment": [
+    {
+      "correlation": 0.885478065322275,
+      "event_index": 200,
+      "expected_marker_sample": 1048576,
+      "observed_marker_sample": 1048816,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8855869462361932,
+      "event_index": 201,
+      "expected_marker_sample": 1598365,
+      "observed_marker_sample": 1598605,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8800818152286236,
+      "event_index": 202,
+      "expected_marker_sample": 2148154,
+      "observed_marker_sample": 2148394,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8834449350910794,
+      "event_index": 203,
+      "expected_marker_sample": 2697943,
+      "observed_marker_sample": 2698183,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8774104987013241,
+      "event_index": 204,
+      "expected_marker_sample": 3247732,
+      "observed_marker_sample": 3247972,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.879770125533418,
+      "event_index": 205,
+      "expected_marker_sample": 3797521,
+      "observed_marker_sample": 3797761,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8835262702445579,
+      "event_index": 206,
+      "expected_marker_sample": 4347310,
+      "observed_marker_sample": 4347550,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8842859221657959,
+      "event_index": 207,
+      "expected_marker_sample": 4897099,
+      "observed_marker_sample": 4897339,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8846769228760356,
+      "event_index": 208,
+      "expected_marker_sample": 5446888,
+      "observed_marker_sample": 5447128,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.88362689469036,
+      "event_index": 209,
+      "expected_marker_sample": 5996677,
+      "observed_marker_sample": 5996917,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8838278521173075,
+      "event_index": 210,
+      "expected_marker_sample": 6546466,
+      "observed_marker_sample": 6546706,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.7563747141921788,
+      "event_index": 211,
+      "expected_marker_sample": 7096255,
+      "observed_marker_sample": 7096495,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.881939293960331,
+      "event_index": 212,
+      "expected_marker_sample": 7646044,
+      "observed_marker_sample": 7646284,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8824573497617169,
+      "event_index": 213,
+      "expected_marker_sample": 8195833,
+      "observed_marker_sample": 8196073,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8829429518592844,
+      "event_index": 214,
+      "expected_marker_sample": 8745622,
+      "observed_marker_sample": 8745862,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8841472091614099,
+      "event_index": 215,
+      "expected_marker_sample": 9295411,
+      "observed_marker_sample": 9295651,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8852223893519183,
+      "event_index": 216,
+      "expected_marker_sample": 9845200,
+      "observed_marker_sample": 9845440,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.886247419157761,
+      "event_index": 217,
+      "expected_marker_sample": 10394989,
+      "observed_marker_sample": 10395229,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8853350738788187,
+      "event_index": 218,
+      "expected_marker_sample": 10944778,
+      "observed_marker_sample": 10945018,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8813415293784961,
+      "event_index": 219,
+      "expected_marker_sample": 11494567,
+      "observed_marker_sample": 11494807,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8836201539537035,
+      "event_index": 220,
+      "expected_marker_sample": 12044356,
+      "observed_marker_sample": 12044596,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8832976135900328,
+      "event_index": 221,
+      "expected_marker_sample": 12594145,
+      "observed_marker_sample": 12594385,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8834039808956791,
+      "event_index": 222,
+      "expected_marker_sample": 13143934,
+      "observed_marker_sample": 13144174,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.883989828080297,
+      "event_index": 223,
+      "expected_marker_sample": 13693723,
+      "observed_marker_sample": 13693963,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8841116039145791,
+      "event_index": 224,
+      "expected_marker_sample": 14243512,
+      "observed_marker_sample": 14243752,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8827579002102776,
+      "event_index": 225,
+      "expected_marker_sample": 14793301,
+      "observed_marker_sample": 14793541,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8813725035177643,
+      "event_index": 226,
+      "expected_marker_sample": 15343090,
+      "observed_marker_sample": 15343330,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8845490566367963,
+      "event_index": 227,
+      "expected_marker_sample": 15892879,
+      "observed_marker_sample": 15893119,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8807479258649958,
+      "event_index": 228,
+      "expected_marker_sample": 16442668,
+      "observed_marker_sample": 16442908,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.884843135108368,
+      "event_index": 229,
+      "expected_marker_sample": 16992457,
+      "observed_marker_sample": 16992697,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8832857809559231,
+      "event_index": 230,
+      "expected_marker_sample": 17542246,
+      "observed_marker_sample": 17542486,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8840558487375413,
+      "event_index": 231,
+      "expected_marker_sample": 18092035,
+      "observed_marker_sample": 18092275,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.883645161043146,
+      "event_index": 232,
+      "expected_marker_sample": 18641824,
+      "observed_marker_sample": 18642064,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8822435969584878,
+      "event_index": 233,
+      "expected_marker_sample": 19191613,
+      "observed_marker_sample": 19191853,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8850516811397411,
+      "event_index": 234,
+      "expected_marker_sample": 19741402,
+      "observed_marker_sample": 19741642,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8243062026274433,
+      "event_index": 235,
+      "expected_marker_sample": 20291191,
+      "observed_marker_sample": 20291431,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8843973469245864,
+      "event_index": 236,
+      "expected_marker_sample": 20840980,
+      "observed_marker_sample": 20841220,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8824434954405338,
+      "event_index": 237,
+      "expected_marker_sample": 21390769,
+      "observed_marker_sample": 21391009,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8866484317751785,
+      "event_index": 238,
+      "expected_marker_sample": 21940558,
+      "observed_marker_sample": 21940798,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8852719779089439,
+      "event_index": 239,
+      "expected_marker_sample": 22490347,
+      "observed_marker_sample": 22490587,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8812842939426287,
+      "event_index": 240,
+      "expected_marker_sample": 23040136,
+      "observed_marker_sample": 23040376,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8838793072939435,
+      "event_index": 241,
+      "expected_marker_sample": 23589925,
+      "observed_marker_sample": 23590165,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8837423375654232,
+      "event_index": 242,
+      "expected_marker_sample": 24139714,
+      "observed_marker_sample": 24139954,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8816148354859179,
+      "event_index": 243,
+      "expected_marker_sample": 24689503,
+      "observed_marker_sample": 24689743,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8840516301143865,
+      "event_index": 244,
+      "expected_marker_sample": 25239292,
+      "observed_marker_sample": 25239532,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.7136800525255597,
+      "event_index": 245,
+      "expected_marker_sample": 25789081,
+      "observed_marker_sample": 25789321,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8816470716935154,
+      "event_index": 246,
+      "expected_marker_sample": 26338870,
+      "observed_marker_sample": 26339110,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8817573079825215,
+      "event_index": 247,
+      "expected_marker_sample": 26888659,
+      "observed_marker_sample": 26888899,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8829594441100224,
+      "event_index": 248,
+      "expected_marker_sample": 27438448,
+      "observed_marker_sample": 27438688,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8819120329152125,
+      "event_index": 249,
+      "expected_marker_sample": 27988237,
+      "observed_marker_sample": 27988477,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8801203287839109,
+      "event_index": 250,
+      "expected_marker_sample": 28538026,
+      "observed_marker_sample": 28538266,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.88396443213988,
+      "event_index": 251,
+      "expected_marker_sample": 29087815,
+      "observed_marker_sample": 29088055,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8817915283591451,
+      "event_index": 252,
+      "expected_marker_sample": 29637604,
+      "observed_marker_sample": 29637844,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8859975130818235,
+      "event_index": 253,
+      "expected_marker_sample": 30187393,
+      "observed_marker_sample": 30187633,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8825104161701341,
+      "event_index": 254,
+      "expected_marker_sample": 30737182,
+      "observed_marker_sample": 30737422,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8832688708363684,
+      "event_index": 255,
+      "expected_marker_sample": 31286971,
+      "observed_marker_sample": 31287211,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8855212908926287,
+      "event_index": 256,
+      "expected_marker_sample": 31836760,
+      "observed_marker_sample": 31837000,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8847133573137859,
+      "event_index": 257,
+      "expected_marker_sample": 32386549,
+      "observed_marker_sample": 32386789,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.885290095857271,
+      "event_index": 258,
+      "expected_marker_sample": 32936338,
+      "observed_marker_sample": 32936578,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8838962108181895,
+      "event_index": 259,
+      "expected_marker_sample": 33486127,
+      "observed_marker_sample": 33486367,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8814929743702888,
+      "event_index": 260,
+      "expected_marker_sample": 34035916,
+      "observed_marker_sample": 34036156,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.881162869261752,
+      "event_index": 261,
+      "expected_marker_sample": 34585705,
+      "observed_marker_sample": 34585945,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8685030045156297,
+      "event_index": 262,
+      "expected_marker_sample": 35135494,
+      "observed_marker_sample": 35135734,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8844102304701212,
+      "event_index": 263,
+      "expected_marker_sample": 35685283,
+      "observed_marker_sample": 35685523,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    },
+    {
+      "correlation": 0.8847740934119773,
+      "event_index": 264,
+      "expected_marker_sample": 36235072,
+      "observed_marker_sample": 36235312,
+      "separation_error_samples": 0,
+      "stream_offset_samples": 240
+    }
+  ],
+  "completed_utc": "2026-08-26T02:19:31.231705+00:00",
+  "pass_index": 4,
+  "quantization_scale": 4.3965905008602215,
+  "quantization_scale_source": "pass_controls",
+  "schema_version": "sdr_transfer_v1",
+  "session_samples": 37833437,
+  "slots": [
+    {
+      "event_index": 200,
+      "event_samples": 517021,
+      "event_start_sample": 1081344,
+      "kind": "tx_zero",
+      "marker_start_sample": 1048576,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 201,
+      "event_samples": 517021,
+      "event_start_sample": 1631133,
+      "kind": "signal_only",
+      "marker_start_sample": 1598365,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 202,
+      "event_samples": 517021,
+      "event_start_sample": 2180922,
+      "kind": "noise_only",
+      "marker_start_sample": 2148154,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 203,
+      "event_samples": 517021,
+      "event_start_sample": 2730711,
+      "kind": "drift",
+      "marker_start_sample": 2697943,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 204,
+      "event_samples": 517021,
+      "event_start_sample": 3280500,
+      "kind": "mixture",
+      "marker_start_sample": 3247732,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 205,
+      "event_samples": 517021,
+      "event_start_sample": 3830289,
+      "kind": "mixture",
+      "marker_start_sample": 3797521,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 206,
+      "event_samples": 517021,
+      "event_start_sample": 4380078,
+      "kind": "mixture",
+      "marker_start_sample": 4347310,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 207,
+      "event_samples": 517021,
+      "event_start_sample": 4929867,
+      "kind": "mixture",
+      "marker_start_sample": 4897099,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 208,
+      "event_samples": 517021,
+      "event_start_sample": 5479656,
+      "kind": "mixture",
+      "marker_start_sample": 5446888,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 209,
+      "event_samples": 517021,
+      "event_start_sample": 6029445,
+      "kind": "mixture",
+      "marker_start_sample": 5996677,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 210,
+      "event_samples": 517021,
+      "event_start_sample": 6579234,
+      "kind": "mixture",
+      "marker_start_sample": 6546466,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 211,
+      "event_samples": 517021,
+      "event_start_sample": 7129023,
+      "kind": "mixture",
+      "marker_start_sample": 7096255,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 212,
+      "event_samples": 517021,
+      "event_start_sample": 7678812,
+      "kind": "mixture",
+      "marker_start_sample": 7646044,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 213,
+      "event_samples": 517021,
+      "event_start_sample": 8228601,
+      "kind": "mixture",
+      "marker_start_sample": 8195833,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 214,
+      "event_samples": 517021,
+      "event_start_sample": 8778390,
+      "kind": "mixture",
+      "marker_start_sample": 8745622,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 215,
+      "event_samples": 517021,
+      "event_start_sample": 9328179,
+      "kind": "mixture",
+      "marker_start_sample": 9295411,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 216,
+      "event_samples": 517021,
+      "event_start_sample": 9877968,
+      "kind": "mixture",
+      "marker_start_sample": 9845200,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 217,
+      "event_samples": 517021,
+      "event_start_sample": 10427757,
+      "kind": "mixture",
+      "marker_start_sample": 10394989,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 218,
+      "event_samples": 517021,
+      "event_start_sample": 10977546,
+      "kind": "mixture",
+      "marker_start_sample": 10944778,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 219,
+      "event_samples": 517021,
+      "event_start_sample": 11527335,
+      "kind": "mixture",
+      "marker_start_sample": 11494567,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 220,
+      "event_samples": 517021,
+      "event_start_sample": 12077124,
+      "kind": "mixture",
+      "marker_start_sample": 12044356,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 221,
+      "event_samples": 517021,
+      "event_start_sample": 12626913,
+      "kind": "mixture",
+      "marker_start_sample": 12594145,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 222,
+      "event_samples": 517021,
+      "event_start_sample": 13176702,
+      "kind": "mixture",
+      "marker_start_sample": 13143934,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 223,
+      "event_samples": 517021,
+      "event_start_sample": 13726491,
+      "kind": "mixture",
+      "marker_start_sample": 13693723,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 224,
+      "event_samples": 517021,
+      "event_start_sample": 14276280,
+      "kind": "mixture",
+      "marker_start_sample": 14243512,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 225,
+      "event_samples": 517021,
+      "event_start_sample": 14826069,
+      "kind": "mixture",
+      "marker_start_sample": 14793301,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 226,
+      "event_samples": 517021,
+      "event_start_sample": 15375858,
+      "kind": "mixture",
+      "marker_start_sample": 15343090,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 227,
+      "event_samples": 517021,
+      "event_start_sample": 15925647,
+      "kind": "mixture",
+      "marker_start_sample": 15892879,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 228,
+      "event_samples": 517021,
+      "event_start_sample": 16475436,
+      "kind": "mixture",
+      "marker_start_sample": 16442668,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 229,
+      "event_samples": 517021,
+      "event_start_sample": 17025225,
+      "kind": "mixture",
+      "marker_start_sample": 16992457,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 230,
+      "event_samples": 517021,
+      "event_start_sample": 17575014,
+      "kind": "mixture",
+      "marker_start_sample": 17542246,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 231,
+      "event_samples": 517021,
+      "event_start_sample": 18124803,
+      "kind": "mixture",
+      "marker_start_sample": 18092035,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 232,
+      "event_samples": 517021,
+      "event_start_sample": 18674592,
+      "kind": "mixture",
+      "marker_start_sample": 18641824,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 233,
+      "event_samples": 517021,
+      "event_start_sample": 19224381,
+      "kind": "mixture",
+      "marker_start_sample": 19191613,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 234,
+      "event_samples": 517021,
+      "event_start_sample": 19774170,
+      "kind": "mixture",
+      "marker_start_sample": 19741402,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 235,
+      "event_samples": 517021,
+      "event_start_sample": 20323959,
+      "kind": "mixture",
+      "marker_start_sample": 20291191,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 236,
+      "event_samples": 517021,
+      "event_start_sample": 20873748,
+      "kind": "mixture",
+      "marker_start_sample": 20840980,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 237,
+      "event_samples": 517021,
+      "event_start_sample": 21423537,
+      "kind": "mixture",
+      "marker_start_sample": 21390769,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 238,
+      "event_samples": 517021,
+      "event_start_sample": 21973326,
+      "kind": "mixture",
+      "marker_start_sample": 21940558,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 239,
+      "event_samples": 517021,
+      "event_start_sample": 22523115,
+      "kind": "mixture",
+      "marker_start_sample": 22490347,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 240,
+      "event_samples": 517021,
+      "event_start_sample": 23072904,
+      "kind": "mixture",
+      "marker_start_sample": 23040136,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 241,
+      "event_samples": 517021,
+      "event_start_sample": 23622693,
+      "kind": "mixture",
+      "marker_start_sample": 23589925,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 242,
+      "event_samples": 517021,
+      "event_start_sample": 24172482,
+      "kind": "mixture",
+      "marker_start_sample": 24139714,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 243,
+      "event_samples": 517021,
+      "event_start_sample": 24722271,
+      "kind": "mixture",
+      "marker_start_sample": 24689503,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 244,
+      "event_samples": 517021,
+      "event_start_sample": 25272060,
+      "kind": "mixture",
+      "marker_start_sample": 25239292,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 245,
+      "event_samples": 517021,
+      "event_start_sample": 25821849,
+      "kind": "mixture",
+      "marker_start_sample": 25789081,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 246,
+      "event_samples": 517021,
+      "event_start_sample": 26371638,
+      "kind": "mixture",
+      "marker_start_sample": 26338870,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 247,
+      "event_samples": 517021,
+      "event_start_sample": 26921427,
+      "kind": "mixture",
+      "marker_start_sample": 26888659,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 248,
+      "event_samples": 517021,
+      "event_start_sample": 27471216,
+      "kind": "mixture",
+      "marker_start_sample": 27438448,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 249,
+      "event_samples": 517021,
+      "event_start_sample": 28021005,
+      "kind": "mixture",
+      "marker_start_sample": 27988237,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 250,
+      "event_samples": 517021,
+      "event_start_sample": 28570794,
+      "kind": "mixture",
+      "marker_start_sample": 28538026,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 251,
+      "event_samples": 517021,
+      "event_start_sample": 29120583,
+      "kind": "mixture",
+      "marker_start_sample": 29087815,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 252,
+      "event_samples": 517021,
+      "event_start_sample": 29670372,
+      "kind": "mixture",
+      "marker_start_sample": 29637604,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 253,
+      "event_samples": 517021,
+      "event_start_sample": 30220161,
+      "kind": "mixture",
+      "marker_start_sample": 30187393,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 254,
+      "event_samples": 517021,
+      "event_start_sample": 30769950,
+      "kind": "mixture",
+      "marker_start_sample": 30737182,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 255,
+      "event_samples": 517021,
+      "event_start_sample": 31319739,
+      "kind": "mixture",
+      "marker_start_sample": 31286971,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 256,
+      "event_samples": 517021,
+      "event_start_sample": 31869528,
+      "kind": "mixture",
+      "marker_start_sample": 31836760,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 257,
+      "event_samples": 517021,
+      "event_start_sample": 32419317,
+      "kind": "mixture",
+      "marker_start_sample": 32386549,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 258,
+      "event_samples": 517021,
+      "event_start_sample": 32969106,
+      "kind": "mixture",
+      "marker_start_sample": 32936338,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 259,
+      "event_samples": 517021,
+      "event_start_sample": 33518895,
+      "kind": "mixture",
+      "marker_start_sample": 33486127,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 260,
+      "event_samples": 517021,
+      "event_start_sample": 34068684,
+      "kind": "mixture",
+      "marker_start_sample": 34035916,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 261,
+      "event_samples": 517021,
+      "event_start_sample": 34618473,
+      "kind": "mixture",
+      "marker_start_sample": 34585705,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 262,
+      "event_samples": 517021,
+      "event_start_sample": 35168262,
+      "kind": "mixture",
+      "marker_start_sample": 35135494,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 263,
+      "event_samples": 517021,
+      "event_start_sample": 35718051,
+      "kind": "mixture",
+      "marker_start_sample": 35685283,
+      "slot_samples": 549789
+    },
+    {
+      "event_index": 264,
+      "event_samples": 517021,
+      "event_start_sample": 36267840,
+      "kind": "drift",
+      "marker_start_sample": 36235072,
+      "slot_samples": 549789
+    }
+  ],
+  "stream_status": {
+    "gfir_enabled": true,
+    "requested_filter_bandwidth_hz": 8000000,
+    "rx_dropped_packets": 0,
+    "rx_host_rate_hz": 10762237.651007516,
+    "rx_lpf_bandwidth_hz": 8000000,
+    "rx_overrun": 0,
+    "rx_rf_rate_hz": 43048950.604030065,
+    "rx_underrun": 0,
+    "schema_version": "sdr_stream_v1",
+    "session_first_timestamp": 5791648,
+    "session_next_timestamp": 49045408,
+    "session_samples": 37833437,
+    "tx_dropped_packets": 0,
+    "tx_host_rate_hz": 10762237.651007516,
+    "tx_lpf_bandwidth_hz": 8000000,
+    "tx_off_dropped_packets": 0,
+    "tx_off_first_timestamp": 5798448,
+    "tx_off_next_timestamp": 6249933,
+    "tx_off_overrun": 0,
+    "tx_off_samples": 451485,
+    "tx_off_underrun": 0,
+    "tx_overrun": 0,
+    "tx_rf_rate_hz": 43048950.604030065,
+    "tx_start_timestamp": 11172767,
+    "tx_underrun": 0,
+    "valid": true
+  },
+  "transmitted_spectral_pilot_below_data_db": 11.227558481044813,
+  "tx_sha256": "09d54d0171079138463803561a55bd220a007db82ea6f6568fcecff880282f4a"
+}

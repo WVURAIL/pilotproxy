@@ -1,0 +1,56 @@
+% Shared architecture diagram: detector datapath in the two-stage
+% channelizer (filterbank) view.
+% Single source of truth -- \input by PilotProxy_DS001 (Data Sheet) and
+% PilotProxy_UG001 (User Guide); render detector_datapath.svg for markdown
+% use with detector_datapath_standalone.tex. Requires tikz libraries
+% arrows.meta + positioning + calc + decorations.pathreplacing, and the
+% colors FStatBlue, FStatRed, FStatGray, LightGray from the host document
+% (or the standalone wrapper).
+% Re-render the svg after editing:
+%   cd docs/figures && pdflatex detector_datapath_standalone.tex \
+%     && pdftocairo -svg detector_datapath_standalone.pdf detector_datapath.svg
+\begin{tikzpicture}[node distance=0.40cm,>=Latex,
+  blk/.style={rectangle,rounded corners,draw=FStatBlue,thick,fill=LightGray,
+              minimum height=0.62cm,align=center,text width=0.72\linewidth},
+  half/.style={rectangle,rounded corners,draw=FStatBlue,thick,fill=LightGray,
+               minimum height=0.62cm,align=center,text width=0.335\linewidth}]
+
+\node[blk] (in) {One selected coarse channel: 390.625\,kHz complex stream
+  per input stream\\ \scriptsize packed complex int4,
+  $N_{\mathrm{streams}}$ streams per frame};
+\node[blk,below=of in] (seg) {Window segmentation: $K=128$ samples per
+  window, $W=\mathrm{frame}/K$ windows per stream};
+\node[blk,below=of seg] (s1) {\textbf{Stage 1 --- selected-bin
+  channelizer:} int4 matched weights evaluate 3 of 128 detector bins
+  (target, lower ref, upper ref)\\ \scriptsize a one-tap
+  (rectangular-window) DFT filterbank computing only the needed channels;
+  bin width 3051.76\,Hz};
+\node[half,anchor=north east] (v1) at ($(s1.south)+(-0.45,-0.55)$)
+  {\textbf{Coarse marginal path (survey flag):} exact uint64 power sums
+  over all rows\\ \scriptsize $F = 2\sum P_t/(\sum P_{r1}+\sum P_{r2})$;
+  integer $F>\mu_0$ recorded flag; bit-exact check on the fine path};
+\node[half,anchor=north west] (v2) at ($(s1.south)+(0.45,-0.55)$)
+  {\textbf{Fine path (deployed decision):} exact int32 row sums
+  $z[n,m]$\\
+  \scriptsize \textbf{Stage 2:} $\times 2$ padded FFT across $W$ windows
+  (coherent) $\to$ 256 fine bins, 11.92\,Hz; incoherent feed sum;
+  $F_2[b]$; designated-set CFAR $\to$ per-frame mask bit};
+
+\draw[->,thick] (in) -- (seg);
+\draw[->,thick] (seg) -- (s1);
+\draw[->,thick] (s1.south -| v1.north) -- (v1.north);
+\draw[->,thick] (s1.south -| v2.north) -- (v2.north);
+\draw[dashed,thick,FStatRed,<->]
+  (v1.east) -- (v2.west |- v1.east);
+\node[font=\scriptsize\color{FStatRed},align=center]
+  at ($(s1.south |- v2.south)+(0,-0.32)$)
+  {bit-exact identity: $\sum_m |z[n,m]|^2 \equiv$ coarse powers};
+
+\coordinate (brx) at ([xshift=0.22cm]s1.east);
+\draw[decorate,decoration={brace,amplitude=5pt},thick,FStatGray]
+  (brx |- in.north) -- (brx |- v2.south)
+  node[midway,right=7pt,font=\scriptsize\color{FStatGray},align=left,
+       text width=2.0cm]
+  {two-stage zoom channelization:\\ 390.625\,kHz\\ $\to$ 3051.76\,Hz\\
+   $\to$ 11.92\,Hz};
+\end{tikzpicture}

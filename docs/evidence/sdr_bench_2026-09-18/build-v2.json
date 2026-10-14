@@ -1,0 +1,47 @@
+{
+  "schema": "lime-reference-build-v1",
+  "created_utc": "2026-09-18T21:42:14.017463+00:00",
+  "command": [
+    "g++",
+    "-std=c++17",
+    "-O2",
+    "-pthread",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I",
+    "/home/djg/rail/results/calibration_progress_2026-09-09/sdr/smoke-build-v5/include",
+    "/home/djg/rail/pilot-proxy/tools/lime_reference_worker_v1.cpp",
+    "/usr/lib/x86_64-linux-gnu/libLimeSuite.so.23.11.0",
+    "-o",
+    "/home/djg/rail/results/sdr_reference_transport_2026-09-09/build-v1/lime_reference_worker_v1"
+  ],
+  "returncode": 0,
+  "worker": "/home/djg/rail/results/sdr_reference_transport_2026-09-09/build-v1/lime_reference_worker_v1",
+  "worker_sha256": "1dbb55782bbf9a070dd949ed3842e6cc4f1cf3b552397451c8b157d121f49aeb",
+  "library": "/usr/lib/x86_64-linux-gnu/libLimeSuite.so.23.11.0",
+  "inputs": {
+    "/home/djg/rail/pilot-proxy/tools/lime_reference_worker_v1.cpp": "d1567f98342fd317b05cc16643e1ddddbb1538e092faf4666c9062e301ca0ae5",
+    "/home/djg/rail/pilot-proxy/tools/lime_reference_capture_v1.py": "dfa977ff749d127c5b5dafac0e66e3f18d88622a33dfb9af2a9a6f2364d693d7",
+    "/home/djg/rail/pilot-proxy/tests/testbench/test_lime_reference_v1.py": "0ef8117375891e328b2c34107da3deae8f7715694de7a9bd28a8e050a686c205",
+    "/home/djg/rail/results/calibration_progress_2026-09-09/sdr/smoke-build-v5/include/lime/LimeSuite.h": "90c82b16f789009d26f6a648fa184af6b6c7e5f18c6afe631f9320d5d20c9c86",
+    "/home/djg/rail/results/calibration_progress_2026-09-09/sdr/smoke-build-v5/include/lime/LMS7002M_parameters.h": "f414fd5efa608170c58adac1ad95cffef6062b10aef51692cc0049f3a0b33ba8",
+    "/usr/lib/x86_64-linux-gnu/libLimeSuite.so.23.11.0": "dcc057d216ba99fad427f212829c10b3aa9e6740f5f15a92b1e24f7a8d547cba",
+    "/home/djg/rail/output/sdr-reference-readiness-2026-09-09/fake-tests-receipt.json": "453eb7e8b9b6b53217ea02363b872d58e058bd30ece9c8964ff9a8ba953183d5"
+  },
+  "compiler": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "ldd": "\tlinux-vdso.so.1 (0x00007ffd653e5000)\n\tlibLimeSuite.so.23.11-1 => /lib/x86_64-linux-gnu/libLimeSuite.so.23.11-1 (0x000078717725d000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x0000787176e00000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000787177174000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000787177146000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x0000787176a00000)\n\tlibusb-1.0.so.0 => /lib/x86_64-linux-gnu/libusb-1.0.so.0 (0x0000787177126000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000787177341000)\n\tlibudev.so.1 => /lib/x86_64-linux-gnu/libudev.so.1 (0x00007871770f3000)\n\tlibcap.so.2 => /lib/x86_64-linux-gnu/libcap.so.2 (0x00007871770e6000)\n",
+  "scope": "Fresh current-source receipt for a single RX-only engineering transport attempt. Old records unchanged; no TX payload or physical calibration.",
+  "supersedes": {
+    "path": "/home/djg/rail/results/sdr_reference_transport_2026-09-09/build-v1/build.json",
+    "sha256": "847d8bd42dd9b826968fb423ff318ae19597fa90f8406f34946ed40973dd9aef"
+  },
+  "reissue_reason": "Re-receipt only, no rebuild: the worker binary is the build-v1 artifact, byte-identical and hash-verified at reissue, and it is referenced in place. One build input changed after the 2026-09-09 build, the test file tests/testbench/test_lime_reference_v1.py, by the author's commit 864e1c2d5694b1187a67d009235c87a6bc2fc675 2026-09-09 12:29:53 -0500 Pace reference tests with the configured sample clock. That file is an input to the build's own validation and not a source of the binary: the worker source, the capture helper, the LimeSuite headers, the LimeSuite library and the fake-test receipt are all unchanged. The capture helper refused to run against build-v1 because of that one hash, which is the guard behaving correctly; this receipt records the current hashes so the refusal is resolved by disclosure rather than by reverting a committed test.",
+  "reissued_by": "bench session of 2026-09-18, protocol v2",
+  "changed_inputs": {
+    "/home/djg/rail/pilot-proxy/tests/testbench/test_lime_reference_v1.py": {
+      "build_v1_sha256": "144872f78b278b9e51a1bebfb2e09c7b99a4ec7b96d39ccb01d2d3f87de18722",
+      "current_sha256": "0ef8117375891e328b2c34107da3deae8f7715694de7a9bd28a8e050a686c205"
+    }
+  }
+}

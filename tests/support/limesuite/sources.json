@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/myriadrf/LimeSuite",
+  "version": "v23.11.0",
+  "revision": "c2d9e87754586304577beff4dc5b16fb9b72c826",
+  "files": {
+    "src/lime/LimeSuite.h": {
+      "url": "https://raw.githubusercontent.com/myriadrf/LimeSuite/c2d9e87754586304577beff4dc5b16fb9b72c826/src/lime/LimeSuite.h",
+      "sha256": "90c82b16f789009d26f6a648fa184af6b6c7e5f18c6afe631f9320d5d20c9c86"
+    },
+    "src/lime/LMS7002M_parameters.h": {
+      "url": "https://raw.githubusercontent.com/myriadrf/LimeSuite/c2d9e87754586304577beff4dc5b16fb9b72c826/src/lime/LMS7002M_parameters.h",
+      "sha256": "f414fd5efa608170c58adac1ad95cffef6062b10aef51692cc0049f3a0b33ba8"
+    },
+    "COPYING": {
+      "url": "https://raw.githubusercontent.com/myriadrf/LimeSuite/c2d9e87754586304577beff4dc5b16fb9b72c826/COPYING",
+      "sha256": "0a87aa6d569be1334ca4d0664c34fd8e856257c9c134e55c75c09f0286f3864d"
+    }
+  }
+}

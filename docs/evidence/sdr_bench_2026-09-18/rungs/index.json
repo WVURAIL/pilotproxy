@@ -1,0 +1,74 @@
+[
+  {
+    "rung": 0,
+    "dir": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a0",
+    "amplitude": 0.005,
+    "amplitude_db_rel": 0.0,
+    "pads": [
+      0,
+      30,
+      60
+    ],
+    "slots": 6
+  },
+  {
+    "rung": 1,
+    "dir": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a1",
+    "amplitude": 0.0025,
+    "amplitude_db_rel": -6.021,
+    "pads": [
+      60,
+      30,
+      0
+    ],
+    "slots": 6
+  },
+  {
+    "rung": 2,
+    "dir": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a2",
+    "amplitude": 0.00125,
+    "amplitude_db_rel": -12.041,
+    "pads": [
+      0,
+      30,
+      60
+    ],
+    "slots": 6
+  },
+  {
+    "rung": 3,
+    "dir": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a3",
+    "amplitude": 0.000625,
+    "amplitude_db_rel": -18.062,
+    "pads": [
+      60,
+      30,
+      0
+    ],
+    "slots": 6
+  },
+  {
+    "rung": 4,
+    "dir": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a4",
+    "amplitude": 0.0003125,
+    "amplitude_db_rel": -24.082,
+    "pads": [
+      0,
+      30,
+      60
+    ],
+    "slots": 6
+  },
+  {
+    "rung": 5,
+    "dir": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a5",
+    "amplitude": 0.00015625,
+    "amplitude_db_rel": -30.103,
+    "pads": [
+      60,
+      30,
+      0
+    ],
+    "slots": 6
+  }
+]

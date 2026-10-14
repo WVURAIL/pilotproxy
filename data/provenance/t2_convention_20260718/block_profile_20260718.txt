@@ -1,0 +1,29 @@
+# Ten-block coherent-projection profile for the ORIGINAL golden capture.
+#
+# Input: generated/atsc/atsc_8vsb_complex64.cfile
+# Span: 600000 samples, divided into ten consecutive 60000-sample blocks
+# Projection frequency: -2690559.4405594408 Hz
+# Run by D. Gormley on cupy-gpu on 2026-07-17; retained from the console
+# transcript. |A|^2 is the squared coherent-projection amplitude, and phase
+# is the phase of that projection in radians.
+block 0: |A|^2=1.038998e-03  phase=-0.003 rad
+block 1: |A|^2=8.842038e-03  phase=-0.004 rad
+block 2: |A|^2=9.551332e-03  phase=-0.007 rad
+block 3: |A|^2=9.634961e-03  phase=-0.009 rad
+block 4: |A|^2=9.601829e-03  phase=-0.012 rad
+block 5: |A|^2=9.654954e-03  phase=-0.015 rad
+block 6: |A|^2=9.520722e-03  phase=-0.017 rad
+block 7: |A|^2=9.862883e-03  phase=-0.020 rad
+block 8: |A|^2=9.997592e-03  phase=-0.022 rad
+block 9: |A|^2=9.906840e-03  phase=-0.025 rad
+#
+# Derived checks independently recomputed from this transcript:
+# - stationary mean over blocks 2-9: 9.7164e-3
+# - block 0 relative to that mean: -9.71 dB
+# - block 1 relative to that mean: -0.41 dB
+# - linear phase drift: approximately -0.070 Hz projection offset
+# - coherence loss from that drift: <1e-4
+#
+# Interpretation: the startup transient is confined to approximately the
+# first 11 ms. This profile identifies the span to exclude; it does not close
+# T2 without the retained stationary-span audit and sweep.

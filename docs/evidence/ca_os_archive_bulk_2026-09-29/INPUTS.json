@@ -1,0 +1,419 @@
+{
+  "dependency_repositories": {
+    "RFIsher": {
+      "clean_when_packaged": true,
+      "commit": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/clones/RFIsher"
+    },
+    "RadioFisher": {
+      "clean_when_packaged": true,
+      "commit": "12a1616637dd46638055f2d6d77788c7214914b2",
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/clones/RadioFisher"
+    },
+    "pilot-proxy": {
+      "clean_when_packaged": true,
+      "commit": "bdfcdce9e1c738e7409c24fca126fda166a5065c",
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/clones/pilot-proxy"
+    }
+  },
+  "external_inputs": [
+    {
+      "channel": 14,
+      "ledger_sha256": "362260144f28a18a9f78e8ce9d47a8e433c9ac93526e487d8d064fa305fa93c2",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/844.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch14_fid844.json",
+      "role": "source archive product",
+      "sha256": "7687592890efaa7f6c5ecfb09b180867c59ed5c8db675ae6315ce42a8d6bcae3",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 15,
+      "ledger_sha256": "a58ae1b7abcf3e37e14e86ea90a808e1728d92b3cf0d17d2c63741d14a61fd38",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/829.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch15_fid829.json",
+      "role": "source archive product",
+      "sha256": "6d04c18cff630da2ccec5de98308a089bc239893d6e246722c4856ee977a0b32",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 16,
+      "ledger_sha256": "2e1823170c619a6dd765ea3b8ba696748e17bb7f6d26822f5f3c014a853aea55",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/813.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch16_fid813.json",
+      "role": "source archive product",
+      "sha256": "4890db510c687763d469ef44ea7528a9928ce310c2525af7af5d91ea4e27ab71",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 17,
+      "ledger_sha256": "571a8e3c6b6febf127be28ab78be1b6c6ca213727262411ffc22c29e45326239",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/798.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch17_fid798.json",
+      "role": "source archive product",
+      "sha256": "8ce6e0887f65bf9a8849d157defd4aec152af7e0edc88505b7b3fefe71153dcf",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 18,
+      "ledger_sha256": "ef50b17e83bd6bd9e0c4c7814258fb64dd580b3184207ce42bbd9cc62ec5d1cb",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/783.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch18_fid783.json",
+      "role": "source archive product",
+      "sha256": "7480f7054d3a26a3c893ade9e8400975333b4f0b18375a77726cde4c3a984276",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 19,
+      "ledger_sha256": "254e747feafbec460eac37f2858f4d64ed85d2979bf02f1545d0908882ef6168",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/767.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch19_fid767.json",
+      "role": "source archive product",
+      "sha256": "21cff3acf7d0a4cd7d35ea3ac5dd15cebbae6dbbeae40d7d222646c8256e3b29",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 20,
+      "ledger_sha256": "40781a7a6ccb4f77806c34f82625223a4e83faf7c99a4f3dfad999ce6a1e0919",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/752.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch20_fid752.json",
+      "role": "source archive product",
+      "sha256": "8d3b3db57acaca4473b3936a088801588752cffcab1d6822754890dee813f411",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 21,
+      "ledger_sha256": "038aea430eca7d6b4daa499efdaf0f148c4d0fb53733141dad0112f7412c9142",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/736.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch21_fid736.json",
+      "role": "source archive product",
+      "sha256": "115a2a3aa705e5b9eb33aa5e3f56241070c714cc1477b122d0110efd7c71ce7d",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 22,
+      "ledger_sha256": "cc28190fb204fdb79df88049c1c1a29667d821316f8837b71f4c6924ae8fbf2b",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/721.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch22_fid721.json",
+      "role": "source archive product",
+      "sha256": "60a710a43e0fea77762591995686675dfd8b54937144ddd16492577b4e6534c6",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 23,
+      "ledger_sha256": "05d9b2f9da22966702af7ce2898014518a57a6495e51a419c4b08a99ddd31f42",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/706.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch23_fid706.json",
+      "role": "source archive product",
+      "sha256": "d9eb635586adb9fa7736c26415c2ef9d3222ab2dc3d7f366a4f6a3a794065318",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 24,
+      "ledger_sha256": "bee9d6bc6b7401810d8c48918de5ca72f23d76abb5008f626ea7dc9d72600cb9",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/690.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch24_fid690.json",
+      "role": "source archive product",
+      "sha256": "166917e1611ac9130df0251be7a88366ce347ae4ad49b1b1ed8f00659f811be9",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 25,
+      "ledger_sha256": "db065091bcd990f4831fd22648453c6f9dc81b00c3277730ed97cdad31a12224",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/675.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch25_fid675.json",
+      "role": "source archive product",
+      "sha256": "5ef436a001bd9f90f7ee90369f0af7f99b4167ae1a24e57903c8a3bb7784e14d",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 26,
+      "ledger_sha256": "4659dcd27b3e48be4d1c1d8162d14063a44e02d8d1c135eda54f6cf2c762b726",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/660.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch26_fid660.json",
+      "role": "source archive product",
+      "sha256": "625a2c4eaac84c5af9b052c601d7379af05765675f2b229abdcf6ce6fda1c72f",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 27,
+      "ledger_sha256": "ace62fd2b263e59970e8010d2390f81ff04770f1bb64b8f2354c66de13a28485",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/644.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch27_fid644.json",
+      "role": "source archive product",
+      "sha256": "fe9dc0aa88f086a92bc92a3f7d7ee223c6f7810e8da78ddc7a1f293c3c9dd91f",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 28,
+      "ledger_sha256": "78730afd24d9764be2f57010b1a06e4e41bf7ccdf865533fd8beb5ffa41d611a",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/629.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch28_fid629.json",
+      "role": "source archive product",
+      "sha256": "03a620b3572bc005da12cf1003a9f0723f0d5decdce2e7180ba496441944aa37",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 29,
+      "ledger_sha256": "682f7898dff06aed290ff71bb7512a0c2f1433556aead90ba57dede2050c5ef5",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/614.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch29_fid614.json",
+      "role": "source archive product",
+      "sha256": "79960cd095733d2d481f172aea449da30e840d7c80e3907fb3108a147ab0db48",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 30,
+      "ledger_sha256": "4c55d4e0fec2723dc5cd1f6d26ebb64ffd1cd3dbc3a2daaa47ba3e55e3173d8b",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/598.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch30_fid598.json",
+      "role": "source archive product",
+      "sha256": "5d95425d68e7d8bb21a7cf385ba60ab0c7148e6baaef542ea5342aa3385f314e",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 31,
+      "ledger_sha256": "dbd5dd9015ef8dc0e3c72df237ab6ac9467370a2dabe816195cca47e40bc3a63",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/583.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch31_fid583.json",
+      "role": "source archive product",
+      "sha256": "283104a296f0897535e96e690c4c6049a7038b3e7dce30a5650368357200f9b6",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 32,
+      "ledger_sha256": "248e50093afcb8ec3594543d40771dc19a47ff5c893e53971f8aeca6b5d1e2a3",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/568.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch32_fid568.json",
+      "role": "source archive product",
+      "sha256": "56035aeb1bba7d08aff1bfdb686e5efef54e834c71791e16d6244583eb6c953c",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 33,
+      "ledger_sha256": "5c8ac7307aacc316089de755111f968ff9752c82d385ec9848c92c0b37cc3d1c",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/552.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch33_fid552.json",
+      "role": "source archive product",
+      "sha256": "3541c84f743c300066350bc915501b45ba82d4d1a930b5150bb75ad1b068fbd1",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 34,
+      "ledger_sha256": "2802ffccdb729af061fa4e8c20d9c16d28b171c341260592608645e5bd2323df",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/537.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch34_fid537.json",
+      "role": "source archive product",
+      "sha256": "53463088a7070128e326157b246ecc251fd0ef6d468f593140da253040811cca",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 35,
+      "ledger_sha256": "7ea4abcc77a6a1fd17ec556e5d6dbc96b5d0bda55828e3aff41795e0cf71f558",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/521.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch35_fid521.json",
+      "role": "source archive product",
+      "sha256": "5146b37500a751d40148d3eb93292a0e00cac48cd8b7327d654c1427fcba9707",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "channel": 36,
+      "ledger_sha256": "51458ec9fe5670aedb945fe2862a3877151319cd4db186cfba41929afc1b4d5c",
+      "path": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot/506.npz",
+      "present_when_packaged": true,
+      "recorded_by": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/channels/ch36_fid506.json",
+      "role": "source archive product",
+      "sha256": "506930073b72aeb595cd528c1c2ef3ccd1a03d4fb9fc7edbd5cc635d8546af71",
+      "verification": "hash recorded by frozen release ledger"
+    },
+    {
+      "bytes": 3779649,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch14.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "b2507759f6219bab2a3b1df457809407c197ea8ec802bcdedca332fdb21dfe1a",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 2942625,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch15.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "96b5fc48864c16adc622348f620fed9eb4a2396ca13c6d674c4c1a134a1e19f0",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 3823890,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch16.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "cab7623500d2e796f7492440b172928379548e6a5180ece5d058af772994829b",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 2900231,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch17.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "4066c5d4c37fbce691e8828b87ab3602b83559bc09d84c4b76ce7468652dfdf6",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 2238636,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch18.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "c3ae7abb35337d36c4c8493089179551ca2f441d227cf7832ef93d7ea4ffea75",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 1312159,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch19.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "2d9712be747a962998a90f331353bbcec536a1efb6baa565dbc6581a6c1d31bb",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 2634527,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch20.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "889f513bb5c9dac59ee6226da802cc1b0e83f1440b450456e6ff077f8373ca9a",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 4025651,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch21.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "2043fa345f27c196fd48a8ea9d99afde1fefe31441a5467e7316b7b8c9078a8d",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 4309125,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch22.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "4c9ab78b94b8a31429194a246be79bcd1b1fe87767f854f0ef878db67717c038",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 3959558,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch23.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "f30c0dbfc019525af43db28dbbe2d4c2e1f03e863340f60d4e6b3ad4f42e1608",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 1128209,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch24.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "8adea75b2b3b02665164b2178d9970d719ec64da03b1740bf2f69510640ef272",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 3782900,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch25.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "f1c4a92840188506de162bc0b535ae1a2ae059d9655b2df7854d00b2bdb376aa",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 1966283,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch26.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "1208330f906e931ef5d25e750980da376b6a563de838d2d7bda37972cb0e7d06",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 2832211,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch27.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "5db03ad497934841b0fff2452f505b445c90f0020a0b0b43bd6d2a64f49bd466",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 3727561,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch28.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "3dcd7762810eb0686dcd85b6779eb11c1ec5a8ac9748cd4243840357050175ab",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 4085969,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch29.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "72e95f62b3ff342e9e90c71c3e5d668af8ef4abc1f50244b5726015d045627a9",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 1029471,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch30.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "adab68647e1a014df7fe841e3ff91e598c142e032fa48b15c0bd0f66f410daa2",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 2329787,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch31.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "b02ee911ee37a2fb8d0ee2d0c7f717fc7afcfbc68dbdd1fd44ac09fedfa51fd0",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 2143145,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch32.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "8219e66355873a9aa793c60196a842413c2eda10c50c4f484b36cfc130e0477d",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 3048096,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch33.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "ccb065160b4b8b11146f0a0cd02a899b14c5148614d1139a39608263005d7bc5",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 4231043,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch34.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "fc2c3e93efb5ef65fe2c460fe418baebbe9ec0535461dc27e02b18e028a5d8b7",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 30194622,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch35.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "dc6c5a6bd0b57c34fc01b851f902bbe4ee54d6d7bf9a0641c0646a2e0ce7ee87",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 4344109,
+      "path": "/home/djg/rail/output/cfar-choice-2026-09-29/data/bulk/ch36.npz",
+      "role": "per-frame archive bulk values; not copied",
+      "sha256": "21e41dff64c98c3c6e3ffe2a237c0849bec8b790dcabcf967c01b5f394b7f9bc",
+      "verification": "bytes hashed during packaging"
+    },
+    {
+      "bytes": 17491,
+      "path": "/home/djg/rail/output/threshold-figures-2026-10-01/rank/data/b2_cfar.json",
+      "role": "recorded reader table; included byte for byte",
+      "sha256": "de15ca1cbb73b0ea2bfe402280dfdaf6e139eb4abf8f284c5861911a10abf843",
+      "verification": "bytes hashed during packaging"
+    }
+  ]
+}

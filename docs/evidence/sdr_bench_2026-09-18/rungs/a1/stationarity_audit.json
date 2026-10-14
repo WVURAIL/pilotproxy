@@ -1,0 +1,65 @@
+{
+  "schema": "pilotproxy-stationary-input-audit-v1",
+  "waveform_sha256": "2a1546412248c534dd869adbfe5263b1c9102e31381abcbd7c57fffa2b991a55",
+  "start_sample": 200000,
+  "samples": 4200000,
+  "source_startup_discard_samples": 300000,
+  "stationarity_passed": true,
+  "method": "Digital command payload only: seven disjoint chronological segments covering the declared interval; per-segment mean power and FFT peak frequency. This audits the commanded waveform, not any RF measurement.",
+  "thresholds": {
+    "relative_mean_power_deviation_max": 1e-06,
+    "peak_frequency_hz": 100000.0,
+    "peak_tolerance_hz": "one FFT bin of the segment"
+  },
+  "segments": [
+    {
+      "start_sample": 200000,
+      "stop_sample": 800000,
+      "mean_power": 6.2500001721810385e-06,
+      "peak_hz": 100000.0,
+      "passed": true
+    },
+    {
+      "start_sample": 800000,
+      "stop_sample": 1400000,
+      "mean_power": 6.2500001721810385e-06,
+      "peak_hz": 100000.0,
+      "passed": true
+    },
+    {
+      "start_sample": 1400000,
+      "stop_sample": 2000000,
+      "mean_power": 6.2500001721810385e-06,
+      "peak_hz": 100000.0,
+      "passed": true
+    },
+    {
+      "start_sample": 2000000,
+      "stop_sample": 2600000,
+      "mean_power": 6.2500001721810385e-06,
+      "peak_hz": 100000.0,
+      "passed": true
+    },
+    {
+      "start_sample": 2600000,
+      "stop_sample": 3200000,
+      "mean_power": 6.2500001721810385e-06,
+      "peak_hz": 100000.0,
+      "passed": true
+    },
+    {
+      "start_sample": 3200000,
+      "stop_sample": 3800000,
+      "mean_power": 6.2500001721810385e-06,
+      "peak_hz": 100000.0,
+      "passed": true
+    },
+    {
+      "start_sample": 3800000,
+      "stop_sample": 4400000,
+      "mean_power": 6.2500001721810385e-06,
+      "peak_hz": 100000.0,
+      "passed": true
+    }
+  ]
+}

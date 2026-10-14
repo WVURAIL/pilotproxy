@@ -1,0 +1,12 @@
+{
+  "input_iq": "generated/atsc/atsc_8vsb_complex64.cfile",
+  "output_iq": "/tmp/retrim_check.cfile",
+  "n_samples": 600000,
+  "pilot_frequency_hz": -2690559.4947729097,
+  "pilot_power_before": 0.008368751254286285,
+  "data_power_direct": 0.12754689990657575,
+  "pilot_below_data_direct_db_before": 11.830092478749057,
+  "target_below_data_db": 11.3,
+  "amplitude_gain_applied": 1.0629299002401351,
+  "gain_db": 0.5300924787490547
+}

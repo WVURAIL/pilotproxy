@@ -1,0 +1,208 @@
+{
+  "bench_scope": "Conducted single-input reference on the LimeSDR Mini: terminated nulls and a cabled tone stepped by commanded amplitude and by two 30 dB pads. Closes the physical single-input reference only; no sensitivity, ROC, telescope deployment or absolute dBm claim.",
+  "capture": {
+    "capture_samples": 4000000,
+    "marker_guard_samples": 100000,
+    "settle_samples": 100000
+  },
+  "guards": {
+    "clip_fraction_max": 0.0,
+    "clip_level": 0.98,
+    "marker_correlation_min": 0.15,
+    "rms_max": 0.5,
+    "rms_min": 1e-05
+  },
+  "implementation_sources": [
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/lime_reference_capture_v1.py",
+      "sha256": "dfa977ff749d127c5b5dafac0e66e3f18d88622a33dfb9af2a9a6f2364d693d7"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/lime_reference_worker_v1.cpp",
+      "sha256": "d1567f98342fd317b05cc16643e1ddddbb1538e092faf4666c9062e301ca0ae5"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/analyze_sdr_antenna_controls_v1.py",
+      "sha256": "371d7ba5f339bdef9195dcdd3829aec0105cba1c8af2c9e57745bc4905e1d572"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/run_sdr_distribution_reference_v1.py",
+      "sha256": "501629892fe2bbb8e5b1c6619aa306bdb9679be73dd3046dfdafd52e84d750ec"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/src/pilot_proxy/integration/sdr_upgrade_adapter.py",
+      "sha256": "d1005269de0fed58b724a8f51a74274d3447d1a41a90ad127ac80053b04d2252"
+    },
+    {
+      "path": "/home/djg/rail/results/sdr_reference_transport_2026-09-09/build-v1/build.json",
+      "sha256": "847d8bd42dd9b826968fb423ff318ae19597fa90f8406f34946ed40973dd9aef"
+    },
+    {
+      "path": "/home/djg/rail/results/sdr_reference_transport_2026-09-09/build-v1/lime_reference_worker_v1",
+      "sha256": "1dbb55782bbf9a070dd949ed3842e6cc4f1cf3b552397451c8b157d121f49aeb"
+    }
+  ],
+  "ladder": {
+    "amplitude_ladder_db_rel": [
+      -0.0,
+      -6.0206,
+      -12.0412,
+      -18.0618,
+      -24.0824,
+      -30.103
+    ],
+    "analysis": "tools/analyze_sdr_antenna_controls_v1.py analyze_capture, unchanged: mix -100 kHz, 25/128 resampler, K=L=128, bins 0/-2/+2, sample scale 500",
+    "capture_maximum_seconds": 4.0,
+    "commanded_amplitude": 0.00015625,
+    "commanded_amplitude_db_rel": -30.102999566398122,
+    "commanded_attenuation_db": [
+      60,
+      30,
+      0
+    ],
+    "helper": "tools/lime_reference_capture_v1.py, unchanged",
+    "level_rule": "slot level = commanded_amplitude_db_rel - commanded_attenuation_db, so rung k at pad p and rung k-5 at pad p-30 are the same commanded level; those coincidences are the analog-versus-digital cross-check",
+    "overload_rule": "A tone slot whose receipt carries worker error 'RX overload guard' is recorded as overloaded and the session continues; the record is kept, counts as attempted not successful, and never enters analysis. Any other failure stops the session.",
+    "pad_inventory": "two 30 dB SMA pads and one SMA cable: settings 0, 30 and 60 dB only",
+    "passes": [
+      "pads ascending on even rungs, descending on odd"
+    ],
+    "record_samples": 4000000,
+    "record_seconds": 2.0,
+    "repeats_per_rung": 1,
+    "rung_index": 5
+  },
+  "noise_model": "independent_complex_gaussian",
+  "power_conversion": {
+    "path": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a5/power_bound_declaration.json",
+    "sha256": "c258a7a394da1b104189affeed112bee9da9e062432982161739786c18ff4aec"
+  },
+  "radio": {
+    "active_tx_path": "TX2",
+    "antenna_polarization": "not applicable, conducted",
+    "antenna_separation_cm": 30.0,
+    "antenna_separation_meaning": "no antennas: nominal SMA cable run length, conducted bench",
+    "clock_source": "LimeSDR Mini internal VCTCXO",
+    "device": "LimeSDR Mini",
+    "device_serial": "1D423D9108F273",
+    "emission_bandwidth_hz": 2000000.0,
+    "frequency_hz": 500000000.0,
+    "native_rx_gain_db": 30,
+    "native_tx_gain_db": 50,
+    "radio_filter_bandwidth_hz": 1500000.0,
+    "rx_antenna": "none: SMA cable C1 from the pad stack, or 50 ohm terminator T1",
+    "rx_gain_setting_db": 18.0,
+    "rx_path": "LNAW",
+    "sample_rate_hz": 2000000.0,
+    "tx_antenna": "none: TX2 into the pad stack and SMA cable C1, or 50 ohm terminator T2",
+    "tx_bandwidth_hz": 5000000.0,
+    "tx_gain_setting_db": 38.0,
+    "tx_rms": 0.00015625
+  },
+  "rf_limits": {
+    "frequency_high_hz": 501000000.0,
+    "frequency_low_hz": 499000000.0,
+    "maximum_power_dbm": 0.0,
+    "power_metric": "average_conducted_dbm",
+    "provided_by": "Author's conducted-bench constraint of 2026-09-17: TX port into a 50 ohm pad stack, cable or terminator only, no antenna, no radiated emission, RX port input kept at or below 0 dBm. Not a jurisdictional authorization."
+  },
+  "run_id": "SDR-BENCH-2026-09-18-single-input-reference-v2-rung5",
+  "schema": "pilotproxy-offline-ota-protocol-v1",
+  "slots": [
+    {
+      "bench_label": "terminated TX-zero before the rung",
+      "commanded_amplitude_db_rel": -30.102999566398122,
+      "commanded_attenuation_db": null,
+      "data_shelf_snr_db": null,
+      "helper_mode": "txzero",
+      "kind": "tx_zero",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "50 ohm terminator T1",
+      "seed": 1500,
+      "slot_index": 0,
+      "tx_port": "50 ohm terminator T2"
+    },
+    {
+      "bench_label": "cabled tone at 60 dB, cabling check",
+      "commanded_amplitude_db_rel": -30.102999566398122,
+      "commanded_attenuation_db": 60,
+      "data_shelf_snr_db": null,
+      "helper_mode": "tone",
+      "kind": "signal_only",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "SMA cable C1 from the pad stack",
+      "seed": 1501,
+      "slot_index": 1,
+      "tx_port": "TX2 to 2 x 30 dB pad to SMA cable C1"
+    },
+    {
+      "bench_label": "terminated null before the rung",
+      "commanded_amplitude_db_rel": -30.102999566398122,
+      "commanded_attenuation_db": null,
+      "data_shelf_snr_db": null,
+      "helper_mode": "noise",
+      "kind": "noise_only",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "50 ohm terminator T1",
+      "seed": 1502,
+      "slot_index": 2,
+      "tx_port": "50 ohm terminator T2"
+    },
+    {
+      "bench_label": "rung 5 (-30.10 dB) at pad 60 dB",
+      "commanded_amplitude_db_rel": -30.102999566398122,
+      "commanded_attenuation_db": 60,
+      "data_shelf_snr_db": -90.10299956639813,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "SMA cable C1 from the pad stack",
+      "seed": 1503,
+      "slot_index": 3,
+      "tx_port": "TX2 to 2 x 30 dB pad to SMA cable C1"
+    },
+    {
+      "bench_label": "rung 5 (-30.10 dB) at pad 30 dB",
+      "commanded_amplitude_db_rel": -30.102999566398122,
+      "commanded_attenuation_db": 30,
+      "data_shelf_snr_db": -60.102999566398125,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "SMA cable C1 from the pad stack",
+      "seed": 1504,
+      "slot_index": 4,
+      "tx_port": "TX2 to 1 x 30 dB pad to SMA cable C1"
+    },
+    {
+      "bench_label": "rung 5 (-30.10 dB) at pad 0 dB",
+      "commanded_amplitude_db_rel": -30.102999566398122,
+      "commanded_attenuation_db": 0,
+      "data_shelf_snr_db": -30.102999566398122,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "SMA cable C1 from the pad stack",
+      "seed": 1505,
+      "slot_index": 5,
+      "tx_port": "TX2 to SMA cable C1 direct"
+    }
+  ],
+  "stationarity_audit": {
+    "path": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a5/stationarity_audit.json",
+    "sha256": "a69407b1bb775ebdf26afba61bb43995132726502d34c4713a3192903144f470"
+  },
+  "waveform": {
+    "path": "/home/djg/rail/output/sdr-bench-2026-09-17/rungs/a5/tx_payload_2s.cfile",
+    "samples": 4200000,
+    "sha256": "f95793abe3c8a882ec193cd9cb74414e81079f7ef63fa3c427aa0fd521682c2c",
+    "source_startup_discard_samples": 300000,
+    "start_sample": 200000
+  }
+}

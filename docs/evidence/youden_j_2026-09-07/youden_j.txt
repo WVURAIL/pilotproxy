@@ -1,0 +1,23 @@
+null: ch35 off-era frames n=11199 (through 2021-10)
+coarse positive-excess point on the null: P_fa = 0.442 (the deployed rule's verified-quiet spend)
+
+ch36: signal n=18296 (from 2025-01), anchor bin 62
+  Pfa(null q)   coarse Pd   fine Pd
+        0.100       0.996     1.000
+        0.050       0.715     0.999
+        0.015       0.130     0.996
+  Youden J: coarse 0.913 (Pfa 0.075, Pd 0.988) | fine 0.983 (Pfa 0.009, Pd 0.992)
+
+ch35: signal n=18049 (from 2025-01), anchor bin 111
+  Pfa(null q)   coarse Pd   fine Pd
+        0.100       0.998     0.999
+        0.050       0.998     0.999
+        0.015       0.998     0.998
+  Youden J: coarse 0.985 (Pfa 0.012, Pd 0.997) | fine 0.987 (Pfa 0.010, Pd 0.997)
+
+ch34: signal n=16193 (from 2025-01), anchor bin 102
+  Pfa(null q)   coarse Pd   fine Pd
+        0.100       0.850     0.998
+        0.050       0.063     0.997
+        0.015       0.012     0.181
+  Youden J: coarse 0.860 (Pfa 0.120, Pd 0.980) | fine 0.959 (Pfa 0.035, Pd 0.994)

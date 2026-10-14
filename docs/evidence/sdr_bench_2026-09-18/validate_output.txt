@@ -1,0 +1,9 @@
+{
+  "protocol_valid": true,
+  "hardware_adapter_available": false,
+  "power_check": {
+    "power_metric": "average_conducted_dbm",
+    "upper_power_dbm": -18.0,
+    "maximum_power_dbm": 0.0
+  }
+}

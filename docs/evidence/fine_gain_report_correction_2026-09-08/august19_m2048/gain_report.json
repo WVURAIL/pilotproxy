@@ -1,0 +1,331 @@
+{
+  "schema": "fine_gain_report_v2",
+  "experiment": {
+    "streams": 2048,
+    "sigma": 120.0,
+    "windows": 128,
+    "bins": 256,
+    "anchor": 62,
+    "designated_bins": [
+      60,
+      61,
+      62,
+      63,
+      64
+    ],
+    "statistic_version": "row_sum_mc_v1"
+  },
+  "producer_sha256": "4ff67992b50e64c7ef26955c83c7215e0ebc0938b2e13f04bfeb310e3e5d23d2",
+  "sources": [
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h0_s1.npz",
+      "sha256": "5e831223db5cff91afad0e2436ccf823dfdc08152aa97928f04aab9615271799",
+      "population": "null",
+      "b0": 62.0,
+      "trials": 4000,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h0_s2.npz",
+      "sha256": "b25a298ecde0ced02ed6d4d6dbd92db7fb49c14079bc967708f9e96d546b55ab",
+      "population": "null",
+      "b0": 62.0,
+      "trials": 4000,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h0_s3.npz",
+      "sha256": "94cc0974de6f3a57e00e68735e29ea3d5fee18c66de8a5b78e9fb36b202e640e",
+      "population": "null",
+      "b0": 62.0,
+      "trials": 4000,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-10.00dB_s7.npz",
+      "sha256": "90793e10a9a8b87aef09e2d6ce7395b220e96cb54fbf3dab1088564c737f875f",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-13.00dB_s7.npz",
+      "sha256": "0000390ded3a3cc0640e3bc2b83707d4a1443532d0b6f0a9bac6959721007f81",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-16.00dB_s7.npz",
+      "sha256": "d848de322eca98fef15e74ba494e39acbf8a11af04f76b2f6ba6cd8f760917d3",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-19.00dB_s7.npz",
+      "sha256": "50907986509bfad220a68c4b5d6fbb2947715630aff03d77e6adcbb606c712e8",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-22.00dB_s7.npz",
+      "sha256": "25a98517469d4c2ab61a2b258282a792ba4a370d0aa96ba5b7aef839c479919d",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-25.00dB_s7.npz",
+      "sha256": "2a4688000d2d669537dbe4bb5d41721e4275b20623fcd0c68215214049293c14",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-28.00dB_s7.npz",
+      "sha256": "cfe2e23689d53a186e07a4fd7c4a9a2e75ba575b6a5d6430b5d9e9fef8560e32",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-31.00dB_s7.npz",
+      "sha256": "075f15b2440fa215ed301bba196ff64218b9d54962f3afe05bdd46ca92ed9074",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-34.00dB_s7.npz",
+      "sha256": "66f58dc132eb118b308748771635e4e30300597234d56900e177fe494a3133e9",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-37.00dB_s7.npz",
+      "sha256": "edb50704647f1c42f616465d05a031491593c7884dd9a5aef183c55abe2b920a",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_-40.00dB_s7.npz",
+      "sha256": "e3b3a750c1595fa9e418804a25158b70166ed84e9296f58c3c10c935f3ba4bb6",
+      "population": "centered",
+      "b0": 62.0,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_half_-22.00dB_s7.npz",
+      "sha256": "ae2761307e5fcf552e5b0aaa9ae29303437497e454c595eea83a043b8de5604d",
+      "population": "_half",
+      "b0": 62.5,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_half_-25.00dB_s7.npz",
+      "sha256": "b533b66217da435658c849624f8bdd3d3118adf9e794d20f8600b1007438a05b",
+      "population": "_half",
+      "b0": 62.5,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_half_-28.00dB_s7.npz",
+      "sha256": "d452be60f869f63109ad7a2ffe26505f42064d06e28bfa35bb8009b039657146",
+      "population": "_half",
+      "b0": 62.5,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_half_-31.00dB_s7.npz",
+      "sha256": "9cd3c3d24f68c1bd869fcb14c64415e398764e4472b8ed311ce94c443f2f2dd5",
+      "population": "_half",
+      "b0": 62.5,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/docs/evidence/fine_gain_mc_2026-08-19/h1_half_-34.00dB_s7.npz",
+      "sha256": "29995fd6b1bcd5a063a3f66e12a65ac2b916d278bf865b4fe3c29888c1d501a7",
+      "population": "_half",
+      "b0": 62.5,
+      "trials": 1200,
+      "legacy_geometry_inferred": true
+    }
+  ],
+  "thresholds": {
+    "0.01": [
+      1.0054876992512303,
+      1.081063346205393
+    ],
+    "0.001": [
+      1.0077186403788916,
+      1.1001624724680228
+    ]
+  },
+  "curves": {
+    "centered": [
+      {
+        "snr_db": -40.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.009166666666666667,
+        "pd_fine_0.01": 0.019166666666666665,
+        "pd_coarse_0.001": 0.0,
+        "pd_fine_0.001": 0.0016666666666666668
+      },
+      {
+        "snr_db": -37.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.01,
+        "pd_fine_0.01": 0.035833333333333335,
+        "pd_coarse_0.001": 0.0,
+        "pd_fine_0.001": 0.005
+      },
+      {
+        "snr_db": -34.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.011666666666666667,
+        "pd_fine_0.01": 0.14916666666666667,
+        "pd_coarse_0.001": 0.0,
+        "pd_fine_0.001": 0.0475
+      },
+      {
+        "snr_db": -31.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.021666666666666667,
+        "pd_fine_0.01": 0.7808333333333334,
+        "pd_coarse_0.001": 0.0008333333333333334,
+        "pd_fine_0.001": 0.52
+      },
+      {
+        "snr_db": -28.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.049166666666666664,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 0.0025,
+        "pd_fine_0.001": 1.0
+      },
+      {
+        "snr_db": -25.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.15916666666666668,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 0.021666666666666667,
+        "pd_fine_0.001": 1.0
+      },
+      {
+        "snr_db": -22.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.6466666666666666,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 0.2725,
+        "pd_fine_0.001": 1.0
+      },
+      {
+        "snr_db": -19.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.9983333333333333,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 0.9783333333333334,
+        "pd_fine_0.001": 1.0
+      },
+      {
+        "snr_db": -16.0,
+        "n": 1200,
+        "pd_coarse_0.01": 1.0,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 1.0,
+        "pd_fine_0.001": 1.0
+      },
+      {
+        "snr_db": -13.0,
+        "n": 1200,
+        "pd_coarse_0.01": 1.0,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 1.0,
+        "pd_fine_0.001": 1.0
+      },
+      {
+        "snr_db": -10.0,
+        "n": 1200,
+        "pd_coarse_0.01": 1.0,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 1.0,
+        "pd_fine_0.001": 1.0
+      }
+    ],
+    "_half": [
+      {
+        "snr_db": -34.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.011666666666666667,
+        "pd_fine_0.01": 0.13416666666666666,
+        "pd_coarse_0.001": 0.0,
+        "pd_fine_0.001": 0.03333333333333333
+      },
+      {
+        "snr_db": -31.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.021666666666666667,
+        "pd_fine_0.01": 0.7108333333333333,
+        "pd_coarse_0.001": 0.0008333333333333334,
+        "pd_fine_0.001": 0.41083333333333333
+      },
+      {
+        "snr_db": -28.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.0475,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 0.0025,
+        "pd_fine_0.001": 0.9983333333333333
+      },
+      {
+        "snr_db": -25.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.15916666666666668,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 0.025,
+        "pd_fine_0.001": 1.0
+      },
+      {
+        "snr_db": -22.0,
+        "n": 1200,
+        "pd_coarse_0.01": 0.6475,
+        "pd_fine_0.01": 1.0,
+        "pd_coarse_0.001": 0.275,
+        "pd_fine_0.001": 1.0
+      }
+    ]
+  },
+  "centered_gains": {
+    "0.01": [
+      -22.902564102564103,
+      -32.33377308707124,
+      9.43120898450714
+    ],
+    "0.001": [
+      -21.03305785123967,
+      -31.126984126984127,
+      10.093926275744458
+    ]
+  },
+  "h0_trials": 12000,
+  "scope": "integer row-sum Monte Carlo with floating fine transform; no input quantizer or radio-path measurement"
+}

@@ -1,0 +1,15 @@
+% Standalone wrapper for rendering the shared detector-datapath diagram to
+% an image (svg for markdown use). The Data Sheet and User Guide \input the
+% .tikz fragment directly; this wrapper exists only for the rendered copy.
+%   pdflatex detector_datapath_standalone.tex
+%   pdftocairo -svg detector_datapath_standalone.pdf detector_datapath.svg
+\documentclass[tikz,border=6pt]{standalone}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing}
+\definecolor{FStatBlue}{HTML}{144E8C}
+\definecolor{FStatRed}{HTML}{A00000}
+\definecolor{FStatGray}{HTML}{555555}
+\definecolor{LightGray}{HTML}{F3F3F3}
+\setlength{\linewidth}{12cm}
+\begin{document}
+\input{detector_datapath.tikz}
+\end{document}

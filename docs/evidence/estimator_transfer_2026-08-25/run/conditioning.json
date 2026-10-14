@@ -1,0 +1,50 @@
+{
+  "benchmark": {
+    "formula": "y=x-10log10(1+10^(x/10))",
+    "label": "Ideal local-reference benchmark"
+  },
+  "clean_waveform": {
+    "input_iq": "/home/djg/rail/pilot-proxy/generated/atsc/atsc_8vsb_complex64.cfile",
+    "input_iq_sha256": "4c765436c68ef5e8c73f9a85a70eb1948db4a63077ca6bd449321d2b392233b7",
+    "p_ref_lower": 25805456,
+    "p_ref_upper": 23238004,
+    "p_target": 3045566544,
+    "quantization_scale": 0.03438752468769892,
+    "reference_norm_sum_sq": 12650,
+    "reference_normalized": 3278602.35152029,
+    "target_norm_sq": 6338,
+    "target_normalized": 406362878.30540764,
+    "weights": "/home/djg/rail/pilot-proxy/weights/chime_dtv_weights_k128.bin",
+    "weights_sha256": "1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259"
+  },
+  "coefficients": {
+    "C_db": -21.017564983265,
+    "a": 135.98891514393506,
+    "b": 1.1061051089539502,
+    "delta": 0.00237654605662585
+  },
+  "comparator_label": "Waveform-conditioned expected transfer",
+  "formula": "y=C+10log10((delta+a*10^(x/10))/(1+b*10^(x/10)))",
+  "lower_trial_conditioning": {
+    "data_shelf_power": 0.5095268275614261,
+    "frequency_offset_hz": 0.0,
+    "metadata_json": "/home/djg/rail/estimator_transfer_2026-08-25/lower/dtv_snr_eval.json",
+    "metadata_sha256": "0d5e974ac7c1ba3205ad3a64ab1c9b3543391569d14cddc55d59d3df13db86fb",
+    "noise_response_rule": "sum(noise_power*(normalized_trial-clean_normalized))/sum(noise_power^2)",
+    "power_scale_note": "First-order correction for adaptive 4-bit scaling.",
+    "power_scale_rule": "raw_power/(weight_norm_sq*quantization_scale^2)",
+    "reference_noise_response": 5817351.31977813,
+    "rows": 1200,
+    "snr_max_db": -30.0,
+    "snr_min_db": -42.0,
+    "target_noise_response": 5831176.523117157,
+    "trial_csv": [
+      {
+        "path": "/home/djg/rail/estimator_transfer_2026-08-25/lower/dtv_snr_eval.csv",
+        "sha256": "3411a49a5b9187502766ee9581f520c9f86f5fe66bdd4f30b350c7293c8644dd"
+      }
+    ]
+  },
+  "plot_source_sha256": "17ab05a1232a544580214b470c9a22bf50069aa9dd7e1a4ec5491ae4cd9ed60b",
+  "schema_version": "pilotproxy_waveform_conditioning_v1"
+}

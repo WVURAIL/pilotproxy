@@ -1,0 +1,72 @@
+{
+  "alignment": {
+    "events": 1950,
+    "maximum_separation_error_samples": 1,
+    "maximum_stream_offset_samples": 241,
+    "minimum_marker_correlation": 0.6939908186463264,
+    "minimum_separation_error_samples": -1,
+    "minimum_stream_offset_samples": 239
+  },
+  "checks": {
+    "all_events_complete": true,
+    "capture_clip_pass": true,
+    "capture_levels_pass": true,
+    "expected_capture_bytes": true,
+    "expected_capture_count": true,
+    "expected_completed_events": true,
+    "expected_event_counts": true,
+    "expected_pass_count": true,
+    "quantization_clip_pass": true,
+    "received_pilot_ratio_pass": true,
+    "stream_counters_zero": true
+  },
+  "event_counts": {
+    "drift": 60,
+    "mixture": 1800,
+    "noise_only": 30,
+    "signal_only": 30,
+    "tx_off": 30,
+    "tx_zero": 30
+  },
+  "levels": {
+    "maximum_mixture_quantization_clip_fraction": 0.0008544921875,
+    "maximum_quantization_clip_fraction": 0.0047607421875,
+    "maximum_received_pilot_ratio_error_db": 0.5856733064687436,
+    "maximum_rf_clip_fraction": 0.0,
+    "maximum_signal_only_quantization_clip_fraction": 0.0047607421875
+  },
+  "raw_captures": {
+    "bytes": 7151522400,
+    "canonical_inventory": {
+      "line_ending": "LF",
+      "path": "raw/raw_capture_inventory.csv",
+      "path_semantics": "source_result_root_relative_posix",
+      "projection": [
+        "path",
+        "size_bytes",
+        "sha256"
+      ],
+      "row_order": "path ascending",
+      "sha256": "38dc85507f433bc79205ec2b6fe8b674bcbd6ba750b2828aa88bfc7a06fe0356",
+      "size_bytes": 229643
+    },
+    "files": 1980
+  },
+  "schema_version": "sdr_ota_estimator_transfer_qc_v1",
+  "stream": {
+    "counter_fields": [
+      "rx_dropped_packets",
+      "rx_overrun",
+      "rx_underrun",
+      "tx_dropped_packets",
+      "tx_off_dropped_packets",
+      "tx_off_overrun",
+      "tx_off_underrun",
+      "tx_overrun",
+      "tx_underrun"
+    ],
+    "counter_values_checked": 270,
+    "maximum_abs_counter": 0,
+    "maximum_host_rate_error_ppm": 0.010335234100939469
+  }
+}

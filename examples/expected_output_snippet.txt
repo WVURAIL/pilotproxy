@@ -1,0 +1,33 @@
+# Output structure from examples/quickstart.sh.
+# Numeric measurements depend on the generated waveform, noise realization,
+# hardware, and software revision. Retain the actual console transcript for a
+# release; do not substitute the placeholders below into a result record.
+
+Wrote generated/atsc/atsc_8vsb_complex64.cfile
+Wrote generated/atsc/atsc_waveform_audit.json
+sample_rate_hz=<measured>
+symbol_rate_hz=<measured>
+pilot_offset_hz=<measured>
+measured_pilot_frequency_hz=<measured>
+measured_pilot_to_data_power_db=<measured>
+measured_pilot_below_data_db=<measured>
+measured_pilot_below_data_direct_db=<measured>
+occupied_bandwidth_hz=<measured>
+shelf_flatness_db=<measured>
+edge_rolloff_check_db=<measured>
+quality_passed=<True-or-False> (<passed>/5)
+quality_check.<name>=<PASS-or-FAIL> value=<measured> margin=<measured>
+
+Wrote generated/detector_input/detector_blocks_i4.npy
+Wrote generated/detector_input/detector_matrix_i4.npy
+
+Wrote generated/quickstart/dtv_snr_eval/dtv_snr_eval.csv
+Wrote generated/quickstart/dtv_snr_eval/dtv_snr_summary.csv
+Wrote generated/quickstart/dtv_snr_eval/dtv_snr_eval.json
+frequency_offset_hz, requested_data_shelf_snr_db, measured_truth_data_shelf_snr_db, cpu_float_estimated_data_shelf_snr_db, gpu_estimated_data_shelf_snr_db, gpu_snr_error_db
+     0.000,  -26.000, <measured>, <measured>, <measured>, <measured>
+
+Pilot frequency from sidecar generated/detector_input/metadata.json: <measured> MHz
+Wrote generated/detections/detect.json
+blocks, positive_excess_set, coarse_power_ratio_mean, estimated_data_shelf_snr_db_mean
+1, <0-or-1>, <measured>, <measured>

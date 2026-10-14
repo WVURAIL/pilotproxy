@@ -1,0 +1,21 @@
+{
+ "name": "37g27",
+ "channel": 37,
+ "screen": "all",
+ "c": 1.0029202417420937,
+ "ndraw": 4,
+ "replicates": 200,
+ "halves": {
+  "cal": {
+   "frames": 20240,
+   "months": 66,
+   "boot_seconds": 2030.4
+  },
+  "eval": {
+   "frames": 20237,
+   "months": 25,
+   "boot_seconds": 2181.2
+  }
+ },
+ "seconds": 4229.6
+}

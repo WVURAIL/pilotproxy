@@ -1,0 +1,475 @@
+{
+  "schema": "pilot_proxy_detector_register_v1",
+  "side": "detector",
+  "source": {
+    "copied_from": "RFIsher src/rfisher/selection_policy.py at e041d5e3d001499eb7758cd694d43ff5ff8bcf2d",
+    "file_sha256": "a997e91999f879de8c7597a51cce7b6758e5d4a8d47ddca8a80cf78d9ab8c347",
+    "snapshot_schema": "rfisher-threshold-decisions-v1",
+    "snapshot_sha256": "b36c612ca1a59c0b5e09ced129bca9e15c589fb94a7e2e3648c6ebd815b68cf7",
+    "copied_prefixes": [
+      "detection.",
+      "era.",
+      "floor.",
+      "preparation.",
+      "selection.minimum_retained_frames"
+    ],
+    "added": [
+      "detection.false_alarm_target",
+      "detection.minimum_frames_per_false_alarm"
+    ],
+    "amended": {
+      "preparation.candidate_rho_grid": "Fixed median rank on the intended bulk geometry (2026-10-01)."
+    },
+    "evidence_paths": "Evidence naming an RFIsher file carries the prefix 'RFIsher '; a relative path without it, or with the prefix 'pilot-proxy/', names a file of this repository. Amendments cite the pilot-proxy handoff or the code that applies the value.",
+    "removed": "The correlation.* and stability.* entries, capture.detection_gate_sigma and measurement_allowance_db went with the code that read them (the residual chain, the drift screen and the capture ruling) on 2026-10-13; they are in this file at d3a3749."
+  },
+  "decisions": [
+    {
+      "id": "detection.false_alarm_probability",
+      "side": "detector",
+      "value": null,
+      "units": "probability per decision",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "The clean-frame loss allocation must be chosen before a null threshold can be derived.",
+      "evidence": [
+        "https://doi.org/10.1098/rsta.1933.0009"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "detection.false_alarm_target",
+      "side": "detector",
+      "value": 0.001,
+      "units": "probability per decision",
+      "basis": "policy",
+      "status": "locked",
+      "rationale": "The false-alarm limit eta_Pfa is the smallest matching-statistic threshold with a one-sided 95% binomial tolerance bound at or below alpha. Its order-statistic rank is fixed by the integer trial count, alpha and confidence before reading scores. Operational calibration requires independently sampled, verified signal-free current-era data; bootstrap effective counts remain diagnostic.",
+      "evidence": [
+        "refactor design addendum 2026-09-23, section 2",
+        "docs/HANDOFF.md@d3a3749"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "detection.minimum_frames_per_false_alarm",
+      "side": "detector",
+      "value": 10.0,
+      "units": "frames times P_fa",
+      "basis": "policy",
+      "status": "locked",
+      "rationale": "A false-alarm rate is estimated only on a control population with at least ten expected false alarms, N_valid >= 10 / P_fa.",
+      "evidence": [
+        "src/pilot_proxy/chime/injection_recovery.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "detection.minimum_injection_recovery",
+      "side": "detector",
+      "value": null,
+      "units": "probability",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "Detection power must be checked with declared injections after the false-alarm allocation is fixed.",
+      "evidence": [
+        "https://doi.org/10.1021/ac60259a007"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.instrument_state_intersection",
+      "side": "detector",
+      "value": null,
+      "units": "method",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "Station-state eras must eventually be intersected with receiver and detector configuration eras before an operational export.",
+      "evidence": [],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.maximum_segments",
+      "side": "detector",
+      "value": 5,
+      "units": "eras per channel",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "The cap prevents recursive over-segmentation in one archive; it is not selected by a formal penalty.",
+      "evidence": [
+        "https://doi.org/10.1080/01621459.2012.737745"
+      ],
+      "sensitivity_values": [
+        3,
+        5,
+        7
+      ]
+    },
+    {
+      "id": "era.minimum_observed_months",
+      "side": "detector",
+      "value": 6,
+      "units": "months per side",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Six months prevents short seasonal excursions from becoming a new station-state era; no universal value exists.",
+      "evidence": [
+        "pilot-proxy/analysis/validate_eras.py@30e50c2"
+      ],
+      "sensitivity_values": [
+        4,
+        6,
+        9,
+        12
+      ]
+    },
+    {
+      "id": "era.minimum_span_days",
+      "side": "detector",
+      "value": 270.0,
+      "units": "days per side",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The span requires most of a year on each side of a split while allowing archive gaps; it is an empirical guardrail.",
+      "evidence": [
+        "pilot-proxy/analysis/validate_eras.py@30e50c2"
+      ],
+      "sensitivity_values": [
+        180.0,
+        270.0,
+        365.25
+      ]
+    },
+    {
+      "id": "era.minimum_step_db",
+      "side": "detector",
+      "value": 2.0,
+      "units": "dB",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "A two-decibel level change targets transmitter-state changes rather than ordinary propagation variation.",
+      "evidence": [
+        "pilot-proxy/analysis/validate_eras.py@30e50c2"
+      ],
+      "sensitivity_values": [
+        1.0,
+        2.0,
+        3.0
+      ]
+    },
+    {
+      "id": "era.rank_z_threshold",
+      "side": "detector",
+      "value": 4.0,
+      "units": "normal-score units",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The threshold is conservative for one comparison but is not a globally calibrated change-point false-alarm probability.",
+      "evidence": [
+        "https://doi.org/10.1214/aoms/1177730491",
+        "https://doi.org/10.2307/2346729"
+      ],
+      "sensitivity_values": [
+        3.0,
+        4.0,
+        5.0
+      ]
+    },
+    {
+      "id": "era.selection",
+      "side": "detector",
+      "value": "latest",
+      "units": "era",
+      "basis": "policy",
+      "status": "locked",
+      "rationale": "Only the latest station state represents the channel configuration for which a new threshold is being chosen.",
+      "evidence": [
+        "RFIsher docs/architecture.md"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.split_method",
+      "side": "detector",
+      "value": "recursive_max_abs_z_times_step",
+      "units": "method",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The strongest admissible rank-and-level split is taken first. The scan is not a single Mann-Whitney test and needs holdout validation.",
+      "evidence": [
+        "https://doi.org/10.2307/2346729",
+        "pilot-proxy/analysis/ppcal/eras.py@30e50c2"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.summary",
+      "side": "detector",
+      "value": "monthly_median_unit_level_db",
+      "units": "method",
+      "basis": "literature",
+      "status": "provisional",
+      "rationale": "Monthly medians reduce the transient tail before station-state change detection; the monthly cadence is a project choice.",
+      "evidence": [
+        "https://doi.org/10.1214/aoms/1177730491",
+        "pilot-proxy/analysis/ppcal/eras.py@30e50c2"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "floor.minimum_null_frames",
+      "side": "detector",
+      "value": 30,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Below thirty null frames the tail percentile is treated as too thin to call measured and falls back to a stated detector-scale bound.",
+      "evidence": [
+        "RFIsher src/rfisher/residual.py@e041d5e"
+      ],
+      "sensitivity_values": [
+        30,
+        50,
+        100
+      ]
+    },
+    {
+      "id": "floor.minimum_shelf_split_frames",
+      "side": "detector",
+      "value": 11,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The nested shelf decomposition starts only above ten selected frames; this is a minimal execution guard, not a precision guarantee.",
+      "evidence": [
+        "RFIsher src/rfisher/residual.py@e041d5e"
+      ],
+      "sensitivity_values": [
+        11,
+        30,
+        100
+      ]
+    },
+    {
+      "id": "floor.mu0_agreement_db",
+      "side": "detector",
+      "value": 1.5,
+      "units": "dB",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The reported kept-frame floor is called weight-norm determined only when it agrees with the exact edge prediction inside this band.",
+      "evidence": [
+        "RFIsher src/rfisher/residual.py@e041d5e"
+      ],
+      "sensitivity_values": [
+        0.5,
+        1.0,
+        1.5
+      ]
+    },
+    {
+      "id": "floor.null_scale_probes",
+      "side": "detector",
+      "value": [
+        [
+          32.0,
+          1.0
+        ],
+        [
+          5.0,
+          1.96
+        ],
+        [
+          0.3,
+          2.9677
+        ]
+      ],
+      "units": "lower-half percentile and normal deviate",
+      "basis": "literature",
+      "status": "provisional",
+      "rationale": "Three lower-tail quantiles diagnose whether the kept sample has a Gaussian-like null scale without using its contaminated upper tail.",
+      "evidence": [
+        "RFIsher src/rfisher/residual.py@e041d5e"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "floor.quiet_era_max_level_db",
+      "side": "detector",
+      "value": 1.0,
+      "units": "dB",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "A qualifying quiet era must remain close to the detector null; the one-decibel boundary is archive-specific.",
+      "evidence": [
+        "pilot-proxy/analysis/ppcal/era_view.py@30e50c2"
+      ],
+      "sensitivity_values": [
+        0.5,
+        1.0,
+        1.5
+      ]
+    },
+    {
+      "id": "floor.upper_percentile",
+      "side": "detector",
+      "value": 90.0,
+      "units": "percentile",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "The upper percentile makes the undetected-shelf substitution a one-sided bound; its exact coverage is not calibrated.",
+      "evidence": [
+        "RFIsher src/rfisher/residual.py@e041d5e"
+      ],
+      "sensitivity_values": [
+        75.0,
+        90.0,
+        95.0
+      ]
+    },
+    {
+      "id": "preparation.additive_residuals",
+      "side": "detector",
+      "value": true,
+      "units": "requirement",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "Histogram prefix sums are sufficient only when correlation and transfer corrections do not need refitting after masking.",
+      "evidence": [
+        "RFIsher src/rfisher/thresholds.py@e041d5e"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.candidate_multiplier_grid",
+      "side": "detector",
+      "value": "q16_one_and_unique_required_q16_change_points",
+      "units": "Q16 multiplier grid",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The mask changes only when the integer multiplier reaches a frame's required value. Those deployable values give the exact empirical staircase without a geometric grid.",
+      "evidence": [
+        "RFIsher src/rfisher/preparation.py@e041d5e"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.candidate_rho_grid",
+      "side": "detector",
+      "value": "floor_of_intended_bulk_size_plus_one_over_two",
+      "units": "rank grid",
+      "basis": "policy",
+      "status": "locked",
+      "rationale": "The intended bulk geometry fixes the median rank before invalid bins are removed. Both CHIME anchor parities give rho = 63; frames lacking that rank remain always masked.",
+      "evidence": [
+        "RFIsher src/rfisher/preparation.py@e041d5e",
+        "docs/HANDOFF.md@d3a3749"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.designated_set_calibration",
+      "side": "detector",
+      "value": null,
+      "units": "method",
+      "basis": "empirical",
+      "status": "open",
+      "rationale": "The per-channel latest-era pilot anchor and designated width need a held-out calibration before the score can be exported.",
+      "evidence": [],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.equal_exposure_frames",
+      "side": "detector",
+      "value": true,
+      "units": "requirement",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "Count fractions equal exposure fractions only when every accepted frame carries the same exposure.",
+      "evidence": [
+        "RFIsher src/rfisher/thresholds.py@e041d5e"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.minimum_multiplier_q16",
+      "side": "detector",
+      "value": 1,
+      "units": "Q16 integer",
+      "basis": "implementation",
+      "status": "locked",
+      "rationale": "One is the smallest positive multiplier accepted by the deployed integer decision. It is eta = 1 / 65536, not eta = 1.",
+      "evidence": [
+        "pilot-proxy/src/pilot_proxy/fine_decision.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.minimum_reference_sweep_frames",
+      "side": "detector",
+      "value": 50,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "historical",
+      "rationale": "The raw coarse reference sweep predates the prepared-family boundary and returns no rows below fifty source frames.",
+      "evidence": [],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.rank_index_mapping",
+      "side": "detector",
+      "value": "rho_equals_zero_based_cfar_rank_plus_one",
+      "units": "index conversion",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The detector stores a zero-based array index, while the order statistic is written as a one-based rank.",
+      "evidence": [
+        "RFIsher src/rfisher/preparation.py@e041d5e"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.residual_score_definition",
+      "side": "detector",
+      "value": "minimum_q16_multiplier_that_keeps_the_frame",
+      "units": "exact decision boundary",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The required multiplier follows from the deployed integer cross-multiplication and represents zero-reference cases without a floating division.",
+      "evidence": [
+        "pilot-proxy/src/pilot_proxy/fine_decision.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.usable_bulk_definition",
+      "side": "detector",
+      "value": "independent_nondesignated_bins_excluding_guard_and_census",
+      "units": "bin rule",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The reference order statistic must exclude the tested signal region, its guard, and declared persistent lines.",
+      "evidence": [
+        "pilot-proxy/src/pilot_proxy/fine_decision.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "selection.minimum_retained_frames",
+      "side": "detector",
+      "value": 30,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The current selector declines candidates supported by fewer than thirty retained frames; the value needs sensitivity testing.",
+      "evidence": [
+        "RFIsher src/rfisher/thresholds.py@e041d5e"
+      ],
+      "sensitivity_values": [
+        30,
+        50,
+        100
+      ]
+    }
+  ]
+}

@@ -1,0 +1,462 @@
+{
+  "bench_scope": "Conducted single-input reference on the LimeSDR Mini: terminated nulls and a cabled tone through a step-attenuator ladder. Closes the physical single-input reference only; no sensitivity, ROC, telescope deployment or absolute dBm claim.",
+  "capture": {
+    "capture_samples": 4000000,
+    "marker_guard_samples": 100000,
+    "settle_samples": 100000
+  },
+  "guards": {
+    "clip_fraction_max": 0.0,
+    "clip_level": 0.98,
+    "marker_correlation_min": 0.15,
+    "rms_max": 0.5,
+    "rms_min": 1e-05
+  },
+  "implementation_sources": [
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/lime_reference_capture_v1.py",
+      "sha256": "dfa977ff749d127c5b5dafac0e66e3f18d88622a33dfb9af2a9a6f2364d693d7"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/lime_reference_worker_v1.cpp",
+      "sha256": "d1567f98342fd317b05cc16643e1ddddbb1538e092faf4666c9062e301ca0ae5"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/analyze_sdr_antenna_controls_v1.py",
+      "sha256": "371d7ba5f339bdef9195dcdd3829aec0105cba1c8af2c9e57745bc4905e1d572"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/tools/run_sdr_distribution_reference_v1.py",
+      "sha256": "501629892fe2bbb8e5b1c6619aa306bdb9679be73dd3046dfdafd52e84d750ec"
+    },
+    {
+      "path": "/home/djg/rail/pilot-proxy/src/pilot_proxy/integration/sdr_upgrade_adapter.py",
+      "sha256": "d1005269de0fed58b724a8f51a74274d3447d1a41a90ad127ac80053b04d2252"
+    },
+    {
+      "path": "/home/djg/rail/results/sdr_reference_transport_2026-09-09/build-v1/build.json",
+      "sha256": "847d8bd42dd9b826968fb423ff318ae19597fa90f8406f34946ed40973dd9aef"
+    },
+    {
+      "path": "/home/djg/rail/results/sdr_reference_transport_2026-09-09/build-v1/lime_reference_worker_v1",
+      "sha256": "1dbb55782bbf9a070dd949ed3842e6cc4f1cf3b552397451c8b157d121f49aeb"
+    }
+  ],
+  "ladder": {
+    "analysis": "tools/analyze_sdr_antenna_controls_v1.py analyze_capture, unchanged: mix -100 kHz, 25/128 resampler, K=L=128, bins 0/-2/+2, sample scale 500",
+    "base_pad_db": 24,
+    "base_pad_meaning": "Fixed 24 dB pad in line on every tone slot, including slot 1, in addition to commanded_attenuation_db; commanded values are the ladder variable and the fit abscissa. Set from the level budget in BENCH_RUNBOOK.md before any capture; never changed during the session.",
+    "capture_maximum_seconds": 4.0,
+    "commanded_attenuation_db": [
+      0,
+      6,
+      12,
+      18,
+      24,
+      30,
+      36
+    ],
+    "helper": "tools/lime_reference_capture_v1.py, unchanged",
+    "overload_rule": "A tone slot whose receipt carries worker error 'RX overload guard' is recorded as overloaded and the session continues; the record is kept, counts as attempted not successful, and never enters analysis. Any other failure stops the session.",
+    "passes": [
+      "A ascending",
+      "B descending",
+      "C ascending"
+    ],
+    "record_samples": 4000000,
+    "record_seconds": 2.0,
+    "repeats_per_rung": 3
+  },
+  "noise_model": "independent_complex_gaussian",
+  "power_conversion": {
+    "path": "/home/djg/rail/output/sdr-bench-2026-09-17/power_bound_declaration.json",
+    "sha256": "bd2b8f8cefb5407b5a9515d237d1ac57305aec049a7e455e36edc7c9895292be"
+  },
+  "radio": {
+    "active_tx_path": "TX2",
+    "antenna_polarization": "not applicable, conducted",
+    "antenna_separation_cm": 30.0,
+    "antenna_separation_meaning": "no antennas: nominal SMA cable run length, conducted bench",
+    "clock_source": "LimeSDR Mini internal VCTCXO",
+    "device": "LimeSDR Mini",
+    "device_serial": "1D423D9108F273",
+    "emission_bandwidth_hz": 2000000.0,
+    "frequency_hz": 500000000.0,
+    "native_rx_gain_db": 30,
+    "native_tx_gain_db": 50,
+    "radio_filter_bandwidth_hz": 1500000.0,
+    "rx_antenna": "none: attenuator ladder output via SMA cable C2, or 50 ohm terminator",
+    "rx_gain_setting_db": 18.0,
+    "rx_path": "LNAW",
+    "sample_rate_hz": 2000000.0,
+    "tx_antenna": "none: SMA cable C1 to attenuator ladder, or 50 ohm terminator",
+    "tx_bandwidth_hz": 5000000.0,
+    "tx_gain_setting_db": 38.0,
+    "tx_rms": 0.005
+  },
+  "rf_limits": {
+    "frequency_high_hz": 501000000.0,
+    "frequency_low_hz": 499000000.0,
+    "maximum_power_dbm": 0.0,
+    "power_metric": "average_conducted_dbm",
+    "provided_by": "Author's conducted-bench constraint of 2026-09-17: TX port into a 50 ohm attenuator ladder or terminator only, no antenna, no radiated emission, RX port input kept at or below 0 dBm. Not a jurisdictional authorization."
+  },
+  "run_id": "SDR-BENCH-2026-09-17-single-input-reference-v1",
+  "schema": "pilotproxy-offline-ota-protocol-v1",
+  "schema_placeholders": {
+    "antenna_separation_cm": "required positive field; nominal cable run, no antennas",
+    "data_shelf_snr_db": "minus the commanded attenuation; required by the schema for mixture slots, not an SNR claim",
+    "noise_model": "schema null model behind the F(256,512) reference width, not a claim about the measured terminated null"
+  },
+  "slots": [
+    {
+      "bench_label": "terminated TX-zero before",
+      "commanded_attenuation_db": null,
+      "data_shelf_snr_db": null,
+      "helper_mode": "txzero",
+      "kind": "tx_zero",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "50 ohm terminator",
+      "seed": 1000,
+      "slot_index": 0,
+      "tx_port": "50 ohm terminator"
+    },
+    {
+      "bench_label": "cabled tone, cabling check",
+      "commanded_attenuation_db": 0,
+      "data_shelf_snr_db": null,
+      "helper_mode": "tone",
+      "kind": "signal_only",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1001,
+      "slot_index": 1,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "terminated null before",
+      "commanded_attenuation_db": null,
+      "data_shelf_snr_db": null,
+      "helper_mode": "noise",
+      "kind": "noise_only",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "50 ohm terminator",
+      "seed": 1002,
+      "slot_index": 2,
+      "tx_port": "50 ohm terminator"
+    },
+    {
+      "bench_label": "ladder pass A rung 0 dB",
+      "commanded_attenuation_db": 0,
+      "data_shelf_snr_db": -0.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1003,
+      "slot_index": 3,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass A rung 6 dB",
+      "commanded_attenuation_db": 6,
+      "data_shelf_snr_db": -6.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1004,
+      "slot_index": 4,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass A rung 12 dB",
+      "commanded_attenuation_db": 12,
+      "data_shelf_snr_db": -12.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1005,
+      "slot_index": 5,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass A rung 18 dB",
+      "commanded_attenuation_db": 18,
+      "data_shelf_snr_db": -18.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1006,
+      "slot_index": 6,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass A rung 24 dB",
+      "commanded_attenuation_db": 24,
+      "data_shelf_snr_db": -24.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1007,
+      "slot_index": 7,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass A rung 30 dB",
+      "commanded_attenuation_db": 30,
+      "data_shelf_snr_db": -30.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1008,
+      "slot_index": 8,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass A rung 36 dB",
+      "commanded_attenuation_db": 36,
+      "data_shelf_snr_db": -36.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1009,
+      "slot_index": 9,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass B rung 36 dB",
+      "commanded_attenuation_db": 36,
+      "data_shelf_snr_db": -36.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1010,
+      "slot_index": 10,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass B rung 30 dB",
+      "commanded_attenuation_db": 30,
+      "data_shelf_snr_db": -30.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1011,
+      "slot_index": 11,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass B rung 24 dB",
+      "commanded_attenuation_db": 24,
+      "data_shelf_snr_db": -24.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1012,
+      "slot_index": 12,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass B rung 18 dB",
+      "commanded_attenuation_db": 18,
+      "data_shelf_snr_db": -18.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1013,
+      "slot_index": 13,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass B rung 12 dB",
+      "commanded_attenuation_db": 12,
+      "data_shelf_snr_db": -12.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1014,
+      "slot_index": 14,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass B rung 6 dB",
+      "commanded_attenuation_db": 6,
+      "data_shelf_snr_db": -6.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1015,
+      "slot_index": 15,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass B rung 0 dB",
+      "commanded_attenuation_db": 0,
+      "data_shelf_snr_db": -0.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1016,
+      "slot_index": 16,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass C rung 0 dB",
+      "commanded_attenuation_db": 0,
+      "data_shelf_snr_db": -0.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1017,
+      "slot_index": 17,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass C rung 6 dB",
+      "commanded_attenuation_db": 6,
+      "data_shelf_snr_db": -6.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1018,
+      "slot_index": 18,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass C rung 12 dB",
+      "commanded_attenuation_db": 12,
+      "data_shelf_snr_db": -12.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1019,
+      "slot_index": 19,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass C rung 18 dB",
+      "commanded_attenuation_db": 18,
+      "data_shelf_snr_db": -18.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1020,
+      "slot_index": 20,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass C rung 24 dB",
+      "commanded_attenuation_db": 24,
+      "data_shelf_snr_db": -24.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1021,
+      "slot_index": 21,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass C rung 30 dB",
+      "commanded_attenuation_db": 30,
+      "data_shelf_snr_db": -30.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1022,
+      "slot_index": 22,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "ladder pass C rung 36 dB",
+      "commanded_attenuation_db": 36,
+      "data_shelf_snr_db": -36.0,
+      "helper_mode": "tone",
+      "kind": "mixture",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "attenuator ladder output via SMA cable C2",
+      "seed": 1023,
+      "slot_index": 23,
+      "tx_port": "SMA cable C1 to attenuator ladder input"
+    },
+    {
+      "bench_label": "terminated null after",
+      "commanded_attenuation_db": null,
+      "data_shelf_snr_db": null,
+      "helper_mode": "noise",
+      "kind": "noise_only",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "50 ohm terminator",
+      "seed": 1024,
+      "slot_index": 24,
+      "tx_port": "50 ohm terminator"
+    },
+    {
+      "bench_label": "terminated TX-zero after",
+      "commanded_attenuation_db": null,
+      "data_shelf_snr_db": null,
+      "helper_mode": "txzero",
+      "kind": "tx_zero",
+      "record_samples": 4000000,
+      "record_seconds": 2.0,
+      "rx_port": "50 ohm terminator",
+      "seed": 1025,
+      "slot_index": 25,
+      "tx_port": "50 ohm terminator"
+    }
+  ],
+  "stationarity_audit": {
+    "path": "/home/djg/rail/output/sdr-bench-2026-09-17/stationarity_audit.json",
+    "sha256": "50329a184bfea16a2b4d6402cd7b03013b86f27274569a7195ed8786bb142910"
+  },
+  "waveform": {
+    "path": "/home/djg/rail/output/sdr-bench-2026-09-17/tx_payload_2s.cfile",
+    "samples": 4200000,
+    "sha256": "fe321ada0af9f0bd1b43b598464c482c683d2bb2551f194778bb087b1b783c45",
+    "source_startup_discard_samples": 300000,
+    "start_sample": 200000
+  }
+}

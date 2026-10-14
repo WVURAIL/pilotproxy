@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "snapshot_id": "dissertation-draft-2026-08-12",
+  "scope_note": "Curated values used by the current dissertation draft. This snapshot is evidence-aware and is not a final 23-channel verdict.",
+  "epoch_operating_points": [
+    {
+      "channel": 32,
+      "epoch_key": "ch32_pre_2021",
+      "epoch_group": 0,
+      "epoch_label": "station era",
+      "survey_mask_fraction": 0.998,
+      "fine_mask_fraction": null,
+      "residual_ratio": null,
+      "retained_frames": 7,
+      "status": "failure",
+      "evidence_state": "measured",
+      "note": "Fine calibration retains seven frames; no defensible operating point."
+    },
+    {
+      "channel": 32,
+      "epoch_key": "ch32_post_2021",
+      "epoch_group": 1,
+      "epoch_label": "modern era",
+      "survey_mask_fraction": 0.590,
+      "fine_mask_fraction": 0.433,
+      "residual_ratio": 0.0155,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured+modeled",
+      "note": "Fine operating point remains conditional on transfer and estimator validation."
+    },
+    {
+      "channel": 35,
+      "epoch_key": "ch35_pre_2021",
+      "epoch_group": 0,
+      "epoch_label": "early era",
+      "survey_mask_fraction": 0.461,
+      "fine_mask_fraction": 0.181,
+      "residual_ratio": null,
+      "retained_frames": null,
+      "status": "conditional",
+      "evidence_state": "measured+modeled",
+      "note": "Early epoch has a feasible fine-mask fraction under the current model."
+    },
+    {
+      "channel": 35,
+      "epoch_key": "ch35_post_2021",
+      "epoch_group": 1,
+      "epoch_label": "switch-on era",
+      "survey_mask_fraction": 0.942,
+      "fine_mask_fraction": 0.988,
+      "residual_ratio": 0.237,
+      "retained_frames": null,
+      "status": "failure",
+      "evidence_state": "measured+modeled",
+      "note": "Post-switch-on epoch is occupancy-pinned under the current policy."
+    }
+  ],
+  "channel_status_groups": [
+    {
+      "channels": [14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],
+      "status": "unmeasured",
+      "secondary_status": "",
+      "epoch_scope": "all",
+      "evidence_state": "pending",
+      "note": "No archive product in the current dissertation bundle."
+    },
+    {
+      "channels": [27, 28, 30, 31, 36],
+      "status": "excision_candidate",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Current screening result; final classification awaits global transfer and estimator gates."
+    },
+    {
+      "channels": [32, 33],
+      "status": "conditional_recovery",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Conditionally recoverable under the current residual model."
+    },
+    {
+      "channels": [29, 34],
+      "status": "measurement_bound",
+      "secondary_status": "",
+      "epoch_scope": "current measured epoch",
+      "evidence_state": "screening",
+      "note": "Verdict is limited by the currently available floor or coherence measurement."
+    },
+    {
+      "channels": [35],
+      "status": "conditional_recovery",
+      "secondary_status": "excision_candidate",
+      "epoch_scope": "pre-2021|post-2021",
+      "evidence_state": "screening",
+      "note": "Epoch split: conditional recovery before switch-on and occupancy-pinned afterward."
+    }
+  ],
+  "bao_policy_case": {
+    "channel": 33,
+    "residual_tolerance": 0.0015,
+    "correlation_time_limit_minutes": 5.0,
+    "policies": [
+      {
+        "policy_key": "keep_everything",
+        "label": "keep everything",
+        "residual_multiple": 316,
+        "time_multiple": 1.5,
+        "evidence_state": "measured+modeled",
+        "note": "Incurs no masking penalty but leaves a large residual."
+      },
+      {
+        "policy_key": "mad_1p8",
+        "label": "MAD 1.8x (incumbent)",
+        "residual_multiple": 1587,
+        "time_multiple": 3.6,
+        "evidence_state": "measured+modeled",
+        "note": "Incumbent time-domain policy under the current comparison."
+      },
+      {
+        "policy_key": "spectral_kurtosis",
+        "label": "spectral kurtosis (incumbent)",
+        "residual_multiple": 382,
+        "time_multiple": 1.9,
+        "evidence_state": "measured+modeled",
+        "note": "Incumbent higher-order-statistic policy under the current comparison."
+      },
+      {
+        "policy_key": "pilot_proxy",
+        "label": "pilot proxy",
+        "residual_multiple": 24,
+        "time_multiple": 5.3,
+        "evidence_state": "measured+modeled",
+        "note": "Best of the compared keep-and-mask policies, but still above the stated bias tolerance."
+      }
+    ]
+  }
+}

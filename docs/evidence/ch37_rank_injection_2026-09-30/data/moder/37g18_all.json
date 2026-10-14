@@ -1,0 +1,21 @@
+{
+ "name": "37g18",
+ "channel": 37,
+ "screen": "all",
+ "c": 1.002924542366154,
+ "ndraw": 4,
+ "replicates": 200,
+ "halves": {
+  "cal": {
+   "frames": 20240,
+   "months": 66,
+   "boot_seconds": 2002.4
+  },
+  "eval": {
+   "frames": 20237,
+   "months": 25,
+   "boot_seconds": 2045.3
+  }
+ },
+ "seconds": 4069.4
+}

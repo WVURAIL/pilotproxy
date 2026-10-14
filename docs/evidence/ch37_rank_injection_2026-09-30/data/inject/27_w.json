@@ -1,0 +1,29 @@
+{
+ "name": "27",
+ "channel": 27,
+ "screen": "w",
+ "bulk_size": 125,
+ "frames": 27453,
+ "selected": 6240,
+ "replicates": 200,
+ "halves": {
+  "cal": {
+   "frames": 3400,
+   "months": 34,
+   "eta_grid_fallbacks": 669,
+   "boot_seconds": 1140.2,
+   "boot_nan": 12668
+  },
+  "eval": {
+   "frames": 2840,
+   "months": 13,
+   "eta_grid_fallbacks": 4052,
+   "boot_seconds": 1218.4,
+   "boot_nan": 25915
+  }
+ },
+ "miss_eta_source": "cal",
+ "mid_frames": 18476,
+ "on_frames": 2737,
+ "seconds": 2476.5
+}

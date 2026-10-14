@@ -1,0 +1,119 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pilot-proxy"
+dynamic = ["version"]
+description = "PilotProxy pilot-informed CUDA local-reference power-ratio detector with GNU Radio ATSC 1.0 testbench"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Dylan J. Gormley" },
+  { name = "WVU Radio Astronomy Instrumentation Lab (RAIL)" },
+]
+keywords = ["radio-astronomy", "RFI", "ATSC", "DTV-pilot", "power-ratio", "CUDA", "CHIME"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+  "numpy",
+  "pyyaml",
+]
+
+[project.optional-dependencies]
+calibration = [
+  "scipy",
+]
+test = [
+  "cryptography",
+  "scipy",
+  "h5py",
+  "matplotlib",
+  "pyyaml",
+  "pytest>=8",
+  "ruff>=0.9",
+]
+cuda = [
+  "cupy-cuda12x",
+]
+plot = [
+  "matplotlib",
+]
+chime = [
+  "h5py",
+  "pyyaml",
+  "matplotlib",
+]
+archive = [
+  "cadcdata>=2.5.0",
+  "cadcutils>=1.5.1.1",
+  "datatrail-cli>=0.11",
+  "h5py",
+  "pyyaml",
+  "requests>=2.29.0",
+]
+n2 = [
+  "h5py",
+  "hdf5plugin",
+]
+
+[project.scripts]
+pilot-proxy = "pilot_proxy.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+"pilot_proxy.instruments" = ["*.yaml"]
+"pilot_proxy.characterization" = ["data/*.json"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pilot_proxy._version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pilot_proxy*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests/products", "tests/support"]
+markers = [
+  "cuda: requires CUDA runtime/GPU",
+]
+
+[tool.ruff]
+target-version = "py310"
+# docs/evidence holds frozen records of what was actually run, absolute paths and
+# all. They are read as evidence, never imported, and editing one to satisfy a
+# linter would alter the record it exists to preserve, so they are not linted.
+extend-exclude = ["docs/evidence"]
+
+[tool.ruff.lint]
+# The library is held to pycodestyle errors and warnings and sorted imports;
+# tests, tools and scripts to the correctness checks only. Long lines, one-line
+# compound statements, lambdas bound to names and short names stay allowed.
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "E701", "E702", "E731", "E741"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E", "W", "I"]
+"tools/**" = ["E", "W", "I"]
+"scripts/**" = ["E", "W", "I"]
+"setup.py" = ["E", "W", "I"]
+# the estimator-transfer freezer holds plot_results.py to its blob at the tag
+# estimator-transfer-publication-source-20260826
+"src/pilot_proxy/testbench/plot_results.py" = ["E", "W", "I"]
+# Keep backend selection immediately after the matplotlib import.
+"src/pilot_proxy/figure_style.py" = ["I"]

@@ -1,0 +1,46 @@
+% Shared architecture diagram: proposed deployment system context.
+% Single source of truth -- \input by PilotProxy_DS001 (Data Sheet) and
+% PilotProxy_UG001 (User Guide); render system_context.svg for markdown use
+% with system_context_standalone.tex. Requires tikz libraries arrows.meta +
+% positioning + calc, and the colors FStatBlue, FStatRed, FStatGray,
+% LightGray from the host document (or the standalone wrapper).
+% Status: this depicts the PROPOSED Kotekan deployment interface (result
+% queue and correlator sync); see docs/KOTEKAN_INTERFACE_PREP.md. Only the
+% detector stage and runtime bundle are implemented and tested here.
+% Re-render the svg after editing:
+%   cd docs/figures && pdflatex system_context_standalone.tex \
+%     && pdftocairo -svg system_context_standalone.pdf system_context.svg
+\begin{tikzpicture}[node distance=0.45cm and 0.9cm,>=Latex,
+  blk/.style={rectangle,rounded corners,draw=FStatBlue,thick,fill=LightGray,
+              minimum height=0.66cm,align=center,text width=3.6cm},
+  wide/.style={blk,text width=8.2cm},
+  fifo/.style={rectangle,draw=FStatRed,thick,fill=LightGray,
+               minimum height=0.66cm,align=center,text width=3.6cm,
+               double,double distance=1.4pt},
+  lbl/.style={font=\scriptsize\color{FStatGray},align=center}]
+
+\node[wide] (fe) {Telescope front end: ADC + F-engine PFB\\
+  \scriptsize 2048-point, 390.625\,kHz coarse channels, packed complex int4};
+\node[blk,below left=0.60cm and -2.0cm of fe] (corr)
+  {Correlator / X-engine\\ \scriptsize primary science path,
+   slower per-frame processing};
+\node[blk,below right=0.60cm and -2.0cm of fe] (det)
+  {PilotProxy detector stage (GPU)\\ \scriptsize selected-channel
+   F-statistic, one decision per aligned frame};
+\node[fifo,below=of det] (q)
+  {Mask result queue (FIFO)\\ \scriptsize decisions enqueue at kernel rate};
+\node[circle,draw=FStatRed,thick,fill=LightGray,inner sep=1.8pt]
+  (sync) at (corr |- q) {$\otimes$};
+\node[wide] (out) at ($(sync)!0.5!(q) + (0,-1.45)$)
+  {DTV-masked integrated products\\ \scriptsize rejected frames excluded
+   from the accumulation};
+
+\draw[->,thick] (fe.south -| corr.north) -- (corr.north);
+\draw[->,thick] (fe.south -| det.north) -- (det.north);
+\draw[->,thick] (det) -- (q);
+\draw[->,thick] (corr) -- (sync);
+\draw[->,thick,FStatRed] (q.west) -- (sync.east)
+  node[midway,above,font=\scriptsize\color{FStatRed},align=center]
+  {correlator pops on frame completion;\\ decision synced to the same frame};
+\draw[->,thick] (sync.south) |- ([yshift=2pt]out.west) -- (out.west);
+\end{tikzpicture}

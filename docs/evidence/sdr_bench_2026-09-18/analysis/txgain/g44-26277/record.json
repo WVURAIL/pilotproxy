@@ -1,0 +1,184 @@
+{
+  "adapter_metadata": {
+    "K": 128,
+    "L": 128,
+    "frame_count": 47,
+    "frame_duration_seconds": 0.04194304,
+    "frame_interval_convention": "sample-center lattice; frame end is the next sample center, exclusive",
+    "frame_size_samples": 16384,
+    "ideal_iid_unquantized_equal_norm_null_dof": [
+      256,
+      512
+    ],
+    "input_rate_hz": 2000000,
+    "num_input_streams": 1,
+    "output_rate_hz": 390625,
+    "ratio_definition": "2 * sum_rows(|z_target|^2) / sum_rows(|z_lower|^2 + |z_upper|^2), without weight-norm renormalization",
+    "ratio_status": {
+      "infinite": 0,
+      "positive_denominator": 44,
+      "undefined_both_zero": 3
+    },
+    "row_spacing_seconds": 0.00032768,
+    "sample_quantization": {
+      "bits_per_component": 4,
+      "component_count": 1540096,
+      "rails": [
+        -7,
+        7
+      ],
+      "rounding": "nearest, ties to even",
+      "saturated_component_count": 0,
+      "scale": 500.0,
+      "scale_estimation": "none; caller must supply a scale frozen independently of evaluation frames"
+    },
+    "schema": "sdr-upgrade-digital-adapter-v1",
+    "scope": "single-input CPU digital adapter; no hardware operation, physical RF mapping, array replication or calibrated null claim",
+    "term_digital_frequencies_hz": [
+      0.0,
+      -6103.515625,
+      6103.515625
+    ],
+    "term_input_digital_frequencies_hz": [
+      100000.0,
+      93896.484375,
+      106103.515625
+    ],
+    "term_order": [
+      "target",
+      "lower_digital_reference",
+      "upper_digital_reference"
+    ],
+    "timing": {
+      "boundary_policy": "drop incomplete FIR support at both ends; never fill a detector frame with zeros",
+      "coefficients_sha256_float64_le": "e1829ea2bc2d6cf6392c38fda8fb3b9ed16364b3ab744eb9ac054ab8fe9fc86a",
+      "digital_orientation": "exp(+2j*pi*f*n/input_rate) denotes positive input digital frequency",
+      "downsample": 128,
+      "filter_cutoff_hz": 165000.0,
+      "filter_design": "firwin, Kaiser beta 8.6, unity DC; upfirdn coefficients multiplied by 25",
+      "filter_group_delay_seconds": 8.192e-05,
+      "filter_taps": 8193,
+      "first_sample_center_seconds_from_record_start": 8.192e-05,
+      "first_untrimmed_output_index": 64,
+      "input_samples": 4000000,
+      "mixing": "multiply by exp(-2j*pi*mixer_hz*n/input_rate); output digital frequency = input digital frequency - mixer_hz",
+      "output_samples_with_full_filter_support": 781186,
+      "physical_rf_mapping": null,
+      "qualified_projector_center_passband_hz": [
+        -135000.0,
+        135000.0
+      ],
+      "sample_center_time_formula_seconds": "(j * 128 - 4096) / 50000000, with j the untrimmed output index",
+      "stop_untrimmed_output_index_exclusive": 781250,
+      "upsample": 25
+    },
+    "unused_full_support_tail_samples": 11138,
+    "weight_packed_sha256_int8": "71a0469fe6eaae5c4454b8c2c0cc0dd9ed7e3f5eb992398206a8c5433ffc6915",
+    "weight_quantization": "nearest, ties to even; scale 7; symmetric signed rails [-7,7]; packed two's-complement real-high/imag-low nibble",
+    "weight_squared_norms": [
+      6272.0,
+      6168.0,
+      6168.0
+    ]
+  },
+  "capture_directory": "/home/djg/rail/output/sdr-bench-2026-09-17/session/txgain/g44-26277",
+  "capture_receipt_sha256": "e80f38543ec8b04cd6a9ddf7129f15067e2a59858e6054aee28cc0d623ae4146",
+  "centered_row_coherence_magnitude": [
+    [
+      1.0,
+      0.02870829029238691,
+      0.024782968189242003
+    ],
+    [
+      0.02870829029238691,
+      1.0,
+      0.05272547804987825
+    ],
+    [
+      0.024782968189242003,
+      0.05272547804987825,
+      1.0
+    ]
+  ],
+  "centered_row_covariance": {
+    "imag": [
+      [
+        0.0,
+        -5.1426978358108306e-08,
+        9.953991544127766e-09
+      ],
+      [
+        5.1426978358108306e-08,
+        0.0,
+        -1.250391341051467e-08
+      ],
+      [
+        -9.953991544127766e-09,
+        1.250391341051467e-08,
+        0.0
+      ]
+    ],
+    "real": [
+      [
+        6.526118976225769e-06,
+        1.1832628961415621e-07,
+        1.1077240949602136e-07
+      ],
+      [
+        1.1832628961415621e-07,
+        3.094825730536946e-06,
+        1.6246256099881753e-07
+      ],
+      [
+        1.1077240949602136e-07,
+        1.6246256099881753e-07,
+        3.085988716718446e-06
+      ]
+    ]
+  },
+  "frame_array_sha256": "aa83a0f9c768329ff9d9a2b9bc4eeae6df9923c4cd15c797b5c7c1230e5afc50",
+  "independent_complex_projections_checked": 18048,
+  "input_sha256": "f8b7ed71bdc58709ba39cb41e1d07d1db4d148276c0edad64bc2bc70f5102fb7",
+  "label": "Commanded steady tone",
+  "mode": "tone",
+  "natural_frame_term_power_std_ddof1": [
+    0.01356316182370131,
+    3.4631213790589894e-05,
+    3.4956312600363437e-05
+  ],
+  "natural_lower_upper_reference_power_ratio": 1.003278915359561,
+  "natural_mean_frame_term_powers": [
+    0.23292125395061195,
+    0.0003962379717532033,
+    0.0003949429871265631
+  ],
+  "natural_ratio": {
+    "finite_count": 47,
+    "finite_max": 701.5081652771847,
+    "finite_mean": 590.7797252448966,
+    "finite_median": 584.8266273867398,
+    "finite_min": 481.0499776704875,
+    "finite_std_ddof1": 47.92952347866017,
+    "infinite_count": 0,
+    "total_count": 47,
+    "undefined_count": 0
+  },
+  "packed_ratio": {
+    "finite_count": 44,
+    "finite_max": 2.271523178807947,
+    "finite_mean": 1.1470386119099434,
+    "finite_median": 1.0315789473684212,
+    "finite_min": 0.9645669291338582,
+    "finite_std_ddof1": 0.29573280309745925,
+    "infinite_count": 0,
+    "total_count": 47,
+    "undefined_count": 3
+  },
+  "schema": "sdr-antenna-controls-record-v1",
+  "scope": "Descriptive single-input antenna record; no thermal-null, stationary-source, absolute-power or physical-path qualification. Centering includes any deterministic tone drift; frame observations may depend.",
+  "zero_variance_rows": [
+    false,
+    false,
+    false
+  ]
+}

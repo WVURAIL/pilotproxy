@@ -1,0 +1,2 @@
+# The frame length a frame residual is counted in.
+frame_seconds: 0.04194304            # 16384 samples at 390625 Hz

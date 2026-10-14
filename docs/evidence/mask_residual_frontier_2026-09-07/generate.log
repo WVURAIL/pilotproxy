@@ -1,0 +1,28 @@
+  off: 250/2000 at 0.046 s/frame
+  off: 500/2000 at 0.048 s/frame
+  off: 750/2000 at 0.048 s/frame
+  off: 1000/2000 at 0.048 s/frame
+  off: 1250/2000 at 0.048 s/frame
+  off: 1500/2000 at 0.048 s/frame
+  off: 1750/2000 at 0.048 s/frame
+off: 2000 frames in 96.9 s (0.048 s/frame) -> docs/evidence/mask_residual_frontier_2026-09-07/frames/off.npz
+  floor: 250/1000 at 0.056 s/frame
+  floor: 500/1000 at 0.052 s/frame
+  floor: 750/1000 at 0.052 s/frame
+floor: 1000 frames in 51.2 s (0.051 s/frame) -> docs/evidence/mask_residual_frontier_2026-09-07/frames/floor.npz
+  on_m10p0: 250/1000 at 0.055 s/frame
+  on_m10p0: 500/1000 at 0.056 s/frame
+  on_m10p0: 750/1000 at 0.057 s/frame
+on_m10p0: 1000 frames in 57.3 s (0.057 s/frame) -> docs/evidence/mask_residual_frontier_2026-09-07/frames/on_m10p0.npz
+  on_m44p0: 250/1000 at 0.056 s/frame
+  on_m44p0: 500/1000 at 0.059 s/frame
+  on_m44p0: 750/1000 at 0.059 s/frame
+on_m44p0: 1000 frames in 59.0 s (0.059 s/frame) -> docs/evidence/mask_residual_frontier_2026-09-07/frames/on_m44p0.npz
+  on_m50p0: 250/1000 at 0.056 s/frame
+  on_m50p0: 500/1000 at 0.059 s/frame
+  on_m50p0: 750/1000 at 0.059 s/frame
+on_m50p0: 1000 frames in 59.9 s (0.060 s/frame) -> docs/evidence/mask_residual_frontier_2026-09-07/frames/on_m50p0.npz
+  on_m55p0: 250/1000 at 0.060 s/frame
+  on_m55p0: 500/1000 at 0.061 s/frame
+  on_m55p0: 750/1000 at 0.060 s/frame
+on_m55p0: 1000 frames in 59.8 s (0.060 s/frame) -> docs/evidence/mask_residual_frontier_2026-09-07/frames/on_m55p0.npz

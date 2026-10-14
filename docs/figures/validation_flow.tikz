@@ -1,0 +1,25 @@
+% Shared architecture diagram: the standalone validation flow.
+% Single source of truth -- \input by PilotProxy_DS001 (Data Sheet) and
+% PilotProxy_UG001 (User Guide), and rendered to validation_flow.svg for
+% README.md. Requires: tikz libraries arrows.meta + positioning, and the
+% colors FStatBlue (#144E8C) and LightGray (#F3F3F3) defined by the host
+% document (or by validation_flow_standalone.tex when rendering the svg).
+% Re-render the svg after editing:
+%   cd docs/figures && pdflatex validation_flow_standalone.tex \
+%     && pdftocairo -svg validation_flow_standalone.pdf validation_flow.svg
+\begin{tikzpicture}[node distance=0.36cm,>=Latex]
+\tikzstyle{block}=[rectangle,rounded corners,draw=FStatBlue,thick,fill=LightGray,minimum height=0.62cm,text width=0.82\linewidth,align=center]
+\node[block] (a) {GNU Radio ATSC 1.0 waveform generator};
+\node[block,below=of a] (b) {Waveform audit: pilot frequency, pilot/data ratio, occupied bandwidth, shelf flatness};
+\node[block,below=of b] (c) {AWGN injection at requested data-shelf SNR};
+\node[block,below=of c] (d) {Reference PFB/channelizer: 4 taps, 2048-point real input, 1024 positive-frequency channels};
+\node[block,below=of d] (e) {Packed int4 detector matrix: row-major blocks of 128 complex samples};
+\node[block,below=of e] (f) {CUDA F-statistic kernel: exact uint64 target/reference powers and rational threshold mask};
+\node[block,below=of f] (g) {Report: $F$, $R_F$, $\rho$, $\mathrm{PNR}_{\mathrm{bin}}$, estimated shelf SNR, truth error, mask};
+\draw[->,thick] (a) -- (b);
+\draw[->,thick] (b) -- (c);
+\draw[->,thick] (c) -- (d);
+\draw[->,thick] (d) -- (e);
+\draw[->,thick] (e) -- (f);
+\draw[->,thick] (f) -- (g);
+\end{tikzpicture}

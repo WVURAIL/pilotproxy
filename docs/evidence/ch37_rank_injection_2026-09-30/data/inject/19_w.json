@@ -1,0 +1,29 @@
+{
+ "name": "19",
+ "channel": 19,
+ "screen": "w",
+ "bulk_size": 125,
+ "frames": 12900,
+ "selected": 10106,
+ "replicates": 200,
+ "halves": {
+  "cal": {
+   "frames": 5009,
+   "months": 12,
+   "eta_grid_fallbacks": 514,
+   "boot_seconds": 1275.3,
+   "boot_nan": 11023
+  },
+  "eval": {
+   "frames": 5097,
+   "months": 6,
+   "eta_grid_fallbacks": 303,
+   "boot_seconds": 1190.4,
+   "boot_nan": 4331
+  }
+ },
+ "miss_eta_source": "cal",
+ "mid_frames": 2538,
+ "on_frames": 256,
+ "seconds": 2567.0
+}

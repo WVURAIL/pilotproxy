@@ -1,0 +1,925 @@
+{
+  "artifacts": [
+    {
+      "path": "build-requirements.txt",
+      "sha256": "08c99c2e58079396e76a7cca361cb1176fed56dd0dc30bf6ab87656831c5d444",
+      "size_bytes": 1402
+    },
+    {
+      "path": "requirements.lock",
+      "sha256": "5df555d527c20391c1a10cd3dc87435531e9787d401f819d0a1352cf6431239b",
+      "size_bytes": 7650
+    },
+    {
+      "path": "source/pilot-proxy-2.0.0.dev0.tar.gz",
+      "sha256": "c04e4f29765993a36041d1e09e4361acf4950abdc9d40072ffa8b235619213b2",
+      "size_bytes": 7675851
+    },
+    {
+      "path": "wheelhouse/annotated_doc-0.0.5-py3-none-any.whl",
+      "sha256": "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101",
+      "size_bytes": 5302
+    },
+    {
+      "path": "wheelhouse/annotated_types-0.8.0-py3-none-any.whl",
+      "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0",
+      "size_bytes": 13427
+    },
+    {
+      "path": "wheelhouse/anyio-4.14.2-py3-none-any.whl",
+      "sha256": "9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494",
+      "size_bytes": 125813
+    },
+    {
+      "path": "wheelhouse/args-0.1.0-py3-none-any.whl",
+      "sha256": "b28975c605321eafb80527d8c62a22caca9a2c4cfd664e17ae45c92b38558882",
+      "size_bytes": 3362
+    },
+    {
+      "path": "wheelhouse/cadcdata-2.5.2-py3-none-any.whl",
+      "sha256": "3a050c84dd04460aced180c5df0c5636aa369534899270d11365e187ec1fb29c",
+      "size_bytes": 34437
+    },
+    {
+      "path": "wheelhouse/cadctap-0.10.1-py3-none-any.whl",
+      "sha256": "0f52d05f15b98accc5fbef83619ecf1061b8c018adb73c08a702241871ae12c6",
+      "size_bytes": 54693
+    },
+    {
+      "path": "wheelhouse/cadcutils-1.6.2-py3-none-any.whl",
+      "sha256": "a95323d422731b41f9d24c2f06785ea2231cf69d1cc6ccacc4175df72b988877",
+      "size_bytes": 164697
+    },
+    {
+      "path": "wheelhouse/canfar-1.4.1-py3-none-any.whl",
+      "sha256": "5047cff29499eb2231ab0186ae2034ac2df939597b0cebc77254e56c8c1ddf03",
+      "size_bytes": 129007
+    },
+    {
+      "path": "wheelhouse/certifi-2026.7.22-py3-none-any.whl",
+      "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "size_bytes": 136983
+    },
+    {
+      "path": "wheelhouse/cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "sha256": "c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf",
+      "size_bytes": 221822
+    },
+    {
+      "path": "wheelhouse/charset_normalizer-3.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "b9af956078716df40d985fb0dfeb2c2120c5ca92ba4ff4b388acfd01cdc14d08",
+      "size_bytes": 248801
+    },
+    {
+      "path": "wheelhouse/click-8.5.0-py3-none-any.whl",
+      "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360",
+      "size_bytes": 125251
+    },
+    {
+      "path": "wheelhouse/click_aliasing-1.0.0-py3-none-any.whl",
+      "sha256": "b11a0fbdf74f62570f97cb2f22cbfaf0af020ef58fe7c540708cd3cfa766f0fe",
+      "size_bytes": 3433
+    },
+    {
+      "path": "wheelhouse/clint-0.5.1-py3-none-any.whl",
+      "sha256": "68aac14b9f7c039d3db899f86f6b920e27702d263af30e49e37c88eaf64ddc36",
+      "size_bytes": 34347
+    },
+    {
+      "path": "wheelhouse/contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "4d00e655fcef08aba35ec9610536bfe90267d7ab5ba944f7032549c55a146da1",
+      "size_bytes": 362601
+    },
+    {
+      "path": "wheelhouse/cryptography-50.0.1-cp311-abi3-manylinux_2_34_x86_64.whl",
+      "sha256": "51afcfceb15597cf2635068e4ac9a56b2abde622edde17f37d85fd7b5306497a",
+      "size_bytes": 4746230
+    },
+    {
+      "path": "wheelhouse/cuda_pathfinder-1.7.0-py3-none-any.whl",
+      "sha256": "e9d67e950f3d5992b854dfd25917c3719d0c21d3057b11abe86ba6feec526138",
+      "size_bytes": 63091
+    },
+    {
+      "path": "wheelhouse/cupy_cuda12x-14.2.0-cp312-cp312-manylinux2014_x86_64.whl",
+      "sha256": "f82141761f2c81905d49387464ae29438887956d99063381c93a1d5d1b7d32e8",
+      "size_bytes": 136111459
+    },
+    {
+      "path": "wheelhouse/cycler-0.12.1-py3-none-any.whl",
+      "sha256": "85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30",
+      "size_bytes": 8321
+    },
+    {
+      "path": "wheelhouse/datatrail_cli-0.12.0-py3-none-any.whl",
+      "sha256": "4709d9de2fb372466d71f486368c93effdd1a44d8c04e941d09e4f0de7ac2456",
+      "size_bytes": 33232
+    },
+    {
+      "path": "wheelhouse/defusedxml-0.7.1-py2.py3-none-any.whl",
+      "sha256": "a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61",
+      "size_bytes": 25604
+    },
+    {
+      "path": "wheelhouse/dill-0.4.1-py3-none-any.whl",
+      "sha256": "1e1ce33e978ae97fcfcff5638477032b801c46c7c65cf717f95fbc2248f79a9d",
+      "size_bytes": 120019
+    },
+    {
+      "path": "wheelhouse/distro-1.9.0-py3-none-any.whl",
+      "sha256": "7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2",
+      "size_bytes": 20277
+    },
+    {
+      "path": "wheelhouse/fonttools-4.63.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "sha256": "58dc6bb86a78d782f00f9190ca02c119cf5bbe2807536e361e18d42019f877d8",
+      "size_bytes": 4999800
+    },
+    {
+      "path": "wheelhouse/h11-0.16.0-py3-none-any.whl",
+      "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+      "size_bytes": 37515
+    },
+    {
+      "path": "wheelhouse/h2-4.4.1-py3-none-any.whl",
+      "sha256": "0e25f1462b23c9cb82d9eb02e28bc706dac2a68cb457c6a0d74d63c8a2a5d0e6",
+      "size_bytes": 62636
+    },
+    {
+      "path": "wheelhouse/h5py-3.16.0-cp312-cp312-manylinux_2_28_x86_64.whl",
+      "sha256": "dfc21898ff025f1e8e67e194965a95a8d4754f452f83454538f98f8a3fcb207e",
+      "size_bytes": 5405250
+    },
+    {
+      "path": "wheelhouse/hpack-4.2.0-py3-none-any.whl",
+      "sha256": "858ac0b02280fa582b5080d68db0899c62a80375e0e5413a74970c5e518b6986",
+      "size_bytes": 34246
+    },
+    {
+      "path": "wheelhouse/httpcore-1.0.9-py3-none-any.whl",
+      "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+      "size_bytes": 78784
+    },
+    {
+      "path": "wheelhouse/httpx-0.28.1-py3-none-any.whl",
+      "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad",
+      "size_bytes": 73517
+    },
+    {
+      "path": "wheelhouse/humanize-4.16.0-py3-none-any.whl",
+      "sha256": "353eb2f34c09d098b2880eee8bef21832eae6d174f48c5762fff7e5fcb74d01d",
+      "size_bytes": 137209
+    },
+    {
+      "path": "wheelhouse/hyperframe-6.1.0-py3-none-any.whl",
+      "sha256": "b03380493a519fce58ea5af42e4a42317bf9bd425596f7a0835ffce80f1a42e5",
+      "size_bytes": 13007
+    },
+    {
+      "path": "wheelhouse/idna-3.19-py3-none-any.whl",
+      "sha256": "815e7be7a7806d54abb586dc943addc79e8b2ee16915059658cbeff4b1b43bf4",
+      "size_bytes": 68550
+    },
+    {
+      "path": "wheelhouse/iniconfig-2.3.0-py3-none-any.whl",
+      "sha256": "f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12",
+      "size_bytes": 7484
+    },
+    {
+      "path": "wheelhouse/kiwisolver-1.5.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "sha256": "bb5136fb5352d3f422df33f0c879a1b0c204004324150cc3b5e3c4f310c9049f",
+      "size_bytes": 1477934
+    },
+    {
+      "path": "wheelhouse/lxml-6.1.2-cp312-cp312-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "04cf9e3f4ee9cab9d9ba05401bef8668840fa9620fcd4d8e85a2d2fd0b0fa960",
+      "size_bytes": 5244532
+    },
+    {
+      "path": "wheelhouse/markdown_it_py-4.2.0-py3-none-any.whl",
+      "sha256": "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a",
+      "size_bytes": 91687
+    },
+    {
+      "path": "wheelhouse/matplotlib-3.11.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "sha256": "ba8f811b8ddfac493734d6af0b2dff96919d0c28ca0d641858dab4262777c6ea",
+      "size_bytes": 10035615
+    },
+    {
+      "path": "wheelhouse/mdurl-0.1.2-py3-none-any.whl",
+      "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8",
+      "size_bytes": 9979
+    },
+    {
+      "path": "wheelhouse/mergedeep-1.3.4-py3-none-any.whl",
+      "sha256": "70775750742b25c0d8f36c55aed03d24c3384d17c951b3175d898bd778ef0307",
+      "size_bytes": 6354
+    },
+    {
+      "path": "wheelhouse/numpy-2.5.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "3cdec01fa790a186d430433fdd4d4ffb70eed6f0eeb4bf05c8dbe2dce0a9bcb8",
+      "size_bytes": 16722264
+    },
+    {
+      "path": "wheelhouse/packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+      "size_bytes": 129956
+    },
+    {
+      "path": "wheelhouse/pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "78cb2c6865a35ab8ff8b75fd122f6033b92a62c82801110e48ddd6c936a45d91",
+      "size_bytes": 6940830
+    },
+    {
+      "path": "wheelhouse/pilot_proxy-2.0.0.dev0-py3-none-any.whl",
+      "sha256": "0d1ee7ec02e78d9fcad9daedc952738cf0040c5fc4635fd3b7dbb688bade8b3b",
+      "size_bytes": 548138
+    },
+    {
+      "path": "wheelhouse/pip-26.2.1-py3-none-any.whl",
+      "sha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+      "size_bytes": 1816632
+    },
+    {
+      "path": "wheelhouse/pluggy-1.6.0-py3-none-any.whl",
+      "sha256": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
+      "size_bytes": 20538
+    },
+    {
+      "path": "wheelhouse/prompt_toolkit-3.0.53-py3-none-any.whl",
+      "sha256": "01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2",
+      "size_bytes": 392288
+    },
+    {
+      "path": "wheelhouse/pyaml-26.7.0-py3-none-any.whl",
+      "sha256": "cfa382780c43ae660669b87d394d550a41856ef175f5749f51f753e12d7077ac",
+      "size_bytes": 27226
+    },
+    {
+      "path": "wheelhouse/pycparser-3.0-py3-none-any.whl",
+      "sha256": "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992",
+      "size_bytes": 48172
+    },
+    {
+      "path": "wheelhouse/pydantic-2.13.4-py3-none-any.whl",
+      "sha256": "45a282cde31d808236fd7ea9d919b128653c8b38b393d1c4ab335c62924d9aba",
+      "size_bytes": 472262
+    },
+    {
+      "path": "wheelhouse/pydantic_core-2.46.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "926c9541b14b12b1681dca8a0b75feb510b06c6341b70a8e500c2fdcff837cce",
+      "size_bytes": 2094516
+    },
+    {
+      "path": "wheelhouse/pydantic_settings-2.15.0-py3-none-any.whl",
+      "sha256": "0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42",
+      "size_bytes": 69413
+    },
+    {
+      "path": "wheelhouse/pygments-2.21.0-py3-none-any.whl",
+      "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+      "size_bytes": 1250147
+    },
+    {
+      "path": "wheelhouse/pyopenssl-26.4.0-py3-none-any.whl",
+      "sha256": "f0eb0cb2d581d3ad2b9c489468485e7f2ab6727d08401bcf9d824c3caddf3c1c",
+      "size_bytes": 56026
+    },
+    {
+      "path": "wheelhouse/pyparsing-3.3.2-py3-none-any.whl",
+      "sha256": "850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d",
+      "size_bytes": 122781
+    },
+    {
+      "path": "wheelhouse/pytest-9.1.1-py3-none-any.whl",
+      "sha256": "37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c",
+      "size_bytes": 386536
+    },
+    {
+      "path": "wheelhouse/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+      "size_bytes": 229892
+    },
+    {
+      "path": "wheelhouse/python_dotenv-1.2.3-py3-none-any.whl",
+      "sha256": "904552145e8bfed22162c09dab1c2b9b54fefa7b23ba780f4f26ca0316b0f0d9",
+      "size_bytes": 22780
+    },
+    {
+      "path": "wheelhouse/python_magic-0.4.27-py2.py3-none-any.whl",
+      "sha256": "c212960ad306f700aa0d01e5d7a325d20548ff97eb9920dcd29513174f0294d3",
+      "size_bytes": 13840
+    },
+    {
+      "path": "wheelhouse/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc",
+      "size_bytes": 807870
+    },
+    {
+      "path": "wheelhouse/questionary-2.1.1-py3-none-any.whl",
+      "sha256": "a51af13f345f1cdea62347589fbb6df3b290306ab8930713bfae4d475a7d4a59",
+      "size_bytes": 36753
+    },
+    {
+      "path": "wheelhouse/requests-2.34.2-py3-none-any.whl",
+      "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "size_bytes": 73075
+    },
+    {
+      "path": "wheelhouse/requests_toolbelt-1.0.0-py2.py3-none-any.whl",
+      "sha256": "cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06",
+      "size_bytes": 54481
+    },
+    {
+      "path": "wheelhouse/rich-15.0.0-py3-none-any.whl",
+      "sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb",
+      "size_bytes": 310654
+    },
+    {
+      "path": "wheelhouse/ruff-0.16.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "f2d812e482f5a7e02eee26cd73d2a37ebbdf47d795ea63ba1b89110ae93e9fb3",
+      "size_bytes": 10286522
+    },
+    {
+      "path": "wheelhouse/scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "f55fa87b6c612ecd6b058f167c53231b1d14e412efe361d3d6e38b3631c73218",
+      "size_bytes": 35344199
+    },
+    {
+      "path": "wheelhouse/segno-1.6.6-py3-none-any.whl",
+      "sha256": "28c7d081ed0cf935e0411293a465efd4d500704072cdb039778a2ab8736190c7",
+      "size_bytes": 76503
+    },
+    {
+      "path": "wheelhouse/setuptools-84.0.0-py3-none-any.whl",
+      "sha256": "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670",
+      "size_bytes": 818216
+    },
+    {
+      "path": "wheelhouse/shellingham-1.5.4-py2.py3-none-any.whl",
+      "sha256": "7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686",
+      "size_bytes": 9755
+    },
+    {
+      "path": "wheelhouse/six-1.17.0-py2.py3-none-any.whl",
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "size_bytes": 11050
+    },
+    {
+      "path": "wheelhouse/tenacity-9.1.4-py3-none-any.whl",
+      "sha256": "6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55",
+      "size_bytes": 28926
+    },
+    {
+      "path": "wheelhouse/termcolor-3.3.0-py3-none-any.whl",
+      "sha256": "cf642efadaf0a8ebbbf4bc7a31cec2f9b5f21a9f726f4ccbb08192c9c26f43a5",
+      "size_bytes": 7734
+    },
+    {
+      "path": "wheelhouse/toml-0.10.2-py2.py3-none-any.whl",
+      "sha256": "806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b",
+      "size_bytes": 16588
+    },
+    {
+      "path": "wheelhouse/typer-0.27.1-py3-none-any.whl",
+      "sha256": "53150287edd11baeb4e4722c8e394fcdf8181c0ae89485cba8d25c778d5edd56",
+      "size_bytes": 122874
+    },
+    {
+      "path": "wheelhouse/typing_extensions-4.16.0-py3-none-any.whl",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "size_bytes": 45571
+    },
+    {
+      "path": "wheelhouse/typing_inspection-0.4.4-py3-none-any.whl",
+      "sha256": "65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147",
+      "size_bytes": 14750
+    },
+    {
+      "path": "wheelhouse/urllib3-2.7.0-py3-none-any.whl",
+      "sha256": "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897",
+      "size_bytes": 131087
+    },
+    {
+      "path": "wheelhouse/wcwidth-0.8.2-py3-none-any.whl",
+      "sha256": "d63947694a0539a1d51e01eda7caf800c291020e6cdd7e28ad7b14dd33ad4f85",
+      "size_bytes": 323166
+    },
+    {
+      "path": "wheelhouse/wheel-0.48.0-py3-none-any.whl",
+      "sha256": "3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab",
+      "size_bytes": 33320
+    }
+  ],
+  "created_at_utc": "2026-08-30T21:26:04.510999+00:00",
+  "direct_sources": [
+    {
+      "commit_id": "9863dbc2868ff62c7b503b28d3bfe5e626bc81ce",
+      "kind": "git",
+      "name": "datatrail-cli",
+      "url": "https://github.com/WVURAIL/datatrail-cli.git"
+    },
+    {
+      "kind": "checkout",
+      "name": "pilot-proxy",
+      "url": "file:///home/djg/rail/pilot-proxy"
+    }
+  ],
+  "package_source_sha256": "e30ec73fd037ff68407194b323766bb3317e4168526a6456e1f0520a074b0c4c",
+  "packages": [
+    {
+      "direct_url": null,
+      "name": "annotated-doc",
+      "normalized_name": "annotated-doc",
+      "version": "0.0.5"
+    },
+    {
+      "direct_url": null,
+      "name": "annotated-types",
+      "normalized_name": "annotated-types",
+      "version": "0.8.0"
+    },
+    {
+      "direct_url": null,
+      "name": "anyio",
+      "normalized_name": "anyio",
+      "version": "4.14.2"
+    },
+    {
+      "direct_url": null,
+      "name": "args",
+      "normalized_name": "args",
+      "version": "0.1.0"
+    },
+    {
+      "direct_url": null,
+      "name": "cadcdata",
+      "normalized_name": "cadcdata",
+      "version": "2.5.2"
+    },
+    {
+      "direct_url": null,
+      "name": "cadctap",
+      "normalized_name": "cadctap",
+      "version": "0.10.1"
+    },
+    {
+      "direct_url": null,
+      "name": "cadcutils",
+      "normalized_name": "cadcutils",
+      "version": "1.6.2"
+    },
+    {
+      "direct_url": null,
+      "name": "canfar",
+      "normalized_name": "canfar",
+      "version": "1.4.1"
+    },
+    {
+      "direct_url": null,
+      "name": "certifi",
+      "normalized_name": "certifi",
+      "version": "2026.7.22"
+    },
+    {
+      "direct_url": null,
+      "name": "cffi",
+      "normalized_name": "cffi",
+      "version": "2.1.1"
+    },
+    {
+      "direct_url": null,
+      "name": "charset-normalizer",
+      "normalized_name": "charset-normalizer",
+      "version": "3.5.1"
+    },
+    {
+      "direct_url": null,
+      "name": "click",
+      "normalized_name": "click",
+      "version": "8.5.0"
+    },
+    {
+      "direct_url": null,
+      "name": "click-aliasing",
+      "normalized_name": "click-aliasing",
+      "version": "1.0.0"
+    },
+    {
+      "direct_url": null,
+      "name": "clint",
+      "normalized_name": "clint",
+      "version": "0.5.1"
+    },
+    {
+      "direct_url": null,
+      "name": "contourpy",
+      "normalized_name": "contourpy",
+      "version": "1.3.3"
+    },
+    {
+      "direct_url": null,
+      "name": "cryptography",
+      "normalized_name": "cryptography",
+      "version": "50.0.1"
+    },
+    {
+      "direct_url": null,
+      "name": "cuda-pathfinder",
+      "normalized_name": "cuda-pathfinder",
+      "version": "1.7.0"
+    },
+    {
+      "direct_url": null,
+      "name": "cupy-cuda12x",
+      "normalized_name": "cupy-cuda12x",
+      "version": "14.2.0"
+    },
+    {
+      "direct_url": null,
+      "name": "cycler",
+      "normalized_name": "cycler",
+      "version": "0.12.1"
+    },
+    {
+      "direct_url": {
+        "url": "https://github.com/WVURAIL/datatrail-cli.git",
+        "vcs_info": {
+          "commit_id": "9863dbc2868ff62c7b503b28d3bfe5e626bc81ce",
+          "requested_revision": "9863dbc2868ff62c7b503b28d3bfe5e626bc81ce",
+          "vcs": "git"
+        }
+      },
+      "name": "datatrail-cli",
+      "normalized_name": "datatrail-cli",
+      "version": "0.12.0"
+    },
+    {
+      "direct_url": null,
+      "name": "defusedxml",
+      "normalized_name": "defusedxml",
+      "version": "0.7.1"
+    },
+    {
+      "direct_url": null,
+      "name": "dill",
+      "normalized_name": "dill",
+      "version": "0.4.1"
+    },
+    {
+      "direct_url": null,
+      "name": "distro",
+      "normalized_name": "distro",
+      "version": "1.9.0"
+    },
+    {
+      "direct_url": null,
+      "name": "fonttools",
+      "normalized_name": "fonttools",
+      "version": "4.63.0"
+    },
+    {
+      "direct_url": null,
+      "name": "h11",
+      "normalized_name": "h11",
+      "version": "0.16.0"
+    },
+    {
+      "direct_url": null,
+      "name": "h2",
+      "normalized_name": "h2",
+      "version": "4.4.1"
+    },
+    {
+      "direct_url": null,
+      "name": "h5py",
+      "normalized_name": "h5py",
+      "version": "3.16.0"
+    },
+    {
+      "direct_url": null,
+      "name": "hpack",
+      "normalized_name": "hpack",
+      "version": "4.2.0"
+    },
+    {
+      "direct_url": null,
+      "name": "httpcore",
+      "normalized_name": "httpcore",
+      "version": "1.0.9"
+    },
+    {
+      "direct_url": null,
+      "name": "httpx",
+      "normalized_name": "httpx",
+      "version": "0.28.1"
+    },
+    {
+      "direct_url": null,
+      "name": "humanize",
+      "normalized_name": "humanize",
+      "version": "4.16.0"
+    },
+    {
+      "direct_url": null,
+      "name": "hyperframe",
+      "normalized_name": "hyperframe",
+      "version": "6.1.0"
+    },
+    {
+      "direct_url": null,
+      "name": "idna",
+      "normalized_name": "idna",
+      "version": "3.19"
+    },
+    {
+      "direct_url": null,
+      "name": "iniconfig",
+      "normalized_name": "iniconfig",
+      "version": "2.3.0"
+    },
+    {
+      "direct_url": null,
+      "name": "kiwisolver",
+      "normalized_name": "kiwisolver",
+      "version": "1.5.0"
+    },
+    {
+      "direct_url": null,
+      "name": "lxml",
+      "normalized_name": "lxml",
+      "version": "6.1.2"
+    },
+    {
+      "direct_url": null,
+      "name": "markdown-it-py",
+      "normalized_name": "markdown-it-py",
+      "version": "4.2.0"
+    },
+    {
+      "direct_url": null,
+      "name": "matplotlib",
+      "normalized_name": "matplotlib",
+      "version": "3.11.1"
+    },
+    {
+      "direct_url": null,
+      "name": "mdurl",
+      "normalized_name": "mdurl",
+      "version": "0.1.2"
+    },
+    {
+      "direct_url": null,
+      "name": "mergedeep",
+      "normalized_name": "mergedeep",
+      "version": "1.3.4"
+    },
+    {
+      "direct_url": null,
+      "name": "numpy",
+      "normalized_name": "numpy",
+      "version": "2.5.2"
+    },
+    {
+      "direct_url": null,
+      "name": "packaging",
+      "normalized_name": "packaging",
+      "version": "26.3"
+    },
+    {
+      "direct_url": null,
+      "name": "pillow",
+      "normalized_name": "pillow",
+      "version": "12.3.0"
+    },
+    {
+      "direct_url": {
+        "dir_info": {
+          "editable": true
+        },
+        "url": "file:///home/djg/rail/pilot-proxy"
+      },
+      "name": "pilot-proxy",
+      "normalized_name": "pilot-proxy",
+      "version": "2.0.0.dev0"
+    },
+    {
+      "direct_url": null,
+      "name": "pip",
+      "normalized_name": "pip",
+      "version": "26.2.1"
+    },
+    {
+      "direct_url": null,
+      "name": "pluggy",
+      "normalized_name": "pluggy",
+      "version": "1.6.0"
+    },
+    {
+      "direct_url": null,
+      "name": "prompt_toolkit",
+      "normalized_name": "prompt-toolkit",
+      "version": "3.0.53"
+    },
+    {
+      "direct_url": null,
+      "name": "pyaml",
+      "normalized_name": "pyaml",
+      "version": "26.7.0"
+    },
+    {
+      "direct_url": null,
+      "name": "pycparser",
+      "normalized_name": "pycparser",
+      "version": "3.0"
+    },
+    {
+      "direct_url": null,
+      "name": "pydantic",
+      "normalized_name": "pydantic",
+      "version": "2.13.4"
+    },
+    {
+      "direct_url": null,
+      "name": "pydantic_core",
+      "normalized_name": "pydantic-core",
+      "version": "2.46.4"
+    },
+    {
+      "direct_url": null,
+      "name": "pydantic-settings",
+      "normalized_name": "pydantic-settings",
+      "version": "2.15.0"
+    },
+    {
+      "direct_url": null,
+      "name": "Pygments",
+      "normalized_name": "pygments",
+      "version": "2.21.0"
+    },
+    {
+      "direct_url": null,
+      "name": "pyOpenSSL",
+      "normalized_name": "pyopenssl",
+      "version": "26.4.0"
+    },
+    {
+      "direct_url": null,
+      "name": "pyparsing",
+      "normalized_name": "pyparsing",
+      "version": "3.3.2"
+    },
+    {
+      "direct_url": null,
+      "name": "pytest",
+      "normalized_name": "pytest",
+      "version": "9.1.1"
+    },
+    {
+      "direct_url": null,
+      "name": "python-dateutil",
+      "normalized_name": "python-dateutil",
+      "version": "2.9.0.post0"
+    },
+    {
+      "direct_url": null,
+      "name": "python-dotenv",
+      "normalized_name": "python-dotenv",
+      "version": "1.2.3"
+    },
+    {
+      "direct_url": null,
+      "name": "python-magic",
+      "normalized_name": "python-magic",
+      "version": "0.4.27"
+    },
+    {
+      "direct_url": null,
+      "name": "PyYAML",
+      "normalized_name": "pyyaml",
+      "version": "6.0.3"
+    },
+    {
+      "direct_url": null,
+      "name": "questionary",
+      "normalized_name": "questionary",
+      "version": "2.1.1"
+    },
+    {
+      "direct_url": null,
+      "name": "requests",
+      "normalized_name": "requests",
+      "version": "2.34.2"
+    },
+    {
+      "direct_url": null,
+      "name": "requests-toolbelt",
+      "normalized_name": "requests-toolbelt",
+      "version": "1.0.0"
+    },
+    {
+      "direct_url": null,
+      "name": "rich",
+      "normalized_name": "rich",
+      "version": "15.0.0"
+    },
+    {
+      "direct_url": null,
+      "name": "ruff",
+      "normalized_name": "ruff",
+      "version": "0.16.4"
+    },
+    {
+      "direct_url": null,
+      "name": "scipy",
+      "normalized_name": "scipy",
+      "version": "1.18.1"
+    },
+    {
+      "direct_url": null,
+      "name": "segno",
+      "normalized_name": "segno",
+      "version": "1.6.6"
+    },
+    {
+      "direct_url": null,
+      "name": "setuptools",
+      "normalized_name": "setuptools",
+      "version": "84.0.0"
+    },
+    {
+      "direct_url": null,
+      "name": "shellingham",
+      "normalized_name": "shellingham",
+      "version": "1.5.4"
+    },
+    {
+      "direct_url": null,
+      "name": "six",
+      "normalized_name": "six",
+      "version": "1.17.0"
+    },
+    {
+      "direct_url": null,
+      "name": "tenacity",
+      "normalized_name": "tenacity",
+      "version": "9.1.4"
+    },
+    {
+      "direct_url": null,
+      "name": "termcolor",
+      "normalized_name": "termcolor",
+      "version": "3.3.0"
+    },
+    {
+      "direct_url": null,
+      "name": "toml",
+      "normalized_name": "toml",
+      "version": "0.10.2"
+    },
+    {
+      "direct_url": null,
+      "name": "typer",
+      "normalized_name": "typer",
+      "version": "0.27.1"
+    },
+    {
+      "direct_url": null,
+      "name": "typing_extensions",
+      "normalized_name": "typing-extensions",
+      "version": "4.16.0"
+    },
+    {
+      "direct_url": null,
+      "name": "typing-inspection",
+      "normalized_name": "typing-inspection",
+      "version": "0.4.4"
+    },
+    {
+      "direct_url": null,
+      "name": "urllib3",
+      "normalized_name": "urllib3",
+      "version": "2.7.0"
+    },
+    {
+      "direct_url": null,
+      "name": "wcwidth",
+      "normalized_name": "wcwidth",
+      "version": "0.8.2"
+    },
+    {
+      "direct_url": null,
+      "name": "wheel",
+      "normalized_name": "wheel",
+      "version": "0.48.0"
+    }
+  ],
+  "python": {
+    "executable": "/home/djg/rail/venvs/archive-local/bin/python",
+    "implementation": "CPython",
+    "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "version": "3.12.3"
+  },
+  "schema_version": "pilotproxy_archive_runtime_bundle_v1",
+  "source_revision": "65b49971ffa673f0c52987b3fe16ef7ecc8aec63"
+}

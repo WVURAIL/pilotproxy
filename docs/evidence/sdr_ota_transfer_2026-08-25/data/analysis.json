@@ -1,0 +1,62 @@
+{
+  "experiment": "sdr_ota",
+  "floor": {
+    "approximate_output_db": -38.23102033606891,
+    "description": "The low-input plateau is the received local-reference estimator floor."
+  },
+  "grid": {
+    "commanded_maximum_db": 0.0,
+    "commanded_minimum_db": -42.0,
+    "mixtures": 1800,
+    "passes": 30,
+    "points": 15,
+    "received_maximum_db": -1.8446431912800276,
+    "received_minimum_db": -43.27196849589975,
+    "step_db": 3.0
+  },
+  "plot": {
+    "bootstrap_samples": 10000,
+    "interval": "95% pass-cluster bootstrap",
+    "smoothing_points": 1
+  },
+  "schema_version": "sdr_ota_estimator_transfer_analysis_v1",
+  "scope": {
+    "not_validated": [
+      "decision threshold calibration",
+      "false-alarm or detection probability",
+      "ROC performance",
+      "field propagation or multipath performance"
+    ],
+    "validated": "threshold-free coarse F-statistic shelf-SNR estimation through the direct radio path"
+  },
+  "unit_gain_fit": {
+    "bootstrap_samples": 10000,
+    "bootstrap_unit": "pass",
+    "commanded_range_db": [
+      -27.0,
+      0.0
+    ],
+    "control_model_max_abs_difference_db": 0.20832835808844408,
+    "control_model_rms_difference_db": 0.08413588891514748,
+    "fit_line_max_abs_residual_db": 0.1368315025962339,
+    "fit_line_rms_residual_db": 0.06488701328274055,
+    "intercept_db": 0.025933537776444616,
+    "intercept_db_ci95": [
+      -0.10097036895378245,
+      0.1679756330829717
+    ],
+    "points": 10,
+    "predictor": "control-conditioned expected output",
+    "r_squared": 0.9999344802072726,
+    "received_range_db": [
+      -28.273151181096402,
+      -1.8446431912800276
+    ],
+    "response": "pooled GPU fixed-point estimate",
+    "slope": 1.0044774680931357,
+    "slope_ci95": [
+      0.9916525224509288,
+      1.0189398216189662
+    ]
+  }
+}

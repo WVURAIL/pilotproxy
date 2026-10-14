@@ -1,0 +1,129 @@
+{
+  "experiment": "digital_synthetic",
+  "grid": {
+    "allocation": {
+      "-12": 60,
+      "-15": 60,
+      "-18": 60,
+      "-21": 60,
+      "-24": 60,
+      "-27": 60,
+      "-3": 60,
+      "-30": 1000,
+      "-33": 1000,
+      "-36": 1000,
+      "-39": 1000,
+      "-42": 1000,
+      "-45": 1000,
+      "-48": 240,
+      "-51": 240,
+      "-54": 240,
+      "-57": 240,
+      "-6": 60,
+      "-60": 240,
+      "-9": 60,
+      "0": 60,
+      "12": 60,
+      "15": 60,
+      "18": 60,
+      "21": 60,
+      "24": 60,
+      "27": 60,
+      "3": 60,
+      "30": 60,
+      "33": 60,
+      "36": 60,
+      "39": 60,
+      "42": 60,
+      "45": 60,
+      "48": 60,
+      "51": 60,
+      "54": 60,
+      "57": 60,
+      "6": 60,
+      "60": 60,
+      "9": 60
+    },
+    "maximum_db": 60.0,
+    "minimum_db": -60.0,
+    "points": 41,
+    "step_db": 3.0,
+    "trials": 9000
+  },
+  "plot": {
+    "bootstrap_samples": 10000,
+    "interval": "95% trial bootstrap",
+    "smoothing_points": 1
+  },
+  "representation": {
+    "cpu_float_nonpositive_pooled_excess_points": [
+      -60.0
+    ],
+    "gpu_finite_points": [
+      -54.0,
+      -51.0,
+      -48.0,
+      -45.0,
+      -42.0,
+      -39.0,
+      -36.0,
+      -33.0,
+      -30.0,
+      -27.0,
+      -24.0,
+      -21.0,
+      -18.0,
+      -15.0,
+      -12.0,
+      -9.0,
+      -6.0,
+      -3.0,
+      0.0,
+      3.0,
+      6.0,
+      9.0,
+      12.0,
+      15.0,
+      18.0,
+      21.0,
+      24.0,
+      27.0,
+      30.0,
+      33.0,
+      36.0,
+      39.0,
+      42.0,
+      45.0,
+      48.0,
+      51.0,
+      54.0,
+      57.0,
+      60.0
+    ],
+    "gpu_fixed_vs_cpu_float_max_abs_estimate_difference_db": 1.8496602399550568,
+    "gpu_fixed_vs_cpu_packed_max_abs_normalized_ratio_difference": 0.0,
+    "gpu_nonpositive_pooled_excess_points": [
+      -60.0,
+      -57.0
+    ]
+  },
+  "schema_version": "digital_estimator_transfer_analysis_v1",
+  "scope": {
+    "not_validated": [
+      "decision threshold calibration",
+      "false-alarm or detection probability",
+      "ROC performance",
+      "full 2048-stream deployment geometry"
+    ],
+    "validated": "threshold-free coarse F-statistic normalization and shelf-SNR estimation transfer"
+  },
+  "waveform_conditioned_comparison": {
+    "max_abs_residual_db": 0.07959253393696386,
+    "points": 11,
+    "requested_range_db": [
+      -30.0,
+      0.0
+    ],
+    "rms_residual_db": 0.03690975833552129
+  }
+}

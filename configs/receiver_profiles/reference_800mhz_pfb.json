@@ -1,0 +1,76 @@
+{
+  "schema_version": "pilotproxy_receiver_profile_v1",
+  "receiver_profile_id": "reference_800mhz_pfb",
+  "instrument_name": "reference",
+  "rf_band": {
+    "lower_hz": 400000000.0,
+    "upper_hz": 800000000.0
+  },
+  "channelizer": {
+    "type": "pfb",
+    "input_sample_rate_hz": 800000000.0,
+    "pfb_fft_size": 2048,
+    "taps": 4,
+    "response": "sinc_hamming",
+    "num_coarse_channels": 1024,
+    "coarse_channel_center_offset_hz": 390625.0,
+    "frequency_axis": {
+      "spectral_sense": "normal",
+      "order": "ascending_rf"
+    }
+  },
+  "framing": {
+    "frame_size_samples": 16384
+  },
+  "input_streams": {
+    "num_input_streams": 1,
+    "stream_unit": "input_stream",
+    "stream_map_required": false,
+    "combine_default": "incoherent_power_sum_over_streams"
+  },
+  "quantization": {
+    "native_channelized_sample_format": "complex64",
+    "adapter_output_format": "complex_int4_packed_int8",
+    "bits_per_component": 4,
+    "scale_mode_default": "global",
+    "clip_sigma_default": 3.0,
+    "record_scale_by_stream": true,
+    "record_clip_fraction_by_stream": true
+  },
+  "detector_adapter": {
+    "compatible_detector_core_id": "pilotproxy_cuda_local_reference_power_ratio",
+    "detector_window_samples": 128,
+    "fine_bin_enbw_hz": 3051.7578125,
+    "dtv_bandwidth_hz": 6000000.0,
+    "pilot_below_data_db": 11.3,
+    "pilot_capture_efficiency": 1.0,
+    "time_reverse_detector_windows_before_kernel": false
+  },
+  "baseband_frame": {
+    "channel_center_normalized": 0.5,
+    "physical_dc_normalized": 0.5
+  },
+  "metadata": {
+    "annotations": {
+      "rf_band": {
+        "bandwidth_hz": 400000000.0
+      },
+      "channelizer": {
+        "coarse_channel_width_hz": 390625.0,
+        "output_sample_rate_hz": 390625.0,
+        "spectral_sense": "normal"
+      },
+      "channelizer_frequency_axis": {
+        "channel_index_to_rf_hz": "rf_hz = upper_hz - (coarse_channel_index + 1) * bandwidth_hz / num_adc_inputs"
+      },
+      "framing": {
+        "frame_size_unit": "channelized complex samples per input stream"
+      },
+      "detector_adapter": {
+        "windows_per_stream_formula": "frame_size_samples / detector_window_samples",
+        "detector_rows_per_frame_formula": "num_input_streams * num_selected_channels * windows_per_stream",
+        "fine_bin_width_hz": 3051.7578125
+      }
+    }
+  }
+}

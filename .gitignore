@@ -1,0 +1,53 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.canfar_registry.env
+*.npz
+*.npy
+*.mat
+*.h5
+*.pdf
+*.png
+# pytest cache
+.pytest_cache/
+# Deterministic TeX facts generated from profiles and source constants.
+docs/generated/
+docs/auxil/
+docs/out/
+# PilotProxy CUDA kernel build artifacts (make build-kernel / test-kernel)
+cuda/*.o
+cuda/*.so*
+# the preserved kernel is machine-local; its manifest travels with it
+cuda/*.manifest.json
+cuda/test_c_header
+cuda/test_fstat_cuda
+cuda/test_fstat_reference
+cuda/.config_*.stamp
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+build/
+work/
+generated/
+results/
+
+# Evidence studies are committed whole. A study directory under docs/evidence/
+# is the record a dissertation chapter cites, so it must be able to carry its
+# own figures (*.png, *.pdf), arrays (*.npz, *.npy, *.h5) and any subdirectory
+# it happens to name build/, work/, generated/ or results/ -- every one of
+# which the rules above would otherwise swallow without a word. Git cannot
+# re-include a file under an excluded *directory*, so the directory itself has
+# to be re-included first, and this block has to come last so that it is the
+# final matching pattern for both.
+!docs/evidence/**/
+!docs/evidence/**
+
+# ...but hygiene still wins inside it. The blanket re-inclusion above is by
+# extension-blind design, so without these it would also track caches, build
+# droppings and OS metadata that happen to land under an evidence directory.
+docs/evidence/**/__pycache__/
+docs/evidence/**/*.py[cod]
+docs/evidence/**/.pytest_cache/
+docs/evidence/**/.DS_Store
+docs/evidence/**/Thumbs.db

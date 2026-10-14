@@ -1,0 +1,12 @@
+# Interference template: what the emitter looks like, for the detector adapter.
+# ATSC 1.0 8-VSB (A/53): a 6 MHz channel whose pilot sits 309.441 kHz above the
+# lower channel edge and 11.3 dB below the aggregate data power.
+# Floats carry a decimal point so YAML reads them as numbers.
+kind: narrowband_marker            # selects the detector adapter and residual estimator
+band_width_hz: 6000000.0
+residual_shape: band_thermal       # the residual fills the band like thermal noise
+reference: ATSC A/53 8-VSB
+marker:
+  offset_hz: 309441.0              # marker frequency above the lower band edge
+  marker_to_band_db: 11.3          # marker power below the band's data power
+  capture_efficiency: 1.0          # fraction of marker power the detector captures

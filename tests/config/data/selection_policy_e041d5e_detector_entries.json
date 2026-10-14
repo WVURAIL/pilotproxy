@@ -1,0 +1,885 @@
+{
+  "source": "RFIsher src/rfisher/selection_policy.py at e041d5e3d001499eb7758cd694d43ff5ff8bcf2d",
+  "file_sha256": "a997e91999f879de8c7597a51cce7b6758e5d4a8d47ddca8a80cf78d9ab8c347",
+  "snapshot_sha256": "b36c612ca1a59c0b5e09ced129bca9e15c589fb94a7e2e3648c6ebd815b68cf7",
+  "decisions": [
+    {
+      "id": "correlation.acquisition_summary",
+      "value": "mean_linear_shelf_power",
+      "units": "method",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "Power must be averaged in linear units before a variance or structure function is formed.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.bootstrap_interval_percentiles",
+      "value": [
+        16.0,
+        84.0
+      ],
+      "units": "percentiles",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "The interval is a one-standard-deviation-style diagnostic rather than an operational coverage guarantee.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        [
+          2.5,
+          97.5
+        ],
+        [
+          16.0,
+          84.0
+        ]
+      ]
+    },
+    {
+      "id": "correlation.bootstrap_replicates",
+      "value": 200,
+      "units": "replicates",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Two hundred reproduces the current screen but is not selected from a target interval-endpoint accuracy.",
+      "evidence": [
+        "https://doi.org/10.1111/1468-0262.00092"
+      ],
+      "sensitivity_values": [
+        200,
+        2000,
+        10000
+      ]
+    },
+    {
+      "id": "correlation.bootstrap_seed",
+      "value": 20260807,
+      "units": "integer seed",
+      "basis": "implementation",
+      "status": "locked",
+      "rationale": "A fixed seed makes the released interval reproducible.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.bootstrap_unit",
+      "value": "sidereal_day",
+      "units": "block",
+      "basis": "literature",
+      "status": "locked",
+      "rationale": "Whole-day resampling preserves within-day ordering and the physical common-mode boundary.",
+      "evidence": [
+        "https://doi.org/10.1214/aos/1176347265"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.cadence_matched_coverage",
+      "value": null,
+      "units": "validation",
+      "basis": "empirical",
+      "status": "open",
+      "rationale": "Cadence-matched simulation must show that gaps and finite duration do not create the reported structure-function break.",
+      "evidence": [
+        "https://doi.org/10.1111/j.1365-2966.2010.16328.x"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.crossing_fraction",
+      "value": 0.6321205588285577,
+      "units": "plateau share",
+      "basis": "literature",
+      "status": "provisional",
+      "rationale": "The crossing is an e-folding persistence time only for an approximately single-exponential autocorrelation.",
+      "evidence": [
+        "https://doi.org/10.1103/PhysRev.36.823"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.integrated_autocorrelation_validation",
+      "value": null,
+      "units": "validation",
+      "basis": "literature",
+      "status": "open",
+      "rationale": "Operational variance scaling needs an integrated autocorrelation or direct block-sum measurement.",
+      "evidence": [
+        "https://doi.org/10.2307/2983611",
+        "https://doi.org/10.1214/ss/1177011137"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.lag_edges_seconds",
+      "value": [
+        0.0,
+        300.0,
+        900.0,
+        1800.0,
+        2700.0,
+        3600.0,
+        5400.0,
+        7200.0,
+        14400.0,
+        28800.0
+      ],
+      "units": "seconds",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The bins follow the available acquisition cadence and stay within one sidereal day; cadence-matched coverage remains required.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.maximum_trim_spread",
+      "value": 2.0,
+      "units": "ratio",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "A factor-of-two change is the current refusal boundary for both the timescale and surviving power; it is a materiality choice.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        1.5,
+        2.0,
+        3.0
+      ]
+    },
+    {
+      "id": "correlation.measurement_population",
+      "value": "valid_positive_excess_frames_with_finite_shelf",
+      "units": "frame rule",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "The current shelf-persistence screen uses the archived positive-excess decision as a measurement cutoff; this is not an independent false-alarm-calibrated population.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.minimum_bootstrap_success_fraction",
+      "value": 0.1,
+      "units": "fraction",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The fractional convergence guard supplements the absolute count.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        0.1,
+        0.5,
+        0.9
+      ]
+    },
+    {
+      "id": "correlation.minimum_bootstrap_successes",
+      "value": 20,
+      "units": "replicates",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "At least twenty finite estimates and ten percent of requested replicates are required before an interval is reported.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        20,
+        50,
+        100
+      ]
+    },
+    {
+      "id": "correlation.minimum_frames_per_acquisition",
+      "value": 2,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "At least two frames are required to estimate the within-acquisition noise contribution.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        2,
+        4,
+        8
+      ]
+    },
+    {
+      "id": "correlation.minimum_pairs_per_lag_bin",
+      "value": 40,
+      "units": "pairs",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The current populated-bin gate is not an effective sample size because observations recur across pairs.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        20,
+        40,
+        80
+      ]
+    },
+    {
+      "id": "correlation.minimum_populated_lag_bins",
+      "value": 3,
+      "units": "lag bins",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Three populated bins are the minimum used for an interpolated crossing; this does not establish model adequacy.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.minimum_same_day_pairs",
+      "value": 200,
+      "units": "pairs",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "This is a gross support guard only because acquisitions recur in many pairs.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        100,
+        200,
+        500
+      ]
+    },
+    {
+      "id": "correlation.minimum_selected_frames",
+      "value": 100,
+      "units": "frames per trim",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Each trim probe needs a basic frame population before the nested variance calculation is attempted.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        100,
+        200,
+        500
+      ]
+    },
+    {
+      "id": "correlation.minimum_sidereal_days",
+      "value": 100,
+      "units": "days",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The day-block interval needs broad day coverage; raw pair counts alone are not independent support.",
+      "evidence": [
+        "https://doi.org/10.1214/aos/1176347265"
+      ],
+      "sensitivity_values": [
+        50,
+        100,
+        200
+      ]
+    },
+    {
+      "id": "correlation.plateau_start_seconds",
+      "value": 7200.0,
+      "units": "seconds",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Pairs beyond two hours define the current structure-function plateau; finite cadence can create false breaks.",
+      "evidence": [
+        "https://doi.org/10.1111/j.1365-2966.2010.16328.x"
+      ],
+      "sensitivity_values": [
+        5400.0,
+        7200.0,
+        10800.0
+      ]
+    },
+    {
+      "id": "correlation.primary_trim_percentile",
+      "value": 90.0,
+      "units": "percentile",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The upper transient tail is removed before measuring the stationary shelf component; the primary cut is tested against two probes.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        75.0,
+        90.0,
+        95.0
+      ]
+    },
+    {
+      "id": "correlation.refusal_cap_seconds",
+      "value": 86164.0905,
+      "units": "seconds",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "A refusal receives no common-mode credit and carries all shelf power at the sidereal-day ceiling as a conservative screening bound.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.sidereal_day_seconds",
+      "value": 86164.0905,
+      "units": "seconds",
+      "basis": "instrument",
+      "status": "locked",
+      "rationale": "The common-mode decomposition is keyed to one mean sidereal day.",
+      "evidence": [
+        "https://iers-conventions.obspm.fr/content/chapter1/icc1.pdf"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.trim_probes",
+      "value": [
+        75.0,
+        90.0,
+        95.0
+      ],
+      "units": "percentiles",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The probes expose tail-dominated estimates rather than assigning a universal trim.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "correlation.variance_scaling",
+      "value": "rectangular_coherent_block",
+      "units": "model",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "The released screen maps persistence to tau divided by frame time. This is a coherent-block model, not a general autocorrelation result.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        "rectangular_coherent_block",
+        "integrated_autocorrelation"
+      ]
+    },
+    {
+      "id": "detection.false_alarm_probability",
+      "value": null,
+      "units": "probability per decision",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "The clean-frame loss allocation must be chosen before a null threshold can be derived.",
+      "evidence": [
+        "https://doi.org/10.1098/rsta.1933.0009"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "detection.minimum_injection_recovery",
+      "value": null,
+      "units": "probability",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "Detection power must be checked with declared injections after the false-alarm allocation is fixed.",
+      "evidence": [
+        "https://doi.org/10.1021/ac60259a007"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.instrument_state_intersection",
+      "value": null,
+      "units": "method",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "Station-state eras must eventually be intersected with receiver and detector configuration eras before an operational export.",
+      "evidence": [],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.maximum_segments",
+      "value": 5,
+      "units": "eras per channel",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "The cap prevents recursive over-segmentation in one archive; it is not selected by a formal penalty.",
+      "evidence": [
+        "https://doi.org/10.1080/01621459.2012.737745"
+      ],
+      "sensitivity_values": [
+        3,
+        5,
+        7
+      ]
+    },
+    {
+      "id": "era.minimum_observed_months",
+      "value": 6,
+      "units": "months per side",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Six months prevents short seasonal excursions from becoming a new station-state era; no universal value exists.",
+      "evidence": [
+        "pilot-proxy/analysis/validate_eras.py"
+      ],
+      "sensitivity_values": [
+        4,
+        6,
+        9,
+        12
+      ]
+    },
+    {
+      "id": "era.minimum_span_days",
+      "value": 270.0,
+      "units": "days per side",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The span requires most of a year on each side of a split while allowing archive gaps; it is an empirical guardrail.",
+      "evidence": [
+        "pilot-proxy/analysis/validate_eras.py"
+      ],
+      "sensitivity_values": [
+        180.0,
+        270.0,
+        365.25
+      ]
+    },
+    {
+      "id": "era.minimum_step_db",
+      "value": 2.0,
+      "units": "dB",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "A two-decibel level change targets transmitter-state changes rather than ordinary propagation variation.",
+      "evidence": [
+        "pilot-proxy/analysis/validate_eras.py"
+      ],
+      "sensitivity_values": [
+        1.0,
+        2.0,
+        3.0
+      ]
+    },
+    {
+      "id": "era.rank_z_threshold",
+      "value": 4.0,
+      "units": "normal-score units",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The threshold is conservative for one comparison but is not a globally calibrated change-point false-alarm probability.",
+      "evidence": [
+        "https://doi.org/10.1214/aoms/1177730491",
+        "https://doi.org/10.2307/2346729"
+      ],
+      "sensitivity_values": [
+        3.0,
+        4.0,
+        5.0
+      ]
+    },
+    {
+      "id": "era.selection",
+      "value": "latest",
+      "units": "era",
+      "basis": "policy",
+      "status": "locked",
+      "rationale": "Only the latest station state represents the channel configuration for which a new threshold is being chosen.",
+      "evidence": [
+        "docs/architecture.md"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.split_method",
+      "value": "recursive_max_abs_z_times_step",
+      "units": "method",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The strongest admissible rank-and-level split is taken first. The scan is not a single Mann-Whitney test and needs holdout validation.",
+      "evidence": [
+        "https://doi.org/10.2307/2346729",
+        "pilot-proxy/analysis/ppcal/eras.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "era.summary",
+      "value": "monthly_median_unit_level_db",
+      "units": "method",
+      "basis": "literature",
+      "status": "provisional",
+      "rationale": "Monthly medians reduce the transient tail before station-state change detection; the monthly cadence is a project choice.",
+      "evidence": [
+        "https://doi.org/10.1214/aoms/1177730491",
+        "pilot-proxy/analysis/ppcal/eras.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "floor.minimum_null_frames",
+      "value": 30,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "Below thirty null frames the tail percentile is treated as too thin to call measured and falls back to a stated detector-scale bound.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        30,
+        50,
+        100
+      ]
+    },
+    {
+      "id": "floor.minimum_shelf_split_frames",
+      "value": 11,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The nested shelf decomposition starts only above ten selected frames; this is a minimal execution guard, not a precision guarantee.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        11,
+        30,
+        100
+      ]
+    },
+    {
+      "id": "floor.mu0_agreement_db",
+      "value": 1.5,
+      "units": "dB",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The reported kept-frame floor is called weight-norm determined only when it agrees with the exact edge prediction inside this band.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        0.5,
+        1.0,
+        1.5
+      ]
+    },
+    {
+      "id": "floor.null_scale_probes",
+      "value": [
+        [
+          32.0,
+          1.0
+        ],
+        [
+          5.0,
+          1.96
+        ],
+        [
+          0.3,
+          2.9677
+        ]
+      ],
+      "units": "lower-half percentile and normal deviate",
+      "basis": "literature",
+      "status": "provisional",
+      "rationale": "Three lower-tail quantiles diagnose whether the kept sample has a Gaussian-like null scale without using its contaminated upper tail.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "floor.quiet_era_max_level_db",
+      "value": 1.0,
+      "units": "dB",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "A qualifying quiet era must remain close to the detector null; the one-decibel boundary is archive-specific.",
+      "evidence": [
+        "pilot-proxy/analysis/ppcal/era_view.py"
+      ],
+      "sensitivity_values": [
+        0.5,
+        1.0,
+        1.5
+      ]
+    },
+    {
+      "id": "floor.upper_percentile",
+      "value": 90.0,
+      "units": "percentile",
+      "basis": "policy",
+      "status": "provisional",
+      "rationale": "The upper percentile makes the undetected-shelf substitution a one-sided bound; its exact coverage is not calibrated.",
+      "evidence": [
+        "src/rfisher/residual.py"
+      ],
+      "sensitivity_values": [
+        75.0,
+        90.0,
+        95.0
+      ]
+    },
+    {
+      "id": "preparation.additive_residuals",
+      "value": true,
+      "units": "requirement",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "Histogram prefix sums are sufficient only when correlation and transfer corrections do not need refitting after masking.",
+      "evidence": [
+        "src/rfisher/thresholds.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.candidate_multiplier_grid",
+      "value": "q16_one_and_unique_required_q16_change_points",
+      "units": "Q16 multiplier grid",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The mask changes only when the integer multiplier reaches a frame's required value. Those deployable values give the exact empirical staircase without a geometric grid.",
+      "evidence": [
+        "src/rfisher/preparation.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.candidate_rho_grid",
+      "value": "all_one_based_ranks_through_minimum_valid_bulk_count",
+      "units": "rank grid",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "Every rank supported by every accepted frame is evaluated, so rank selection has no coarse-grid approximation or invalid-frame branch.",
+      "evidence": [
+        "src/rfisher/preparation.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.designated_set_calibration",
+      "value": null,
+      "units": "method",
+      "basis": "empirical",
+      "status": "open",
+      "rationale": "The per-channel latest-era pilot anchor and designated width need a held-out calibration before the score can be exported.",
+      "evidence": [],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.equal_exposure_frames",
+      "value": true,
+      "units": "requirement",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "Count fractions equal exposure fractions only when every accepted frame carries the same exposure.",
+      "evidence": [
+        "src/rfisher/thresholds.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.minimum_multiplier_q16",
+      "value": 1,
+      "units": "Q16 integer",
+      "basis": "implementation",
+      "status": "locked",
+      "rationale": "One is the smallest positive multiplier accepted by the deployed integer decision. It is eta = 1 / 65536, not eta = 1.",
+      "evidence": [
+        "pilot-proxy/src/pilot_proxy/fine_decision.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.minimum_reference_sweep_frames",
+      "value": 50,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "historical",
+      "rationale": "The raw coarse reference sweep predates the prepared-family boundary and returns no rows below fifty source frames.",
+      "evidence": [],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.rank_index_mapping",
+      "value": "rho_equals_zero_based_cfar_rank_plus_one",
+      "units": "index conversion",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The detector stores a zero-based array index, while the order statistic is written as a one-based rank.",
+      "evidence": [
+        "src/rfisher/preparation.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.residual_score_definition",
+      "value": "minimum_q16_multiplier_that_keeps_the_frame",
+      "units": "exact decision boundary",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The required multiplier follows from the deployed integer cross-multiplication and represents zero-reference cases without a floating division.",
+      "evidence": [
+        "pilot-proxy/src/pilot_proxy/fine_decision.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "preparation.usable_bulk_definition",
+      "value": "independent_nondesignated_bins_excluding_guard_and_census",
+      "units": "bin rule",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "The reference order statistic must exclude the tested signal region, its guard, and declared persistent lines.",
+      "evidence": [
+        "pilot-proxy/src/pilot_proxy/fine_decision.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "selection.minimum_retained_frames",
+      "value": 30,
+      "units": "frames",
+      "basis": "empirical",
+      "status": "provisional",
+      "rationale": "The current selector declines candidates supported by fewer than thirty retained frames; the value needs sensitivity testing.",
+      "evidence": [
+        "src/rfisher/thresholds.py"
+      ],
+      "sensitivity_values": [
+        30,
+        50,
+        100
+      ]
+    },
+    {
+      "id": "stability.maximum_cost_ratio",
+      "value": null,
+      "units": "early/late ratio",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "A practical-equivalence margin must be tied to the largest cost change that cannot alter the science decision.",
+      "evidence": [
+        "https://doi.org/10.1007/BF01068419"
+      ],
+      "sensitivity_values": [
+        1.02,
+        1.05,
+        1.1
+      ]
+    },
+    {
+      "id": "stability.maximum_systematic_residual_ratio",
+      "value": null,
+      "units": "early/late ratio",
+      "basis": "policy",
+      "status": "open",
+      "rationale": "A practical-equivalence margin must come from transfer uncertainty or a science-materiality allocation; no universal ratio exists.",
+      "evidence": [
+        "https://doi.org/10.1007/BF01068419"
+      ],
+      "sensitivity_values": [
+        1.05,
+        1.1,
+        1.2
+      ]
+    },
+    {
+      "id": "stability.minimum_half_retained_frames",
+      "value": null,
+      "units": "retained frames per half",
+      "basis": "empirical",
+      "status": "open",
+      "rationale": "Early and late residual estimates need their own precision-based support rule; the pooled selector floor is not that derivation.",
+      "evidence": [],
+      "sensitivity_values": [
+        15,
+        30,
+        50,
+        100
+      ]
+    },
+    {
+      "id": "stability.split",
+      "value": "latest_era_calendar_midpoint",
+      "units": "method",
+      "basis": "policy",
+      "status": "locked",
+      "rationale": "Calendar time, rather than frame count, avoids hiding drift when archive cadence changes.",
+      "evidence": [
+        "scripts/fine_operating_point.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "stability.surface",
+      "value": "all_candidate_rho_q16_pairs",
+      "units": "method",
+      "basis": "derivation",
+      "status": "derived",
+      "rationale": "Every selector-evaluable point needs a supported early/late drift check so the selected point cannot evade validation.",
+      "evidence": [
+        "src/rfisher/preparation.py"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "stability.uncertainty_validation",
+      "value": null,
+      "units": "validation",
+      "basis": "literature",
+      "status": "open",
+      "rationale": "The current early/late ratio screen has no confidence interval. An operational stability claim needs block-based uncertainty whose interval lies inside the declared margins.",
+      "evidence": [
+        "https://doi.org/10.1214/aos/1176347265",
+        "https://doi.org/10.1007/BF01068419"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "transfer.nominal_pilot_below_shelf_db",
+      "value": 11.3,
+      "units": "dB",
+      "basis": "literature",
+      "status": "provisional",
+      "rationale": "The ATSC convention converts pilot power to aggregate data-shelf power; receiver-specific departures need measurement.",
+      "evidence": [
+        "pilot-proxy/docs/RERUN_PARAMETER_REGISTER.md"
+      ],
+      "sensitivity_values": []
+    },
+    {
+      "id": "transfer.pilot_capture_efficiency",
+      "value": 1.0,
+      "units": "fraction",
+      "basis": "policy",
+      "status": "conditional",
+      "rationale": "Unity is the current closure assumption until receiver capture efficiency is measured.",
+      "evidence": [
+        "pilot-proxy/docs/RERUN_PARAMETER_REGISTER.md"
+      ],
+      "sensitivity_values": [
+        0.8,
+        0.9,
+        1.0
+      ]
+    }
+  ]
+}

@@ -1,0 +1,312 @@
+{
+ "schema": {
+  "name": "rfisher-archive-ledger",
+  "version": 1
+ },
+ "generated": "2026-09-25T06:33:55+00:00",
+ "producer": {
+  "repository": "WVURAIL/RFIsher",
+  "commit": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+  "dirty": false,
+  "dirty_files": "",
+  "module": "rfisher_results.archive.run",
+  "source_digest": "02d92c579a9a6d44ff614c80ec1c032d90cce5e86212a52df1fa353fb9914b16",
+  "source_roots": {
+   "RFIsher/src": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-f72bf34/src",
+   "RFIsher/scripts": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-f72bf34/scripts",
+   "pilot_proxy": "/home/djg/rail/output/refactor-equivalence-2026-09/checkouts/pilot-proxy-m1/src/pilot_proxy",
+   "radiofisher": "/home/djg/rail/RadioFisher/radiofisher"
+  },
+  "policy_sha256": "b36c612ca1a59c0b5e09ced129bca9e15c589fb94a7e2e3648c6ebd815b68cf7",
+  "commit_at_end": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+  "source_changed_during_run": false
+ },
+ "products_dir": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot",
+ "products": {
+  "506.npz": "506930073b72aeb595cd528c1c2ef3ccd1a03d4fb9fc7edbd5cc635d8546af71",
+  "521.npz": "5146b37500a751d40148d3eb93292a0e00cac48cd8b7327d654c1427fcba9707",
+  "537.npz": "53463088a7070128e326157b246ecc251fd0ef6d468f593140da253040811cca",
+  "552.npz": "3541c84f743c300066350bc915501b45ba82d4d1a930b5150bb75ad1b068fbd1",
+  "568.npz": "56035aeb1bba7d08aff1bfdb686e5efef54e834c71791e16d6244583eb6c953c",
+  "583.npz": "283104a296f0897535e96e690c4c6049a7038b3e7dce30a5650368357200f9b6",
+  "598.npz": "5d95425d68e7d8bb21a7cf385ba60ab0c7148e6baaef542ea5342aa3385f314e",
+  "614.npz": "79960cd095733d2d481f172aea449da30e840d7c80e3907fb3108a147ab0db48",
+  "629.npz": "03a620b3572bc005da12cf1003a9f0723f0d5decdce2e7180ba496441944aa37",
+  "644.npz": "fe9dc0aa88f086a92bc92a3f7d7ee223c6f7810e8da78ddc7a1f293c3c9dd91f",
+  "660.npz": "625a2c4eaac84c5af9b052c601d7379af05765675f2b229abdcf6ce6fda1c72f",
+  "675.npz": "5ef436a001bd9f90f7ee90369f0af7f99b4167ae1a24e57903c8a3bb7784e14d",
+  "690.npz": "166917e1611ac9130df0251be7a88366ce347ae4ad49b1b1ed8f00659f811be9",
+  "706.npz": "d9eb635586adb9fa7736c26415c2ef9d3222ab2dc3d7f366a4f6a3a794065318",
+  "721.npz": "60a710a43e0fea77762591995686675dfd8b54937144ddd16492577b4e6534c6",
+  "736.npz": "115a2a3aa705e5b9eb33aa5e3f56241070c714cc1477b122d0110efd7c71ce7d",
+  "752.npz": "8d3b3db57acaca4473b3936a088801588752cffcab1d6822754890dee813f411",
+  "767.npz": "21cff3acf7d0a4cd7d35ea3ac5dd15cebbae6dbbeae40d7d222646c8256e3b29",
+  "783.npz": "7480f7054d3a26a3c893ade9e8400975333b4f0b18375a77726cde4c3a984276",
+  "798.npz": "8ce6e0887f65bf9a8849d157defd4aec152af7e0edc88505b7b3fefe71153dcf",
+  "813.npz": "4890db510c687763d469ef44ea7528a9928ce310c2525af7af5d91ea4e27ab71",
+  "829.npz": "6d04c18cff630da2ccec5de98308a089bc239893d6e246722c4856ee977a0b32",
+  "844.npz": "7687592890efaa7f6c5ecfb09b180867c59ed5c8db675ae6315ce42a8d6bcae3"
+ },
+ "channels": [
+  "channels/ch14_fid844.json",
+  "channels/ch15_fid829.json",
+  "channels/ch16_fid813.json",
+  "channels/ch17_fid798.json",
+  "channels/ch18_fid783.json",
+  "channels/ch19_fid767.json",
+  "channels/ch20_fid752.json",
+  "channels/ch21_fid736.json",
+  "channels/ch22_fid721.json",
+  "channels/ch23_fid706.json",
+  "channels/ch24_fid690.json",
+  "channels/ch25_fid675.json",
+  "channels/ch26_fid660.json",
+  "channels/ch27_fid644.json",
+  "channels/ch28_fid629.json",
+  "channels/ch29_fid614.json",
+  "channels/ch30_fid598.json",
+  "channels/ch31_fid583.json",
+  "channels/ch32_fid568.json",
+  "channels/ch33_fid552.json",
+  "channels/ch34_fid537.json",
+  "channels/ch35_fid521.json",
+  "channels/ch36_fid506.json"
+ ],
+ "campaign_last_month": "2026-08",
+ "era_config": {
+  "high_db": 1.0,
+  "indeterminate_fraction": 0.5,
+  "instrument_field": "unit_input_map_sha256",
+  "low_db": 0.5,
+  "min_days": 3,
+  "min_frames": 30,
+  "min_peak_cohort": 30,
+  "min_units": 5,
+  "one_sided_ambiguous": "inherit",
+  "persistence_months": 2,
+  "stale_grace_months": 1,
+  "station_check_states": [
+   "proxy-high"
+  ],
+  "station_shift_bins": 3.0,
+  "threshold_sensitivity_db": [
+   [
+    0.5,
+    0.5
+   ],
+   [
+    0.5,
+    1.0
+   ],
+   [
+    0.5,
+    2.0
+   ],
+   [
+    1.0,
+    1.0
+   ],
+   [
+    1.0,
+    2.0
+   ],
+   [
+    2.0,
+    2.0
+   ]
+  ],
+  "units_sensitivity": [
+   3,
+   5,
+   10
+  ],
+  "version": "section-8.1-eras-v2",
+  "window_half_width": 30
+ },
+ "era_config_digest": "e7a8328c6a27f8557165853484f15bed882fbf0271cc88b9b9affdd15c2e9fe5",
+ "era_overrides": {
+  "14": [
+   [
+    "2018-12",
+    "2019-08",
+    "archive start"
+   ],
+   [
+    "2019-10",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "15": [
+   [
+    "2018-12",
+    "2021-04",
+    "archive start"
+   ],
+   [
+    "2021-07",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "17": [
+   [
+    "2018-12",
+    "2021-05",
+    "archive start"
+   ],
+   [
+    "2022-10",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "18": [
+   [
+    "2018-12",
+    "2024-05",
+    "archive start"
+   ],
+   [
+    "2024-08",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "19": [
+   [
+    "2022-10",
+    "2024-11",
+    "archive start"
+   ],
+   [
+    "2024-12",
+    "2026-04",
+    "power transition"
+   ]
+  ],
+  "20": [
+   [
+    "2018-12",
+    "2022-08",
+    "archive start"
+   ],
+   [
+    "2022-09",
+    "2026-06",
+    "power transition"
+   ]
+  ],
+  "24": [
+   [
+    "2018-12",
+    "2026-04",
+    "archive start"
+   ]
+  ],
+  "25": [
+   [
+    "2018-12",
+    "2019-08",
+    "archive start"
+   ],
+   [
+    "2019-10",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "27": [
+   [
+    "2018-12",
+    "2020-11",
+    "archive start"
+   ],
+   [
+    "2022-10",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "31": [
+   [
+    "2019-06",
+    "2021-10",
+    "archive start"
+   ],
+   [
+    "2022-10",
+    "2026-04",
+    "power transition"
+   ]
+  ],
+  "33": [
+   [
+    "2018-12",
+    "2020-09",
+    "archive start"
+   ],
+   [
+    "2022-10",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "35": [
+   [
+    "2018-12",
+    "2021-10",
+    "archive start"
+   ],
+   [
+    "2021-11",
+    "2026-08",
+    "power transition"
+   ]
+  ],
+  "36": [
+   [
+    "2018-12",
+    "2026-08",
+    "archive start"
+   ]
+  ]
+ },
+ "era_overrides_sha256": "81f5f20e075c8f6bde41928ecfdd8215b87488b2ee3ff512b5c9ab8343c81aae",
+ "bootstrap": {
+  "replicates": 1000,
+  "seed": 20260907
+ },
+ "worlds_contract": {
+  "time_rule": "target_only",
+  "target_years": 1.0,
+  "bin_rule": "every overlapping bin; both dilations required",
+  "delay_suppression": "hypothetical",
+  "physical_recovery_certified": false
+ },
+ "provisional": {
+  "stability.minimum_half_retained_frames": 30,
+  "stability.maximum_cost_ratio": 1.05,
+  "stability.maximum_systematic_residual_ratio": 1.1,
+  "occupancy_wall_masked_fraction": 0.95,
+  "occupancy_wall_flag_rate": 0.9,
+  "null_scale_probes": [
+   [
+    15.87,
+    1.0
+   ],
+   [
+    2.5,
+    1.96
+   ],
+   [
+    0.15,
+    2.9677
+   ]
+  ],
+  "containment_window_hz": 15000.0,
+  "e_min": 0.9
+ },
+ "errors": [],
+ "seconds": 1519.8600845336914
+}

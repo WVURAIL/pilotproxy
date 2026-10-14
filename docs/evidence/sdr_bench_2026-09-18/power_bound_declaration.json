@@ -1,0 +1,10 @@
+{
+  "schema": "pilotproxy-measured-rf-power-v1",
+  "settings_sha256": "e095485676453df79d862c16fedd80ef648254376de3a2344da2250ef5e87adb",
+  "power_metric": "average_conducted_dbm",
+  "covers_all_slots_markers_transitions": true,
+  "measurement_id": "BENCH-2026-09-17-declared-conducted-bound",
+  "method": "Declared upper bound, not a meter reading: LimeSDR Mini specified maximum TX output near +10 dBm at full digital scale and full gain; the 0.005 tone is 46 dB below full scale; bound stated at -30 dBm with 12 dB uncertainty covering gain-table and device spread. Applies to every slot, the zero-IQ slots and the ramps, whose amplitude never exceeds the tone. Absolute dBm is outside this protocol's claims.",
+  "conducted_power_dbm": -30.0,
+  "total_uncertainty_db": 12.0
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "pilotproxy_detector_core_profile_v1",
+  "detector_core_id": "pilotproxy_cuda_local_reference_power_ratio",
+  "kernel_contract": {
+    "detector_window_samples": 128,
+    "supported_detector_window_samples": [64, 128],
+    "num_weight_terms": 3,
+    "skipped_guard_bins": 1,
+    "packed_complex_bits": 8,
+    "sample_bits_per_component": 4,
+    "input_format": "complex_int4_packed_int8",
+    "power_accumulator": "uint64",
+    "coarse_power_ratio_definition": "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)",
+    "raw_pilot_excess_definition": "rho_raw = R_coarse - 1 (diagnostic only)",
+    "host_masking_policy": "normalized_positive_excess_from_uint64_powers",
+    "per_frequency_threshold": false
+  },
+  "fixed_point_limits": {
+    "dot_product_component_accumulator_bits_target": 16,
+    "mag_squared_accumulator_bits_target": 32,
+    "power_sum_accumulator_bits": 64
+  }
+}

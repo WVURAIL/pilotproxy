@@ -1,0 +1,21 @@
+{
+  "checks": {
+    "expected_allocation": true,
+    "expected_grid": true,
+    "expected_point_count": true,
+    "expected_trial_count": true,
+    "gpu_matches_packed_cpu": true,
+    "no_display_smoothing": true
+  },
+  "geometry": {
+    "detector_rows_per_frame": 512,
+    "detector_window_samples": 128,
+    "frame_size_samples": 16384,
+    "noise_source": "gnuradio",
+    "num_input_streams": 4,
+    "quantization_bits_per_component": 4
+  },
+  "raw_source_bytes": 43461820,
+  "raw_source_files": 120,
+  "schema_version": "digital_estimator_transfer_qc_v1"
+}

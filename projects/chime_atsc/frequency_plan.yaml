@@ -1,0 +1,35 @@
+# Frequency plan: ATSC UHF physical channels inside CHIME's 400-800 MHz band.
+# An explicit band list (no formula in code). Edges are integer MHz, so they
+# parse to the same floats as 470 + 6 (ch - 14).
+#   role screened: a band the characterization screens for its emitter.
+#   role control:  a band with no licensed transmitter, processed the same way
+#                  as a reference. Channel 37 (608-614 MHz) is the protected
+#                  allocation; its target is freq_id 491, the coarse channel of
+#                  the nominal marker position 608.309441 MHz (off DC), per the
+#                  author decision of 2026-09-24.
+name: atsc_uhf
+bands:
+  - {label: "14", low_mhz: 470, high_mhz: 476, role: screened}
+  - {label: "15", low_mhz: 476, high_mhz: 482, role: screened}
+  - {label: "16", low_mhz: 482, high_mhz: 488, role: screened}
+  - {label: "17", low_mhz: 488, high_mhz: 494, role: screened}
+  - {label: "18", low_mhz: 494, high_mhz: 500, role: screened}
+  - {label: "19", low_mhz: 500, high_mhz: 506, role: screened}
+  - {label: "20", low_mhz: 506, high_mhz: 512, role: screened}
+  - {label: "21", low_mhz: 512, high_mhz: 518, role: screened}
+  - {label: "22", low_mhz: 518, high_mhz: 524, role: screened}
+  - {label: "23", low_mhz: 524, high_mhz: 530, role: screened}
+  - {label: "24", low_mhz: 530, high_mhz: 536, role: screened}
+  - {label: "25", low_mhz: 536, high_mhz: 542, role: screened}
+  - {label: "26", low_mhz: 542, high_mhz: 548, role: screened}
+  - {label: "27", low_mhz: 548, high_mhz: 554, role: screened}
+  - {label: "28", low_mhz: 554, high_mhz: 560, role: screened}
+  - {label: "29", low_mhz: 560, high_mhz: 566, role: screened}
+  - {label: "30", low_mhz: 566, high_mhz: 572, role: screened}
+  - {label: "31", low_mhz: 572, high_mhz: 578, role: screened}
+  - {label: "32", low_mhz: 578, high_mhz: 584, role: screened}
+  - {label: "33", low_mhz: 584, high_mhz: 590, role: screened}
+  - {label: "34", low_mhz: 590, high_mhz: 596, role: screened}
+  - {label: "35", low_mhz: 596, high_mhz: 602, role: screened}
+  - {label: "36", low_mhz: 602, high_mhz: 608, role: screened}
+  - {label: "37", low_mhz: 608, high_mhz: 614, role: control, target_freq_id: 491}

@@ -1,0 +1,70 @@
+{
+  "artifact_count": 9,
+  "artifacts": [
+    {
+      "path": "README.md",
+      "role": "documentation",
+      "sha256": "104430c76865d672a675477a28ac573673bf0f548b1152bc2c96449f1a97fa86",
+      "size_bytes": 2416
+    },
+    {
+      "path": "data/analysis.json",
+      "role": "analysis",
+      "sha256": "22a88fdc6c2fa98f5ed9747a4e8a3a820082579b5b77e86e26bcfe2082831c28",
+      "size_bytes": 2407
+    },
+    {
+      "path": "data/plot_points.csv",
+      "role": "plot_data",
+      "sha256": "7083a01ea066917ebcb7ef964cfea9137da6ab19385158909f4b6364ff3b34b3",
+      "size_bytes": 8194
+    },
+    {
+      "path": "data/qc.json",
+      "role": "quality_control",
+      "sha256": "ad6c14042e5c6a635bbde8ca8187946a394d3d51b78070ca1c9673cf99cce351",
+      "size_bytes": 561
+    },
+    {
+      "path": "figures/fig_estimator_transfer_digital.pdf",
+      "role": "publication_figure",
+      "sha256": "347361308778f12093e3db74030cefebf248debe74e85b2ed06afb88697e4972",
+      "size_bytes": 152456
+    },
+    {
+      "path": "figures/fig_estimator_transfer_digital.png",
+      "role": "figure_preview",
+      "sha256": "f58b5e5e6cf388c3e4eea73a1ed775bbb466ecf3d0bbb53d7803843802daa3ed",
+      "size_bytes": 290263
+    },
+    {
+      "path": "raw/raw_input_inventory.csv",
+      "role": "external_raw_inventory",
+      "sha256": "1bf5874ac2327de6cdea3976075ff363b6386bc1eae7e75e6389d301d4fcefc4",
+      "size_bytes": 14530
+    },
+    {
+      "path": "run/conditioning.json",
+      "role": "run_provenance",
+      "sha256": "b84c7765867b3b9c6ce6f5cea92506d41266ffa26cf486d3775651701d78762d",
+      "size_bytes": 2134
+    },
+    {
+      "path": "run/source_provenance.json",
+      "role": "run_provenance",
+      "sha256": "d51486917567eadb8bf89291e80fc1ef3bc4bc95f5fcad4070fd175a2d1a128b",
+      "size_bytes": 3643
+    }
+  ],
+  "counts": {
+    "plot_points": 41,
+    "raw_shards": 40,
+    "raw_source_files": 120,
+    "trials": 9000
+  },
+  "experiment": "digital_synthetic",
+  "path_semantics": "release_root_relative_posix",
+  "release_date": "2026-08-25",
+  "schema_version": "estimator_transfer_release_v1",
+  "title": "Synthetic GNU Radio estimator transfer"
+}

@@ -1,0 +1,43 @@
+Verbatim stdout of the README's reproduce block, replayed 2026-09-07.
+
+  runtime   /usr/bin/python3.12 (python 3.12.3, numpy 2.4.2), reached as
+            /home/djg/rail/delete_me/venvs/ppci/bin/python
+  host      Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39
+  source    pilot-proxy 1062b8b73718c44f69f58c9f6cac3291fd859bee, with the
+            --stage verify argument wiring of tools/measure_fine_gain.py
+            applied so that "--trials 4" runs four trials at the deployed
+            2048-stream geometry rather than the function's own defaults.
+  wall      52m43s at load average ~20 (the machine was shared); 684 MB peak
+            RSS. The README's "4-5 minutes" is the unloaded figure.
+
+Every SNR@Pd=0.5 and gain figure below is identical to the README's, to the
+printed precision: the seeds are fixed, so the replay is exact rather than
+merely consistent.
+
+-------------------------------------------------------------------------
+verify: batched reduction == fine_reduce on 4 trials (streams=2048; exact marginals, float32-identical spectra)
+wrote h0_s1.npz: 4000 trials (coarse med 1.00000, fine med 1.0278)
+wrote h0_s2.npz: 4000 trials (coarse med 0.99996, fine med 1.0275)
+wrote h0_s3.npz: 4000 trials (coarse med 0.99998, fine med 1.0282)
+wrote h1_-40.00dB_s7.npz: 1200 trials (coarse med 1.00013, fine med 1.0322)
+wrote h1_-37.00dB_s7.npz: 1200 trials (coarse med 1.00023, fine med 1.0385)
+wrote h1_-34.00dB_s7.npz: 1200 trials (coarse med 1.00044, fine med 1.0558)
+wrote h1_-31.00dB_s7.npz: 1200 trials (coarse med 1.00084, fine med 1.1016)
+wrote h1_-28.00dB_s7.npz: 1200 trials (coarse med 1.00165, fine med 1.2016)
+wrote h1_-25.00dB_s7.npz: 1200 trials (coarse med 1.00324, fine med 1.4037)
+wrote h1_-22.00dB_s7.npz: 1200 trials (coarse med 1.00637, fine med 1.8076)
+wrote h1_-19.00dB_s7.npz: 1200 trials (coarse med 1.01261, fine med 2.6103)
+wrote h1_-16.00dB_s7.npz: 1200 trials (coarse med 1.02515, fine med 4.2146)
+wrote h1_-13.00dB_s7.npz: 1200 trials (coarse med 1.05016, fine med 7.4152)
+wrote h1_-10.00dB_s7.npz: 1200 trials (coarse med 1.10003, fine med 13.7962)
+wrote h1_half_-34.00dB_s7.npz: 1200 trials (coarse med 1.00045, fine med 1.0558)
+wrote h1_half_-31.00dB_s7.npz: 1200 trials (coarse med 1.00086, fine med 1.0952)
+wrote h1_half_-28.00dB_s7.npz: 1200 trials (coarse med 1.00166, fine med 1.1776)
+wrote h1_half_-25.00dB_s7.npz: 1200 trials (coarse med 1.00326, fine med 1.3428)
+wrote h1_half_-22.00dB_s7.npz: 1200 trials (coarse med 1.00638, fine med 1.6721)
+H0 trials: 12000
+  Pfa=0.01: coarse thr 1.005488, fine thr 1.0811
+  Pfa=0.001: coarse thr 1.007719, fine thr 1.1002
+Pfa=0.01: SNR@Pd=0.5 coarse -22.90 dB, fine -32.22 dB  ->  measured gain 9.32 dB
+Pfa=0.001: SNR@Pd=0.5 coarse -21.04 dB, fine -30.81 dB  ->  measured gain 9.77 dB
+wrote docs/evidence/fine_gain_mc_2026-08-19/measured_fine_gain.png

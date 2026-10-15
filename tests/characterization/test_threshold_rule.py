@@ -167,15 +167,22 @@ def test_a_cache_whose_mask_the_rule_does_not_reproduce_is_refused(tmp_path):
 
 
 def test_the_admissible_minimum_gain_matches_the_dump_lengths():
-    assert round(t.admissible_min_gain(4), 2) == 4.06
-    assert round(t.admissible_min_gain(11), 2) == 8.41
-    assert round(t.admissible_min_gain(33), 2) == 21.06
+    assert round(t.admissible_min_gain(4), 2) == 6.75
+    assert round(t.admissible_min_gain(11), 2) == 15.23
+    assert round(t.admissible_min_gain(33), 2) == 40.00
+
+
+def test_the_gain_is_the_sum_over_every_lag():
+    d = np.arange(1, 200001)
+    for tau in (0.3, 1.7, 5.0, 12.4):
+        assert t.gain_of(tau, "exp") == pytest.approx(1 + 2 * np.exp(-d / tau).sum(), rel=1e-12)
+        assert t.gain_of(tau, "tri") == pytest.approx(1 + 2 * np.clip(1 - d / tau, 0, None).sum(), rel=1e-12)
 
 
 @needs_measurements
-def test_bands_are_priced_by_the_dump_that_measured_them():
-    assert t.coherent_gain(18) == t.admissible_min_gain(11)
-    assert t.coherent_gain(20) == t.admissible_min_gain(4)
+def test_every_band_is_priced_by_the_dumps_that_measured_the_coherent_fraction():
+    assert t.GAIN_FRAMES == 33
+    assert t.coherent_gain(18) == t.coherent_gain(20) == t.admissible_min_gain(33)
 
 
 @needs_measurements

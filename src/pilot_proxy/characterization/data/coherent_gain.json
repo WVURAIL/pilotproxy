@@ -1,9 +1,7 @@
 {
- "schema": "coherent-gain-v1",
- "rule": "admissible minimum: the least G(tau) / rho_bar_n(tau) over every coherence time tau, the lower of an exponential and a triangular frame-to-frame correlation, with G(tau) = max(tau / T_frame, 1) and rho_bar_n the mean correlation over the frame pairs of the n-frame dump that measured the coherent fraction",
- "why": "The coherent fraction is built from products of distinct frames, so a measured value implies coherence across frames; no coherence time prices it below this minimum.",
- "frames_with_pilot_channel": 11,
- "frames_without_pilot_channel": 4,
- "bands_without_pilot_channel": [19, 20, 24, 30, 31, 34],
- "note": "A band whose pilot frequency channel was on a live node in the 2026-09 captures takes the 11-frame pilot dump's value (8.41); one without takes the 4-frame value (4.06)."
+ "schema": "coherent-gain-v2",
+ "rule": "admissible minimum: the least G(tau) / rho_bar_n(tau) over every coherence time tau, the lower of an exponential and a triangular frame-to-frame correlation, with G(tau) the sum of rho over every lag (coth(T / 2 tau) for the exponential, about tau / T for the triangular) and rho_bar_n the mean correlation over the frame pairs of the n-frame dumps that measured the coherent fraction",
+ "why": "The coherent fraction is built from products of distinct frames, so a measured value implies coherence across frames; no coherence time prices it below this minimum. A residual's power in a long average is its zero-lag power times the sum of its correlation over every lag.",
+ "frames": 33,
+ "note": "The coherent fraction is the median of bands 17, 30, 31 and 35, which is the mean of bands 30 and 35; each of those is the median of its four dumps, and the middle two are 33-frame science dumps. One coherent fraction prices every band, so every band takes the 33-frame value (40.00)."
 }

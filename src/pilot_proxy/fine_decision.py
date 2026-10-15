@@ -1,7 +1,7 @@
 # coding=utf-8
 """Frozen fine designated-set decision reference (fine decision v1).
 
-This module is the bit-exact Python reference for the deployed mask
+This module is the bit-exact Python reference for the fine-mask
 decision computed by the fused kernel epilogue (kernel core 2.3.0,
 ``FStat_Compute_FusedFineMask_U64``). The CUDA implementation must
 reproduce ``fine_mask_decision`` exactly --- same mask bit for the same
@@ -53,12 +53,14 @@ Why rank-based (order-statistic) CFAR: the survey's recorded per-frame
 calibration (``fine_reduction.calibrate_cfar``) uses float medians and
 interpolated quantiles, which cannot be made bit-exact across
 numpy/nvcc/compiler versions --- the same reason the deployed FFT is
-fixed point. A rank threshold with a Q16 multiplier is exact, needs no
-contamination fallback mode (order statistics reject the measured 0.29%
-bulk tail by construction), and is calibrated by the same null-quantile
-program: the campaign picks (rank, multiplier) from measured off-epoch
-nulls to hit the target false-alarm rate. Rank and multiplier are
-bundle *data*; this module and the kernel freeze only the arithmetic.
+fixed point. A rank threshold with a Q16 multiplier makes the decision
+exact, and order statistics reject a contaminated bulk tail by construction.
+Rank and multiplier are bundle *data*; this module and the kernel freeze only
+the arithmetic, not the rule that selects them. The rank is the bulk median;
+the multiplier (the Q16 word) comes from ``characterization.threshold_rule``:
+the channel's knee, or the loosest word below it that meets the science
+tolerance within the time limit. ``runtime_calibration`` separately proposes
+commissioning thresholds from declared calibration populations.
 """
 from __future__ import annotations
 

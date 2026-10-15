@@ -27,7 +27,7 @@ FCC/ISED transmitter census and RFIsher's forecast tolerance table) is not liste
 | `projects/chime_atsc/eras/power_eras_2026-10-04.json` | Power-era proposals per channel (current-era months) of the 2026-10-04 threshold release |
 | `projects/chime_atsc/eras/on_off_2026-10-14/` (3 files) | Era list of record: monthly pilot levels per channel from the 2026-10-03 era review (`monthly_levels.json`), their Bayesian Blocks (`blocks.json`) and the on/off eras (`eras.json`) |
 | `src/pilot_proxy/characterization/data/coherent_fraction.json` | Coherent fraction of the DTV shelf, per band and its median, measured from the 2026 matched capture |
-| `src/pilot_proxy/characterization/data/coherent_gain.json` | Coherence-gain rule and the frame counts of the capture dump it was measured on |
+| `src/pilot_proxy/characterization/data/coherent_gain.json` | Coherence-gain rule and the frame count of the capture dumps that measured the coherent fraction |
 | `tests/data/threshold_decisions_2026-10-12.json` | Decisions of record per channel (2026-10-12): deployed word or reason not deployed, shelf, exclusions and the coherent-fraction inputs; a test golden for the deployment compiler |
 
 ## Inline quotes

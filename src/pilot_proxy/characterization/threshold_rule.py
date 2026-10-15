@@ -11,7 +11,7 @@ For every distinct keep word ``w`` of a band's current era (``eta = w / 2**16``)
     a(w)      (c x)^2 N G, the residual strength the tolerance table is written
               in: c the coherent fraction of the power, N the samples in one
               frame, G the frames it stays coherent, priced at the admissible
-              minimum the measured c allows (``coherent_gain``)
+              minimum the measured c allows, one value for every band (``coherent_gain``)
     r(w)      a(w) R, the bias in units of the clean sigma; R is the band's
               response from the table (the combined distance D_V)
     r_hi(w)   r at x + 2 se, the value the rule tests
@@ -91,10 +91,9 @@ COHERENT_FRACTION = float(_COHERENT["value"]) if _COHERENT else float("nan")
 COHERENT_FRACTION_SCALE = _COHERENT["scale"] if _COHERENT else None
 # G: the frames the residual keeps its phase. The coherent fraction is measured from products of
 # distinct frames, so it cannot be priced below the admissible minimum (data/coherent_gain.json).
+# One coherent fraction serves every band, so one G does too: that of the dumps that measured it.
 _GAIN = _measurement("coherent_gain.json")
-GAIN_FRAMES_BY_BAND = {int(b): int(_GAIN["frames_without_pilot_channel"])
-                       for b in (_GAIN or {"bands_without_pilot_channel": []})["bands_without_pilot_channel"]}
-GAIN_FRAMES_DEFAULT = int(_GAIN["frames_with_pilot_channel"]) if _GAIN else None
+GAIN_FRAMES = int(_GAIN["frames"]) if _GAIN else None
 GUARD_STANDARD_ERRORS = 2.0
 MAX_CALENDAR_YEARS = 30.0                  # a threshold needing longer than this is not usable
 ON_SKY_DUTY = 0.152                        # science-quality duty: night only, 94 of 309 days retained
@@ -220,25 +219,37 @@ def sweep(frames: ChannelFrames, shelf: float = SHELF) -> dict:
                 se=shelf * out["se"], mean_excess=out["mean"], kept_frames=kept_frames, kept_events=kept_events)
 
 
+def gain_of(tau, model: str):
+    """G(tau): the residual's power in a long average over a white residual's, the sum of rho(d)
+    over every lag d (tau in frame intervals). coth(1 / 2 tau) for the exponential rho = exp(-d / tau),
+    about 2 tau; the exact lag sum of the triangular rho = max(1 - d / tau, 0), about tau."""
+    tau = np.asarray(tau, dtype=float)
+    if model == "exp":
+        return 1 / np.tanh(1 / (2 * tau))
+    m = np.ceil(tau) - 1                                       # lags 1..m have d < tau
+    return 1 + 2 * m - m * (m + 1) / tau
+
+
 @lru_cache
 def admissible_min_gain(frames: int) -> float:
-    """The least G(tau) / rho_bar_n(tau) over the coherence time tau for an n-frame dump: the
-    lower of an exponential and a triangular frame-to-frame correlation, G(tau) = max(tau / T, 1).
-    4.06 for 4 frames, 8.41 for 11, 21.06 for 33."""
+    """The least G(tau) / rho_bar_n(tau) over the coherence time tau for an n-frame dump, the lower
+    of an exponential and a triangular frame-to-frame correlation, with G(tau) the lag sum
+    (``gain_of``). 6.75 for 4 frames, 15.23 for 11, 40.00 for 33; the triangular sets each."""
     d = np.arange(1, frames)[:, None]
-    tau = np.geomspace(0.05, 1e4, 20001)[None, :]             # in frame intervals
+    tau = np.geomspace(0.05, 1e4, 20001)                      # in frame intervals
     best = np.inf
-    for rho in (np.exp(-d / tau), np.clip(1 - d / tau, 0, None)):
+    for model, rho in (("exp", np.exp(-d / tau)), ("tri", np.clip(1 - d / tau, 0, None))):
         rbar = (2 * (frames - d) * rho).sum(axis=0) / (frames * (frames - 1))
         ok = rbar > 0
-        best = min(best, float(np.min(np.maximum(tau[0, ok], 1) / rbar[ok])))
+        best = min(best, float(np.min(gain_of(tau[ok], model) / rbar[ok])))
     return best
 
 
 def coherent_gain(channel: int) -> float:
-    """G the decision prices a band at: the admissible minimum of the dump that measured it."""
+    """G the decision prices a band at: the admissible minimum of the dumps that measured the
+    coherent fraction, the same for every band."""
     _require(_GAIN, "coherent_gain.json")
-    return admissible_min_gain(GAIN_FRAMES_BY_BAND.get(channel, GAIN_FRAMES_DEFAULT))
+    return admissible_min_gain(GAIN_FRAMES)
 
 
 def strength(x, gain: float, c: float = COHERENT_FRACTION):

@@ -22,7 +22,8 @@ The original values were computed from the 4-significant-figure table-of-record 
 script recomputes A_bao from the frame-residual products as well and reports both.
 
 Also: calibrated-scale c, the sensitivity of the per-channel rule to c, and the capture
-cross-check a_cap = A_net^2 * 16384 * G against a_tol = 1/|R|, with G each band's admissible minimum
+cross-check a_cap = A_net^2 * 16384 * G against a_tol = 1/|R|, with G the admissible minimum of the
+33-frame dumps that measured c, the same for every band
 (pilot_proxy.characterization.threshold_rule.coherent_gain), as the rule prices it.
 Read-only on every input; writes c.json (the full report) in --out and, with --data-file, the
 coherent-fraction record the threshold rule reads.

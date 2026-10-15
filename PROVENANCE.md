@@ -37,3 +37,15 @@ Frozen records (`docs/evidence/`, `data/provenance/`, `docs/runtime_freezes/` an
 `tests/data/threshold_decisions_2026-10-12.json`) keep the absolute paths of the
 workstation that wrote them (`/home/djg/rail/...`). They are records, so they were
 not edited. The code never reads those paths.
+
+## Ported after the snapshot
+
+Work continues in this repository. The private repository took one more change after
+the snapshot, ported here:
+
+| This repository | Private provenance repository |
+|---|---|
+| Coherence gain as the lag sum at 33 frames, 40.00 for every band; tolerance table on inter-cylinder baselines | `76b5ecf..d59baa24d7e8c3083569ce17e3de4fa612dba222` (its PR 55) |
+
+After this port the tree corresponds to `WVURAIL/pilot-proxy@d59baa2`, except for the
+differences listed above.

@@ -62,7 +62,8 @@ def test_rebuilds_observed_grid_and_joint_miss_oracle(monkeypatch):
     captured = {}
     def fake_band(frames, words, **kwargs):
         captured['words'] = words.copy()
-        result = {'eligible': np.ones(2, bool), 'signed_upper': np.array([.4, 1.]),
+        result = {'eligible': np.ones(2, bool), 'signed_mean': np.array([0., .6]),
+                  'se': np.array([.2, .2]), 'signed_upper': np.array([.4, 1.]),
                   'upper': np.array([.4, 1.]), 'kept_weight': np.array([1., 3.])}
         return {'status': 'available', 'critical': 2., 'windows': {'full': result, 'last': result}}
     monkeypatch.setattr(validation, 'simultaneous_upper_band', fake_band)
@@ -72,3 +73,4 @@ def test_rebuilds_observed_grid_and_joint_miss_oracle(monkeypatch):
     assert out['miss'] and out['clipped_miss'] and not out['unavailable']
     assert out['eligible_points'] == 4
     assert out['selection_budget'] == .75
+    assert out['required_multiplier'] == pytest.approx(1.25)

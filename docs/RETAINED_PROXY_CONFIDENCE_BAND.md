@@ -340,7 +340,7 @@ also leaves the production `x + 2 se` guard unchanged. The original seven-model
 validation is retained: 18, 23, 20, 94, 18, 25 and 21 joint misses among 400
 datasets, respectively, in the scenario order above with the two empirical
 models last. All were finite, but none passed the stricter family-adjusted
-qualification gate. The assumption-matched observed miss rates of 4.5–6.25%
+qualification gate. The assumption-matched observed miss rates of 4.5â€“6.25%
 do not, by themselves, demonstrate a numerical defect. The wrong-unit control
 had a substantially larger 23.5% miss rate.
 

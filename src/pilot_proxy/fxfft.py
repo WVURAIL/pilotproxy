@@ -116,6 +116,12 @@ def twiddle_table_sha256() -> str:
     return hashlib.sha256(str(list(TWIDDLE_Q15)).encode()).hexdigest()
 
 
+def _max_component_magnitude(a: np.ndarray) -> int:
+    # Check in the original integer dtype: casting uint64 may wrap, and
+    # fixed-width abs cannot represent the magnitude of INT64_MIN.
+    return max(-int(a.min(initial=0)), int(a.max(initial=0)))
+
+
 def _validate_input(a: np.ndarray) -> np.ndarray:
     if a.dtype.kind not in "iu":
         raise TypeError("fxfft256 input must be an integer array (re/im).")
@@ -123,13 +129,13 @@ def _validate_input(a: np.ndarray) -> np.ndarray:
         raise ValueError(
             f"fxfft256 input must have shape [..., {N_IN}, 2]; got {a.shape}."
         )
-    wide = a.astype(np.int64, copy=False)
-    if int(np.abs(wide).max(initial=0)) > INPUT_ABS_MAX:
+    peak_in = _max_component_magnitude(a)
+    if peak_in > INPUT_ABS_MAX:
         raise OverflowError(
             f"fxfft256 input exceeds the |.| <= 2**20 contract "
-            f"(max {int(np.abs(wide).max())})."
+            f"(max {peak_in})."
         )
-    return wide
+    return a.astype(np.int64, copy=False)
 
 
 def fxfft256(x: Any, *, return_stage_maxima: bool = False):
@@ -307,13 +313,13 @@ def fxfft(x: Any, *, n_out: int = N, return_stage_maxima: bool = False):
         raise TypeError("fxfft input must be an integer array (re/im).")
     if a.ndim < 2 or a.shape[-1] != 2 or a.shape[-2] != n_in:
         raise ValueError(f"fxfft input must have shape [..., {n_in}, 2]; got {a.shape}")
-    a = a.astype(np.int64, copy=False)
-    peak_in = int(np.abs(a).max(initial=0))
+    peak_in = _max_component_magnitude(a)
     if peak_in > limit:
         raise OverflowError(
             f"fxfft input exceeds the |.| <= {limit} contract for n_out={n_out} "
             f"(max {peak_in}); the bound tightens with transform length."
         )
+    a = a.astype(np.int64, copy=False)
 
     width = stages
     bitrev = np.asarray(

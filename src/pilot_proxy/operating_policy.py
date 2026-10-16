@@ -191,6 +191,7 @@ def analyze_policy(plan_path):
         profiles.setdefault(profile["physical_channel"], []).append(profile)
     project = default_project() if namespace == "chime_freq_id" else None
     permanent, pending, thresholds, rows, outside = [], [], [], [], []
+    review_candidates = []
     for channel, decision in sorted(decisions.items()):
         if not FIRST_CHANNEL <= channel <= LAST_CHANNEL:
             outside.append({"physical_channel": channel, "outcome": decision["outcome"],
@@ -225,7 +226,13 @@ def analyze_policy(plan_path):
                 row["bundle_status"] = "pending: the bundle's profile does not carry the decided word yet"
                 pending.append(freq)
             else:
-                row["bundle_status"] = "calibrated at the decided word"
+                selection = bound["fine_calibration"]["provenance"].get("threshold_selection")
+                if selection is not None:
+                    row["bundle_status"] = "archive review candidate at the decided word"
+                    row["selection_granularity"] = selection["selection_granularity"]
+                    review_candidates.append(freq)
+                else:
+                    row["bundle_status"] = "calibrated at the decided word"
                 thresholds.append(binding)
         rows.append(row)
     _require(rows, "The decisions name no ATSC channel 14-36")
@@ -233,7 +240,7 @@ def analyze_policy(plan_path):
     pending.sort()
     thresholds.sort(key=lambda r: r["receiver_channel_id"])
     required = [r["receiver_channel_id"] for r in thresholds]
-    complete = not pending
+    complete = not pending and not review_candidates
     report = {
         "schema_version": POLICY_SCHEMA, "status": "review_only",
         "deployment_configuration_complete": complete,
@@ -259,6 +266,13 @@ def analyze_policy(plan_path):
             "A release owner must approve activation after startup and runtime acceptance; no configuration was activated by this compiler.",
         ],
     }
+    if review_candidates:
+        report["candidate_configuration_complete"] = not pending
+        report["review_only_candidate_freq_ids"] = sorted(review_candidates)
+        report["remaining_runtime_acceptance"].insert(0,
+            "Archive candidate words describe detector-frame selection only. Recompute the policy "
+            "for the consumer's actual masking granularity and qualify the physical transfer, "
+            "receiver conditions, and release before forming a deployment configuration.")
     for source, expected in bindings.items():
         _require(calibration.sha256(source) == expected, "Source changed during policy compilation: " + source)
     return report
@@ -275,7 +289,7 @@ def _identity():
 def write_policy(plan_path, output_dir, *, require_complete=False):
     report = analyze_policy(plan_path)
     _require(not require_complete or report["deployment_configuration_complete"],
-             "A deployed channel's bundle profile does not carry its word yet; the configuration is incomplete")
+             "The configuration is incomplete: a word is pending or an archive review candidate is not qualified for deployment")
     directory = Path(output_dir).resolve()
     directory.mkdir(parents=True, exist_ok=False)
     calibration._write_json(directory / "policy.json", report)

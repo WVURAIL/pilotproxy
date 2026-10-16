@@ -15,6 +15,8 @@ configuration. The policy compiler does not activate a telescope configuration.
 
 **Release requires a calibrated bundle, verified telescope configuration, acceptance record, and site restart/rollback procedure.** An exported bundle marked `pending_campaign` and a receiver profile marked `example_requires_data_product_verification` do not meet those requirements. Keep development bundles separate from accepted releases.
 
+[Archive operating-curve candidates](ARCHIVE_POLICY_CANDIDATE.md) are a separate review product. They can preserve saved words and exact numerical geometry without assigning a null-quantile interpretation, but their `archive_review_only` qualification prevents the operating-policy compiler from producing a complete deployment configuration. They are not release bundles; detector-frame policy still needs evaluation at the actual consumer masking granularity.
+
 ## 1. Build and check the implementation
 
 Use the accepted Kotekan revision recorded in the release manifest. Build with `USE_CUDA=ON` and `WITH_TESTS=ON` on a supported CUDA device. Follow the checkout's `docs/sphinx/compiling/general.rst`, `README.md`, and `docs/sphinx/dev/dev_pilotproxy_testing.rst`. Record the complete build options, compiler/CUDA versions, binary hash, and `external/pilotproxy/VENDOR.json`.

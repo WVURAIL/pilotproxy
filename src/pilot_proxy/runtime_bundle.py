@@ -677,6 +677,8 @@ def _validate_fine_calibration_provenance(
     status: str,
     field: str,
     errors: list[dict[str, str]],
+    physical_channel: object = None,
+    multiplier_q16: object = None,
 ) -> None:
     provenance_field = f"{field}.provenance"
     if not isinstance(provenance, dict):
@@ -690,7 +692,7 @@ def _validate_fine_calibration_provenance(
             f"{provenance_field}.required_fields",
             f"missing required fields: {missing}",
         )
-    unknown = sorted(set(provenance) - required - {"note"})
+    unknown = sorted(set(provenance) - required - {"note", "threshold_selection"})
     if unknown:
         _add_error(
             errors,
@@ -729,7 +731,8 @@ def _validate_fine_calibration_provenance(
         )
 
     if status == FINE_CALIBRATION_STATUS_PENDING:
-        if epochs != [] or source_hashes != [] or null_quantile is not None:
+        if (epochs != [] or source_hashes != [] or null_quantile is not None
+                or "threshold_selection" in provenance):
             _add_error(
                 errors,
                 provenance_field,
@@ -750,6 +753,40 @@ def _validate_fine_calibration_provenance(
             f"{provenance_field}.source_product_sha256",
             "calibrated provenance must include at least one source-product hash",
         )
+    if "threshold_selection" in provenance:
+        selection = provenance["threshold_selection"]
+        selection_field = f"{provenance_field}.threshold_selection"
+        expected_fields = {
+            "method", "decision_record_sha256", "decision_channel", "decision_word_q16",
+            "score_metadata_sha256", "score_population_sha256", "selection_granularity",
+            "qualification",
+        }
+        if not isinstance(selection, dict) or set(selection) != expected_fields:
+            _add_error(errors, selection_field, "operating-curve provenance fields differ")
+            return
+        for key, expected in (
+            ("method", "operating_curve_candidate_v1"),
+            ("selection_granularity", "detector_frame"),
+            ("qualification", "archive_review_only"),
+        ):
+            if selection[key] != expected:
+                _add_error(errors, f"{selection_field}.{key}", f"must be {expected!r}")
+        for key in ("decision_record_sha256", "score_metadata_sha256", "score_population_sha256"):
+            digest = selection[key]
+            if (not isinstance(digest, str) or len(digest) != 64
+                    or any(c not in "0123456789abcdef" for c in digest)
+                    or not isinstance(source_hashes, list) or digest not in source_hashes):
+                _add_error(errors, f"{selection_field}.{key}",
+                           "must be a lowercase source-product SHA256 included in provenance")
+        for key, expected in (("decision_channel", physical_channel),
+                              ("decision_word_q16", multiplier_q16)):
+            if type(selection[key]) is not int or selection[key] != expected:
+                _add_error(errors, f"{selection_field}.{key}", "must match the runtime profile")
+        if null_quantile is not None:
+            _add_error(errors, f"{provenance_field}.null_quantile",
+                       "operating-curve candidates have no null-quantile threshold claim")
+        return
+
     if isinstance(null_quantile, bool) or not isinstance(null_quantile, (int, float)):
         _add_error(
             errors,
@@ -913,6 +950,8 @@ def _validate_fine_calibration(
             status=status,
             field=field,
             errors=errors,
+            physical_channel=row.get("physical_channel"),
+            multiplier_q16=block.get("cfar_multiplier_q16"),
         )
         if status == FINE_CALIBRATION_STATUS_PENDING:
             continue

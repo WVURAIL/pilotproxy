@@ -5,6 +5,13 @@ decisions, the sweeps and one plate per channel. A deployed channel's word is
 then checked against the tolerance on its era's last year (one full seasonal
 cycle) and lowered only if it fails there (the last-year guard).
 
+The serialized legacy ``coherence_limit_s`` field is the full-era
+effective-gain-time diagnostic at the final deployed word, or at the knee
+when undeployed. It is not the joint full-era/last-year limit or a physical
+phase lifetime. ``last_year_r_hi`` is evaluated at the original
+``full_era_word``, before any tightening, so it cannot generally be combined
+with the final full-era ``r_hi`` to reconstruct that joint limit.
+
     python tools/threshold_rule.py --scores <score cache dir> --out <dir>
 
 The score cache is the current-era equal-event cache (``ch<N>.json`` and

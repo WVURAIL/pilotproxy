@@ -272,7 +272,12 @@ def _at(s: dict, word: int) -> int | None:
 
 
 def _point(s: dict, word: int, R: float, gain: float) -> dict:
-    """The sweep read at ``word``: kappa, x, r and calendar years of the frames it keeps."""
+    """Read the supplied sweep at ``word``.
+
+    ``coherence_limit_s`` is the effective-gain-time diagnostic
+    ``FRAME_SECONDS * gain / r_hi`` for this sweep alone. It is not a physical
+    phase lifetime or a limit jointly evaluated across multiple sweeps.
+    """
     i = _at(s, word)
     if i is None:
         return dict(word=int(word), eta=word / Q16, kappa=0.0, time_years=float("inf"), x=None, se=None, a=None,
@@ -316,8 +321,16 @@ GUARD_FAILED = "fails the tolerance on its last year"
 
 def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: float,
                    max_years: float = MAX_CALENDAR_YEARS, exclude: str | None = None) -> dict:
-    """``decide`` on the full era (sweep ``full``) with the last-year guard (sweep ``last``, from
-    ``last_year``). Adds ``full_era_word``, ``last_year_r_hi`` (at the full-era word) and ``guard_acted``."""
+    """``decide`` on the full era with the last-year guard (sweep ``last``).
+
+    Adds ``full_era_word``, ``last_year_r_hi`` and ``guard_acted``.
+    ``last_year_r_hi`` is evaluated at the original ``full_era_word``, before
+    any tightening. Any deployed point, including its legacy
+    ``coherence_limit_s`` diagnostic, is read on ``full`` at the final word.
+    The joint effective-gain-time limit instead uses
+    ``FRAME_SECONDS * gain / max(r_hi_full, r_hi_last)``, with both ratios
+    evaluated at that final word; it is not stored in ``coherence_limit_s``.
+    """
     d = decide(full, knee_word, R, gain=gain, max_years=max_years, exclude=exclude)
     out = dict(d, full_era_word=d["deployed_word"], last_year_r_hi=None, guard_acted=False)
     if d["deployed"] is None:

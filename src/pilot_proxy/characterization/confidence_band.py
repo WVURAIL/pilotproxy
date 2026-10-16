@@ -7,6 +7,7 @@ selection assumptions, support rules, and the treatment of failed replicates.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from numbers import Integral, Real
 
@@ -281,4 +282,33 @@ def simultaneous_upper_band(
     }
 
 
-__all__ = ["simultaneous_upper_band"]
+def widen_upper_band(band, multiplier, *, minimum_critical=1.):
+    """Apply a separately calibrated model-specific widening to a band.
+
+    This preserves every original statistic and resampling draw. It does not
+    assert that the calibration models describe the caller's data. A finite
+    positive critical floor makes multiplying the margin conservative even
+    when the original upper-tail bootstrap quantile is negative.
+    """
+    multiplier = _real(multiplier, "multiplier", lower=0)
+    minimum_critical = _real(minimum_critical, "minimum_critical", lower=0)
+    if multiplier < 1:
+        raise ValueError("multiplier must be >= 1")
+    result = deepcopy(band)
+    original = float(band["critical"])
+    critical = multiplier * max(original, minimum_critical)
+    result["bootstrap_critical"] = original
+    result["critical"] = critical
+    result["model_widening"] = {"multiplier": multiplier, "minimum_critical": minimum_critical,
+        "scope": "Separately calibrated declared-model margin; no universal or physical coverage claim."}
+    if band["status"] == "available" and not np.isfinite(critical):
+        raise ValueError("widened critical value is not finite")
+    if band["status"] == "available":
+        for window in result["windows"].values():
+            eligible = window["eligible"]
+            window["signed_upper"][eligible] = window["signed_mean"][eligible] + critical * window["se"][eligible]
+            window["upper"][eligible] = np.maximum(window["signed_upper"][eligible], 0.)
+    return result
+
+
+__all__ = ["simultaneous_upper_band", "widen_upper_band"]

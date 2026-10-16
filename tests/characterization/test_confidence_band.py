@@ -243,3 +243,45 @@ def test_unsupported_frames_remain_in_original_event_population():
     result = run(replace(f, supported=supported, excess=excess))
     assert result["resampling_cluster_count"] == 30
     np.testing.assert_array_equal(result["windows"]["full"]["kept_events"], [25, 25, 25])
+
+
+def test_model_widening_preserves_raw_statistics_and_does_not_mutate_input():
+    from pilot_proxy.characterization.confidence_band import widen_upper_band
+
+    original = run(frames_fixture())
+    widened = widen_upper_band(original, 2.)
+    assert widened["critical"] == 2 * max(original["critical"], 1.)
+    assert "model_widening" not in original
+    np.testing.assert_array_equal(widened["bootstrap_max_pivots"], original["bootstrap_max_pivots"])
+    for key, row in original["windows"].items():
+        got = widened["windows"][key]
+        for field in ("signed_mean", "se", "eligible", "kept_weight", "kept_events"):
+            np.testing.assert_array_equal(got[field], row[field])
+        use = row["eligible"]
+        np.testing.assert_allclose(got["signed_upper"][use],
+            row["signed_mean"][use] + widened["critical"] * row["se"][use])
+        assert np.all(got["signed_upper"][use] >= row["signed_upper"][use])
+
+
+def test_model_widening_refuses_overflow_and_narrowing():
+    from pilot_proxy.characterization.confidence_band import widen_upper_band
+
+    original = run(frames_fixture())
+    original["critical"] = 1e308
+    with pytest.raises(ValueError, match="not finite"):
+        widen_upper_band(original, 10.)
+    with pytest.raises(ValueError, match=">= 1"):
+        widen_upper_band(original, .5)
+
+
+def test_model_widening_floors_negative_critical_and_preserves_unavailability():
+    from pilot_proxy.characterization.confidence_band import widen_upper_band
+
+    original = run(frames_fixture())
+    original["critical"] = -.5
+    assert widen_upper_band(original, 2.)["critical"] == 2.
+    original["status"] = "unavailable"
+    original["critical"] = float("inf")
+    widened = widen_upper_band(original, 2.)
+    assert widened["status"] == "unavailable"
+    assert np.isinf(widened["critical"])

@@ -20,7 +20,7 @@ from scipy.stats import beta
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from pilot_proxy.characterization.confidence_band import simultaneous_upper_band
+from pilot_proxy.characterization.confidence_band import simultaneous_upper_band, widen_upper_band
 from pilot_proxy.characterization.knee import propose
 from pilot_proxy.characterization.threshold_rule import ChannelFrames, SHELF
 from pilot_proxy.testbench.fine_validation_scores import construct_geometry, fixed_scores
@@ -129,7 +129,22 @@ def evaluate_dataset(frames, windows, clusters, target, args, seed, selection_bu
     band = simultaneous_upper_band(frames, words, windows=windows, cluster_labels=clusters,
         confidence=.95, bootstrap_replicates=args.bootstrap_replicates, seed=seed,
         min_kept_events=30, min_effective_events=20, shelf=SHELF)
-    truth = target(words)
+    truth = np.asarray(target(words), dtype=float)
+    if truth.shape != words.shape or not np.isfinite(truth).all():
+        raise ValueError("target must provide finite truth for every supplied word")
+    # A held-out calibration driver may widen the margin. The standalone
+    # original protocol keeps multiplier one and its original critical value.
+    raw_critical = float(band["critical"])
+    multiplier = getattr(args, "critical_multiplier", None)
+    critical_floor = getattr(args, "minimum_critical", 1.)
+    if multiplier is not None:
+        band = widen_upper_band(band, multiplier, minimum_critical=critical_floor)
+    required_multiplier = 0.
+    for result in band["windows"].values():
+        eligible = result["eligible"]
+        if eligible.any():
+            score = (truth[eligible] - result["signed_mean"][eligible]) / result["se"][eligible]
+            required_multiplier = max(required_multiplier, float(np.max(score)) / max(raw_critical, critical_floor))
     any_miss = clipped_miss = False
     eligible_count = 0
     unavailable = band["status"] != "available"
@@ -164,7 +179,7 @@ def evaluate_dataset(frames, windows, clusters, target, args, seed, selection_bu
             return None
         return bool(truth[i] > full["signed_upper"][i] + 1e-15 or
                     truth[i] > last["signed_upper"][i] + 1e-15)
-    return dict(miss=any_miss, clipped_miss=clipped_miss, unavailable=unavailable,
+    return dict(required_multiplier=required_multiplier, miss=any_miss, clipped_miss=clipped_miss, unavailable=unavailable,
         eligible_points=eligible_count, observed_words=len(words),
         knee_miss=point_miss(knee_index), selected_miss=point_miss(selected),
         selection_budget=budget,

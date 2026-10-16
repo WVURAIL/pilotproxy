@@ -175,3 +175,27 @@ def test_serialization_preserves_refusal_status_while_using_json_null():
     assert value == {"status": "bootstrap_unavailable", "upper": [None, None],
                      "eligible": [False, True], "word": 2**63 + 3}
     json.dumps(value, allow_nan=False)
+
+
+@pytest.mark.parametrize("mismatch", ["source", "replicates"])
+def test_model_artifact_mismatch_refuses_before_output_writes(tmp_path, monkeypatch, mismatch):
+    import sys
+
+    sys.path.insert(0, str(Path(REPORT.__file__).parent))
+    from calibrate_proxy_confidence_band import source_hashes
+
+    calibration_dir = tmp_path / "calibration"
+    calibration_dir.mkdir()
+    protocol = dict(source_sha256=source_hashes(), bootstrap_replicates=399)
+    if mismatch == "source":
+        protocol["source_sha256"] = {}
+    else:
+        protocol["bootstrap_replicates"] = 1999
+    (calibration_dir / "protocol.json").write_text(json.dumps(protocol))
+    output = tmp_path / "output"
+    monkeypatch.setattr(sys, "argv", [REPORT.__file__, "--frozen-inputs", str(tmp_path / "inputs"),
+        "--output", str(output), "--replicates", "399", "--model-calibration",
+        str(calibration_dir / "calibration.json")])
+    with pytest.raises(ValueError, match="mismatch"):
+        REPORT.main()
+    assert not output.exists()

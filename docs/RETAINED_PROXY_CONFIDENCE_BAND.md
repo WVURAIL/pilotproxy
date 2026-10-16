@@ -329,3 +329,186 @@ population. It does not certify physical shelf power, arbitrary archive
 dependence, profile selection, or a simultaneous statement across channels.
 These instructions specify the analysis and its gate; they make no claim that
 the completed validation passes it. The existing guard remains unchanged.
+
+
+## Separately calibrated model margin
+
+`tools/calibrate_proxy_confidence_band.py` adds a conservative, explicitly
+model-conditional option. It leaves the event/block estimator, original event
+weights, joint windows, support rules and bootstrap algorithm unchanged. It
+also leaves the production `x + 2 se` guard unchanged. The original seven-model
+validation is retained: 18, 23, 20, 94, 18, 25 and 21 joint misses among 400
+datasets, respectively, in the scenario order above with the two empirical
+models last. All were finite, but none passed the stricter family-adjusted
+qualification gate. The assumption-matched observed miss rates of 4.5–6.25%
+do not, by themselves, demonstrate a numerical defect. The wrong-unit control
+had a substantially larger 23.5% miss rate.
+
+The new procedure uses **independent calibration and validation datasets**.
+For each calibration dataset, let `c` be its original bootstrap critical value
+and let `mu` be the known population conditional proxy mean. Its scalar score is
+
+```
+R = max(0, max over eligible words/windows ((mu - mu_hat) / se_hat))
+    / max(c, 1)
+```
+
+The score includes the complete observed-staircase procedure, overlapping
+windows, support selection and finite-bootstrap randomness. A multiplier `M`
+then gives the upper band
+
+```
+mu_hat + M * max(c, 1) * se_hat
+```
+
+The positive critical floor makes widening monotone even when a bootstrap
+critical value is negative. `widen_upper_band` preserves raw means, standard
+errors and bootstrap pivots, clips only the final nonnegative branch, rejects
+multipliers below one and refuses a nonfinite widened critical value. An
+unavailable original band remains unavailable.
+
+For each of the six assumption-matched models, 400 independent calibration
+scores determine a one-sided nonparametric tolerance limit. The declared
+content is 0.975. The smallest order rank `k` satisfying
+
+```
+P[Binomial(400, 0.975) >= k] <= 0.05 / 6
+```
+
+is **398** (one-based): its exact tail is 0.002547621772282387; rank 397 gives
+0.009683002762933034 and does not meet the rule. The model's multiplier is the
+398th ascending score, floored at one. The common multiplier is the maximum
+across the six models. No failed or unavailable calibration dataset is dropped:
+any such dataset refuses finite calibration.
+
+For independent, identically distributed complete-dataset scores from each
+specified model, this order-statistic construction gives at least 95%
+simultaneous calibration confidence that the resulting multiplier covers at
+least 97.5% of future datasets from **each of those six models**. Bonferroni
+controls the six statements; independence across the six calibrations is not
+needed. Ties make the order-statistic guarantee conservative. This is a
+statement about the score distribution under the declared simulation laws,
+including their sample sizes and procedure. It is not a distribution-free
+claim about arbitrary archive data or physical DTV power. The distinction
+between tolerance content and confidence is described in the
+[NIST tolerance-limit reference](https://itl.nist.gov/div898/software/dataplot/refman1/auxillar/tolelimi.htm);
+the order-statistic approach originates in
+[Wilks (1941)](https://doi.org/10.1214/aoms/1177731788).
+
+The calibration namespace is fixed at seed 20261016031. After the multiplier is
+frozen, 400 fresh datasets per scenario use seed 20261016032, with distinct
+hashed dataset/bootstrap purposes. The validation gate is unchanged: no
+unavailable datasets and the one-sided exact binomial upper miss limit at
+`alpha = .05/7` must be at most .05 for **all six matched models**. The seventh
+scenario, incorrect event resampling under four-event dependence, is excluded
+from calibration and reported as a negative control. Its lower miss limit
+above .05 establishes assumption failure when observed; it does not trigger
+retuning if the conservative margin happens to mask that failure. No seeds,
+model populations or multiplier are replaced after held-out outcomes.
+
+### Calibration and held-out replay
+
+The compact frozen population package contains `empirical_populations.npz` and
+`population_receipt.json`; the driver verifies the NPZ SHA256 before writing
+output. Its score/proxy rows are the exact finite populations extracted by the
+original validator, with their source receipts retained separately. This avoids
+re-reading large waveform products and does not create new physical trials.
+
+```bash
+cd /home/djg/rail/pilotproxy
+export PYTHONPATH="$PWD/src"
+proxy_python=/home/djg/rail/venvs/archive-local/bin/python
+proxy_band_run=/home/djg/rail/output/paper-publication-followup-2026-10-16/confidence
+proxy_populations=/home/djg/rail/output/proxy-confidence-validation-compact
+
+"$proxy_python" tools/calibrate_proxy_confidence_band.py \
+  --phase calibrate --output "$proxy_band_run" \
+  --populations "$proxy_populations" \
+  --base-revision 0adde4b775fd8428b790b64e3494205072da51c3
+
+"$proxy_python" tools/calibrate_proxy_confidence_band.py \
+  --phase validate --output "$proxy_band_run" \
+  --populations "$proxy_populations" \
+  --base-revision 0adde4b775fd8428b790b64e3494205072da51c3
+```
+
+Defaults fix 400 datasets per phase/model and 399 bootstrap replicates. The
+protocol, source hashes, population identity, both seed namespaces, support
+rules and success criterion are written before any outcomes. Runtime receipts
+record Python, NumPy, SciPy and platform; every record identifies its runtime,
+replicate index and dataset/bootstrap seeds. The per-record runtime identity hashes
+the compact, sorted JSON representation of the runtime object; the evidence
+manifest separately hashes the receipt file bytes. Checkpoints every ten datasets
+resume only with the same protocol and ordered seed identities. Validation
+rechecks calibration-file hashes and recomputes all six order statistics from
+complete saved records, rather than trusting a printed multiplier.
+
+Outputs are `protocol.json`, runtime receipts, six `calibrate-*.json`
+checkpoints, `calibration.json`, seven `validate-*.json` checkpoints,
+`summary.json` and `heldout_scenarios.csv`. Preserve all records, optionally in
+a lossless compressed archive, plus their hashes. Record the eventual source
+commit separately; the base revision identifies the pre-change checkout, while
+the frozen source hashes identify the actual implementation used. A different
+source, protocol, or input needs a new output directory. Exact numerical replay
+also depends on the recorded numerical runtime. Use a new output directory for
+a different platform: the inherited JSON writer uses native newline bytes, so
+cross-platform protocol rewriting can change its byte hash and refuse resume.
+The completed experiment uses one recorded native Windows runtime throughout.
+
+The archive reporter accepts the verified artifact explicitly:
+
+```bash
+"$proxy_python" tools/report_proxy_confidence_band.py \
+  --frozen-inputs /path/to/previous/archive/inputs \
+  --output "$proxy_band_run/archive-diagnostic" \
+  --channels 37 --modes event --replicates 399 \
+  --model-calibration "$proxy_band_run/calibration.json"
+```
+
+It refuses a different source or bootstrap replicate count and recomputes the
+calibration artifact from its saved records before processing archive data.
+Applying this multiplier to an archive remains an unqualified **sensitivity
+diagnostic**: matching the model's independence, population and selection
+assumptions has not been established for that archive. It changes neither
+accepted words nor the production sampling guard and supplies no physical
+transfer-calibration allowance.
+
+
+### Completed held-out result (2026-10-16)
+
+The frozen multiplier is **1.5651996017565912**, selected by the correctly
+blocked dependence model's calibration tolerance limit. All 2,400 calibration
+datasets and 2,800 held-out datasets produced finite available bands. All six
+assumption-matched models passed the unchanged qualification gate:
+
+| Held-out model | Misses / 400 | Family-adjusted upper miss limit |
+| --- | ---: | ---: |
+| Null Gaussian | 0 | 1.228% |
+| Independent Gaussian | 1 | 1.743% |
+| Coupled score/proxy, unequal event sizes | 0 | 1.228% |
+| Correlated events, correct blocks | 2 | 2.189% |
+| Frozen empirical frontier | 0 | 1.228% |
+| Frozen empirical campaign | 2 | 2.189% |
+
+The wrong-unit negative control had 19/400 misses (4.75%), with lower and
+upper limits 2.524% and 8.012%. It **failed qualification**, but the widened
+margin did not establish that its miss probability exceeds 5%. Thus this run
+supports the six declared model results while its negative control is not a
+successful detector of nominal undercoverage after widening. No procedure,
+seed or multiplier was changed in response. The original unwidened control's
+94/400 misses remain part of the preserved earlier diagnostic.
+
+These are joint eligible-staircase/window results. Diagnostic selected points
+exist in only a subset of datasets; their separate counts remain in the
+summary and must not be described as 400 successful operating selections.
+The complete artifact is under
+`output/paper-publication-followup-2026-10-16/confidence` in the local aggregate
+workspace: `summary.json`, `heldout_scenarios.csv`, `complete_records.zip`, the
+raw records, runtime/test receipts and `MANIFEST.json`. The protocol SHA256 is
+`2b83b2901c4d1ebc1869f07b987dede01ab85a6d0eb2893af6dc7cd06b7f0e24`;
+the calibrated artifact SHA256 is
+`3fe6f4625dd0d45f01cc1c62922eedba376d1fcb3ba7a722429d0c053759a319`.
+The recorded runtime was Python 3.12.14, NumPy 2.5.4 and SciPy 1.18.1 on Windows.
+A no-work resume verified all protocol, calibration, validation and summary
+bytes unchanged. An offline channel-37 archive replay checked the opt-in
+reporting path; it remains an archive diagnostic, not a model qualification.

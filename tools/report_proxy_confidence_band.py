@@ -16,7 +16,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pilot_proxy.characterization import threshold_rule as rule
-from pilot_proxy.characterization.confidence_band import simultaneous_upper_band
+from pilot_proxy.characterization.confidence_band import simultaneous_upper_band, widen_upper_band
 
 
 def digest(path):
@@ -114,6 +114,23 @@ def at_word(words, window, word):
         key: np.asarray(window[key])[i] for key in keys if key in window})
 
 
+def load_model_calibration(path, replicates):
+    """Verify a model artifact; archive application is still only diagnostic."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from calibrate_proxy_confidence_band import source_hashes, verify_calibration
+
+    protocol_path = path.parent / "protocol.json"
+    frozen = json.loads(protocol_path.read_text())
+    if path.name != "calibration.json":
+        raise ValueError("model calibration must be named calibration.json")
+    if frozen["source_sha256"] != source_hashes():
+        raise ValueError("model calibration source mismatch")
+    if frozen["bootstrap_replicates"] != replicates:
+        raise ValueError("model calibration bootstrap replicate count mismatch")
+    calibration = verify_calibration(path.parent, frozen, digest(protocol_path))
+    return calibration
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group(required=True)
@@ -126,7 +143,11 @@ def main():
     parser.add_argument("--seed", type=int, default=2026101601)
     parser.add_argument("--modes", nargs="+", choices=["event", "day", "week"],
                         default=["event", "day", "week"])
+    parser.add_argument("--model-calibration", type=Path,
+                        help="Verified declared-model calibration; archive use remains diagnostic")
     args = parser.parse_args()
+    calibration = (None if args.model_calibration is None else
+                   load_model_calibration(args.model_calibration, args.replicates))
     args.output.mkdir(parents=True, exist_ok=True)
     settings = {
         "schema": "retained-proxy-archive-band-v1", "confidence": .95,
@@ -135,6 +156,10 @@ def main():
         "grid_rule": "all distinct supported observed Q16 requirements; rebuild in coverage replications",
         "windows": ["full_era", "last_year"], "modes": args.modes,
         "channels": args.channels,
+        "model_calibration": None if calibration is None else {
+            "sha256": digest(args.model_calibration), "multiplier": calibration["multiplier"],
+            "minimum_critical": calibration["minimum_critical"], "scope": calibration["scope"],
+            "archive_qualification": "none; declared model assumptions have not been established for this archive"},
         "target": "event-weighted conditional mean signed shelf proxy within the frozen era and profiles",
         "interpretation": "nominal approximate simultaneous empirical-staircase bootstrap diagnostic",
         "family": "per channel, joint over eligible threshold points and both overlapping windows",
@@ -191,6 +216,9 @@ def main():
                 frames, words, windows=windows, cluster_labels=clusters, confidence=.95,
                 bootstrap_replicates=args.replicates, seed=args.seed + ch * 10 + args.modes.index(mode),
                 min_kept_events=30, min_effective_events=20., batch_size=16)
+            if calibration is not None:
+                band = widen_upper_band(band, calibration["multiplier"],
+                                        minimum_critical=calibration["minimum_critical"])
             # Independent comparison with the existing accepted sweep, including
             # the last window's different denominator and inherited event weights.
             for name, mask in windows.items():

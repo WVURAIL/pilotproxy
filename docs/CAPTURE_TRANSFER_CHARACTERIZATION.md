@@ -93,9 +93,10 @@ Raw files and large products remain external. Receipts hash selected raw frame
 bytes, the used saved arrays, and exact products; they do not claim a whole-HDF5
 byte hash when only selected frames were read.
 
-The October16 execution has an explicit source-only amendments for per-frame
+The October16 execution has explicit source-only amendments for per-frame
 checkpoints, verified per-epoch and per-payload-cell summary caches, and stricter input-byte identity checks. The original protocol and
-completed products are preserved. To resume that execution, pass
+completed products are preserved. To resume that historical execution, use the
+executed source at commit `fbc548d2e1cf79cc3ef89739a79b4c65b32ce103` and pass
 `--source-amendment /path/to/source_amendment_v3.json` to `reduce-one` or
 `summarize`. A new execution freezes the current source normally. Frame
 checkpoints bind the exact selected raw bytes, FPGA origin, protocol, and executing
@@ -104,3 +105,8 @@ retained with the private evidence. These changes do not alter the numerical
 analysis or shorten its declared capture population.
 
 The per-epoch caches retain the verified observations and receipts needed by the fit. The final evidence retains these caches, but omits duplicate per-cell and per-frame checkpoints. Source revisions are explicit, and cache reuse requires an approved source hash plus unchanged protocol and payload digest.
+
+After the study, frame checkpoints gained a digest of every numerical array and
+identity field. New runs refuse altered payloads and legacy checkpoints without
+that digest. The completed study retains its exact executed sources and product
+hashes; this later guard does not change or requalify its numerical results.

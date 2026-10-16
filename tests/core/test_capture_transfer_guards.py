@@ -44,8 +44,9 @@ def test_control_auto_and_origin_mutation_refused(tool):
 
 def test_checkpoint_binds_raw_frame_protocol_origin_and_source(tool, tmp_path):
     path = tmp_path / 'frame.npz'
-    np.savez(path, raw_sha256='raw', protocol_sha256='protocol', origin=123,
-             execution_source_sha256='source', per=np.zeros((3, 2048), dtype=np.uint64))
+    arrays = dict(raw_sha256='raw', protocol_sha256='protocol', origin=123,
+                  execution_source_sha256='source', per=np.zeros((3, 2048), dtype=np.uint64))
+    np.savez(path, **arrays, payload_sha256=tool.digest_arrays(arrays))
     got = tool.read_checkpoint(path, 'protocol', 'raw', 123, 'source')
     np.testing.assert_array_equal(got['per'], 0)
     for params in [('wrong', 'raw', 123, 'source'), ('protocol', 'wrong', 123, 'source'),
@@ -78,3 +79,27 @@ def test_summary_checkpoint_preserves_arrays_and_refuses_mutation(tool, tmp_path
     np.savez_compressed(path, **altered)
     with pytest.raises(ValueError, match='checkpoint payload'):
         tool.read_summary_checkpoint(path, 'protocol', 'source', 29, 'epoch')
+
+@pytest.mark.parametrize('field', ['fine', 'keep', 'target_norm', 'reference_norm', 'per', 'glob'])
+def test_checkpoint_payload_mutation_refused(tool, tmp_path, field):
+    path = tmp_path / 'frame.npz'
+    arrays = dict(raw_sha256=np.array('raw'), protocol_sha256=np.array('protocol'),
+                  origin=np.array(123), execution_source_sha256=np.array('source'),
+                  fine=np.zeros(256, dtype=np.uint64), keep=np.array(False),
+                  target_norm=np.array(123), reference_norm=np.array(246),
+                  per=np.zeros((3, 2048), dtype=np.uint64), glob=np.zeros(3, dtype=np.uint64))
+    digest = tool.digest_arrays(arrays)
+    np.savez(path, **arrays, payload_sha256=digest)
+    tool.read_checkpoint(path, 'protocol', 'raw', 123, 'source')
+    arrays[field].flat[0] = arrays[field].flat[0] + 1
+    np.savez(path, **arrays, payload_sha256=digest)
+    with pytest.raises(ValueError, match='checkpoint payload'):
+        tool.read_checkpoint(path, 'protocol', 'raw', 123, 'source')
+
+
+def test_legacy_checkpoint_without_payload_digest_refused(tool, tmp_path):
+    path = tmp_path / 'legacy.npz'
+    np.savez(path, raw_sha256='raw', protocol_sha256='protocol', origin=123,
+             execution_source_sha256='source')
+    with pytest.raises(ValueError, match='lacks payload digest'):
+        tool.read_checkpoint(path, 'protocol', 'raw', 123, 'source')

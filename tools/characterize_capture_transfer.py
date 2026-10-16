@@ -56,10 +56,16 @@ def require_saved_control_identity(control, exact_receipt):
 
 def read_checkpoint(path, protocol_hash, raw_hash, origin, source_hash):
     with np.load(path, allow_pickle=False) as z:
-        if (str(z['protocol_sha256']) != protocol_hash or str(z['raw_sha256']) != raw_hash
-                or int(z['origin']) != int(origin) or str(z['execution_source_sha256']) != source_hash):
-            raise ValueError('frame checkpoint identity mismatch')
-        return {k: z[k] for k in z.files}
+        arrays = {k: z[k] for k in z.files}
+    if 'payload_sha256' not in arrays:
+        raise ValueError('frame checkpoint lacks payload digest')
+    recorded_hash = str(arrays.pop('payload_sha256'))
+    if digest_arrays(arrays) != recorded_hash:
+        raise ValueError('frame checkpoint payload mismatch')
+    if (str(arrays['protocol_sha256']) != protocol_hash or str(arrays['raw_sha256']) != raw_hash
+            or int(arrays['origin']) != int(origin) or str(arrays['execution_source_sha256']) != source_hash):
+        raise ValueError('frame checkpoint identity mismatch')
+    return arrays
 
 
 def write_summary_checkpoint(path, record, input_ids, provenance, protocol_hash, source_hash, channel, epoch):
@@ -330,10 +336,12 @@ def reduce_one(args):
                     keep = ch == 37
                 temporary = checkpoint_dir / (cache.name + '.' + uuid.uuid4().hex + '.tmp')
                 with temporary.open('xb') as handle:
-                    np.savez_compressed(handle, per=per, glob=glob, fine=fp, keep=keep,
-                                        target_norm=target_norm, reference_norm=reference_norm,
-                                        origin=origin, raw_sha256=raw_hash, protocol_sha256=protocol_hash,
-                                        execution_source_sha256=sha(Path(__file__)))
+                    checkpoint_arrays = dict(per=per, glob=glob, fine=fp, keep=keep,
+                                             target_norm=target_norm, reference_norm=reference_norm,
+                                             origin=origin, raw_sha256=raw_hash, protocol_sha256=protocol_hash,
+                                             execution_source_sha256=sha(Path(__file__)))
+                    np.savez_compressed(handle, **checkpoint_arrays,
+                                        payload_sha256=digest_arrays(checkpoint_arrays))
                     handle.flush()
                     os.fsync(handle.fileno())
                 temporary.rename(cache)

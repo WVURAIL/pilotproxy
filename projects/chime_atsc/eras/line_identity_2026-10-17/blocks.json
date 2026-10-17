@@ -1,0 +1,3917 @@
+{
+ "p0": 0.05,
+ "step_count": 110,
+ "split": {
+  "largest_below_db": 19.441919071998747,
+  "smallest_above_db": 29.49286884689529
+ },
+ "channels": [
+  {
+   "channel": 14,
+   "scatter_db": 1.23611775,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2019-11",
+     "level_db": 2.783589058292258
+    },
+    {
+     "first_month": "2019-12",
+     "last_month": "2020-02",
+     "level_db": 7.392138434967588
+    },
+    {
+     "first_month": "2020-05",
+     "last_month": "2022-04",
+     "level_db": 2.0642131694412322
+    },
+    {
+     "first_month": "2022-05",
+     "last_month": "2022-08",
+     "level_db": 6.901631467046229
+    },
+    {
+     "first_month": "2022-09",
+     "last_month": "2025-04",
+     "level_db": 3.903252301192466
+    },
+    {
+     "first_month": "2025-05",
+     "last_month": "2025-08",
+     "level_db": 9.83440440650635
+    },
+    {
+     "first_month": "2025-09",
+     "last_month": "2026-04",
+     "level_db": 4.190736559632146
+    },
+    {
+     "first_month": "2026-05",
+     "last_month": "2026-08",
+     "level_db": 9.590590786410916
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2019-12",
+      "step_db": 4.608549376675331,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 3.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 1.5,
+       "mad_bins": 4.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2020-05",
+      "step_db": -5.327925265526356,
+      "change": "steadiness",
+      "before": {
+       "median_bins": 1.5,
+       "mad_bins": 4.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2022-05",
+      "step_db": 4.837418297604997,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2022-09",
+      "step_db": -2.9983791658537635,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 0.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 2.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2025-05",
+      "step_db": 5.931152105313884,
+      "change": "steadiness",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 3.75,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2025-09",
+      "step_db": -5.643667846874203,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 7,
+      "month": "2026-05",
+      "step_db": 5.3998542267787695,
+      "change": "steadiness",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 2.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 5.643667846874203,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2019-12",
+      "last_month": "2020-02",
+      "resolved": true
+     },
+     {
+      "first_month": "2022-05",
+      "last_month": "2022-08",
+      "resolved": true
+     },
+     {
+      "first_month": "2025-05",
+      "last_month": "2025-08",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2019-12",
+     "step_db": 4.608549376675331,
+     "boundary": false
+    },
+    {
+     "month": "2020-05",
+     "step_db": -5.327925265526356,
+     "boundary": false
+    },
+    {
+     "month": "2022-05",
+     "step_db": 4.837418297604997,
+     "boundary": false
+    },
+    {
+     "month": "2022-09",
+     "step_db": -2.9983791658537635,
+     "boundary": false
+    },
+    {
+     "month": "2025-05",
+     "step_db": 5.931152105313884,
+     "boundary": false
+    },
+    {
+     "month": "2025-09",
+     "step_db": -5.643667846874203,
+     "boundary": false
+    },
+    {
+     "month": "2026-05",
+     "step_db": 5.3998542267787695,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 15,
+   "scatter_db": 0.5633879999999984,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2020-12",
+     "level_db": 13.021723886090973
+    },
+    {
+     "first_month": "2021-01",
+     "last_month": "2022-12",
+     "level_db": 12.115906663017418
+    },
+    {
+     "first_month": "2023-01",
+     "last_month": "2023-08",
+     "level_db": 11.13853004225061
+    },
+    {
+     "first_month": "2023-09",
+     "last_month": "2025-01",
+     "level_db": 12.854449579804616
+    },
+    {
+     "first_month": "2025-02",
+     "last_month": "2025-02",
+     "level_db": 10.385
+    },
+    {
+     "first_month": "2025-03",
+     "last_month": "2026-08",
+     "level_db": 13.131446995945886
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2021-01",
+      "step_db": -0.9058172230735551,
+      "change": "same",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2023-01",
+      "step_db": -0.9773766207668082,
+      "change": "same",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2023-09",
+      "step_db": 1.7159195375540062,
+      "change": "same",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -2.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2025-02",
+      "step_db": -2.469449579804616,
+      "change": "same",
+      "before": {
+       "median_bins": -6.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -7.0,
+       "mad_bins": 0.0,
+       "months": 1
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2025-03",
+      "step_db": 2.7464469959458864,
+      "change": "same",
+      "before": {
+       "median_bins": -7.0,
+       "mad_bins": 0.0,
+       "months": 1
+      },
+      "after": {
+       "median_bins": -7.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 1.7159195375540062,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2023-01",
+      "last_month": "2023-08",
+      "resolved": true
+     },
+     {
+      "first_month": "2025-02",
+      "last_month": "2025-02",
+      "resolved": false
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2021-01",
+     "step_db": -0.9058172230735551,
+     "boundary": false
+    },
+    {
+     "month": "2023-01",
+     "step_db": -0.9773766207668082,
+     "boundary": false
+    },
+    {
+     "month": "2023-09",
+     "step_db": 1.7159195375540062,
+     "boundary": false
+    },
+    {
+     "month": "2025-02",
+     "step_db": -2.469449579804616,
+     "boundary": false
+    },
+    {
+     "month": "2025-03",
+     "step_db": 2.7464469959458864,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 16,
+   "scatter_db": 0.7338870000000001,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2022-04",
+     "level_db": 0.4776355753270007
+    },
+    {
+     "first_month": "2022-05",
+     "last_month": "2022-08",
+     "level_db": 3.3707926179816567
+    },
+    {
+     "first_month": "2022-09",
+     "last_month": "2025-04",
+     "level_db": 1.5282415928176456
+    },
+    {
+     "first_month": "2025-05",
+     "last_month": "2025-08",
+     "level_db": 4.621946050193558
+    },
+    {
+     "first_month": "2025-09",
+     "last_month": "2026-04",
+     "level_db": 1.578830600441587
+    },
+    {
+     "first_month": "2026-05",
+     "last_month": "2026-08",
+     "level_db": 4.046089431972874
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2022-05",
+      "step_db": 2.8931570426546562,
+      "change": "same",
+      "before": {
+       "median_bins": 11.0,
+       "mad_bins": 13.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 1.0,
+       "mad_bins": 4.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2022-09",
+      "step_db": -1.8425510251640111,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 2.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 3.0,
+       "mad_bins": 5.5,
+       "months": 3
+      },
+      "edge_move_bins": 0.5,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2025-05",
+      "step_db": 3.0937044573759125,
+      "change": "same",
+      "before": {
+       "median_bins": 2.0,
+       "mad_bins": 5.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 2.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2025-09",
+      "step_db": -3.043115449751971,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 1.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 2.0,
+       "mad_bins": 6.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2026-05",
+      "step_db": 2.4672588315312867,
+      "change": "same",
+      "before": {
+       "median_bins": 2.0,
+       "mad_bins": 4.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 1.0,
+       "mad_bins": 2.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 3.0937044573759125,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2022-05",
+      "last_month": "2022-08",
+      "resolved": true
+     },
+     {
+      "first_month": "2025-05",
+      "last_month": "2025-08",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2022-05",
+     "step_db": 2.8931570426546562,
+     "boundary": false
+    },
+    {
+     "month": "2022-09",
+     "step_db": -1.8425510251640111,
+     "boundary": false
+    },
+    {
+     "month": "2025-05",
+     "step_db": 3.0937044573759125,
+     "boundary": false
+    },
+    {
+     "month": "2025-09",
+     "step_db": -3.043115449751971,
+     "boundary": false
+    },
+    {
+     "month": "2026-05",
+     "step_db": 2.4672588315312867,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 17,
+   "scatter_db": 0.5077905000000017,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2020-04",
+     "level_db": 31.455925578127804
+    },
+    {
+     "first_month": "2020-05",
+     "last_month": "2020-10",
+     "level_db": 33.0261450770682
+    },
+    {
+     "first_month": "2021-01",
+     "last_month": "2021-02",
+     "level_db": 13.584226005069455
+    },
+    {
+     "first_month": "2021-03",
+     "last_month": "2021-05",
+     "level_db": 31.881251525613536
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2024-01",
+     "level_db": 37.11231978353179
+    },
+    {
+     "first_month": "2024-02",
+     "last_month": "2024-07",
+     "level_db": 38.45004715258415
+    },
+    {
+     "first_month": "2024-08",
+     "last_month": "2026-08",
+     "level_db": 37.20792066247378
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2022-10"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2020-05",
+      "step_db": 1.5702194989403964,
+      "change": "same",
+      "before": {
+       "median_bins": -1.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2021-01",
+      "step_db": -19.441919071998747,
+      "change": "same",
+      "before": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.5,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2021-03",
+      "step_db": 18.297025520544082,
+      "change": "same",
+      "before": {
+       "median_bins": -1.5,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "after": {
+       "median_bins": -1.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2022-10",
+      "step_db": 5.231068257918253,
+      "change": "jump",
+      "before": {
+       "median_bins": -1.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 1.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": true
+     },
+     {
+      "block": 5,
+      "month": "2024-02",
+      "step_db": 1.3377273690523594,
+      "change": "drift",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -3.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2024-08",
+      "step_db": -1.2421264901103655,
+      "change": "same",
+      "before": {
+       "median_bins": -4.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -3.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 1.5702194989403964,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2021-01",
+      "last_month": "2021-02",
+      "resolved": false
+     },
+     {
+      "first_month": "2024-02",
+      "last_month": "2024-07",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2020-05",
+     "step_db": 1.5702194989403964,
+     "boundary": false
+    },
+    {
+     "month": "2021-01",
+     "step_db": -19.441919071998747,
+     "boundary": false
+    },
+    {
+     "month": "2021-03",
+     "step_db": 18.297025520544082,
+     "boundary": false
+    },
+    {
+     "month": "2022-10",
+     "step_db": 5.231068257918253,
+     "boundary": true
+    },
+    {
+     "month": "2024-02",
+     "step_db": 1.3377273690523594,
+     "boundary": false
+    },
+    {
+     "month": "2024-08",
+     "step_db": -1.2421264901103655,
+     "boundary": false
+    }
+   ],
+   "boundaries": [
+    "2022-10"
+   ],
+   "excursions": [],
+   "current_first_month": "2022-10",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 18,
+   "scatter_db": 1.100830500000001,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2024-05",
+     "level_db": 1.0215462199906162
+    },
+    {
+     "first_month": "2024-08",
+     "last_month": "2026-08",
+     "level_db": 4.583242676181472
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2024-08"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2024-08",
+      "step_db": 3.5616964561908557,
+      "change": "steadiness",
+      "before": {
+       "median_bins": -1.5,
+       "mad_bins": 3.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": true
+     }
+    ],
+    "calibration_db": 0.0,
+    "two_state_line": true,
+    "reversing_blocks": []
+   },
+   "steps": [
+    {
+     "month": "2024-08",
+     "step_db": 3.5616964561908557,
+     "boundary": true
+    }
+   ],
+   "boundaries": [
+    "2024-08"
+   ],
+   "excursions": [],
+   "current_first_month": "2024-08",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 19,
+   "scatter_db": 0.372503249999993,
+   "blocks": [
+    {
+     "first_month": "2020-10",
+     "last_month": "2020-10",
+     "level_db": 37.7
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2024-01",
+     "level_db": 34.72917965480156
+    },
+    {
+     "first_month": "2024-02",
+     "last_month": "2024-10",
+     "level_db": 35.47304376835257
+    },
+    {
+     "first_month": "2024-11",
+     "last_month": "2024-11",
+     "level_db": 34.019999999999996
+    },
+    {
+     "first_month": "2024-12",
+     "last_month": "2026-04",
+     "level_db": 1.1061723987654117
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2022-10",
+     "2024-12"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2022-10",
+      "step_db": -2.9708203451984403,
+      "change": "jump",
+      "before": {
+       "median_bins": -38.0,
+       "mad_bins": 0.0,
+       "months": 1
+      },
+      "after": {
+       "median_bins": 1.0,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 38.0,
+      "boundary": true
+     },
+     {
+      "block": 2,
+      "month": "2024-02",
+      "step_db": 0.7438641135510053,
+      "change": "drift",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 4.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2024-11",
+      "step_db": -1.4530437683525719,
+      "change": "same",
+      "before": {
+       "median_bins": 3.0,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 1.0,
+       "mad_bins": 1.0,
+       "months": 1
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2024-12",
+      "step_db": -32.91382760123459,
+      "change": "steadiness",
+      "before": {
+       "median_bins": 1.0,
+       "mad_bins": 1.0,
+       "months": 1
+      },
+      "after": {
+       "median_bins": 9.75,
+       "mad_bins": 32.25,
+       "months": 3
+      },
+      "edge_move_bins": 8.75,
+      "boundary": true
+     }
+    ],
+    "calibration_db": 1.4530437683525719,
+    "two_state_line": false,
+    "reversing_blocks": []
+   },
+   "steps": [
+    {
+     "month": "2022-10",
+     "step_db": -2.9708203451984403,
+     "boundary": true
+    },
+    {
+     "month": "2024-02",
+     "step_db": 0.7438641135510053,
+     "boundary": false
+    },
+    {
+     "month": "2024-11",
+     "step_db": -1.4530437683525719,
+     "boundary": false
+    },
+    {
+     "month": "2024-12",
+     "step_db": -32.91382760123459,
+     "boundary": true
+    }
+   ],
+   "boundaries": [
+    "2022-10",
+    "2024-12"
+   ],
+   "excursions": [],
+   "current_first_month": "2024-12",
+   "current_last_month": "2026-04"
+  },
+  {
+   "channel": 20,
+   "scatter_db": 0.9970484999999991,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2021-04",
+     "level_db": 22.174989816805454
+    },
+    {
+     "first_month": "2021-05",
+     "last_month": "2022-08",
+     "level_db": 20.467422372242797
+    },
+    {
+     "first_month": "2022-09",
+     "last_month": "2023-08",
+     "level_db": 12.726782204985902
+    },
+    {
+     "first_month": "2023-09",
+     "last_month": "2023-12",
+     "level_db": 8.43298858237074
+    },
+    {
+     "first_month": "2024-01",
+     "last_month": "2024-06",
+     "level_db": 5.737091987695581
+    },
+    {
+     "first_month": "2024-07",
+     "last_month": "2026-06",
+     "level_db": 10.614105644780327
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2022-09"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2021-05",
+      "step_db": -1.707567444562656,
+      "change": "same",
+      "before": {
+       "median_bins": -4.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -4.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2022-09",
+      "step_db": -7.740640167256895,
+      "change": "jump",
+      "before": {
+       "median_bins": -4.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 3.5,
+      "boundary": true
+     },
+     {
+      "block": 3,
+      "month": "2023-09",
+      "step_db": -4.293793622615162,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -2.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2024-01",
+      "step_db": -2.695896594675159,
+      "change": "same",
+      "before": {
+       "median_bins": -2.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -3.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2024-07",
+      "step_db": 4.877013657084746,
+      "change": "same",
+      "before": {
+       "median_bins": -3.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -3.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 4.877013657084746,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2023-09",
+      "last_month": "2023-12",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2021-05",
+     "step_db": -1.707567444562656,
+     "boundary": false
+    },
+    {
+     "month": "2022-09",
+     "step_db": -7.740640167256895,
+     "boundary": true
+    },
+    {
+     "month": "2023-09",
+     "step_db": -4.293793622615162,
+     "boundary": false
+    },
+    {
+     "month": "2024-01",
+     "step_db": -2.695896594675159,
+     "boundary": false
+    },
+    {
+     "month": "2024-07",
+     "step_db": 4.877013657084746,
+     "boundary": false
+    }
+   ],
+   "boundaries": [
+    "2022-09"
+   ],
+   "excursions": [],
+   "current_first_month": "2022-09",
+   "current_last_month": "2026-06"
+  },
+  {
+   "channel": 21,
+   "scatter_db": 0.17791199999999982,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2022-03",
+     "level_db": -1.7982342247347691
+    },
+    {
+     "first_month": "2022-04",
+     "last_month": "2023-09",
+     "level_db": -1.2062776554672863
+    },
+    {
+     "first_month": "2023-10",
+     "last_month": "2024-04",
+     "level_db": -1.5275688954782827
+    },
+    {
+     "first_month": "2024-05",
+     "last_month": "2024-06",
+     "level_db": -0.44090930432380226
+    },
+    {
+     "first_month": "2024-07",
+     "last_month": "2025-01",
+     "level_db": -1.370107241770696
+    },
+    {
+     "first_month": "2025-02",
+     "last_month": "2025-05",
+     "level_db": -0.9101917584637568
+    },
+    {
+     "first_month": "2025-06",
+     "last_month": "2025-08",
+     "level_db": 0.09535350214943891
+    },
+    {
+     "first_month": "2025-09",
+     "last_month": "2026-04",
+     "level_db": -1.1593793476346832
+    },
+    {
+     "first_month": "2026-05",
+     "last_month": "2026-08",
+     "level_db": 0.6428883122445261
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2022-04",
+      "step_db": 0.5919565692674829,
+      "change": "same",
+      "before": {
+       "median_bins": 1.5,
+       "mad_bins": 15.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 1.0,
+       "mad_bins": 5.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2023-10",
+      "step_db": -0.3212912400109964,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 3.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 1.5,
+       "mad_bins": 7.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2024-05",
+      "step_db": 1.0866595911544805,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 10.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 2.0,
+       "mad_bins": 8.5,
+       "months": 2
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2024-07",
+      "step_db": -0.9291979374468938,
+      "change": "same",
+      "before": {
+       "median_bins": 2.0,
+       "mad_bins": 8.5,
+       "months": 2
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 3.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2025-02",
+      "step_db": 0.4599154833069393,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 15.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 10.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2025-06",
+      "step_db": 1.0055452606131956,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 9.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 3.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 7,
+      "month": "2025-09",
+      "step_db": -1.2547328497841221,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 3.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 6.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 8,
+      "month": "2026-05",
+      "step_db": 1.8022676598792093,
+      "change": "same",
+      "before": {
+       "median_bins": 0.75,
+       "mad_bins": 11.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 2.25,
+       "months": 3
+      },
+      "edge_move_bins": 0.25,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 1.8022676598792093,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2024-05",
+      "last_month": "2024-06",
+      "resolved": false
+     },
+     {
+      "first_month": "2025-06",
+      "last_month": "2025-08",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2022-04",
+     "step_db": 0.5919565692674829,
+     "boundary": false
+    },
+    {
+     "month": "2023-10",
+     "step_db": -0.3212912400109964,
+     "boundary": false
+    },
+    {
+     "month": "2024-05",
+     "step_db": 1.0866595911544805,
+     "boundary": false
+    },
+    {
+     "month": "2024-07",
+     "step_db": -0.9291979374468938,
+     "boundary": false
+    },
+    {
+     "month": "2025-02",
+     "step_db": 0.4599154833069393,
+     "boundary": false
+    },
+    {
+     "month": "2025-06",
+     "step_db": 1.0055452606131956,
+     "boundary": false
+    },
+    {
+     "month": "2025-09",
+     "step_db": -1.2547328497841221,
+     "boundary": false
+    },
+    {
+     "month": "2026-05",
+     "step_db": 1.8022676598792093,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 22,
+   "scatter_db": 0.5374425000000063,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2022-05",
+     "level_db": 24.22203389293219
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2024-03",
+     "level_db": 24.992162353538344
+    },
+    {
+     "first_month": "2024-04",
+     "last_month": "2025-03",
+     "level_db": 24.003122878679214
+    },
+    {
+     "first_month": "2025-04",
+     "last_month": "2025-12",
+     "level_db": 22.442825190753048
+    },
+    {
+     "first_month": "2026-01",
+     "last_month": "2026-08",
+     "level_db": 23.452914427832788
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2022-10",
+      "step_db": 0.7701284606061556,
+      "change": "same",
+      "before": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2024-04",
+      "step_db": -0.9890394748591298,
+      "change": "same",
+      "before": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2025-04",
+      "step_db": -1.560297687926166,
+      "change": "same",
+      "before": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2026-01",
+      "step_db": 1.0100892370797396,
+      "change": "same",
+      "before": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -6.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 1.560297687926166,
+    "two_state_line": false,
+    "reversing_blocks": []
+   },
+   "steps": [
+    {
+     "month": "2022-10",
+     "step_db": 0.7701284606061556,
+     "boundary": false
+    },
+    {
+     "month": "2024-04",
+     "step_db": -0.9890394748591298,
+     "boundary": false
+    },
+    {
+     "month": "2025-04",
+     "step_db": -1.560297687926166,
+     "boundary": false
+    },
+    {
+     "month": "2026-01",
+     "step_db": 1.0100892370797396,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 23,
+   "scatter_db": 0.5040839999999994,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2019-10",
+     "level_db": 0.5446345137349228
+    },
+    {
+     "first_month": "2019-11",
+     "last_month": "2020-01",
+     "level_db": 2.704474247398534
+    },
+    {
+     "first_month": "2020-02",
+     "last_month": "2022-03",
+     "level_db": 0.7086918656936071
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2025-03",
+     "level_db": 1.6915324621856958
+    },
+    {
+     "first_month": "2025-04",
+     "last_month": "2025-05",
+     "level_db": 3.583459399252205
+    },
+    {
+     "first_month": "2025-06",
+     "last_month": "2025-08",
+     "level_db": 6.1497225277453245
+    },
+    {
+     "first_month": "2025-09",
+     "last_month": "2026-04",
+     "level_db": 1.7777906652378355
+    },
+    {
+     "first_month": "2026-05",
+     "last_month": "2026-08",
+     "level_db": 5.006763622184597
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2019-11",
+      "step_db": 2.159839733663611,
+      "change": "same",
+      "before": {
+       "median_bins": -144.5,
+       "mad_bins": 47.25,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -9.25,
+       "mad_bins": 14.25,
+       "months": 3
+      },
+      "edge_move_bins": 130.5,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2020-02",
+      "step_db": -1.995782381704927,
+      "change": "same",
+      "before": {
+       "median_bins": -9.25,
+       "mad_bins": 14.25,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -122.0,
+       "mad_bins": 68.5,
+       "months": 3
+      },
+      "edge_move_bins": 4.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2022-10",
+      "step_db": 0.9828405964920887,
+      "change": "same",
+      "before": {
+       "median_bins": -17.5,
+       "mad_bins": 22.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -13.0,
+       "mad_bins": 12.0,
+       "months": 3
+      },
+      "edge_move_bins": 31.5,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2025-04",
+      "step_db": 1.8919269370665093,
+      "change": "same",
+      "before": {
+       "median_bins": -30.0,
+       "mad_bins": 14.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -31.5,
+       "mad_bins": 11.875,
+       "months": 2
+      },
+      "edge_move_bins": 5.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2025-06",
+      "step_db": 2.5662631284931194,
+      "change": "same",
+      "before": {
+       "median_bins": -31.5,
+       "mad_bins": 11.875,
+       "months": 2
+      },
+      "after": {
+       "median_bins": -17.0,
+       "mad_bins": 6.0,
+       "months": 3
+      },
+      "edge_move_bins": 12.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2025-09",
+      "step_db": -4.371931862507489,
+      "change": "same",
+      "before": {
+       "median_bins": -17.0,
+       "mad_bins": 6.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -37.0,
+       "mad_bins": 19.5,
+       "months": 3
+      },
+      "edge_move_bins": 11.0,
+      "boundary": false
+     },
+     {
+      "block": 7,
+      "month": "2026-05",
+      "step_db": 3.228972956946761,
+      "change": "same",
+      "before": {
+       "median_bins": -39.0,
+       "mad_bins": 15.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -34.0,
+       "mad_bins": 15.0,
+       "months": 3
+      },
+      "edge_move_bins": 19.75,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 4.371931862507489,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2019-11",
+      "last_month": "2020-01",
+      "resolved": true
+     },
+     {
+      "first_month": "2025-04",
+      "last_month": "2025-05",
+      "resolved": false
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2019-11",
+     "step_db": 2.159839733663611,
+     "boundary": false
+    },
+    {
+     "month": "2020-02",
+     "step_db": -1.995782381704927,
+     "boundary": false
+    },
+    {
+     "month": "2022-10",
+     "step_db": 0.9828405964920887,
+     "boundary": false
+    },
+    {
+     "month": "2025-04",
+     "step_db": 1.8919269370665093,
+     "boundary": false
+    },
+    {
+     "month": "2025-06",
+     "step_db": 2.5662631284931194,
+     "boundary": false
+    },
+    {
+     "month": "2025-09",
+     "step_db": -4.371931862507489,
+     "boundary": false
+    },
+    {
+     "month": "2026-05",
+     "step_db": 3.228972956946761,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 24,
+   "scatter_db": 1.3195139999999903,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2026-04",
+     "level_db": 37.82699124030107
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [],
+    "calibration_db": 0.0,
+    "two_state_line": false,
+    "reversing_blocks": []
+   },
+   "steps": [],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-04"
+  },
+  {
+   "channel": 25,
+   "scatter_db": 0.50593725,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2020-01",
+     "level_db": 2.9156420675118877
+    },
+    {
+     "first_month": "2020-02",
+     "last_month": "2022-04",
+     "level_db": 1.153512475432442
+    },
+    {
+     "first_month": "2022-05",
+     "last_month": "2022-07",
+     "level_db": 3.8116930222179883
+    },
+    {
+     "first_month": "2022-08",
+     "last_month": "2025-05",
+     "level_db": 2.132741040059488
+    },
+    {
+     "first_month": "2025-06",
+     "last_month": "2025-08",
+     "level_db": 4.382784426422549
+    },
+    {
+     "first_month": "2025-09",
+     "last_month": "2026-04",
+     "level_db": 2.2084063428132583
+    },
+    {
+     "first_month": "2026-05",
+     "last_month": "2026-08",
+     "level_db": 4.780844365814462
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2020-02",
+      "step_db": -1.7621295920794458,
+      "change": "same",
+      "before": {
+       "median_bins": 1.5,
+       "mad_bins": 10.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 26.5,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2022-05",
+      "step_db": 2.6581805467855464,
+      "change": "same",
+      "before": {
+       "median_bins": -0.5,
+       "mad_bins": 23.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -3.5,
+       "mad_bins": 4.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2022-08",
+      "step_db": -1.6789519821585004,
+      "change": "same",
+      "before": {
+       "median_bins": -3.5,
+       "mad_bins": 4.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -3.5,
+       "mad_bins": 13.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2025-06",
+      "step_db": 2.250043386363061,
+      "change": "same",
+      "before": {
+       "median_bins": -2.5,
+       "mad_bins": 7.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -2.5,
+       "mad_bins": 5.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2025-09",
+      "step_db": -2.1743780836092905,
+      "change": "same",
+      "before": {
+       "median_bins": -2.5,
+       "mad_bins": 5.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -3.5,
+       "mad_bins": 11.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2026-05",
+      "step_db": 2.572438023001204,
+      "change": "same",
+      "before": {
+       "median_bins": -1.5,
+       "mad_bins": 6.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -2.5,
+       "mad_bins": 6.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 2.6581805467855464,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2022-05",
+      "last_month": "2022-07",
+      "resolved": true
+     },
+     {
+      "first_month": "2025-06",
+      "last_month": "2025-08",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2020-02",
+     "step_db": -1.7621295920794458,
+     "boundary": false
+    },
+    {
+     "month": "2022-05",
+     "step_db": 2.6581805467855464,
+     "boundary": false
+    },
+    {
+     "month": "2022-08",
+     "step_db": -1.6789519821585004,
+     "boundary": false
+    },
+    {
+     "month": "2025-06",
+     "step_db": 2.250043386363061,
+     "boundary": false
+    },
+    {
+     "month": "2025-09",
+     "step_db": -2.1743780836092905,
+     "boundary": false
+    },
+    {
+     "month": "2026-05",
+     "step_db": 2.572438023001204,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 26,
+   "scatter_db": 0.34099799999999997,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2019-11",
+     "level_db": 32.57548701222494
+    },
+    {
+     "first_month": "2019-12",
+     "last_month": "2020-01",
+     "level_db": 30.98118376467092
+    },
+    {
+     "first_month": "2020-02",
+     "last_month": "2022-10",
+     "level_db": 32.43866552994353
+    },
+    {
+     "first_month": "2022-11",
+     "last_month": "2023-03",
+     "level_db": 30.48028625884496
+    },
+    {
+     "first_month": "2023-04",
+     "last_month": "2025-04",
+     "level_db": 0.6559282252602738
+    },
+    {
+     "first_month": "2025-05",
+     "last_month": "2026-08",
+     "level_db": 1.5469149926385795
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2019-12",
+      "step_db": -1.59430324755402,
+      "change": "same",
+      "before": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2020-02",
+      "step_db": 1.4574817652726075,
+      "change": "same",
+      "before": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "after": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2022-11",
+      "step_db": -1.9583792710985684,
+      "change": "same",
+      "before": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2023-04",
+      "step_db": -29.824358033584687,
+      "change": "same",
+      "before": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 2.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2025-05",
+      "step_db": 0.8909867673783056,
+      "change": "same",
+      "before": {
+       "median_bins": -0.5,
+       "mad_bins": 8.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.5,
+       "mad_bins": 2.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 29.824358033584687,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2019-12",
+      "last_month": "2020-01",
+      "resolved": false
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2019-12",
+     "step_db": -1.59430324755402,
+     "boundary": false
+    },
+    {
+     "month": "2020-02",
+     "step_db": 1.4574817652726075,
+     "boundary": false
+    },
+    {
+     "month": "2022-11",
+     "step_db": -1.9583792710985684,
+     "boundary": false
+    },
+    {
+     "month": "2023-04",
+     "step_db": -29.824358033584687,
+     "boundary": true
+    },
+    {
+     "month": "2025-05",
+     "step_db": 0.8909867673783056,
+     "boundary": false
+    }
+   ],
+   "boundaries": [
+    "2023-04"
+   ],
+   "excursions": [],
+   "current_first_month": "2023-04",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 27,
+   "scatter_db": 1.2083190000000006,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2020-11",
+     "level_db": 40.781755014400225
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2026-08",
+     "level_db": 3.5271222696829194
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2022-10"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2022-10",
+      "step_db": -37.254632744717306,
+      "change": "steadiness",
+      "before": {
+       "median_bins": -7.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 3.5,
+       "months": 3
+      },
+      "edge_move_bins": 7.0,
+      "boundary": true
+     }
+    ],
+    "calibration_db": 0.0,
+    "two_state_line": false,
+    "reversing_blocks": []
+   },
+   "steps": [
+    {
+     "month": "2022-10",
+     "step_db": -37.254632744717306,
+     "boundary": true
+    }
+   ],
+   "boundaries": [
+    "2022-10"
+   ],
+   "excursions": [],
+   "current_first_month": "2022-10",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 28,
+   "scatter_db": 0.6078660000000001,
+   "blocks": [
+    {
+     "first_month": "2020-06",
+     "last_month": "2021-05",
+     "level_db": 9.183270057824934
+    },
+    {
+     "first_month": "2021-06",
+     "last_month": "2022-05",
+     "level_db": 10.379885656814915
+    },
+    {
+     "first_month": "2022-06",
+     "last_month": "2022-12",
+     "level_db": 11.485043951225265
+    },
+    {
+     "first_month": "2023-01",
+     "last_month": "2023-04",
+     "level_db": 9.782716823898856
+    },
+    {
+     "first_month": "2023-05",
+     "last_month": "2026-08",
+     "level_db": 11.203905042086578
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2021-06",
+      "step_db": 1.1966155989899807,
+      "change": "jump",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 3.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 3.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2022-06",
+      "step_db": 1.1051582944103497,
+      "change": "jump",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 3.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 3.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2023-01",
+      "step_db": -1.7023271273264093,
+      "change": "same",
+      "before": {
+       "median_bins": 3.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 3.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2023-05",
+      "step_db": 1.421188218187723,
+      "change": "same",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 1.7023271273264093,
+    "two_state_line": true,
+    "reversing_blocks": [
+     {
+      "first_month": "2023-01",
+      "last_month": "2023-04",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2021-06",
+     "step_db": 1.1966155989899807,
+     "boundary": false
+    },
+    {
+     "month": "2022-06",
+     "step_db": 1.1051582944103497,
+     "boundary": false
+    },
+    {
+     "month": "2023-01",
+     "step_db": -1.7023271273264093,
+     "boundary": false
+    },
+    {
+     "month": "2023-05",
+     "step_db": 1.421188218187723,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2020-06",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 29,
+   "scatter_db": 0.05189099999999988,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2022-04",
+     "level_db": -1.0245207517505828
+    },
+    {
+     "first_month": "2022-05",
+     "last_month": "2022-08",
+     "level_db": -0.7520060998090843
+    },
+    {
+     "first_month": "2022-09",
+     "last_month": "2024-04",
+     "level_db": -0.9801171784152595
+    },
+    {
+     "first_month": "2024-05",
+     "last_month": "2024-06",
+     "level_db": -0.6040152196344607
+    },
+    {
+     "first_month": "2024-07",
+     "last_month": "2025-03",
+     "level_db": -0.9320451044869429
+    },
+    {
+     "first_month": "2025-04",
+     "last_month": "2025-08",
+     "level_db": -0.6364625034962436
+    },
+    {
+     "first_month": "2025-09",
+     "last_month": "2026-04",
+     "level_db": -0.9734335267778278
+    },
+    {
+     "first_month": "2026-05",
+     "last_month": "2026-08",
+     "level_db": -0.4483972624477435
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2022-05",
+      "step_db": 0.2725146519414985,
+      "change": "same",
+      "before": {
+       "median_bins": -186.0,
+       "mad_bins": 45.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -14.5,
+       "mad_bins": 21.0,
+       "months": 3
+      },
+      "edge_move_bins": 154.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2022-09",
+      "step_db": -0.2281110786061752,
+      "change": "same",
+      "before": {
+       "median_bins": -14.5,
+       "mad_bins": 21.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -112.75,
+       "mad_bins": 86.0,
+       "months": 3
+      },
+      "edge_move_bins": 143.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2024-05",
+      "step_db": 0.3761019587807988,
+      "change": "same",
+      "before": {
+       "median_bins": -129.0,
+       "mad_bins": 99.25,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -13.25,
+       "mad_bins": 34.375,
+       "months": 2
+      },
+      "edge_move_bins": 93.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2024-07",
+      "step_db": -0.3280298848524822,
+      "change": "same",
+      "before": {
+       "median_bins": -13.25,
+       "mad_bins": 34.375,
+       "months": 2
+      },
+      "after": {
+       "median_bins": -113.0,
+       "mad_bins": 62.0,
+       "months": 3
+      },
+      "edge_move_bins": 149.5,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2025-04",
+      "step_db": 0.29558260099069933,
+      "change": "same",
+      "before": {
+       "median_bins": -127.75,
+       "mad_bins": 98.75,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -30.5,
+       "mad_bins": 76.0,
+       "months": 3
+      },
+      "edge_move_bins": 4.5,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2025-09",
+      "step_db": -0.33697102328158424,
+      "change": "same",
+      "before": {
+       "median_bins": -15.5,
+       "mad_bins": 28.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -172.0,
+       "mad_bins": 56.5,
+       "months": 3
+      },
+      "edge_move_bins": 156.5,
+      "boundary": false
+     },
+     {
+      "block": 7,
+      "month": "2026-05",
+      "step_db": 0.5250362643300843,
+      "change": "same",
+      "before": {
+       "median_bins": -112.0,
+       "mad_bins": 99.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -37.5,
+       "mad_bins": 61.75,
+       "months": 3
+      },
+      "edge_move_bins": 58.5,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 0.5250362643300843,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2022-05",
+      "last_month": "2022-08",
+      "resolved": true
+     },
+     {
+      "first_month": "2024-05",
+      "last_month": "2024-06",
+      "resolved": false
+     },
+     {
+      "first_month": "2025-04",
+      "last_month": "2025-08",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2022-05",
+     "step_db": 0.2725146519414985,
+     "boundary": false
+    },
+    {
+     "month": "2022-09",
+     "step_db": -0.2281110786061752,
+     "boundary": false
+    },
+    {
+     "month": "2024-05",
+     "step_db": 0.3761019587807988,
+     "boundary": false
+    },
+    {
+     "month": "2024-07",
+     "step_db": -0.3280298848524822,
+     "boundary": false
+    },
+    {
+     "month": "2025-04",
+     "step_db": 0.29558260099069933,
+     "boundary": false
+    },
+    {
+     "month": "2025-09",
+     "step_db": -0.33697102328158424,
+     "boundary": false
+    },
+    {
+     "month": "2026-05",
+     "step_db": 0.5250362643300843,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 30,
+   "scatter_db": 0.45033975000000126,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2019-03",
+     "level_db": 42.41655687282399
+    },
+    {
+     "first_month": "2019-04",
+     "last_month": "2019-04",
+     "level_db": 5.76
+    },
+    {
+     "first_month": "2019-05",
+     "last_month": "2020-11",
+     "level_db": 41.93389545146738
+    },
+    {
+     "first_month": "2022-11",
+     "last_month": "2023-09",
+     "level_db": 42.74942554448495
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2019-04",
+      "step_db": -36.65655687282399,
+      "change": "steadiness",
+      "before": {
+       "median_bins": -8.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -7.5,
+       "mad_bins": 45.5,
+       "months": 1
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2019-05",
+      "step_db": 36.17389545146738,
+      "change": "steadiness",
+      "before": {
+       "median_bins": -7.5,
+       "mad_bins": 45.5,
+       "months": 1
+      },
+      "after": {
+       "median_bins": -8.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2022-11",
+      "step_db": 0.8155300930175713,
+      "change": "same",
+      "before": {
+       "median_bins": -8.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -8.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 0.8155300930175713,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2019-04",
+      "last_month": "2019-04",
+      "resolved": false
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2019-04",
+     "step_db": -36.65655687282399,
+     "boundary": false
+    },
+    {
+     "month": "2019-05",
+     "step_db": 36.17389545146738,
+     "boundary": false
+    },
+    {
+     "month": "2022-11",
+     "step_db": 0.8155300930175713,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [
+    {
+     "first_month": "2019-04",
+     "last_month": "2019-04",
+     "months": 1,
+     "level_before_db": 42.41655687282399,
+     "level_after_db": 41.93389545146738
+    }
+   ],
+   "current_first_month": "2018-12",
+   "current_last_month": "2023-09"
+  },
+  {
+   "channel": 31,
+   "scatter_db": 0.4447800000000063,
+   "blocks": [
+    {
+     "first_month": "2019-06",
+     "last_month": "2019-11",
+     "level_db": 32.89866874390179
+    },
+    {
+     "first_month": "2019-12",
+     "last_month": "2020-01",
+     "level_db": 31.113403587114824
+    },
+    {
+     "first_month": "2020-02",
+     "last_month": "2020-12",
+     "level_db": 33.24529604747189
+    },
+    {
+     "first_month": "2021-01",
+     "last_month": "2021-02",
+     "level_db": 26.474275436238518
+    },
+    {
+     "first_month": "2021-03",
+     "last_month": "2021-10",
+     "level_db": 35.356861431068836
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2023-03",
+     "level_db": 33.193332856816134
+    },
+    {
+     "first_month": "2023-04",
+     "last_month": "2026-04",
+     "level_db": 34.30106452456226
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2019-12",
+      "step_db": -1.7852651567869628,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2020-02",
+      "step_db": 2.131892460357065,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2021-01",
+      "step_db": -6.7710206112333715,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2021-03",
+      "step_db": 8.882585994830318,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2022-10",
+      "step_db": -2.1635285742527017,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2023-04",
+      "step_db": 1.1077316677461226,
+      "change": "jump",
+      "before": {
+       "median_bins": -3.0,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -6.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 2.1635285742527017,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2019-12",
+      "last_month": "2020-01",
+      "resolved": false
+     },
+     {
+      "first_month": "2021-01",
+      "last_month": "2021-02",
+      "resolved": false
+     },
+     {
+      "first_month": "2022-10",
+      "last_month": "2023-03",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2019-12",
+     "step_db": -1.7852651567869628,
+     "boundary": false
+    },
+    {
+     "month": "2020-02",
+     "step_db": 2.131892460357065,
+     "boundary": false
+    },
+    {
+     "month": "2021-01",
+     "step_db": -6.7710206112333715,
+     "boundary": false
+    },
+    {
+     "month": "2021-03",
+     "step_db": 8.882585994830318,
+     "boundary": false
+    },
+    {
+     "month": "2022-10",
+     "step_db": -2.1635285742527017,
+     "boundary": false
+    },
+    {
+     "month": "2023-04",
+     "step_db": 1.1077316677461226,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2019-06",
+   "current_last_month": "2026-04"
+  },
+  {
+   "channel": 32,
+   "scatter_db": 0.47813849999999963,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2020-11",
+     "level_db": 46.620326917724185
+    },
+    {
+     "first_month": "2023-02",
+     "last_month": "2023-04",
+     "level_db": 1.9030404321881254
+    },
+    {
+     "first_month": "2023-05",
+     "last_month": "2026-04",
+     "level_db": -1.3548371621015056
+    },
+    {
+     "first_month": "2026-05",
+     "last_month": "2026-08",
+     "level_db": -0.3617434755373362
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2023-02"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2023-02",
+      "step_db": -44.71728648553606,
+      "change": "steadiness",
+      "before": {
+       "median_bins": -4.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 59.0,
+       "months": 3
+      },
+      "edge_move_bins": 7.0,
+      "boundary": true
+     },
+     {
+      "block": 2,
+      "month": "2023-05",
+      "step_db": -3.257877594289631,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 59.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -4.0,
+       "mad_bins": 7.5,
+       "months": 3
+      },
+      "edge_move_bins": 4.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2026-05",
+      "step_db": 0.9930936865641694,
+      "change": "same",
+      "before": {
+       "median_bins": -5.0,
+       "mad_bins": 13.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 6.0,
+       "months": 3
+      },
+      "edge_move_bins": 3.5,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 3.257877594289631,
+    "two_state_line": false,
+    "reversing_blocks": []
+   },
+   "steps": [
+    {
+     "month": "2023-02",
+     "step_db": -44.71728648553606,
+     "boundary": true
+    },
+    {
+     "month": "2023-05",
+     "step_db": -3.257877594289631,
+     "boundary": false
+    },
+    {
+     "month": "2026-05",
+     "step_db": 0.9930936865641694,
+     "boundary": false
+    }
+   ],
+   "boundaries": [
+    "2023-02"
+   ],
+   "excursions": [],
+   "current_first_month": "2023-02",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 33,
+   "scatter_db": 0.4818450000000042,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2020-02",
+     "level_db": 1.9033300679090401
+    },
+    {
+     "first_month": "2020-04",
+     "last_month": "2020-10",
+     "level_db": 0.9449953318043941
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2026-08",
+     "level_db": 32.94141557349575
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2022-10"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2020-04",
+      "step_db": -0.958334736104646,
+      "change": "same",
+      "before": {
+       "median_bins": 3.5,
+       "mad_bins": 12.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 9.5,
+       "mad_bins": 33.0,
+       "months": 3
+      },
+      "edge_move_bins": 103.5,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2022-10",
+      "step_db": 31.99642024169136,
+      "change": "steadiness",
+      "before": {
+       "median_bins": 1.0,
+       "mad_bins": 6.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -92.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "edge_move_bins": 92.0,
+      "boundary": true
+     }
+    ],
+    "calibration_db": 0.958334736104646,
+    "two_state_line": false,
+    "reversing_blocks": []
+   },
+   "steps": [
+    {
+     "month": "2020-04",
+     "step_db": -0.958334736104646,
+     "boundary": false
+    },
+    {
+     "month": "2022-10",
+     "step_db": 31.99642024169136,
+     "boundary": true
+    }
+   ],
+   "boundaries": [
+    "2022-10"
+   ],
+   "excursions": [],
+   "current_first_month": "2022-10",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 34,
+   "scatter_db": 0.6819959999999993,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2019-07",
+     "level_db": 1.7597862362019894
+    },
+    {
+     "first_month": "2019-08",
+     "last_month": "2019-11",
+     "level_db": 7.644176232112804
+    },
+    {
+     "first_month": "2019-12",
+     "last_month": "2020-02",
+     "level_db": 9.582494533934879
+    },
+    {
+     "first_month": "2020-04",
+     "last_month": "2020-07",
+     "level_db": 7.098817427236975
+    },
+    {
+     "first_month": "2020-08",
+     "last_month": "2021-01",
+     "level_db": 9.191116619917565
+    },
+    {
+     "first_month": "2021-02",
+     "last_month": "2021-07",
+     "level_db": 3.685166262307943
+    },
+    {
+     "first_month": "2021-08",
+     "last_month": "2021-09",
+     "level_db": 5.742875536010771
+    },
+    {
+     "first_month": "2021-10",
+     "last_month": "2022-07",
+     "level_db": 3.0177374028345825
+    },
+    {
+     "first_month": "2022-08",
+     "last_month": "2026-07",
+     "level_db": 6.926607857604106
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2019-08"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2019-08",
+      "step_db": 5.884389995910815,
+      "change": "jump",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 5.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 4.0,
+      "boundary": true
+     },
+     {
+      "block": 2,
+      "month": "2019-12",
+      "step_db": 1.9383183018220747,
+      "change": "same",
+      "before": {
+       "median_bins": 5.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 5.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2020-04",
+      "step_db": -2.483677106697904,
+      "change": "same",
+      "before": {
+       "median_bins": 5.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 4.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2020-08",
+      "step_db": 2.0922991926805903,
+      "change": "same",
+      "before": {
+       "median_bins": 4.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 3.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2021-02",
+      "step_db": -5.505950357609622,
+      "change": "same",
+      "before": {
+       "median_bins": 4.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 4.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2021-08",
+      "step_db": 2.0577092737028275,
+      "change": "same",
+      "before": {
+       "median_bins": 2.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 2.0,
+       "mad_bins": 0.75,
+       "months": 2
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 7,
+      "month": "2021-10",
+      "step_db": -2.725138133176188,
+      "change": "same",
+      "before": {
+       "median_bins": 2.0,
+       "mad_bins": 0.75,
+       "months": 2
+      },
+      "after": {
+       "median_bins": 2.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 8,
+      "month": "2022-08",
+      "step_db": 3.908870454769523,
+      "change": "same",
+      "before": {
+       "median_bins": 0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -0.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.5,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 5.505950357609622,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2019-12",
+      "last_month": "2020-02",
+      "resolved": true
+     },
+     {
+      "first_month": "2021-08",
+      "last_month": "2021-09",
+      "resolved": false
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2019-08",
+     "step_db": 5.884389995910815,
+     "boundary": true
+    },
+    {
+     "month": "2019-12",
+     "step_db": 1.9383183018220747,
+     "boundary": false
+    },
+    {
+     "month": "2020-04",
+     "step_db": -2.483677106697904,
+     "boundary": false
+    },
+    {
+     "month": "2020-08",
+     "step_db": 2.0922991926805903,
+     "boundary": false
+    },
+    {
+     "month": "2021-02",
+     "step_db": -5.505950357609622,
+     "boundary": false
+    },
+    {
+     "month": "2021-08",
+     "step_db": 2.0577092737028275,
+     "boundary": false
+    },
+    {
+     "month": "2021-10",
+     "step_db": -2.725138133176188,
+     "boundary": false
+    },
+    {
+     "month": "2022-08",
+     "step_db": 3.908870454769523,
+     "boundary": false
+    }
+   ],
+   "boundaries": [
+    "2019-08"
+   ],
+   "excursions": [],
+   "current_first_month": "2019-08",
+   "current_last_month": "2026-07"
+  },
+  {
+   "channel": 35,
+   "scatter_db": 0.3335849999999968,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2021-10",
+     "level_db": -1.492585090514411
+    },
+    {
+     "first_month": "2021-11",
+     "last_month": "2022-08",
+     "level_db": 28.908117309082392
+    },
+    {
+     "first_month": "2022-09",
+     "last_month": "2022-09",
+     "level_db": -1.4675
+    },
+    {
+     "first_month": "2022-10",
+     "last_month": "2023-01",
+     "level_db": 28.02536884689529
+    },
+    {
+     "first_month": "2023-02",
+     "last_month": "2023-05",
+     "level_db": 29.46644018611927
+    },
+    {
+     "first_month": "2023-06",
+     "last_month": "2024-01",
+     "level_db": 28.31896499559538
+    },
+    {
+     "first_month": "2024-02",
+     "last_month": "2026-08",
+     "level_db": 29.08690152953709
+    }
+   ],
+   "line": {
+    "boundaries": [
+     "2021-11"
+    ],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2021-11",
+      "step_db": 30.400702399596803,
+      "change": "steadiness",
+      "before": {
+       "median_bins": 3.5,
+       "mad_bins": 9.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -13.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 19.0,
+      "boundary": true
+     },
+     {
+      "block": 2,
+      "month": "2022-09",
+      "step_db": -30.375617309082394,
+      "change": "steadiness",
+      "before": {
+       "median_bins": -13.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 2.5,
+       "mad_bins": 4.0,
+       "months": 1
+      },
+      "edge_move_bins": 14.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2022-10",
+      "step_db": 29.49286884689529,
+      "change": "steadiness",
+      "before": {
+       "median_bins": 2.5,
+       "mad_bins": 4.0,
+       "months": 1
+      },
+      "after": {
+       "median_bins": -12.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 16.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2023-02",
+      "step_db": 1.4410713392239813,
+      "change": "same",
+      "before": {
+       "median_bins": -12.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -11.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 5,
+      "month": "2023-06",
+      "step_db": -1.1474751905238918,
+      "change": "jump",
+      "before": {
+       "median_bins": -11.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -8.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 2.0,
+      "boundary": false
+     },
+     {
+      "block": 6,
+      "month": "2024-02",
+      "step_db": 0.767936533941711,
+      "change": "drift",
+      "before": {
+       "median_bins": -9.5,
+       "mad_bins": 1.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -12.5,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 1.4410713392239813,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2022-09",
+      "last_month": "2022-09",
+      "resolved": false
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2021-11",
+     "step_db": 30.400702399596803,
+     "boundary": true
+    },
+    {
+     "month": "2022-09",
+     "step_db": -30.375617309082394,
+     "boundary": false
+    },
+    {
+     "month": "2022-10",
+     "step_db": 29.49286884689529,
+     "boundary": false
+    },
+    {
+     "month": "2023-02",
+     "step_db": 1.4410713392239813,
+     "boundary": false
+    },
+    {
+     "month": "2023-06",
+     "step_db": -1.1474751905238918,
+     "boundary": false
+    },
+    {
+     "month": "2024-02",
+     "step_db": 0.767936533941711,
+     "boundary": false
+    }
+   ],
+   "boundaries": [
+    "2021-11"
+   ],
+   "excursions": [
+    {
+     "first_month": "2022-09",
+     "last_month": "2022-09",
+     "months": 1,
+     "level_before_db": 28.908117309082392,
+     "level_after_db": 28.02536884689529
+    }
+   ],
+   "current_first_month": "2021-11",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 36,
+   "scatter_db": 0.8117235000000017,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2019-03",
+     "level_db": 11.325031106580216
+    },
+    {
+     "first_month": "2019-04",
+     "last_month": "2019-05",
+     "level_db": 8.882004732927928
+    },
+    {
+     "first_month": "2019-06",
+     "last_month": "2019-11",
+     "level_db": 14.006288298539847
+    },
+    {
+     "first_month": "2019-12",
+     "last_month": "2023-04",
+     "level_db": 12.437322489417033
+    },
+    {
+     "first_month": "2023-05",
+     "last_month": "2026-08",
+     "level_db": 13.675682790338843
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2019-04",
+      "step_db": -2.4430263736522875,
+      "change": "same",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2019-06",
+      "step_db": 5.124283565611918,
+      "change": "same",
+      "before": {
+       "median_bins": -1.0,
+       "mad_bins": 0.0,
+       "months": 2
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 1.0,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2019-12",
+      "step_db": -1.5689658091228136,
+      "change": "same",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 4,
+      "month": "2023-05",
+      "step_db": 1.2383603009218103,
+      "change": "same",
+      "before": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "after": {
+       "median_bins": 0.0,
+       "mad_bins": 0.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 1.5689658091228136,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2019-04",
+      "last_month": "2019-05",
+      "resolved": false
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2019-04",
+     "step_db": -2.4430263736522875,
+     "boundary": false
+    },
+    {
+     "month": "2019-06",
+     "step_db": 5.124283565611918,
+     "boundary": false
+    },
+    {
+     "month": "2019-12",
+     "step_db": -1.5689658091228136,
+     "boundary": false
+    },
+    {
+     "month": "2023-05",
+     "step_db": 1.2383603009218103,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  },
+  {
+   "channel": 37,
+   "scatter_db": 0.007413000000000006,
+   "blocks": [
+    {
+     "first_month": "2018-12",
+     "last_month": "2020-09",
+     "level_db": 0.1980129040643951
+    },
+    {
+     "first_month": "2020-10",
+     "last_month": "2024-04",
+     "level_db": 0.2060897603582077
+    },
+    {
+     "first_month": "2024-05",
+     "last_month": "2025-05",
+     "level_db": 0.22611633252938154
+    },
+    {
+     "first_month": "2025-06",
+     "last_month": "2026-08",
+     "level_db": 0.21411776443919783
+    }
+   ],
+   "line": {
+    "boundaries": [],
+    "edges": [
+     {
+      "block": 1,
+      "month": "2020-10",
+      "step_db": 0.008076856293812607,
+      "change": "same",
+      "before": {
+       "median_bins": -201.5,
+       "mad_bins": 26.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -196.0,
+       "mad_bins": 25.0,
+       "months": 3
+      },
+      "edge_move_bins": 0.0,
+      "boundary": false
+     },
+     {
+      "block": 2,
+      "month": "2024-05",
+      "step_db": 0.020026572171173845,
+      "change": "same",
+      "before": {
+       "median_bins": -195.5,
+       "mad_bins": 28.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -182.75,
+       "mad_bins": 37.5,
+       "months": 3
+      },
+      "edge_move_bins": 8.5,
+      "boundary": false
+     },
+     {
+      "block": 3,
+      "month": "2025-06",
+      "step_db": -0.011998568090183709,
+      "change": "same",
+      "before": {
+       "median_bins": -191.75,
+       "mad_bins": 24.5,
+       "months": 3
+      },
+      "after": {
+       "median_bins": -189.25,
+       "mad_bins": 28.5,
+       "months": 3
+      },
+      "edge_move_bins": 0.5,
+      "boundary": false
+     }
+    ],
+    "calibration_db": 0.020026572171173845,
+    "two_state_line": false,
+    "reversing_blocks": [
+     {
+      "first_month": "2024-05",
+      "last_month": "2025-05",
+      "resolved": true
+     }
+    ]
+   },
+   "steps": [
+    {
+     "month": "2020-10",
+     "step_db": 0.008076856293812607,
+     "boundary": false
+    },
+    {
+     "month": "2024-05",
+     "step_db": 0.020026572171173845,
+     "boundary": false
+    },
+    {
+     "month": "2025-06",
+     "step_db": -0.011998568090183709,
+     "boundary": false
+    }
+   ],
+   "boundaries": [],
+   "excursions": [],
+   "current_first_month": "2018-12",
+   "current_last_month": "2026-08"
+  }
+ ],
+ "line_identity": {
+  "marker_half_width_bins": 2,
+  "local_months": 3
+ },
+ "monthly_levels_sha256": "24523c9224c66e62fa6099b79b1157a6ffdf0f57e2b3f22ea0e7c0c8d8bcd706",
+ "monthly_lines_sha256": "3417e51a79b9771496adba44b8bebb0c787155f84420bf84b9f435cbd164084d"
+}

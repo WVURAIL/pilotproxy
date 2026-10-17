@@ -28,15 +28,19 @@ the fine export adds each frame's exact minimum keep word
     pilot-proxy characterize fine-histogram-frames --frames <frames> --output <fine>
 
 **3. Eras.** Each channel's monthly level from the era review (2026-10-03),
-cut only where a transmitter switches on or off
-(`characterization/era_boundaries.py`): Bayesian Blocks change points whose step
-lies above the largest gap in the step sizes over all channels, an excursion
-that returns to its prior level merged away. The era list of record is
-`projects/chime_atsc/eras/on_off_2026-10-14/eras.json`, with its monthly levels
-and blocks beside it. The earlier list, `power_eras_2026-10-04.json`
-(`characterization/power_eras.py`, `power_era_review.py`), is kept for the record.
+cut where a transmitter switches on or off and where the pilot line's identity
+changes (`characterization/era_boundaries.py`): Bayesian Blocks change points
+whose step lies above the largest gap in the step sizes over all channels, an
+excursion that returns to its prior level merged away; and, with
+`--line-identity`, a block edge where a steady line jumps by more than the
+marker half-width in one month, or a steady line becomes unsteady, backed by a
+level step larger than any the same line makes. The era list of record is
+`projects/chime_atsc/eras/line_identity_2026-10-17/eras.json`, with its monthly
+levels, line offsets and blocks beside it; `on_off_2026-10-14/` is the list
+without the line test, and the earlier `power_eras_2026-10-04.json`
+(`characterization/power_eras.py`, `power_era_review.py`) is kept for the record.
 
-    pilot-proxy characterize era-boundaries --review <era review> --previous <earlier era list> --output <eras>
+    pilot-proxy characterize era-boundaries --review <era review> --line-identity --previous <earlier era list> --output <eras>
 
 **4. Score cache and knee.** Per channel, the current-era frames with their
 words and equal-event weights (`characterization/score_cache.py`). The knee

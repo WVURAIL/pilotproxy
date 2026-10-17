@@ -115,3 +115,79 @@ def test_the_tool_writes_the_era_list(tmp_path, capsys):
     for name in ("monthly_levels.json", "blocks.json", "eras.json"):
         assert (tmp_path / "out" / name).read_bytes() == (RECORD / name).read_bytes()
     assert "ch37: 2018-12 .. 2026-08  boundaries -" in capsys.readouterr().out
+
+
+# ---- the line-identity option --------------------------------------------------------------------------------------
+
+def _lines(offsets_by_month: dict[int, float], mad: float = 0.0) -> dict[int, dict]:
+    return {m: dict(median_bins=v, mad_bins=mad, events=40) for m, v in offsets_by_month.items()}
+
+
+def _blocks(spec):
+    """[(first, last, level), ...] -> Block list."""
+    return [e.Block(a, b, lvl) for a, b, lvl in spec]
+
+
+def test_monthly_lines_round_to_the_half_bin_grid_and_pool_small_months():
+    month = np.r_[np.full(40, 10), np.full(3, 11)]
+    offset = np.r_[np.full(40, -99.0), np.full(3, 5.0)]
+    rows = e.monthly_lines(month, offset, 23.84)
+    assert set(rows) == {10}
+    assert rows[10]["median_bins"] == -4.0 and rows[10]["mad_bins"] == 0.0 and rows[10]["events"] == 40
+
+
+def test_a_steady_line_that_jumps_more_than_the_half_width_cuts_when_the_level_backs_it():
+    blocks = _blocks([(0, 23, 20.0), (24, 47, 12.0)])
+    lines = _lines({m: -4.0 for m in range(24)} | {m: 0.0 for m in range(24, 48)})
+    cut, evidence = e.line_boundaries(blocks, lines, upper=29.0)
+    assert cut == [1] and evidence["edges"][0]["change"] == "jump" and evidence["calibration_db"] == 0.0
+
+
+def test_drift_one_bin_per_month_never_cuts():
+    blocks = _blocks([(0, 23, 20.0), (24, 47, 12.0)])
+    lines = _lines({m: -4.0 + 0.5 * max(0, m - 20) for m in range(48)})   # creeps half a bin a month from month 20
+    cut, evidence = e.line_boundaries(blocks, lines, upper=29.0)
+    assert cut == [] and evidence["edges"][0]["change"] in ("drift", "same")
+
+
+def test_a_jump_needs_a_level_step_above_the_same_line_steps():
+    blocks = _blocks([(0, 11, 20.0), (12, 23, 25.0), (24, 35, 20.0), (36, 47, 21.0)])   # the same line steps 5 dB twice
+    lines = _lines({m: -4.0 for m in range(36)} | {m: 0.0 for m in range(36, 48)})
+    cut, evidence = e.line_boundaries(blocks, lines, upper=29.0)
+    assert evidence["calibration_db"] == 5.0 and cut == []
+
+
+def test_edges_of_a_reversing_block_never_cut_and_short_ones_do_not_calibrate():
+    blocks = _blocks([(0, 23, 30.0), (24, 25, 12.0), (26, 47, 31.0), (48, 71, 36.0)])   # a two-month dip, then a new line
+    lines = _lines({m: -1.5 for m in range(48)} | {m: 1.5 for m in range(48, 72)})
+    cut, evidence = e.line_boundaries(blocks, lines, upper=29.0)
+    assert evidence["reversing_blocks"] == [dict(first_month="0002-01", last_month="0002-02", resolved=False)]
+    assert evidence["calibration_db"] == 0.0 and cut == [3]
+
+
+def test_a_steady_line_becoming_unsteady_cuts():
+    blocks = _blocks([(0, 23, 20.0), (24, 47, 24.0)])
+    lines = _lines({m: -1.0 for m in range(24)}, mad=3.0) | _lines({m: -1.0 for m in range(24, 48)}, mad=0.0)
+    cut, evidence = e.line_boundaries(blocks, lines, upper=29.0)
+    assert cut == [1] and evidence["edges"][0]["change"] == "steadiness"
+
+
+def test_a_two_state_line_hands_over_without_a_boundary():
+    lines = _lines({m: (0.0 if (m // 6) % 2 == 0 else 3.0) for m in range(48)})
+    assert e.two_state_line(lines, 2)
+    blocks = _blocks([(0, 5, 20.0), (6, 11, 21.2), (12, 17, 20.0), (18, 47, 21.1)])
+    cut, evidence = e.line_boundaries(blocks, lines, upper=29.0)
+    assert cut == [] and all(x["change"] == "jump" for x in evidence["edges"])
+    assert not e.two_state_line(_lines({m: float(m // 6) for m in range(48)}), 2)   # a staircase is not two-state
+
+
+def test_era_list_names_the_line_basis():
+    result = dict(channels=[dict(channel=20, current_first_month="2022-09", current_last_month="2026-06",
+                                 boundaries=["2022-09"], line=dict(boundaries=["2022-09"]))])
+    rows = e.era_list(result, dict(path="x", sha256="y"))["channels"]
+    assert rows[0]["era_basis"] == "line_identity_transition" and rows[0]["current_months"][0] == "2022-09"
+
+
+def test_the_marker_half_width_is_the_detector_s():
+    from pilot_proxy.detectors.narrowband_marker.anchors import DESIGNATED_HALF_WIDTH
+    assert e.MARKER_HALF_WIDTH_BINS == DESIGNATED_HALF_WIDTH

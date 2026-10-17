@@ -3,6 +3,21 @@
 All notable changes to PilotProxy are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Era boundaries by the pilot line's identity
+
+`characterize era-boundaries --line-identity` also cuts an era where the pilot
+line's identity changes: a steady line (monthly offsets within one fine bin)
+that jumps by more than the marker half-width in one month, or a steady line
+that becomes unsteady, backed by a level step larger than any step the same
+line makes on that channel. Drift of one bin per month never cuts, nor does a
+hand-over between the two offsets of a two-state line, nor an edge of a
+reversing block. Without the flag the on/off list of 2026-10-14 reproduces byte
+for byte. The era list of record moves to
+`projects/chime_atsc/eras/line_identity_2026-10-17/`: channels 17, 18, 20 and
+34 start later (2022-10, 2024-08, 2022-09, 2019-08); the other twenty are
+unchanged.
+
+
 ## Per-pilot product schema v5 --- railed and fill counts per frame
 
 `chime-scan` now records `railed_sample_count` and `fill_sample_count` per

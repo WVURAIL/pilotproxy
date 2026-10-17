@@ -25,7 +25,8 @@ FCC/ISED transmitter census and RFIsher's forecast tolerance table) is not liste
 | `projects/chime_atsc/eras/author_eras_2026-09-23.json` | Era boundaries per channel, dated from the archive's monthly spectrograms |
 | `projects/chime_atsc/eras/transmitter_off.json` | Transmitter on/off months per channel, read from the archive's pilot series, with the external record found for each |
 | `projects/chime_atsc/eras/power_eras_2026-10-04.json` | Power-era proposals per channel (current-era months) of the 2026-10-04 threshold release |
-| `projects/chime_atsc/eras/on_off_2026-10-14/` (3 files) | Era list of record: monthly pilot levels per channel from the 2026-10-03 era review (`monthly_levels.json`), their Bayesian Blocks (`blocks.json`) and the on/off eras (`eras.json`) |
+| `projects/chime_atsc/eras/on_off_2026-10-14/` (3 files) | The on/off era list of 2026-10-14: monthly pilot levels per channel from the 2026-10-03 era review (`monthly_levels.json`), their Bayesian Blocks (`blocks.json`) and the on/off eras (`eras.json`) |
+| `projects/chime_atsc/eras/line_identity_2026-10-17/` (4 files) | Era list of record: the same levels and blocks with the pilot line's monthly offsets (`monthly_lines.json`) and the eras cut by on/off steps and by the line's identity (`eras.json`) |
 | `src/pilot_proxy/characterization/data/coherent_fraction.json` | Coherent fraction of the DTV shelf, per band and its median, measured from the 2026 matched capture |
 | `src/pilot_proxy/characterization/data/coherent_gain.json` | Coherence-gain rule and the frame count of the capture dumps that measured the coherent fraction |
 | `tests/data/threshold_decisions_2026-10-12.json` | Decisions of record per channel (2026-10-12): deployed word or reason not deployed, shelf, exclusions and the coherent-fraction inputs; a test golden for the deployment compiler |
@@ -70,6 +71,7 @@ projects/chime_atsc/eras/author_eras_2026-09-23.json
 projects/chime_atsc/eras/transmitter_off.json
 projects/chime_atsc/eras/power_eras_2026-10-04.json
 projects/chime_atsc/eras/on_off_2026-10-14/
+projects/chime_atsc/eras/line_identity_2026-10-17/
 src/pilot_proxy/characterization/data/coherent_fraction.json
 src/pilot_proxy/characterization/data/coherent_gain.json
 tests/data/threshold_decisions_2026-10-12.json

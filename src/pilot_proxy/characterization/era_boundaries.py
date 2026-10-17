@@ -22,8 +22,9 @@ propagation do not split blocks.
 
 With ``--line-identity`` the pilot line's identity also cuts, from the per-event
 peak offsets the review carries. In local windows of three covered months on each
-side of a block edge, with h the marker half-width in fine bins (the detector's
-``DESIGNATED_HALF_WIDTH``), a line is steady when the median absolute deviation
+side of a block edge, with h the marker half-width (the detector's
+``DESIGNATED_HALF_WIDTH`` fine bins, 23.84 Hz, one bin of the review's grid), a
+line is steady when the median absolute deviation
 of its monthly offsets is at most h/2 and unsteady above h. The edge is a line
 boundary when (a) both lines are steady and the local median offset moves by
 more than h and the move between the last and first covered months exceeds
@@ -56,6 +57,8 @@ from pathlib import Path
 
 import numpy as np
 
+from pilot_proxy.products.reader import FINE_BIN_HZ
+
 P0 = 0.05                 # false-positive probability of each change point
 MIN_EVENTS = 5            # a month with fewer events takes the channel's pooled spread
 CODE_QUANTUM_DB = 0.005   # the stored dB codes are quantized at this step
@@ -65,7 +68,8 @@ MEDIAN_ERROR = 1.2533     # sqrt(pi / 2): error of a median per error of a mean
 CHANNELS = tuple(range(14, 38))
 SCHEMA = "robust-power-era-threshold-cohorts-v1"
 LOCAL_MONTHS = 3          # covered months on each side of a block edge the line is judged in
-MARKER_HALF_WIDTH_BINS = 2  # the detector's marker half-width h (narrowband_marker.anchors.DESIGNATED_HALF_WIDTH; pinned by a test)
+MARKER_HALF_WIDTH_FINE_BINS = 2   # the detector's marker half-width h (narrowband_marker.anchors.DESIGNATED_HALF_WIDTH; pinned by a test)
+MARKER_HALF_WIDTH_HZ = MARKER_HALF_WIDTH_FINE_BINS * FINE_BIN_HZ   # 23.84 Hz: the detector's fine bins are half the review's
 
 
 def month_index(month: str) -> int:
@@ -268,8 +272,7 @@ def line_edges(channel_blocks: list[Block], lines: dict[int, dict], h: float) ->
     return edges
 
 
-def line_boundaries(channel_blocks: list[Block], lines: dict[int, dict], upper: float,
-                    h: float = MARKER_HALF_WIDTH_BINS) -> tuple[list[int], dict]:
+def line_boundaries(channel_blocks: list[Block], lines: dict[int, dict], upper: float, h: float) -> tuple[list[int], dict]:
     """Block indices that start an era by the line's identity, and the evidence (edges, reversing blocks, calibration)."""
     reversing = reversing_blocks(channel_blocks, upper)
     touching = {j for r in reversing for j in (r, r + 1)}
@@ -292,7 +295,8 @@ def line_boundaries(channel_blocks: list[Block], lines: dict[int, dict], upper: 
                                             resolved=j not in unresolved) for j in reversing])
 
 
-def era_boundaries(levels: dict[int, list[dict]], p0: float = P0, lines: dict[int, dict[int, dict]] | None = None) -> dict:
+def era_boundaries(levels: dict[int, list[dict]], p0: float = P0, lines: dict[int, dict[int, dict]] | None = None,
+                   h_bins: float | None = None) -> dict:
     """Blocks, the computed split, the boundaries and the current era of every channel."""
     fitted = {ch: blocks(rows, p0) for ch, rows in levels.items()}
     every_step = [d for b, _ in fitted.values() for d in steps(b)]
@@ -303,7 +307,7 @@ def era_boundaries(levels: dict[int, list[dict]], p0: float = P0, lines: dict[in
         row = dict(channel=ch, scatter_db=scatter,
                    blocks=[dict(first_month=month_name(x.first), last_month=month_name(x.last), level_db=x.level) for x in b])
         if lines is not None:
-            line_cut, evidence = line_boundaries(b, lines[ch], upper)
+            line_cut, evidence = line_boundaries(b, lines[ch], upper, h_bins)
             row["line"] = dict(boundaries=[month_name(b[k].first) for k in line_cut], **evidence)
             cut = sorted(set(cut) | set(line_cut))
         start = b[cut[-1]].first if cut else b[0].first
@@ -315,7 +319,8 @@ def era_boundaries(levels: dict[int, list[dict]], p0: float = P0, lines: dict[in
         channels.append(row)
     result = dict(p0=p0, step_count=len(every_step), split=dict(largest_below_db=lower, smallest_above_db=upper), channels=channels)
     if lines is not None:
-        result.update(line_identity=dict(marker_half_width_bins=MARKER_HALF_WIDTH_BINS, local_months=LOCAL_MONTHS))
+        result.update(line_identity=dict(marker_half_width_hz=MARKER_HALF_WIDTH_HZ, marker_half_width_review_bins=h_bins,
+                                         local_months=LOCAL_MONTHS))
     return result
 
 
@@ -344,16 +349,19 @@ def _sha(path: Path) -> str:
 def levels_from_review(review: Path, with_lines: bool = False):
     """Each channel's monthly levels from the era review and the sha256 of every file read; with ``with_lines``,
     also each channel's monthly line offsets (the review's per-event peak offsets, in fine bins)."""
-    levels, lines, read = {}, {}, {}
+    levels, lines, read, bin_hz = {}, {}, {}, None
     for ch in CHANNELS:
         path = Path(review) / "data" / f"ch{ch}.npz"
         read[f"data/ch{ch}.npz"] = _sha(path)
         with np.load(path, allow_pickle=False) as z:
             levels[ch] = monthly_levels(z["event_month"], z["event_peak_db"], z["months"], z["frame_counts"])
             if with_lines:
-                bin_hz = float(z["sky_offset_hz"][1] - z["sky_offset_hz"][0])
+                step = float(z["sky_offset_hz"][1] - z["sky_offset_hz"][0])
+                if bin_hz is not None and abs(step - bin_hz) > 1e-9:
+                    raise ValueError("the review's offset grid differs between channels")
+                bin_hz = step
                 lines[ch] = monthly_lines(z["event_month"], z["event_peak_offset_hz"], bin_hz)
-    return (levels, lines, read) if with_lines else (levels, read)
+    return (levels, lines, read, MARKER_HALF_WIDTH_HZ / bin_hz) if with_lines else (levels, read)
 
 
 def _write(path: Path, value) -> str:
@@ -385,10 +393,10 @@ def main(argv=None) -> int:
     parser.add_argument("--line-identity", action="store_true", help="also cut where the pilot line's identity changes (needs --review)")
     parser.add_argument("--output", type=Path, required=True, help="new output directory")
     args = parser.parse_args(argv)
-    lines = None
+    lines, h_bins = None, None
     if args.review:
         if args.line_identity:
-            levels, lines, read = levels_from_review(args.review, with_lines=True)
+            levels, lines, read, h_bins = levels_from_review(args.review, with_lines=True)
         else:
             levels, read = levels_from_review(args.review)
         header = dict(source=f"era review {args.review.name}", source_sha256=read)
@@ -402,7 +410,7 @@ def main(argv=None) -> int:
     header["spread"] = f"{MAD_TO_SIGMA} x median absolute deviation of the month's event levels; null below {MIN_EVENTS} events"
     args.output.mkdir(parents=True, exist_ok=False)
     level_sha = _write_levels(args.output / "monthly_levels.json", header, levels)
-    result = era_boundaries(levels, args.p0, lines)
+    result = era_boundaries(levels, args.p0, lines, h_bins)
     result["monthly_levels_sha256"] = level_sha
     if lines is not None:
         result["monthly_lines_sha256"] = _write(args.output / "monthly_lines.json",

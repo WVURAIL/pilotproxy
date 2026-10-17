@@ -112,7 +112,7 @@
       "block": 4,
       "month": "2022-09",
       "step_db": -2.9983791658537635,
-      "change": "same",
+      "change": "steadiness",
       "before": {
        "median_bins": 0.5,
        "mad_bins": 0.5,
@@ -130,7 +130,7 @@
       "block": 5,
       "month": "2025-05",
       "step_db": 5.931152105313884,
-      "change": "steadiness",
+      "change": "same",
       "before": {
        "median_bins": 0.5,
        "mad_bins": 3.75,
@@ -166,7 +166,7 @@
       "block": 7,
       "month": "2026-05",
       "step_db": 5.3998542267787695,
-      "change": "steadiness",
+      "change": "same",
       "before": {
        "median_bins": 0.5,
        "mad_bins": 2.5,
@@ -181,7 +181,7 @@
       "boundary": false
      }
     ],
-    "calibration_db": 5.643667846874203,
+    "calibration_db": 5.931152105313884,
     "two_state_line": false,
     "reversing_blocks": [
      {
@@ -321,7 +321,7 @@
       "block": 3,
       "month": "2023-09",
       "step_db": 1.7159195375540062,
-      "change": "same",
+      "change": "jump",
       "before": {
        "median_bins": 0.0,
        "mad_bins": 0.0,
@@ -372,7 +372,7 @@
       "boundary": false
      }
     ],
-    "calibration_db": 1.7159195375540062,
+    "calibration_db": 0.9773766207668082,
     "two_state_line": false,
     "reversing_blocks": [
      {
@@ -716,7 +716,7 @@
       "block": 5,
       "month": "2024-02",
       "step_db": 1.3377273690523594,
-      "change": "drift",
+      "change": "same",
       "before": {
        "median_bins": 0.5,
        "mad_bins": 1.0,
@@ -843,7 +843,7 @@
      }
     ],
     "calibration_db": 0.0,
-    "two_state_line": true,
+    "two_state_line": false,
     "reversing_blocks": []
    },
    "steps": [
@@ -891,16 +891,13 @@
     }
    ],
    "line": {
-    "boundaries": [
-     "2022-10",
-     "2024-12"
-    ],
+    "boundaries": [],
     "edges": [
      {
       "block": 1,
       "month": "2022-10",
       "step_db": -2.9708203451984403,
-      "change": "jump",
+      "change": "same",
       "before": {
        "median_bins": -38.0,
        "mad_bins": 0.0,
@@ -912,13 +909,13 @@
        "months": 3
       },
       "edge_move_bins": 38.0,
-      "boundary": true
+      "boundary": false
      },
      {
       "block": 2,
       "month": "2024-02",
       "step_db": 0.7438641135510053,
-      "change": "drift",
+      "change": "same",
       "before": {
        "median_bins": -1.0,
        "mad_bins": 1.0,
@@ -954,7 +951,7 @@
       "block": 4,
       "month": "2024-12",
       "step_db": -32.91382760123459,
-      "change": "steadiness",
+      "change": "same",
       "before": {
        "median_bins": 1.0,
        "mad_bins": 1.0,
@@ -966,10 +963,10 @@
        "months": 3
       },
       "edge_move_bins": 8.75,
-      "boundary": true
+      "boundary": false
      }
     ],
-    "calibration_db": 1.4530437683525719,
+    "calibration_db": 32.91382760123459,
     "two_state_line": false,
     "reversing_blocks": []
    },
@@ -977,7 +974,7 @@
     {
      "month": "2022-10",
      "step_db": -2.9708203451984403,
-     "boundary": true
+     "boundary": false
     },
     {
      "month": "2024-02",
@@ -996,7 +993,6 @@
     }
    ],
    "boundaries": [
-    "2022-10",
     "2024-12"
    ],
    "excursions": [],
@@ -1545,7 +1541,7 @@
      }
     ],
     "calibration_db": 1.560297687926166,
-    "two_state_line": false,
+    "two_state_line": true,
     "reversing_blocks": []
    },
    "steps": [
@@ -2070,7 +2066,9 @@
     }
    ],
    "line": {
-    "boundaries": [],
+    "boundaries": [
+     "2023-04"
+    ],
     "edges": [
      {
       "block": 1,
@@ -2130,7 +2128,7 @@
       "block": 4,
       "month": "2023-04",
       "step_db": -29.824358033584687,
-      "change": "same",
+      "change": "steadiness",
       "before": {
        "median_bins": -0.5,
        "mad_bins": 0.0,
@@ -2142,7 +2140,7 @@
        "months": 3
       },
       "edge_move_bins": 0.0,
-      "boundary": false
+      "boundary": true
      },
      {
       "block": 5,
@@ -2163,7 +2161,7 @@
       "boundary": false
      }
     ],
-    "calibration_db": 29.824358033584687,
+    "calibration_db": 1.9583792710985684,
     "two_state_line": false,
     "reversing_blocks": [
      {
@@ -2904,7 +2902,7 @@
       "block": 6,
       "month": "2023-04",
       "step_db": 1.1077316677461226,
-      "change": "jump",
+      "change": "same",
       "before": {
        "median_bins": -3.0,
        "mad_bins": 1.0,
@@ -3110,9 +3108,7 @@
     }
    ],
    "line": {
-    "boundaries": [
-     "2022-10"
-    ],
+    "boundaries": [],
     "edges": [
      {
       "block": 1,
@@ -3136,7 +3132,7 @@
       "block": 2,
       "month": "2022-10",
       "step_db": 31.99642024169136,
-      "change": "steadiness",
+      "change": "same",
       "before": {
        "median_bins": 1.0,
        "mad_bins": 6.5,
@@ -3148,10 +3144,10 @@
        "months": 3
       },
       "edge_move_bins": 92.0,
-      "boundary": true
+      "boundary": false
      }
     ],
-    "calibration_db": 0.958334736104646,
+    "calibration_db": 31.99642024169136,
     "two_state_line": false,
     "reversing_blocks": []
    },
@@ -3505,7 +3501,7 @@
       "block": 2,
       "month": "2022-09",
       "step_db": -30.375617309082394,
-      "change": "steadiness",
+      "change": "same",
       "before": {
        "median_bins": -13.5,
        "mad_bins": 1.0,
@@ -3577,7 +3573,7 @@
       "block": 6,
       "month": "2024-02",
       "step_db": 0.767936533941711,
-      "change": "drift",
+      "change": "same",
       "before": {
        "median_bins": -9.5,
        "mad_bins": 1.0,
@@ -3756,7 +3752,7 @@
      }
     ],
     "calibration_db": 1.5689658091228136,
-    "two_state_line": false,
+    "two_state_line": true,
     "reversing_blocks": [
      {
       "first_month": "2019-04",
@@ -3909,7 +3905,8 @@
   }
  ],
  "line_identity": {
-  "marker_half_width_bins": 2,
+  "marker_half_width_hz": 23.84185791015625,
+  "marker_half_width_review_bins": 1.0,
   "local_months": 3
  },
  "monthly_levels_sha256": "24523c9224c66e62fa6099b79b1157a6ffdf0f57e2b3f22ea0e7c0c8d8bcd706",

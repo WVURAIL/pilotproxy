@@ -6,7 +6,7 @@ All notable changes to PilotProxy are recorded here. The project follows
 ## Era boundaries by the pilot line's identity
 
 `characterize era-boundaries --line-identity` also cuts an era where the pilot
-line's identity changes: a steady line (monthly offsets within one fine bin)
+line's identity changes: a steady line (monthly offsets within half the marker half-width)
 that jumps by more than the marker half-width in one month, or a steady line
 that becomes unsteady, backed by a level step larger than any step the same
 line makes on that channel. Drift of one bin per month never cuts, nor does a

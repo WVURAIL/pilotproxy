@@ -2,7 +2,7 @@
  "schema": "robust-power-era-threshold-cohorts-v1",
  "provenance": {
   "path": "blocks.json",
-  "sha256": "353301c99cd9ec2fffa030149dd030e3735458ebe08ca1ca638e8b5a3e2d4a3a"
+  "sha256": "e5b2e0789ca7ce153de3fac8776c6401855cd5ad0d8c0bde0cbf3d6ea7448254"
  },
  "channels": [
   {
@@ -418,7 +418,7 @@
     "2026-04"
    ],
    "status": "unchanged_current_era",
-   "era_basis": "line_identity_transition",
+   "era_basis": "on_off_transition",
    "hold_reason": null
   },
   {
@@ -1022,7 +1022,7 @@
     "2026-08"
    ],
    "status": "unchanged_current_era",
-   "era_basis": "on_off_transition",
+   "era_basis": "line_identity_transition",
    "hold_reason": null
   },
   {
@@ -1524,7 +1524,7 @@
     "2026-08"
    ],
    "status": "unchanged_current_era",
-   "era_basis": "line_identity_transition",
+   "era_basis": "on_off_transition",
    "hold_reason": null
   },
   {

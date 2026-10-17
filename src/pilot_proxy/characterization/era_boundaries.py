@@ -57,8 +57,6 @@ from pathlib import Path
 
 import numpy as np
 
-from pilot_proxy.products.reader import FINE_BIN_HZ
-
 P0 = 0.05                 # false-positive probability of each change point
 MIN_EVENTS = 5            # a month with fewer events takes the channel's pooled spread
 CODE_QUANTUM_DB = 0.005   # the stored dB codes are quantized at this step
@@ -68,6 +66,7 @@ MEDIAN_ERROR = 1.2533     # sqrt(pi / 2): error of a median per error of a mean
 CHANNELS = tuple(range(14, 38))
 SCHEMA = "robust-power-era-threshold-cohorts-v1"
 LOCAL_MONTHS = 3          # covered months on each side of a block edge the line is judged in
+FINE_BIN_HZ = 390625 / 128 / 256  # the detector's fine bin, 11.92 Hz (products.reader.FINE_BIN_HZ; pinned by a test, kept so this file stands alone)
 MARKER_HALF_WIDTH_FINE_BINS = 2   # the detector's marker half-width h (narrowband_marker.anchors.DESIGNATED_HALF_WIDTH; pinned by a test)
 MARKER_HALF_WIDTH_HZ = MARKER_HALF_WIDTH_FINE_BINS * FINE_BIN_HZ   # 23.84 Hz: the detector's fine bins are half the review's
 

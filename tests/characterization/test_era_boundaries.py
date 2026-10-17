@@ -192,5 +192,6 @@ def test_the_marker_half_width_is_the_detector_s():
     from pilot_proxy.detectors.narrowband_marker.anchors import DESIGNATED_HALF_WIDTH
     from pilot_proxy.products.reader import FINE_BIN_HZ
     assert e.MARKER_HALF_WIDTH_FINE_BINS == DESIGNATED_HALF_WIDTH
+    assert e.FINE_BIN_HZ == FINE_BIN_HZ
     assert e.MARKER_HALF_WIDTH_HZ == DESIGNATED_HALF_WIDTH * FINE_BIN_HZ
     assert abs(e.MARKER_HALF_WIDTH_HZ - 23.84) < 0.01

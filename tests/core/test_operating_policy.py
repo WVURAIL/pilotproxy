@@ -234,11 +234,11 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
                 for ch, row in decisions.items() if row["outcome"] == "useful" and ch <= 36}
     # not deployed: above tolerance (17, 24), out of time (22, 30, 31, 35, 36), excluded (19, 33)
     assert sorted(ch for ch, row in decisions.items() if row["outcome"] == "not useful") == [17, 19, 22, 24, 30, 31, 33, 35, 36]
-    permanent = [506, 521, 552, 583, 598, 690, 721, 767, 798]
+    permanent = [506, 521, 552, 583, 598, 690, 721, 798]        # channel 19 (767) is left unmasked
 
     write(plan_path, plan)
     report = op.analyze_policy(plan_path)
-    assert report["permanent_mask_freq_ids"] == permanent
+    assert report["permanent_mask_freq_ids"] == permanent and report["unmasked_freq_ids"] == [767]
     assert report["pending_freq_ids"] == sorted(deployed) and report["kotekan_parameters"] is None
     assert [row["physical_channel"] for row in report["not_in_policy"]] == [37]
     for row in report["channels"]:
@@ -246,6 +246,8 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
         assert row["frequency_ids"] == [project.target_freq_id(str(row["physical_channel"]))]
         if decision["outcome"] == "useful":
             assert row["threshold"] == {"kind": "finite", "eta_q16": str(decision["deployed_word"])}
+        elif decision["reason"] in op.UNMASKED_REASONS:
+            assert row["threshold"] == {"kind": "pass_all"} and row["reason"] == decision["reason"]
         else:
             assert row["threshold"] == {"kind": "reject_all"} and row["reason"] == decision["reason"]
 
@@ -262,3 +264,4 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
                                             "require_fine_freq_ids": sorted(deployed)}
     assert {int(b["receiver_channel_id"]): int(b["eta_q16"]) for b in report["required_threshold_bindings"]} == deployed
     assert not set(report["permanent_mask_freq_ids"]) & set(report["require_fine_freq_ids"])
+    assert not set(report["unmasked_freq_ids"]) & (set(permanent) | set(deployed))

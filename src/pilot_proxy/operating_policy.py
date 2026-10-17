@@ -11,7 +11,10 @@ becomes one assignment at its receiver frequency ID:
   (``fine_calibration`` calibrated with ``cfar_multiplier_q16`` equal to it);
   until it does, the channel is pending and the configuration is incomplete;
 - not deployed (outcome ``not useful``): ``reject_all``, the permanent mask,
-  with the rule's reason.
+  with the rule's reason; except a channel whose reason is in
+  ``UNMASKED_REASONS`` (DTV without a matching pilot: the detector has no
+  pilot to act on and would never fire), which is ``pass_all``, left unmasked
+  and listed under ``unmasked_freq_ids``.
 
 A decision outside channels 14 to 36 (the channel 37 control band) is not a
 DTV channel and is reported, not assigned. On ``chime_freq_id`` the frequency
@@ -55,6 +58,8 @@ NAMESPACES = tuple(sorted(CHANNEL_ID_NAMESPACE_FIELD_ALIASES))
 FIRST_CHANNEL, LAST_CHANNEL = 14, 36        # the ATSC UHF television channels a DTV policy covers
 CHANNEL_WIDTH_HZ = 6_000_000
 OUTCOMES = {"useful": "finite", "not useful": "reject_all"}
+# not deployed and not masked: the rule's reasons for which the detector has nothing to act on
+UNMASKED_REASONS = frozenset({"DTV without a matching pilot", "pilot not seen"})   # the 2026-10-12 wording of the same verdict
 
 
 def _require(condition, message):
@@ -190,7 +195,7 @@ def analyze_policy(plan_path):
     for profile in bundle["pilot_profiles.json"]["profiles"]:
         profiles.setdefault(profile["physical_channel"], []).append(profile)
     project = default_project() if namespace == "chime_freq_id" else None
-    permanent, pending, thresholds, rows, outside = [], [], [], [], []
+    permanent, unmasked, pending, thresholds, rows, outside = [], [], [], [], [], []
     review_candidates = []
     for channel, decision in sorted(decisions.items()):
         if not FIRST_CHANNEL <= channel <= LAST_CHANNEL:
@@ -215,7 +220,10 @@ def analyze_policy(plan_path):
                  "Receiver frequency center lies outside the assigned physical channel")
         row = {"physical_channel": channel, "frequency_ids": [freq], "outcome": decision["outcome"],
                "frequency_mapping": [{"receiver_channel_id": freq, "coarse_channel_index": index, "rf_center_hz": center}]}
-        if OUTCOMES[decision["outcome"]] == "reject_all":
+        if OUTCOMES[decision["outcome"]] == "reject_all" and decision["reason"] in UNMASKED_REASONS:
+            row.update(threshold={"kind": "pass_all"}, reason=decision["reason"])
+            unmasked.append(freq)
+        elif OUTCOMES[decision["outcome"]] == "reject_all":
             row.update(threshold={"kind": "reject_all"}, reason=decision["reason"])
             permanent.append(freq)
         else:
@@ -237,6 +245,7 @@ def analyze_policy(plan_path):
         rows.append(row)
     _require(rows, "The decisions name no ATSC channel 14-36")
     permanent.sort()
+    unmasked.sort()
     pending.sort()
     thresholds.sort(key=lambda r: r["receiver_channel_id"])
     required = [r["receiver_channel_id"] for r in thresholds]
@@ -253,11 +262,11 @@ def analyze_policy(plan_path):
         "decisions_sha256": calibration.sha256(decisions_path),
         "bundle_files_sha256": {name: calibration.sha256(p) for name, p in files.items()},
         "channels": rows, "not_in_policy": outside,
-        "permanent_mask_freq_ids": permanent, "require_fine_freq_ids": required,
+        "permanent_mask_freq_ids": permanent, "unmasked_freq_ids": unmasked, "require_fine_freq_ids": required,
         "pending_freq_ids": pending, "required_threshold_bindings": thresholds,
         "kotekan_parameters": {"permanent_mask_freq_ids": permanent, "require_fine_freq_ids": required} if complete else None,
         "input_files_sha256": bindings,
-        "interpretation": "reject_all is the permanent-mask limit of the threshold family, explicitly encoded rather than eta=0: the threshold rule's not-deployed channels. A deployed channel's word is the threshold rule's; it is pending until the bundle carries it. No word certifies physical recovery or minimum observing time.",
+        "interpretation": "reject_all is the permanent-mask limit of the threshold family, explicitly encoded rather than eta=0: the threshold rule's not-deployed channels. A deployed channel's word is the threshold rule's; it is pending until the bundle carries it. A pass_all channel is not deployed and not masked: the rule's reason leaves the detector nothing to act on, so it is absent from both consumer lists. No word certifies physical recovery or minimum observing time.",
         "remaining_runtime_acceptance": [
             "Verify that the named consumer build implements every declared capability; compilation checks declarations and hashes, not implementation.",
             "Match live receiver frequency IDs, input population/state, exact bundle files, frozen threshold bindings, and era to this review record.",

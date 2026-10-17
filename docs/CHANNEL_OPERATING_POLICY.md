@@ -13,6 +13,11 @@ receiver frequency ID:
   `threshold.kind: reject_all`, never as `eta_q16: 0`: the frozen detector
   uses a strict comparison, zero scores would not fire at zero, and zero is
   not a legal runtime multiplier. The row keeps the rule's reason.
+- **not deployed and not masked**: a not-useful decision whose reason is
+  `DTV without a matching pilot` (channel 19). The detector has no pilot to act
+  on there and would never fire, so the channel is `threshold.kind: pass_all`,
+  listed under `unmasked_freq_ids` and absent from both consumer lists; its
+  residual DTV is left to the consumer's other flaggers.
 
 A decision outside channels 14 to 36 (the channel 37 control band) is not a
 DTV channel; the review lists it under `not_in_policy` and assigns nothing.
@@ -126,5 +131,5 @@ owner must approve activation. No review output changes a live configuration.
 
 `tests/core/test_operating_policy.py` compiles the frozen decisions of
 2026-10-12 (`tests/data/threshold_decisions_2026-10-12.json`) on the CHIME
-receiver profile: nine channels go to the permanent mask and fourteen to their
-words.
+receiver profile: eight channels go to the permanent mask, channel 19 is left
+unmasked and fourteen go to their words.

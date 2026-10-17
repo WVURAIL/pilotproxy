@@ -1,5 +1,9 @@
 # Power-era proposals
 
+> Superseded. The era list of record comes from `characterize era-boundaries --line-identity`
+> (`projects/chime_atsc/eras/line_identity_2026-10-17/`; see START_HERE.md, step 3). This page
+> documents the 2026-10-04 procedure, kept for the record.
+
 `python -m pilot_proxy.characterization.power_eras` proposes changes in a
 channel's dominant **relative spectral feature**. It is the era procedure of
 the threshold release of 2026-10-04, whose current-era spans it supplies:

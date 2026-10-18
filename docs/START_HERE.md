@@ -61,7 +61,10 @@ knee when the upper end of the kept DTV power meets RFIsher's tolerance
 within 30; else at the loosest word below the knee that does; else not deployed.
 
     python tools/threshold_rule.py --scores <scores> --out <rule> \
-        --exclude "33=pilot off the detector's frequency" --exclude "19=DTV without a matching pilot"
+        --exclude "33=pilot off the detector's frequency"
+
+(Channel 19 was excluded as "DTV without a matching pilot" until 2026-10-17; its weak line at the nominal pilot
+frequency is now read as a distant transmitter's pilot, likely K19NN-D, and the channel is ruled like the others.)
 
 **6. Deployment compiler** (`operating_policy.py`,
 [CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)). The plan names the

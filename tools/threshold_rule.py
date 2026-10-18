@@ -38,7 +38,7 @@ MEAS, HIGH, KNEE, PICK = "#2a78d6", "#9fc2ef", "#5a6168", "#eb6834"
 OUTCOME = {"knee": "useful for BAO: deployed at the knee",
            "below the knee": "useful for BAO: deployed below the knee",
            "above tolerance": "not deployed: above tolerance at every threshold",
-           "out of time": "not deployed: the tolerance needs more than 30 years"}
+           "out of time": f"not deployed: the tolerance needs more than {t.MAX_CALENDAR_YEARS:g} years"}
 COLUMNS = ["channel", "outcome", "reason", "deployed_at", "deployed_word", "full_era_word", "last_year_r_hi", "guard_acted", "knee_word", "eta", "kappa", "time_years", "r", "r_hi", "kept_frames", "kept_events",
            "gain", "coherence_limit_s", "below_knee_eta", "below_knee_kappa", "below_knee_years", "below_knee_r_hi"]
 

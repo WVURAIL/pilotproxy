@@ -58,7 +58,7 @@ knee when the upper end of the kept DTV power meets RFIsher's tolerance
 `characterization/data/coherent_fraction.json`, from
 `tools/derive_coherent_fraction.py`; coherence gain G at the admissible minimum,
 `characterization/data/coherent_gain.json`) and 6.574 / kappa calendar years stays
-within 30; else at the loosest word below the knee that does; else not deployed.
+within 20 (the facility-lifetime limit; 30 until 2026-10-18); else at the loosest word below the knee that does; else not deployed.
 
     python tools/threshold_rule.py --scores <scores> --out <rule> \
         --exclude "33=pilot off the detector's frequency"

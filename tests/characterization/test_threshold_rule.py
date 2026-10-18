@@ -90,10 +90,10 @@ def test_the_guard_can_fail_a_knee_the_measured_power_passes():
 @needs_measurements
 def test_a_failing_knee_tightens_to_the_passing_threshold_closest_to_it():
     # passes at words 1000 and 3000, fails at 2000 and at the knee; never looks above the knee
-    s = sweep_of([0.1, 2.0, 0.3, 2.0, 0.1], [0.2, 3.0, 0.9, 3.0, 0.2], [0.1, 0.2, 0.3, 0.9, 0.95])
+    s = sweep_of([0.1, 2.0, 0.3, 2.0, 0.1], [0.2, 3.0, 0.9, 3.0, 0.2], [0.1, 0.2, 0.4, 0.9, 0.95])
     d = t.decide(s, knee_word=4000, R=1.0, gain=1.0)
     assert d["outcome"] == "useful" and d["deployed_word"] == 3000 and d["reason"] is None
-    assert d["deployed"]["time_years"] == pytest.approx(t.CALENDAR_YEARS_PER_RETAINED_YEAR / 0.3)
+    assert d["deployed"]["time_years"] == pytest.approx(t.CALENDAR_YEARS_PER_RETAINED_YEAR / 0.4)
 
 
 @needs_measurements
@@ -210,12 +210,12 @@ def test_a_word_that_passes_on_the_last_year_is_unchanged():
 
 @needs_measurements
 def test_a_last_year_failure_moves_to_the_loosest_word_passing_on_both():
-    full = sweep_of([0.1, 0.2, 0.5, 0.8], [0.2, 1.2, 0.7, 0.9], [0.3, 0.4, 0.8, 0.9])   # 2000 fails on the full era
+    full = sweep_of([0.1, 0.2, 0.5, 0.8], [0.2, 1.2, 0.7, 0.9], [0.4, 0.5, 0.8, 0.9])   # 2000 fails on the full era
     last = sweep_of([0.1, 0.2, 0.5, 0.8], [0.2, 0.3, 1.5, 1.5], [0.2, 0.5, 0.8, 0.9])   # 3000 and 4000 fail last year
     d = t.decide_guarded(full, 4000, last, R=1.0, gain=1.0)
     assert d["guard_acted"] and d["last_year_r_hi"] == pytest.approx(1.5) and d["full_era_word"] == 4000
     assert d["deployed_word"] == 1000 and d["deployed_at"] == "below the knee" and d["outcome"] == "useful"
-    assert d["deployed"]["kappa"] == 0.3 and d["deployed"]["r_hi"] == pytest.approx(0.2)   # read on the full era
+    assert d["deployed"]["kappa"] == 0.4 and d["deployed"]["r_hi"] == pytest.approx(0.2)   # read on the full era
 
 
 @needs_measurements

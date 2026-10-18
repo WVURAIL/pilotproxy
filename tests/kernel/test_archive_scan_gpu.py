@@ -164,10 +164,21 @@ def test_archive_gpu_scan_interrupt_resume_and_cpu_reference(tmp_path):
             rows = np.stack(
                 ((xr @ wr.T + xi @ wi.T).T, (xi @ wr.T - xr @ wi.T).T), axis=-1
             )
-            expected_power.append((rows**2).sum(axis=(1, 2)))
-            expected_fine.append(fine_power_fx(rows, num_streams=4))
+            fine = fine_power_fx(rows, num_streams=4)
+            expected_fine.append(fine)
+            # Kernel core 3.0.0: the frame powers are the all-bin sums of the
+            # fine spectrum, not the sum of |z|^2 over rows.
+            expected_power.append(fine.sum(axis=-1, dtype=np.uint64))
     for term, name in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
         np.testing.assert_array_equal(
             actual[name], np.asarray(expected_power)[:, term : term + 1]
         )
+        # ...and the stored powers are the sums of the stored fine terms.
+        np.testing.assert_array_equal(
+            actual[name][:, 0],
+            actual["fine_power_u64"][:, term, :].sum(axis=-1, dtype=np.uint64),
+        )
     np.testing.assert_array_equal(actual["fine_power_u64"], expected_fine)
+    np.testing.assert_array_equal(
+        actual["p_ref_sum_u64"], actual["p_ref_lower_u64"] + actual["p_ref_upper_u64"]
+    )

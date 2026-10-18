@@ -10,7 +10,10 @@ exact fine powers --- no tolerances, every frame. Gates:
 1. reference equality on noise frames and on frames carrying an
    injected pilot line (both mask outcomes exercised), across a batch,
    with the fine accumulator simultaneously bit-checked against the
-   fxfft reference chain via the row-sum tap;
+   fxfft reference chain via the row-projection tap, and the optional
+   frame-power tap checked against the all-bin sum of the fine
+   accumulator (kernel core 3.0.0: ``d_power_out`` == ``fine.sum(axis=-1)``)
+   on every launch that binds it, while an unbound tap is left untouched;
 2. degenerate rules on device: empty bulk mask forces mask 0; a
    designated set whose denominators are live fires only per reference;
 3. production form (no debug taps) emits the identical mask;
@@ -49,6 +52,7 @@ RNG_SEED = 20260806
 ANCHOR = 62
 HALF_WIDTH = 2
 MULT_Q16 = int(1.5 * 65536)
+UNWRITTEN_POWER = 123  # sentinel an unbound frame-power tap must keep
 
 
 def _import_cupy_or_skip():
@@ -122,16 +126,13 @@ def _run_mask(cp, kernel, packed, weights, *, anchor, half_width, bulk,
               rank, mult, batch, streams, with_taps=True, with_support=False):
     rows = streams * WINDOWS
     d_in = cp.asarray(packed)
-    d_diag = cp.zeros(max(batch, 1), dtype=cp.float32)
     if batch > 1:
-        handle = kernel.create_raw_batch(
-            rows, batch, d_in.data.ptr, d_diag.data.ptr
-        )
+        handle = kernel.create_raw_batch(rows, batch, d_in.data.ptr)
     else:
-        handle = kernel.create_raw(rows, d_in.data.ptr, d_diag.data.ptr)
+        handle = kernel.create_raw(rows, d_in.data.ptr)
     d_fine = cp.zeros((batch, TERMS, FINE_BINS), dtype=cp.uint64)
     d_mask = cp.zeros(batch, dtype=cp.int32)
-    d_pow = cp.zeros((batch, TERMS), dtype=cp.uint64)
+    d_pow = cp.full((batch, TERMS), UNWRITTEN_POWER, dtype=cp.uint64)
     d_tap = cp.zeros(batch * TERMS * rows * 2, dtype=cp.int32)
     d_rank_valid = cp.full(batch, 77, dtype=cp.int32)
     d_n_bulk = cp.full(batch, 77, dtype=cp.int32)
@@ -156,6 +157,7 @@ def _run_mask(cp, kernel, packed, weights, *, anchor, half_width, bulk,
         assert kernel.last_error() == ""
         fine = cp.asnumpy(d_fine)
         mask = cp.asnumpy(d_mask)
+        powers = cp.asnumpy(d_pow)
         tap = (
             cp.asnumpy(d_tap).reshape(batch, TERMS, rows, 2)
             if with_taps
@@ -163,6 +165,11 @@ def _run_mask(cp, kernel, packed, weights, *, anchor, half_width, bulk,
         )
     finally:
         kernel.destroy(handle)
+    if with_taps:
+        # Frame-power tap: the all-bin sum of the fine accumulator (core 3.0.0).
+        np.testing.assert_array_equal(powers, fine.sum(axis=-1, dtype=np.uint64))
+    else:
+        assert (powers == UNWRITTEN_POWER).all(), "unbound frame-power tap was written"
     if with_support:
         return fine, mask, tap, cp.asnumpy(d_rank_valid), cp.asnumpy(d_n_bulk)
     return fine, mask, tap
@@ -175,7 +182,7 @@ def test_full_rate_rank_support_matches_reference_and_legacy(case, with_taps):
     cp = _import_cupy_or_skip()
     kernel = _kernel_or_skip()
     assert kernel.supports_fused_fine_mask_with_support()
-    assert kernel.version.as_tuple() >= (2, 5, 0)
+    assert kernel.version.as_tuple() >= (3, 0, 0)
     rng = np.random.default_rng(RNG_SEED + 11)
     streams, batch = 4, 3
     window = kernel.specs.detector_window_samples
@@ -406,8 +413,7 @@ def test_mask_rate_margin_report():
     words = pack_bulk_mask(bulk)
 
     d_in = cp.asarray(packed)
-    d_diag = cp.zeros(1, dtype=cp.float32)
-    handle = kernel.create_raw(rows, d_in.data.ptr, d_diag.data.ptr)
+    handle = kernel.create_raw(rows, d_in.data.ptr)
     d_fine = cp.zeros((TERMS, FINE_BINS), dtype=cp.uint64)
     d_mask = cp.zeros(1, dtype=cp.int32)
     d_pow = cp.zeros(TERMS, dtype=cp.uint64)

@@ -2,6 +2,7 @@
 #include "f_statistic_reference.h"
 
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -18,25 +19,19 @@ constexpr int INT4_MAX_POSITIVE_VALUE = 7;
 constexpr int INT4_MIN_NEGATIVE_VALUE = -8;
 constexpr int INT4_NEGATIVE_ONE_VALUE = -1;
 constexpr int UNINITIALIZED_SENTINEL = 999;
-constexpr int SINGLE_DETECTOR_ROW = 1;
+constexpr int SINGLE_STREAM = 1;
+constexpr int TWO_STREAMS = 2;
+constexpr int WINDOWS = FSTAT_FINE_WINDOWS_PER_STREAM;
+constexpr int TERMS = FSTAT_NUM_WEIGHT_TERMS;
+constexpr int BINS = FSTAT_FINE_NUM_BINS;
 
 constexpr unsigned long long ZERO_POWER = 0ULL;
-constexpr unsigned long long UNIT_COMPLEX_POWER = 1ULL;
-constexpr unsigned long long TWO_COMPONENT_COMPLEX_POWER = 4ULL;
-constexpr unsigned long long CHECKED_RATIONAL_SENTINEL_NUM = 123ULL;
-constexpr unsigned long long CHECKED_RATIONAL_SENTINEL_DEN = 456ULL;
-constexpr unsigned long long UNIT_THRESHOLD_NUM = 1ULL;
-constexpr unsigned long long UNIT_THRESHOLD_DEN = 1ULL;
-constexpr unsigned long long FULL_THRESHOLD_EXAMPLE_NUM = 1027ULL;
-constexpr unsigned long long FULL_THRESHOLD_EXAMPLE_DEN = 1024ULL;
-constexpr unsigned long long HALF_THRESHOLD_EXAMPLE_DEN = 2048ULL;
-constexpr unsigned long long INVALID_THRESHOLD_DEN = 0ULL;
-constexpr unsigned long long OVERFLOW_THRESHOLD_DEN = ~0ULL;
-constexpr unsigned long long RAW_F_EXAMPLE_NUM = 3ULL;
-constexpr unsigned long long RAW_F_EXAMPLE_DEN = 2ULL;
-constexpr double RAW_F_EXAMPLE_VALUE = 3.0;
-constexpr double PILOT_EXCESS_EXAMPLE_VALUE = 2.0;
-constexpr double PILOT_EXCESS_SENTINEL = 123.0;
+constexpr unsigned long long UNIT_POWER = 1ULL;
+// The frozen transform's Parseval departure on the golden vectors is bounded
+// at 5e-3 (tests/core/test_fxfft256.py); random rows at the amplitudes
+// below sit far inside it. This documents the relation P ~ 256 sum|z|^2
+// without asserting an equality the fixed-point transform does not provide.
+constexpr double PARSEVAL_RELATIVE_TOLERANCE = 5.0e-3;
 
 InputType pack_i4(int real, int imag)
 {
@@ -69,21 +64,84 @@ void assert_mul(
     assert(imag == expected_imag);
 }
 
-void assert_single_tap_power(
-    InputType x0,
-    InputType w0,
-    unsigned long long expected_power)
+// A unit impulse in window 0 of one stream transforms to a flat spectrum of
+// exactly one per bin: the impulse only ever enters a butterfly as the top
+// leg and every bottom leg is an exact zero, so no rounding occurs. The fine
+// reference must therefore give S[f] = 1 for all 256 bins and the frame
+// power the transform length; the untouched terms stay zero.
+void assert_impulse_fine_powers(int component)
 {
-    InputType x[FSTAT_DETECTOR_WINDOW_SAMPLES] = {};
-    InputType w[FSTAT_NUM_WEIGHT_TERMS * FSTAT_DETECTOR_WINDOW_SAMPLES] = {};
-    x[0] = x0;
-    w[0] = w0;
+    std::vector<int> row_sums(static_cast<std::size_t>(TERMS) * WINDOWS * 2, 0);
+    row_sums[static_cast<std::size_t>(component)] = 1;  // window 0 of the target term
 
-    unsigned long long powers[FSTAT_REFERENCE_POWER_TERMS] = {};
-    fstat_ref_powers_u64(x, w, SINGLE_DETECTOR_ROW, powers);
-    assert(powers[FSTAT_TARGET_WEIGHT_INDEX] == expected_power);
+    unsigned long long fine[TERMS][BINS];
+    fstat_ref_fine_powers_u64(row_sums.data(), SINGLE_STREAM, fine);
+    for (int f = 0; f < BINS; ++f) {
+        assert(fine[FSTAT_TARGET_WEIGHT_INDEX][f] == UNIT_POWER);
+        assert(fine[FSTAT_LOWER_REFERENCE_WEIGHT_INDEX][f] == ZERO_POWER);
+        assert(fine[FSTAT_UPPER_REFERENCE_WEIGHT_INDEX][f] == ZERO_POWER);
+    }
+
+    unsigned long long powers[TERMS];
+    fstat_ref_powers_from_fine_u64(fine, powers);
+    assert(powers[FSTAT_TARGET_WEIGHT_INDEX] == static_cast<unsigned long long>(BINS));
     assert(powers[FSTAT_LOWER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
     assert(powers[FSTAT_UPPER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
+
+    // Two streams carrying the same impulse: the feed sum doubles exactly.
+    std::vector<int> two(static_cast<std::size_t>(TERMS) * TWO_STREAMS * WINDOWS * 2, 0);
+    two[static_cast<std::size_t>(component)] = 1;
+    two[static_cast<std::size_t>(WINDOWS) * 2 + component] = 1;
+    fstat_ref_fine_powers_u64(two.data(), TWO_STREAMS, fine);
+    fstat_ref_powers_from_fine_u64(fine, powers);
+    for (int f = 0; f < BINS; ++f) {
+        assert(fine[FSTAT_TARGET_WEIGHT_INDEX][f] == 2ULL * UNIT_POWER);
+    }
+    assert(powers[FSTAT_TARGET_WEIGHT_INDEX] == 2ULL * BINS);
+}
+
+void assert_null_arguments_are_harmless()
+{
+    unsigned long long fine[TERMS][BINS];
+    for (int n = 0; n < TERMS; ++n) {
+        for (int f = 0; f < BINS; ++f) {
+            fine[n][f] = 7ULL;
+        }
+    }
+    fstat_ref_fine_powers_u64(nullptr, SINGLE_STREAM, fine);
+    for (int n = 0; n < TERMS; ++n) {
+        for (int f = 0; f < BINS; ++f) {
+            assert(fine[n][f] == ZERO_POWER);
+        }
+    }
+    fstat_ref_fine_powers_u64(nullptr, SINGLE_STREAM, nullptr);
+    fstat_ref_powers_from_fine_u64(fine, nullptr);
+
+    unsigned long long powers[TERMS] = {5ULL, 5ULL, 5ULL};
+    fstat_ref_powers_from_fine_u64(nullptr, powers);
+    for (int n = 0; n < TERMS; ++n) {
+        assert(powers[n] == ZERO_POWER);
+    }
+}
+
+// The frame power is the exact all-bin sum: a hand-built spectrum sums to
+// the closed form, including the uint64 range above 2^32 per bin.
+void assert_frame_power_is_the_all_bin_sum()
+{
+    unsigned long long fine[TERMS][BINS];
+    for (int n = 0; n < TERMS; ++n) {
+        for (int f = 0; f < BINS; ++f) {
+            fine[n][f] = (1ULL << 40) * static_cast<unsigned long long>(n + 1)
+                + static_cast<unsigned long long>(f);
+        }
+    }
+    unsigned long long powers[TERMS];
+    fstat_ref_powers_from_fine_u64(fine, powers);
+    const unsigned long long bin_sum =
+        static_cast<unsigned long long>(BINS) * (BINS - 1) / 2ULL;
+    for (int n = 0; n < TERMS; ++n) {
+        assert(powers[n] == (1ULL << 40) * BINS * (n + 1) + bin_sum);
+    }
 }
 
 }  // namespace
@@ -119,7 +177,7 @@ static void run_row_sums_reference_checks()
         static_cast<std::size_t>(FSTAT_NUM_WEIGHT_TERMS) * rows * 2, 0);
     fstat_ref_row_sums_i32(x.data(), w.data(), rows, row_sums.data());
 
-    // (a) exact equality against an independently ordered brute force
+    // Exact equality against an independently ordered brute force
     // (term-outer, tap-outer accumulation): integer addition is associative,
     // so any ordering must agree bit-for-bit.
     for (int n = 0; n < FSTAT_NUM_WEIGHT_TERMS; ++n) {
@@ -155,27 +213,99 @@ static void run_row_sums_reference_checks()
             assert(static_cast<long long>(row_sums[idx + 1]) == bi);
         }
     }
+}
 
-    // (b) exact v1 marginal identity: sum over rows of |z|^2 in int64
-    // reproduces fstat_ref_powers_u64 bit-for-bit.
-    unsigned long long powers[FSTAT_REFERENCE_POWER_TERMS] = {};
-    fstat_ref_powers_u64(x.data(), w.data(), rows, powers);
-    for (int n = 0; n < FSTAT_NUM_WEIGHT_TERMS; ++n) {
-        unsigned long long marginal = 0ULL;
-        for (int m = 0; m < rows; ++m) {
-            const std::size_t idx =
-                (static_cast<std::size_t>(n) * rows + m) * 2;
-            const long long zr = row_sums[idx + 0];
-            const long long zi = row_sums[idx + 1];
-            marginal += static_cast<unsigned long long>(zr * zr + zi * zi);
+// Random rows through the whole reference chain: row sums -> fine spectra ->
+// frame powers. Checks (a) the frame power is the exact all-bin sum of the
+// fine spectrum, (b) the feed sum is additive over streams (the stream
+// indexing of the term-major buffer is right), and (c) the Parseval relation
+// P ~ L_F * sum|z|^2 holds to the frozen transform's rounding.
+static void run_fine_reference_checks()
+{
+    const int rows = TWO_STREAMS * WINDOWS;
+    unsigned int state = 0xF1DE5Au;
+
+    std::vector<InputType> x(
+        static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+    std::vector<InputType> w(
+        static_cast<std::size_t>(TERMS) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+    for (std::size_t i = 0; i < x.size(); ++i) {
+        const int re = static_cast<int>(lcg_next(&state) % 15) - 7;
+        const int im = static_cast<int>(lcg_next(&state) % 15) - 7;
+        x[i] = pack_i4(re, im);
+    }
+    for (std::size_t i = 0; i < w.size(); ++i) {
+        const int re = static_cast<int>(lcg_next(&state) % 15) - 7;
+        const int im = static_cast<int>(lcg_next(&state) % 15) - 7;
+        w[i] = pack_i4(re, im);
+    }
+
+    std::vector<int> row_sums(static_cast<std::size_t>(TERMS) * rows * 2, 0);
+    fstat_ref_row_sums_i32(x.data(), w.data(), rows, row_sums.data());
+
+    unsigned long long fine[TERMS][BINS];
+    unsigned long long powers[TERMS];
+    fstat_ref_fine_powers_u64(row_sums.data(), TWO_STREAMS, fine);
+    fstat_ref_powers_from_fine_u64(fine, powers);
+
+    // (a) definition: P_n == sum_f S_n[f], summed independently here.
+    for (int n = 0; n < TERMS; ++n) {
+        unsigned long long total = 0ULL;
+        for (int f = 0; f < BINS; ++f) {
+            total += fine[n][f];
         }
-        assert(marginal == powers[n]);
+        assert(total == powers[n]);
+        assert(powers[n] > ZERO_POWER);
+    }
+
+    // (b) additivity over streams: each stream alone, then summed.
+    unsigned long long fine_sum[TERMS][BINS] = {};
+    for (int s = 0; s < TWO_STREAMS; ++s) {
+        std::vector<int> one(static_cast<std::size_t>(TERMS) * WINDOWS * 2, 0);
+        for (int n = 0; n < TERMS; ++n) {
+            for (int m = 0; m < WINDOWS; ++m) {
+                const std::size_t src =
+                    (static_cast<std::size_t>(n) * rows + s * WINDOWS + m) * 2;
+                const std::size_t dst =
+                    (static_cast<std::size_t>(n) * WINDOWS + m) * 2;
+                one[dst + 0] = row_sums[src + 0];
+                one[dst + 1] = row_sums[src + 1];
+            }
+        }
+        unsigned long long fine_one[TERMS][BINS];
+        fstat_ref_fine_powers_u64(one.data(), SINGLE_STREAM, fine_one);
+        for (int n = 0; n < TERMS; ++n) {
+            for (int f = 0; f < BINS; ++f) {
+                fine_sum[n][f] += fine_one[n][f];
+            }
+        }
+    }
+    for (int n = 0; n < TERMS; ++n) {
+        for (int f = 0; f < BINS; ++f) {
+            assert(fine_sum[n][f] == fine[n][f]);
+        }
+    }
+
+    // (c) Parseval to rounding: |P - L_F sum|z|^2| / (L_F sum|z|^2) small.
+    for (int n = 0; n < TERMS; ++n) {
+        double energy = 0.0;
+        for (int m = 0; m < rows; ++m) {
+            const std::size_t idx = (static_cast<std::size_t>(n) * rows + m) * 2;
+            const double zr = row_sums[idx + 0];
+            const double zi = row_sums[idx + 1];
+            energy += zr * zr + zi * zi;
+        }
+        const double parseval = static_cast<double>(BINS) * energy;
+        const double drift =
+            std::fabs(static_cast<double>(powers[n]) - parseval) / parseval;
+        assert(drift <= PARSEVAL_RELATIVE_TOLERANCE);
     }
 }
 
 int main()
 {
     run_row_sums_reference_checks();
+    run_fine_reference_checks();
     assert(fstat_ref_sign_extend_i4(INT4_ZERO_CODE) == INT4_ZERO_VALUE);
     assert(
         fstat_ref_sign_extend_i4(INT4_MAX_POSITIVE_CODE)
@@ -195,66 +325,10 @@ int main()
     assert_mul(0, 1, 1, 0, 0, 1);
     assert_mul(1, -1, 1, 1, 0, -2);
 
-    assert_single_tap_power(
-        pack_i4(1, 1), pack_i4(1, 1), TWO_COMPONENT_COMPLEX_POWER);
-    assert_single_tap_power(
-        pack_i4(1, 0), pack_i4(0, 1), UNIT_COMPLEX_POWER);
-    assert_single_tap_power(
-        pack_i4(0, 1), pack_i4(1, 0), UNIT_COMPLEX_POWER);
-    assert_single_tap_power(
-        pack_i4(1, -1), pack_i4(1, 1), TWO_COMPONENT_COMPLEX_POWER);
-
-    FStatRational checked = {
-        CHECKED_RATIONAL_SENTINEL_NUM,
-        CHECKED_RATIONAL_SENTINEL_DEN};
-    assert(FStat_MakeHalfThresholdFromFullChecked(
-        FULL_THRESHOLD_EXAMPLE_NUM,
-        FULL_THRESHOLD_EXAMPLE_DEN,
-        &checked) == 1);
-    assert(checked.num == FULL_THRESHOLD_EXAMPLE_NUM);
-    assert(checked.den == HALF_THRESHOLD_EXAMPLE_DEN);
-
-    assert(FStat_MakeHalfThresholdFromFullChecked(
-        UNIT_THRESHOLD_NUM,
-        INVALID_THRESHOLD_DEN,
-        &checked) == 0);
-    assert(checked.num == ZERO_POWER);
-    assert(checked.den == ZERO_POWER);
-
-    assert(FStat_MakeHalfThresholdFromFullChecked(
-        UNIT_THRESHOLD_NUM,
-        OVERFLOW_THRESHOLD_DEN,
-        &checked) == 0);
-    assert(checked.num == ZERO_POWER);
-    assert(checked.den == ZERO_POWER);
-
-    assert(FStat_MakeHalfThresholdFromFullChecked(
-        UNIT_THRESHOLD_NUM,
-        UNIT_THRESHOLD_DEN,
-        0) == 0);
-    assert(FStat_NumDenToRawF(RAW_F_EXAMPLE_NUM, RAW_F_EXAMPLE_DEN)
-        == RAW_F_EXAMPLE_VALUE);
-    assert(FStat_NumDenToRawF(RAW_F_EXAMPLE_NUM, INVALID_THRESHOLD_DEN) == 0.0);
-    assert(FStat_NumDenToPilotExcess(RAW_F_EXAMPLE_NUM, RAW_F_EXAMPLE_DEN)
-        == PILOT_EXCESS_EXAMPLE_VALUE);
-    assert(FStat_NumDenToPilotExcess(RAW_F_EXAMPLE_NUM, INVALID_THRESHOLD_DEN)
-        == 0.0);
-
-    double rho = PILOT_EXCESS_SENTINEL;
-    assert(FStat_NumDenToPilotExcessChecked(
-        RAW_F_EXAMPLE_NUM,
-        RAW_F_EXAMPLE_DEN,
-        &rho) == 1);
-    assert(rho == PILOT_EXCESS_EXAMPLE_VALUE);
-    assert(FStat_NumDenToPilotExcessChecked(
-        RAW_F_EXAMPLE_NUM,
-        INVALID_THRESHOLD_DEN,
-        &rho) == 0);
-    assert(rho == 0.0);
-    assert(FStat_NumDenToPilotExcessChecked(
-        RAW_F_EXAMPLE_NUM,
-        RAW_F_EXAMPLE_DEN,
-        0) == 0);
+    assert_impulse_fine_powers(0);  // real unit impulse
+    assert_impulse_fine_powers(1);  // imaginary unit impulse
+    assert_null_arguments_are_harmless();
+    assert_frame_power_is_the_all_bin_sum();
 
     return 0;
 }

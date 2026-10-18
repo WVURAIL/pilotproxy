@@ -28,47 +28,74 @@ def test_void_kernel_call_surfaces_last_error() -> None:
         error = b"FStat API error: handle is null."
 
     lib = SimpleNamespace(
-        FStat_Compute_Powers_U64=_Function(fail),
+        FStat_Compute_FusedFine_U64=_Function(fail),
         FStat_LastError=_Function(lambda: error),
     )
     wrapper = object.__new__(FStatKernel)
     wrapper._lib = lib
     wrapper._has_last_error = True
-    wrapper._has_powers_u64 = True
+    wrapper._has_fused_fine_u64 = True
 
     with pytest.raises(RuntimeError, match="handle is null"):
-        wrapper.compute_powers_u64(None, 1, 2)
+        wrapper.compute_fused_fine_u64(None, 1, 2, 3)
 
 
-def test_setup_signatures_marks_void_functions_as_void(monkeypatch) -> None:
-    names = {
-        "FStat_GetSpecs",
-        "FStat_GetVersion",
-        "FStat_LastError",
-        "FStat_Create",
-        "FStat_Compute_DiagnosticFloat",
-        "FStat_Destroy",
-        "FStat_Compute_Powers_U64",
-    }
-    lib = SimpleNamespace(**{name: _Function() for name in names})
+_CORE_3_NAMES = {
+    "FStat_GetSpecs",
+    "FStat_GetVersion",
+    "FStat_LastError",
+    "FStat_Create",
+    "FStat_Create_Batch",
+    "FStat_Destroy",
+    "FStat_Compute_RowSums_I32",
+    "FStat_Compute_FusedFine_U64",
+}
+
+
+def _setup_core_3_wrapper(monkeypatch) -> SimpleNamespace:
+    lib = SimpleNamespace(**{name: _Function() for name in _CORE_3_NAMES})
     wrapper = object.__new__(FStatKernel)
     wrapper._lib = lib
     monkeypatch.setattr(
         kernel_module,
         "_has_symbol",
-        lambda _lib, name: name in names,
+        lambda _lib, name: name in _CORE_3_NAMES,
     )
-
     wrapper._setup_signatures()
+    return lib
 
+
+def test_setup_signatures_marks_void_functions_as_void(monkeypatch) -> None:
+    lib = _setup_core_3_wrapper(monkeypatch)
     for name in (
         "FStat_GetSpecs",
         "FStat_GetVersion",
-        "FStat_Compute_DiagnosticFloat",
         "FStat_Destroy",
-        "FStat_Compute_Powers_U64",
+        "FStat_Compute_RowSums_I32",
+        "FStat_Compute_FusedFine_U64",
     ):
         assert getattr(lib, name).restype is None
+
+
+def test_setup_signatures_does_not_require_the_removed_coarse_entries(monkeypatch) -> None:
+    """Kernel core 3.0.0 removed the float diagnostic and the uint64 power
+    entries; a library without them must load, and the handle constructors
+    take the packed input and geometry only (no float output pointer)."""
+    import ctypes
+
+    lib = _setup_core_3_wrapper(monkeypatch)
+    assert lib.FStat_Create.argtypes == [ctypes.c_void_p, ctypes.c_int]
+    assert lib.FStat_Create_Batch.argtypes == [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+    ]
+    for removed in (
+        "compute_powers",
+        "compute_powers_u64",
+        "compute_diagnostic_float",
+        "compute_numden_mask_rational_half",
+        "compute_numden_mask_rational_half_checked",
+    ):
+        assert not hasattr(FStatKernel, removed), removed
 
 
 def _fused_mask_wrapper(callback=lambda *args: None) -> FStatKernel:
@@ -307,9 +334,9 @@ def test_create_entry_points_require_positive_exact_c_int_rows(
 
     with pytest.raises((TypeError, ValueError), match="detector_rows_per_block"):
         if method == "create_raw":
-            wrapper.create_raw(invalid, 1, 2)
+            wrapper.create_raw(invalid, 1)
         else:
-            getattr(wrapper, method)(invalid, _DeviceBuffer(), _DeviceBuffer())
+            getattr(wrapper, method)(invalid, _DeviceBuffer())
 
     assert calls == []
 
@@ -335,14 +362,9 @@ def test_batch_create_entry_points_require_positive_exact_c_int_geometry(
 
     with pytest.raises((TypeError, ValueError), match=field):
         if method == "create_raw_batch":
-            wrapper.create_raw_batch(rows, batch, 1, 2)
+            wrapper.create_raw_batch(rows, batch, 1)
         else:
-            getattr(wrapper, method)(
-                rows,
-                batch,
-                _DeviceBuffer(),
-                _DeviceBuffer(),
-            )
+            getattr(wrapper, method)(rows, batch, _DeviceBuffer())
 
     assert calls == []
 
@@ -351,13 +373,24 @@ def test_create_entry_points_preserve_c_int_boundaries() -> None:
     calls = []
     wrapper = _create_wrapper(lambda *args: calls.append(args) or 123)
 
-    assert wrapper.create_raw((1 << 31) - 1, 1, 2) == 123
-    assert wrapper.create_raw_batch((1 << 31) - 1, (1 << 31) - 1, 1, 2) == 123
+    assert wrapper.create_raw((1 << 31) - 1, 1) == 123
+    assert wrapper.create_raw_batch((1 << 31) - 1, (1 << 31) - 1, 1) == 123
 
     assert calls == [
-        (1, 2, (1 << 31) - 1),
-        (1, 2, (1 << 31) - 1, (1 << 31) - 1),
+        (1, (1 << 31) - 1),
+        (1, (1 << 31) - 1, (1 << 31) - 1),
     ]
+
+
+def test_context_manager_handles_pass_input_and_geometry_only() -> None:
+    calls = []
+    wrapper = _create_wrapper(lambda *args: calls.append(args) or 123)
+    wrapper._lib.FStat_Destroy = _Function()
+    with wrapper.create_handle(128, _DeviceBuffer()) as handle:
+        assert handle == 123
+    with wrapper.create_batch_handle(256, 2, _DeviceBuffer()) as handle:
+        assert handle == 123
+    assert calls == [(1, 128), (1, 256, 2)]
 
 
 def _fine_powers_wrapper(callback=lambda *args: None) -> FStatKernel:
@@ -422,66 +455,3 @@ def test_fine_power_entry_point_preserves_launch_capacity_boundary() -> None:
     assert calls == [(1, 3, 256, 128, (1 << 31) - 1, 2)]
 
 
-def _numden_wrapper(callback=lambda *args: None) -> FStatKernel:
-    wrapper = object.__new__(FStatKernel)
-    wrapper._lib = SimpleNamespace(
-        FStat_Compute_NumDen_Mask_RationalHalf=_Function(callback),
-        FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount=_Function(
-            callback
-        ),
-    )
-    wrapper._has_numden_mask_rational_half = True
-    wrapper._has_numden_mask_rational_half_checked = True
-    wrapper._has_last_error = False
-    return wrapper
-
-
-@pytest.mark.parametrize(
-    ("field", "invalid"),
-    [
-        ("threshold_half_numerator", -1),
-        ("threshold_half_numerator", 1 << 64),
-        ("threshold_half_numerator", 1.0),
-        ("threshold_half_numerator", True),
-        ("threshold_half_denominator", 0),
-        ("threshold_half_denominator", -1),
-        ("threshold_half_denominator", 1 << 64),
-        ("threshold_half_denominator", 1.0),
-        ("threshold_half_denominator", True),
-    ],
-)
-@pytest.mark.parametrize("checked", [False, True])
-def test_numden_threshold_requires_exact_uint64(
-    checked: bool,
-    field: str,
-    invalid: object,
-) -> None:
-    calls = []
-    wrapper = _numden_wrapper(lambda *args: calls.append(args))
-    numerator = invalid if field == "threshold_half_numerator" else 1
-    denominator = invalid if field == "threshold_half_denominator" else 1
-    arguments = (None, 1, numerator, denominator, 2, 3, 4)
-
-    with pytest.raises((TypeError, ValueError), match=field):
-        if checked:
-            wrapper.compute_numden_mask_rational_half_checked(*arguments, 5)
-        else:
-            wrapper.compute_numden_mask_rational_half(*arguments)
-
-    assert calls == []
-
-
-@pytest.mark.parametrize("checked", [False, True])
-def test_numden_threshold_preserves_uint64_boundaries(checked: bool) -> None:
-    calls = []
-    wrapper = _numden_wrapper(lambda *args: calls.append(args))
-    arguments = (None, 1, (1 << 64) - 1, (1 << 64) - 1, 2, 3, 4)
-
-    if checked:
-        wrapper.compute_numden_mask_rational_half_checked(*arguments, 5)
-    else:
-        wrapper.compute_numden_mask_rational_half(*arguments)
-
-    assert len(calls) == 1
-    assert calls[0][2].value == (1 << 64) - 1
-    assert calls[0][3].value == (1 << 64) - 1

@@ -19,6 +19,8 @@ from pilot_proxy.kernel import FStatKernel
 pytestmark = pytest.mark.cuda
 ROOT = Path(__file__).resolve().parents[2]
 WINDOWS = 128
+FINE_BINS = 256
+UNWRITTEN = 123  # sentinel the kernel must overwrite (or, for an unbound tap, leave)
 
 # Exercise each implementation choice at both K values, including grid stride.
 CONFIGURATIONS = [
@@ -94,6 +96,7 @@ def kernel_build(request, tmp_path_factory):
     assert kernel.features.block_threads == threads
     assert kernel.features.grid_max_blocks == grid
     assert kernel.supports_fused_fine_mask()
+    assert kernel.version.as_tuple() >= (3, 0, 0)
     return cp, kernel, k
 
 
@@ -106,6 +109,11 @@ def integer_rows(packed, weights):
     real = xr @ wr.T + xi @ wi.T
     imag = xi @ wr.T - xr @ wi.T
     return np.stack((real.T, imag.T), axis=-1)
+
+
+def frame_powers(fine):
+    """Kernel core 3.0.0: the frame powers are the all-bin sums of the fine spectrum."""
+    return np.asarray(fine).sum(axis=-1, dtype=np.uint64)
 
 
 @pytest.mark.parametrize(
@@ -135,47 +143,30 @@ def test_all_exact_paths_and_reused_outputs(kernel_build, streams, batch, patter
         packed[:, int(pattern[6:]) * WINDOWS :] = 0
 
     expected_rows = np.stack([integer_rows(frame, weights) for frame in packed])
-    expected_power = (expected_rows**2).sum(axis=(2, 3)).astype(np.uint64)
     expected_fine = np.stack(
         [fine_power_fx(frame, num_streams=streams) for frame in expected_rows]
     )
+    expected_power = frame_powers(expected_fine)
     device_input = cp.asarray(packed)
-    diag = cp.full(batch * 3, -1, dtype=cp.float32)
-    handle = kernel.create_raw_batch(rows, batch, device_input.data.ptr, diag.data.ptr)
+    handle = kernel.create_raw_batch(rows, batch, device_input.data.ptr)
     tap = cp.full((batch, 3, rows, 2), -1, dtype=cp.int32)
-    powers = cp.full((batch, 3), 123, dtype=cp.uint64)
-    fine = cp.full((batch, 3, 256), 123, dtype=cp.uint64)
+    powers = cp.full((batch, 3), UNWRITTEN, dtype=cp.uint64)
+    fine = cp.full((batch, 3, FINE_BINS), UNWRITTEN, dtype=cp.uint64)
     mask = cp.full(batch, -1, dtype=cp.int32)
-    coarse_mask = cp.full(batch, 255, dtype=cp.uint8)
-    num = cp.full(batch, 123, dtype=cp.uint64)
-    den = cp.full(batch, 123, dtype=cp.uint64)
-    overflow = cp.full(1, 123, dtype=cp.uint64)
-    bulk = np.zeros(256, dtype=bool)
+    bulk = np.zeros(FINE_BINS, dtype=bool)
     bulk[::2] = True
     try:
+        # Staged path: row projections, then the fine stage over the same
+        # device buffer; the host forms the frame powers as the bin sums.
         kernel.compute_row_projections_i32(handle, weights.ctypes.data, tap.data.ptr)
         np.testing.assert_array_equal(cp.asnumpy(tap), expected_rows)
-        kernel.compute_powers_u64(handle, weights.ctypes.data, powers.data.ptr)
-        np.testing.assert_array_equal(cp.asnumpy(powers), expected_power)
-        kernel.compute_powers(handle, weights.ctypes.data)
-        np.testing.assert_array_equal(
-            cp.asnumpy(diag).reshape(batch, 3), expected_power.astype(np.float32)
-        )
-        kernel.compute_diagnostic_float(handle, weights.ctypes.data)
-        denominator = expected_power[:, 1].astype(np.float64) + expected_power[:, 2]
-        expected_ratio = np.divide(
-            2 * expected_power[:, 0],
-            denominator,
-            out=np.zeros(batch),
-            where=denominator != 0,
-        )
-        np.testing.assert_allclose(
-            cp.asnumpy(diag)[:batch], expected_ratio, rtol=2e-6, atol=0
-        )
         kernel.compute_fine_powers_u64(
             tap.data.ptr, streams, WINDOWS, batch, fine.data.ptr
         )
         np.testing.assert_array_equal(cp.asnumpy(fine), expected_fine)
+        np.testing.assert_array_equal(frame_powers(cp.asnumpy(fine)), expected_power)
+
+        # Fused path: fine powers and the device-reduced frame powers.
         kernel.compute_fused_fine_u64(
             handle, weights.ctypes.data, fine.data.ptr, powers.data.ptr, tap.data.ptr
         )
@@ -183,27 +174,9 @@ def test_all_exact_paths_and_reused_outputs(kernel_build, streams, batch, patter
         np.testing.assert_array_equal(cp.asnumpy(powers), expected_power)
         np.testing.assert_array_equal(cp.asnumpy(tap), expected_rows)
 
-        for numerator, denominator in ((0, 1), (1, 1), (2, 3)):
-            kernel.compute_numden_mask_rational_half_checked(
-                handle,
-                weights.ctypes.data,
-                numerator,
-                denominator,
-                num.data.ptr,
-                den.data.ptr,
-                coarse_mask.data.ptr,
-                overflow.data.ptr,
-            )
-            ref_den = expected_power[:, 1] + expected_power[:, 2]
-            ref_mask = (ref_den != 0) & (
-                expected_power[:, 0] * denominator > ref_den * numerator
-            )
-            np.testing.assert_array_equal(cp.asnumpy(num), expected_power[:, 0])
-            np.testing.assert_array_equal(cp.asnumpy(den), ref_den)
-            np.testing.assert_array_equal(cp.asnumpy(coarse_mask), ref_mask)
-            assert int(overflow.get()[0]) == 0
-
-        # Repeated calls must clear counters and powers, including zero frames.
+        # Repeated calls must clear counters and fine powers, including zero
+        # frames; the optional frame-power tap carries the same sums and an
+        # unbound tap is left untouched.
         for anchor, width, rank, multiplier in (
             (0, 2, 0, 1),
             (255, 127, 127, (1 << 64) - 1),
@@ -221,6 +194,7 @@ def test_all_exact_paths_and_reused_outputs(kernel_build, streams, batch, patter
                 for frame in expected_fine
             ]
             for taps in (True, False, False):
+                powers.fill(UNWRITTEN)
                 kernel.compute_fused_fine_mask_u64(
                     handle,
                     weights.ctypes.data,
@@ -239,6 +213,8 @@ def test_all_exact_paths_and_reused_outputs(kernel_build, streams, batch, patter
                 if taps:
                     np.testing.assert_array_equal(cp.asnumpy(powers), expected_power)
                     np.testing.assert_array_equal(cp.asnumpy(tap), expected_rows)
+                else:
+                    assert (cp.asnumpy(powers) == UNWRITTEN).all()
         assert kernel.last_error() == ""
     finally:
         kernel.destroy(handle)
@@ -252,25 +228,28 @@ def test_weight_changes_across_live_handles(kernel_build):
         rng.integers(0, 256, (3, k), dtype=np.uint8).view(np.int8) for _ in range(2)
     ]
     device_input = cp.asarray(packed)
-    diag = cp.zeros(1, dtype=cp.float32)
+    fine = cp.empty((3, FINE_BINS), dtype=cp.uint64)
     powers = cp.empty(3, dtype=cp.uint64)
+
+    def expected_for(w):
+        return frame_powers(fine_power_fx(integer_rows(packed, w), num_streams=1))
+
     handles = []
     try:
         for _ in range(2):
-            handles.append(
-                kernel.create_raw(WINDOWS, device_input.data.ptr, diag.data.ptr)
-            )
+            handles.append(kernel.create_raw(WINDOWS, device_input.data.ptr))
         for index in (0, 1, 0, 1, 0):
-            kernel.compute_powers_u64(
-                handles[index], weights[index].ctypes.data, powers.data.ptr
+            kernel.compute_fused_fine_u64(
+                handles[index], weights[index].ctypes.data,
+                fine.data.ptr, powers.data.ptr, 0,
             )
-            expected = (integer_rows(packed, weights[index]) ** 2).sum(axis=(1, 2))
-            np.testing.assert_array_equal(cp.asnumpy(powers), expected)
+            np.testing.assert_array_equal(cp.asnumpy(powers), expected_for(weights[index]))
         # A host buffer can change without its address changing.
         weights[0][:] = weights[1]
-        kernel.compute_powers_u64(handles[0], weights[0].ctypes.data, powers.data.ptr)
-        expected = (integer_rows(packed, weights[0]) ** 2).sum(axis=(1, 2))
-        np.testing.assert_array_equal(cp.asnumpy(powers), expected)
+        kernel.compute_fused_fine_u64(
+            handles[0], weights[0].ctypes.data, fine.data.ptr, powers.data.ptr, 0
+        )
+        np.testing.assert_array_equal(cp.asnumpy(powers), expected_for(weights[0]))
     finally:
         for handle in handles:
             kernel.destroy(handle)
@@ -300,15 +279,22 @@ def test_device_wide_integer_compares_against_python_bigints(kernel_build):
 def test_native_error_does_not_poison_the_next_call(kernel_build):
     cp, kernel, k = kernel_build
     weights = np.ones((3, k), dtype=np.int8)
+    fine = cp.empty((3, FINE_BINS), dtype=cp.uint64)
     powers = cp.empty(3, dtype=cp.uint64)
     with pytest.raises(RuntimeError, match="handle is null"):
-        kernel.compute_powers_u64(None, weights.ctypes.data, powers.data.ptr)
+        kernel.compute_fused_fine_u64(
+            None, weights.ctypes.data, fine.data.ptr, powers.data.ptr, 0
+        )
     packed = cp.zeros((WINDOWS, k), dtype=cp.int8)
-    diag = cp.zeros(1, dtype=cp.float32)
-    handle = kernel.create_raw(WINDOWS, packed.data.ptr, diag.data.ptr)
+    handle = kernel.create_raw(WINDOWS, packed.data.ptr)
     try:
-        kernel.compute_powers_u64(handle, weights.ctypes.data, powers.data.ptr)
+        kernel.compute_fused_fine_u64(
+            handle, weights.ctypes.data, fine.data.ptr, powers.data.ptr, 0
+        )
         np.testing.assert_array_equal(cp.asnumpy(powers), [0, 0, 0])
+        np.testing.assert_array_equal(
+            cp.asnumpy(fine), np.zeros((3, FINE_BINS), dtype=np.uint64)
+        )
         assert kernel.last_error() == ""
     finally:
         kernel.destroy(handle)

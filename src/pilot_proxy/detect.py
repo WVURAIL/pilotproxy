@@ -180,15 +180,31 @@ def detect_packed_detector_input(
 ) -> dict[str, Any]:
     """Run fixed-point detection and return exact power ratios.
 
+    The three frame powers are the all-bin sums of the exact fine power
+    spectra (kernel core 3.0.0): ``P_r = sum_f S_r[f]`` with ``S_r`` the
+    uint64 output of the frozen fxfft256 stage over the device row
+    projections (``FStat_Compute_RowSums_I32`` ->
+    ``FStat_Compute_FinePowers_U64``, summed on the host in uint64). The
+    transform length cancels in the ratio, so ``coarse_power_ratio =
+    2 P_0 / (P_1 + P_2)`` keeps its form; the fused kernel's ``d_power_out``
+    is the same sum formed on the device.
+
     The positive-excess mask is norm-corrected: it compares against the H0
     zero-point ``null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq`` implied by the
     supplied int4 weights (exactly, in integers), not against ``F > 1``.
+
+    Rows must be a multiple of 128 (the frozen window count), because the
+    frame powers are defined over whole-stream fine spectra. The row
+    projections are always computed on the device; ``emit_row_projections``
+    only controls whether that device buffer is returned with the result.
     """
     _validate_kernel_inputs(packed=packed, weights=weights, kernel=kernel)
-    if not getattr(kernel, "_has_powers_u64", False):
+    if not kernel.supports_row_projections() or not kernel.supports_fine_powers():
         raise RuntimeError(
-            "Kernel library does not expose FStat_Compute_Powers_U64; "
-            "rebuild libfstatistic.so with the current CUDA sources."
+            "Kernel library does not expose FStat_Compute_RowSums_I32 and "
+            "FStat_Compute_FinePowers_U64 (the frame powers are their all-bin "
+            "sums since kernel core 3.0.0); rebuild libfstatistic.so with the "
+            "current CUDA sources."
         )
 
     target_norm_sq, ref_lower_norm_sq, ref_upper_norm_sq = weight_term_norms_sq(
@@ -209,85 +225,60 @@ def detect_packed_detector_input(
     if packed.ndim == 2:
         batch = 1
         rows = int(packed.shape[0])
-        d_in = cp.asarray(packed)
-        d_out = cp.zeros(batch, dtype=cp.float32)
-        handle = kernel.create_raw(rows, d_in.data.ptr, d_out.data.ptr)
     elif packed.ndim == 3:
         batch = int(packed.shape[0])
         rows = int(packed.shape[1])
-        d_in = cp.asarray(packed)
-        d_out = cp.zeros(batch, dtype=cp.float32)
-        handle = kernel.create_raw_batch(rows, batch, d_in.data.ptr, d_out.data.ptr)
     else:
         raise ValueError("packed must be a 2D or 3D detector matrix array.")
-
-    d_powers = cp.zeros((batch, REFERENCE_WEIGHT_TERMS), dtype=cp.uint64)
-    d_matched_filter_row_projections = None
-    d_fine_powers_u64 = None
-    if emit_row_projections:
-        if not kernel.supports_row_projections():
-            raise RuntimeError(
-                "row sums requested but the kernel library does not expose "
-                "FStat_Compute_RowSums_I32; rebuild libfstatistic.so from the "
-                "v2 CUDA sources."
-            )
-        d_matched_filter_row_projections = cp.zeros(
-            batch * REFERENCE_WEIGHT_TERMS * rows * 2, dtype=cp.int32
+    # fxfft256 is frozen at 128 windows per stream, and this entry point does
+    # not see the caller's frame size, so it derives the stream count as
+    # rows // 128. Refuse rather than guess when that is not exact: a wrong
+    # stream count would emit quietly meaningless powers.
+    if rows % FINE_WINDOWS_PER_STREAM != 0:
+        raise ValueError(
+            f"detector rows ({rows}) must be a multiple of the frozen fxfft256 "
+            f"window count ({FINE_WINDOWS_PER_STREAM}): the frame powers are the "
+            "all-bin sums of whole-stream fine spectra."
         )
-        # The exact fine terms are only obtainable here, while the row sums are
-        # still on the device. Recovering them later from the float ratio is
-        # impossible, so emit them whenever the library can.
-        # fxfft256 is frozen at 128 windows per stream, and this entry point
-        # does not see the caller's frame size, so it can only derive the
-        # stream count as rows // 128. Refuse to guess when that is not exact:
-        # a wrong stream count would emit quietly meaningless powers.
-        if (
-            kernel.supports_fine_powers()
-            and rows % FINE_WINDOWS_PER_STREAM == 0
-        ):
-            d_fine_powers_u64 = cp.zeros(
-                batch * REFERENCE_WEIGHT_TERMS * FINE_BINS, dtype=cp.uint64
-            )
-    try:
-        kernel.compute_powers_u64(handle, weights.ctypes.data, d_powers.data.ptr)
-        if d_matched_filter_row_projections is not None:
-            kernel.compute_row_projections_i32(
-                handle, weights.ctypes.data, d_matched_filter_row_projections.data.ptr
-            )
-            if d_fine_powers_u64 is not None:
-                kernel.compute_fine_powers_u64(
-                    d_matched_filter_row_projections.data.ptr,
-                    rows // FINE_WINDOWS_PER_STREAM,
-                    FINE_WINDOWS_PER_STREAM,
-                    batch,
-                    d_fine_powers_u64.data.ptr,
-                )
-        cp.cuda.Device().synchronize()
-        powers = cp.asnumpy(d_powers).astype(np.uint64, copy=False)
-    finally:
-        kernel.destroy(handle)
+    num_streams = rows // FINE_WINDOWS_PER_STREAM
 
-    fine_powers_u64 = None
-    if d_fine_powers_u64 is not None:
+    d_in = cp.asarray(packed)
+    if packed.ndim == 2:
+        handle = kernel.create_raw(rows, d_in.data.ptr)
+    else:
+        handle = kernel.create_raw_batch(rows, batch, d_in.data.ptr)
+    d_matched_filter_row_projections = cp.zeros(
+        batch * REFERENCE_WEIGHT_TERMS * rows * 2, dtype=cp.int32
+    )
+    d_fine_powers_u64 = cp.zeros(
+        batch * REFERENCE_WEIGHT_TERMS * FINE_BINS, dtype=cp.uint64
+    )
+    try:
+        kernel.compute_row_projections_i32(
+            handle, weights.ctypes.data, d_matched_filter_row_projections.data.ptr
+        )
+        kernel.compute_fine_powers_u64(
+            d_matched_filter_row_projections.data.ptr,
+            num_streams,
+            FINE_WINDOWS_PER_STREAM,
+            batch,
+            d_fine_powers_u64.data.ptr,
+        )
+        cp.cuda.Device().synchronize()
         fine_powers_u64 = cp.asnumpy(d_fine_powers_u64).astype(
             np.uint64, copy=False
         ).reshape(batch, REFERENCE_WEIGHT_TERMS, FINE_BINS)
+    finally:
+        kernel.destroy(handle)
+
+    # Frame powers: the exact all-bin sum of each term's fine spectrum.
+    powers = fine_powers_u64.sum(axis=-1, dtype=np.uint64)
 
     matched_filter_row_projections = None
-    if d_matched_filter_row_projections is not None:
-        matched_filter_row_projections = d_matched_filter_row_projections.reshape(batch, REFERENCE_WEIGHT_TERMS, rows, 2)
-        # Exact all-bin marginal identity against the deployed u64 powers.
-        # Any mismatch means stage-1 output is corrupt; fail immediately.
-        from .fine_reduction import (
-            check_coarse_power_marginal_identity,
-            exact_coarse_power_by_term,
+    if emit_row_projections:
+        matched_filter_row_projections = d_matched_filter_row_projections.reshape(
+            batch, REFERENCE_WEIGHT_TERMS, rows, 2
         )
-
-        for b_idx in range(batch):
-            marginal = exact_coarse_power_by_term(
-                matched_filter_row_projections[b_idx], num_weight_terms=REFERENCE_WEIGHT_TERMS, xp=cp
-            )
-            check_coarse_power_marginal_identity(marginal, powers[b_idx])
 
     rows_out: list[dict[str, Any]] = []
     for idx in range(batch):

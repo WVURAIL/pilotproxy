@@ -235,51 +235,26 @@ class FStatKernel:
 
         if not _has_symbol(self._lib, "FStat_Create"):
             raise RuntimeError("Kernel library does not expose FStat_Create.")
+        # Kernel core 3.0.0: the handle takes the packed input only; every
+        # output buffer is passed to the compute entry that writes it.
         self._lib.FStat_Create.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_void_p,
-            ctypes.c_int,
+            ctypes.c_void_p,  # device packed input pointer
+            ctypes.c_int,     # detector_rows_per_block
         ]
         self._lib.FStat_Create.restype = ctypes.c_void_p
 
         self._has_batch_create = _has_symbol(self._lib, "FStat_Create_Batch")
         if self._has_batch_create:
             self._lib.FStat_Create_Batch.argtypes = [
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-                ctypes.c_int,
-                ctypes.c_int,
+                ctypes.c_void_p,  # device packed input pointer
+                ctypes.c_int,     # detector_rows_per_block
+                ctypes.c_int,     # batch
             ]
             self._lib.FStat_Create_Batch.restype = ctypes.c_void_p
-
-        if not _has_symbol(self._lib, "FStat_Compute_DiagnosticFloat"):
-            raise RuntimeError(
-                "Kernel library does not expose FStat_Compute_DiagnosticFloat."
-            )
-        self._lib.FStat_Compute_DiagnosticFloat.argtypes = [
-            ctypes.c_void_p,  # handle
-            ctypes.c_void_p,  # weights pointer
-        ]
-        self._lib.FStat_Compute_DiagnosticFloat.restype = None
 
         self._lib.FStat_Destroy.argtypes = [ctypes.c_void_p]
         self._lib.FStat_Destroy.restype = None
 
-        self._has_powers = _has_symbol(self._lib, "FStat_Compute_Powers")
-        if self._has_powers:
-            self._lib.FStat_Compute_Powers.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.c_void_p,  # weights pointer
-            ]
-            self._lib.FStat_Compute_Powers.restype = None
-        self._has_powers_u64 = _has_symbol(self._lib, "FStat_Compute_Powers_U64")
-        if self._has_powers_u64:
-            self._lib.FStat_Compute_Powers_U64.argtypes = [
-                ctypes.c_void_p,  # handle
-                ctypes.c_void_p,  # weights pointer
-                ctypes.c_void_p,  # uint64 device output pointer
-            ]
-            self._lib.FStat_Compute_Powers_U64.restype = None
         self._has_matched_filter_row_projections_i32 = _has_symbol(
             self._lib, "FStat_Compute_RowSums_I32"
         )
@@ -323,8 +298,8 @@ class FStatKernel:
                 ctypes.c_void_p,  # handle
                 ctypes.c_void_p,  # weights pointer (host)
                 ctypes.c_void_p,  # device uint64 fine-power output pointer
-                ctypes.c_void_p,  # device uint64 marginal-power output pointer
-                ctypes.c_void_p,  # optional device int32 row-sum tap (or NULL)
+                ctypes.c_void_p,  # device uint64 frame powers (sum over fine bins)
+                ctypes.c_void_p,  # optional device int32 row-projection tap (or NULL)
             ]
             self._lib.FStat_Compute_FusedFine_U64.restype = None
         self._has_supports_fused_fine = _has_symbol(
@@ -347,8 +322,8 @@ class FStatKernel:
                 ctypes.c_ulonglong,  # multiplier_q16
                 ctypes.c_void_p,   # device uint64 fine-power accumulator
                 ctypes.c_void_p,   # device int32 mask output
-                ctypes.c_void_p,   # optional device uint64 marginals (or NULL)
-                ctypes.c_void_p,   # optional device int32 row-sum tap (or NULL)
+                ctypes.c_void_p,   # optional device uint64 frame powers (or NULL)
+                ctypes.c_void_p,   # optional device int32 row-projection tap (or NULL)
             ]
             self._lib.FStat_Compute_FusedFineMask_U64.restype = None
         self._has_supports_fused_fine_mask = _has_symbol(
@@ -380,39 +355,6 @@ class FStatKernel:
                 ctypes.POINTER(ctypes.c_int)
             ] * 3
             self._lib.FStat_GetFineSpecs.restype = None
-
-        self._has_numden_mask_rational_half = _has_symbol(
-            self._lib, "FStat_Compute_NumDen_Mask_RationalHalf"
-        )
-        if self._has_numden_mask_rational_half:
-            self._lib.FStat_Compute_NumDen_Mask_RationalHalf.argtypes = [
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-                ctypes.c_ulonglong,
-                ctypes.c_ulonglong,
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-            ]
-            self._lib.FStat_Compute_NumDen_Mask_RationalHalf.restype = None
-        self._has_numden_mask_rational_half_checked = _has_symbol(
-            self._lib, "FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount"
-        )
-        if self._has_numden_mask_rational_half_checked:
-            checked = (
-                self._lib.FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount
-            )
-            checked.argtypes = [
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-                ctypes.c_ulonglong,
-                ctypes.c_ulonglong,
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-            ]
-            checked.restype = None
 
     def _get_specs(self) -> KernelSpecs:
         """Query compile-time kernel parameters."""
@@ -495,22 +437,20 @@ class FStatKernel:
             patch=int(c_patch.value),
         )
 
-    def create_handle(self, M: int, d_in: Any, d_out: Any):
+    def create_handle(self, M: int, d_in: Any):
         """Create a kernel handle (use as a context manager)."""
         rows = _checked_c_int(
             M,
             field="detector_rows_per_block",
             minimum=1,
         )
-        return _KernelHandle(self._lib, rows, d_in, d_out)
+        return _KernelHandle(self._lib, rows, d_in)
 
-    def create_detector_matrix_handle(
-        self, detector_rows_per_block: int, d_in: Any, d_out: Any
-    ):
+    def create_detector_matrix_handle(self, detector_rows_per_block: int, d_in: Any):
         """Create a handle using descriptive detector-matrix terminology."""
-        return self.create_handle(detector_rows_per_block, d_in, d_out)
+        return self.create_handle(detector_rows_per_block, d_in)
 
-    def create_batch_handle(self, M: int, batch: int, d_in: Any, d_out: Any):
+    def create_batch_handle(self, M: int, batch: int, d_in: Any):
         """Create a batched kernel handle (use as a context manager)."""
         rows = _checked_c_int(
             M,
@@ -522,7 +462,6 @@ class FStatKernel:
             self._lib,
             rows,
             d_in,
-            d_out,
             batch=batch_count,
         )
 
@@ -531,29 +470,30 @@ class FStatKernel:
         detector_rows_per_block: int,
         batch: int,
         d_in: Any,
-        d_out: Any,
     ):
         """Create a batched handle using descriptive detector-matrix terminology."""
-        return self.create_batch_handle(
-            detector_rows_per_block, batch, d_in, d_out
-        )
+        return self.create_batch_handle(detector_rows_per_block, batch, d_in)
 
-    def create_raw(self, M: int, in_ptr: int, out_ptr: int):
-        """Create a handle from raw pointers."""
+    def create_raw(self, M: int, in_ptr: int):
+        """Create a handle from a raw device input pointer.
+
+        Kernel core 3.0.0 handles own no output buffer: every output is passed
+        to the compute entry that writes it.
+        """
         rows = _checked_c_int(
             M,
             field="detector_rows_per_block",
             minimum=1,
         )
-        handle = self._lib.FStat_Create(in_ptr, out_ptr, rows)
+        handle = self._lib.FStat_Create(in_ptr, rows)
         if not handle:
             raise RuntimeError(
                 self.last_error() or "FStat_Create returned NULL."
             )
         return handle
 
-    def create_raw_batch(self, M: int, batch: int, in_ptr: int, out_ptr: int):
-        """Create a batched handle from raw pointers."""
+    def create_raw_batch(self, M: int, batch: int, in_ptr: int):
+        """Create a batched handle from a raw device input pointer."""
         if not getattr(self, "_has_batch_create", False):
             raise RuntimeError("Kernel library does not expose FStat_Create_Batch.")
         rows = _checked_c_int(
@@ -564,7 +504,6 @@ class FStatKernel:
         batch_count = _checked_c_int(batch, field="batch", minimum=1)
         handle = self._lib.FStat_Create_Batch(
             in_ptr,
-            out_ptr,
             rows,
             batch_count,
         )
@@ -588,27 +527,6 @@ class FStatKernel:
     def supports_batch(self) -> bool:
         """Return True if the kernel library supports batched handles."""
         return bool(getattr(self, "_has_batch_create", False))
-
-    def compute_diagnostic_float(self, handle, weights_ptr: int):
-        """Execute the diagnostic floating-point F-statistic path."""
-        self._lib.FStat_Compute_DiagnosticFloat(handle, weights_ptr)
-        self._check_call("FStat_Compute_DiagnosticFloat")
-
-    def compute_powers(self, handle, weights_ptr: int):
-        """Execute the kernel and write per-weight power terms to d_out."""
-        if not getattr(self, "_has_powers", False):
-            raise RuntimeError("Kernel library does not expose FStat_Compute_Powers.")
-        self._lib.FStat_Compute_Powers(handle, weights_ptr)
-        self._check_call("FStat_Compute_Powers")
-
-    def compute_powers_u64(self, handle, weights_ptr: int, powers_ptr: int):
-        """Execute the kernel and write exact uint64 power terms to powers_ptr."""
-        if not getattr(self, "_has_powers_u64", False):
-            raise RuntimeError(
-                "Kernel library does not expose FStat_Compute_Powers_U64."
-            )
-        self._lib.FStat_Compute_Powers_U64(handle, weights_ptr, powers_ptr)
-        self._check_call("FStat_Compute_Powers_U64")
 
     def supports_row_projections(self) -> bool:
         """Return True when the v2 exact row-sum front end is available."""
@@ -736,19 +654,21 @@ class FStatKernel:
         powers_ptr: int,
         row_projections_tap_ptr: int = 0,
     ):
-        """One launch from packed samples to exact fine and coarse powers.
+        """One launch from packed samples to exact fine powers and frame powers.
 
-        The fused form of the deployed fine path (kernel core 2.2.0):
-        row sums live in shared memory, the exact uint64 coarse marginals
-        and the frozen fxfft256 v1 fine powers are accumulated in the same
-        launch, and the bit-exact marginal identity is internal to the
-        kernel. Output layouts match the composed path exactly:
-        fine_powers_ptr addresses batch * num_weight_terms * 256 uint64
-        and powers_ptr addresses batch * num_weight_terms uint64 (both
-        zeroed by the library before accumulation). row_projections_tap_ptr, when
-        nonzero, addresses the same device buffer layout
-        compute_row_projections_i32 fills and receives the identical bits; leave
-        it 0 in production so row sums never touch global memory.
+        The fused form of the deployed fine path (kernel core 2.2.0): row
+        projections live in shared memory and the frozen fxfft256 v1 fine
+        powers are accumulated in the launch. fine_powers_ptr addresses
+        batch * num_weight_terms * 256 uint64 (zeroed by the library before
+        accumulation) and matches the composed path bit for bit.
+        powers_ptr addresses batch * num_weight_terms uint64 and receives
+        the frame powers ``P_r = sum over the 256 fine bins of S_r[f]``,
+        reduced from the finalized fine sums after the fused launch (kernel
+        core 3.0.0); it equals ``fine.sum(axis=-1)`` on the host exactly.
+        row_projections_tap_ptr, when nonzero, addresses the same device
+        buffer layout compute_row_projections_i32 fills and receives the
+        identical bits; leave it 0 in production so row projections never
+        touch global memory.
         """
         if not getattr(self, "_has_fused_fine_u64", False):
             raise RuntimeError(
@@ -776,7 +696,7 @@ class FStatKernel:
         cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, powers_ptr=0,
         row_projections_tap_ptr=0,
     ):
-        """Legacy fine decision v1 mask and optional exact power diagnostics."""
+        """Fine decision v1 mask with optional frame-power and row-projection taps."""
         self._compute_fused_fine_mask_u64(
             handle, weights_ptr, anchor_bin, designated_half_width, bulk_mask_words,
             cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, powers_ptr,
@@ -837,10 +757,14 @@ class FStatKernel:
         4-word packed 256-bit bulk mask (``fine_decision.pack_bulk_mask``).
         ``mask_ptr`` must address ``batch`` int32 on the device (zeroed
         by the library; doubles as the completion counter during the
-        launch). ``fine_powers_ptr`` is the required exact accumulator;
-        ``powers_ptr`` and ``row_projections_tap_ptr`` are optional debug taps
-        (0 in production). anchor/width/rank/multiplier are runtime
-        bundle data.
+        launch). ``fine_powers_ptr`` is the required exact accumulator.
+        ``powers_ptr``, when nonzero, receives the frame powers
+        ``P_r = sum over the 256 fine bins of S_r[f]`` (batch *
+        num_weight_terms uint64, the same values ``compute_fused_fine_u64``
+        writes; kernel core 3.0.0) and ``row_projections_tap_ptr`` the exact
+        row projections; both are 0 in production. The decision never reads
+        the frame powers. anchor/width/rank/multiplier are runtime bundle
+        data.
         """
         symbol = "FStat_Compute_FusedFineMaskWithSupport_U64" if support is not None else "FStat_Compute_FusedFineMask_U64"
         feature = "_has_fused_fine_mask_with_support_u64" if support is not None else "_has_fused_fine_mask_u64"
@@ -895,82 +819,6 @@ class FStatKernel:
         )
         self._check_call(symbol)
 
-    def compute_numden_mask_rational_half(
-        self,
-        handle,
-        weights_ptr: int,
-        threshold_half_numerator: int,
-        threshold_half_denominator: int,
-        numerator_ptr: int,
-        denominator_ptr: int,
-        mask_ptr: int,
-    ):
-        """Execute the half-threshold path and write numerator/denominator/mask."""
-        if not getattr(self, "_has_numden_mask_rational_half", False):
-            raise RuntimeError(
-                "Kernel library does not expose "
-                "FStat_Compute_NumDen_Mask_RationalHalf."
-            )
-        numerator = _checked_uint64(
-            threshold_half_numerator,
-            field="threshold_half_numerator",
-        )
-        denominator = _checked_uint64(
-            threshold_half_denominator,
-            field="threshold_half_denominator",
-            positive=True,
-        )
-        self._lib.FStat_Compute_NumDen_Mask_RationalHalf(
-            handle,
-            weights_ptr,
-            ctypes.c_ulonglong(numerator),
-            ctypes.c_ulonglong(denominator),
-            numerator_ptr,
-            denominator_ptr,
-            mask_ptr,
-        )
-        self._check_call("FStat_Compute_NumDen_Mask_RationalHalf")
-
-    def compute_numden_mask_rational_half_checked(
-        self,
-        handle,
-        weights_ptr: int,
-        threshold_half_numerator: int,
-        threshold_half_denominator: int,
-        numerator_ptr: int,
-        denominator_ptr: int,
-        mask_ptr: int,
-        rational_overflow_count_ptr: int,
-    ):
-        """Execute half-threshold num/den/mask and write an overflow counter."""
-        if not getattr(self, "_has_numden_mask_rational_half_checked", False):
-            raise RuntimeError(
-                "Kernel library does not expose "
-                "FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount."
-            )
-        numerator = _checked_uint64(
-            threshold_half_numerator,
-            field="threshold_half_numerator",
-        )
-        denominator = _checked_uint64(
-            threshold_half_denominator,
-            field="threshold_half_denominator",
-            positive=True,
-        )
-        self._lib.FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount(
-            handle,
-            weights_ptr,
-            ctypes.c_ulonglong(numerator),
-            ctypes.c_ulonglong(denominator),
-            numerator_ptr,
-            denominator_ptr,
-            mask_ptr,
-            rational_overflow_count_ptr,
-        )
-        self._check_call(
-            "FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount"
-        )
-
     def destroy(self, handle):
         """Destroy a kernel handle."""
         self._lib.FStat_Destroy(handle)
@@ -985,11 +833,10 @@ class _KernelHandle:
         lib,
         M: int,
         d_in: Any,
-        d_out: Any,
         *,
         batch: int = 1,
     ):
-        """Create a kernel handle for the provided device buffers."""
+        """Create a kernel handle for the provided device input buffer."""
         self._lib = lib
         if batch < 1:
             raise ValueError("batch must be >= 1.")
@@ -997,13 +844,9 @@ class _KernelHandle:
             create_batch = getattr(lib, "FStat_Create_Batch", None)
             if create_batch is None:
                 raise RuntimeError("Kernel library does not expose FStat_Create_Batch.")
-            self._handle = create_batch(d_in.data.ptr, d_out.data.ptr, M, batch)
+            self._handle = create_batch(d_in.data.ptr, M, batch)
         else:
-            self._handle = lib.FStat_Create(
-                d_in.data.ptr,
-                d_out.data.ptr,
-                M,
-            )
+            self._handle = lib.FStat_Create(d_in.data.ptr, M)
         if not self._handle:
             last_error = _last_error_from_library(lib)
             raise RuntimeError(

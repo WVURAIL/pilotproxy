@@ -70,11 +70,11 @@ SOURCES           := f_statistic.cu
 HEADERS           := f_statistic.h config.h
 REF_TEST          := test_fstat_reference
 REF_TEST_SOURCES  := f_statistic_reference.cpp tests/test_fstat_reference.cpp
-REF_TEST_HEADERS  := f_statistic_reference.h config.h
+REF_TEST_HEADERS  := f_statistic_reference.h config.h fxfft256_ref.c
 C_HEADER_TEST_OBJ := test_c_header.o
 CUDA_TEST         := test_fstat_cuda
 CUDA_TEST_SOURCES := tests/test_fstat_cuda.cpp f_statistic_reference.cpp
-CUDA_TEST_HEADERS := f_statistic.h f_statistic_reference.h config.h
+CUDA_TEST_HEADERS := f_statistic.h f_statistic_reference.h config.h fxfft256_ref.c
 
 # ------------------------------------------------------------------------------
 # Build-configuration tracking
@@ -221,7 +221,7 @@ help:
 	@echo "  DETECTOR_WINDOW_SAMPLES=K"
 	@echo "          Set detector-window samples (default: 128; supported: 64, 128)"
 	@echo "  GRID_MAX_BLOCKS=N"
-	@echo "          Set maximum power-accumulation grid blocks (default: 4096)"
+	@echo "          Set maximum grid blocks of the staged row-sum launches (default: 4096)"
 	@echo "  CONSTANT_WEIGHT_LANES=0|1"
 	@echo "          Store DP4A weight lanes in CUDA constant memory (default: 0)"
 	@echo "  SHARED_WEIGHT_LANES=0|1"

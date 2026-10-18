@@ -1,16 +1,20 @@
 # coding=utf-8
-"""GPU gates for the on-device fine-power stage (kernel core 2.1.0).
+"""GPU gates for the on-device fine-power stage (kernel core 2.1.0) and the
+frame-power identity built on it (kernel core 3.0.0).
 
 The library's ``FStat_Compute_FinePowers_U64`` must reproduce the frozen
 Python reference (``fine_power_fx``) bit-for-bit --- exact uint64
 equality, no tolerances. Three gates plus a rate-margin report:
 
-1. pure stage: seeded row-sum buffers uploaded directly, library output
-   == reference, including a non-block-multiple stream count and batch;
-2. chained: packed int4 frames -> device row sums
+1. pure stage: seeded row-projection buffers uploaded directly, library
+   output == reference, including a non-block-multiple stream count and
+   batch;
+2. chained: packed int4 frames -> device row projections
    (``FStat_Compute_RowSums_I32``) -> fine powers from the SAME device
    buffer, compared against the reference applied to the host readback ---
-   the deployed composition with no host round-trip in between;
+   the deployed composition with no host round-trip in between --- and the
+   kernel core 3.0.0 frame-power identity on top: the fused entry's
+   ``d_power_out`` == the host sum over bins of this staged output;
 3. geometry probe: ``FStat_GetFineSpecs`` returns the frozen 128/2/256.
 
 The timing report (printed rather than asserted) is the first rate-margin
@@ -51,10 +55,15 @@ def _kernel_or_skip() -> FStatKernel:
         kernel = FStatKernel(DEFAULT_LIB_PATH)
     except FileNotFoundError:  # pragma: no cover - library not built
         pytest.skip("libfstatistic.so is not built")
-    if not kernel.supports_fine_powers():
-        pytest.skip(
-            "libfstatistic.so predates kernel core 2.1.0 (no fine-power "
-            "stage): rebuild from the current CUDA sources."
+    if (
+        not kernel.supports_fine_powers()
+        or not kernel.supports_fused_fine()
+        or kernel.version.as_tuple() < (3, 0, 0)
+    ):
+        pytest.fail(
+            "libfstatistic.so predates kernel core 3.0.0 (no fine-power stage, "
+            "no fused entry, or frame powers not yet the fine-bin sums): "
+            "rebuild from the current CUDA sources."
         )
     return kernel
 
@@ -111,24 +120,33 @@ def test_device_chain_matched_filter_row_projections_to_fine_powers():
     )
 
     d_in = cp.asarray(packed)
-    d_diag = cp.zeros(1, dtype=cp.float32)
-    handle = kernel.create_raw(rows, d_in.data.ptr, d_diag.data.ptr)
+    handle = kernel.create_raw(rows, d_in.data.ptr)
     d_matched_filter_row_projections = cp.zeros(TERMS * rows * 2, dtype=cp.int32)
     d_fine = cp.zeros((TERMS, FINE_BINS), dtype=cp.uint64)
+    d_fine_fused = cp.zeros((TERMS, FINE_BINS), dtype=cp.uint64)
+    d_powers = cp.full(TERMS, 123, dtype=cp.uint64)
     try:
         kernel.compute_row_projections_i32(
             handle, weights.ctypes.data, d_matched_filter_row_projections.data.ptr
         )
-        # fine powers straight from the device row-sum buffer: the deployed
-        # composition, no host round-trip
+        # fine powers straight from the device row-projection buffer: the
+        # deployed composition, no host round-trip
         kernel.compute_fine_powers_u64(
             int(d_matched_filter_row_projections.data.ptr), streams, WINDOWS, 1,
             int(d_fine.data.ptr)
+        )
+        # the fused entry on the same handle: its frame powers must be the
+        # bin sums of this staged output (kernel core 3.0.0)
+        kernel.compute_fused_fine_u64(
+            handle, weights.ctypes.data,
+            int(d_fine_fused.data.ptr), int(d_powers.data.ptr), 0,
         )
         cp.cuda.Device().synchronize()
         assert kernel.last_error() == ""
         host_rows = cp.asnumpy(d_matched_filter_row_projections).reshape(TERMS, rows, 2)
         got = cp.asnumpy(d_fine)
+        got_fused = cp.asnumpy(d_fine_fused)
+        powers = cp.asnumpy(d_powers)
     finally:
         kernel.destroy(handle)
 
@@ -138,6 +156,9 @@ def test_device_chain_matched_filter_row_projections_to_fine_powers():
         windows_per_stream=WINDOWS,
     )
     np.testing.assert_array_equal(got, exp)
+    np.testing.assert_array_equal(got_fused, exp)
+    np.testing.assert_array_equal(powers, got.sum(axis=-1, dtype=np.uint64))
+    np.testing.assert_array_equal(powers, exp.sum(axis=-1, dtype=np.uint64))
 
 
 @pytest.mark.cuda

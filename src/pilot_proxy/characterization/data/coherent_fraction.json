@@ -1,26 +1,26 @@
 {
  "schema": "coherent-fraction-v1",
- "value": 0.07802965192051772,
+ "value": 0.07802990345209647,
  "scale": "calibrated",
  "statistic": "median over the bands below",
  "by_band": {
-  "17": 0.11063917218043295,
-  "30": 0.07104639820954207,
-  "31": 0.051664647266797835,
-  "35": 0.08501290563149336
+  "17": 0.11063947215660211,
+  "30": 0.07104645743757708,
+  "31": 0.05166464372662675,
+  "35": 0.08501334946661586
  },
  "by_band_raw": {
-  "17": 0.03210697767700149,
-  "22": 0.010983626314484005,
-  "30": 0.012992040223714392,
-  "31": 0.01955328592661793,
-  "35": 0.025751676822471852
+  "17": 0.032107064728702776,
+  "22": 0.010983642381288232,
+  "30": 0.012992051054566238,
+  "31": 0.019553284586785354,
+  "35": 0.0257518112667489
  },
  "definition": "c = (A[band] - A[control]) / x_all[band] on the raw frame, times the calibrated-to-raw amplitude ratio of the same east-west baseline classes. A is the capture's in-band visibility amplitude over its auto power (median over 3 classes and 4 dumps of 2026-09-16/17); x_all is the archive's current-era shelf power over all frames, with no mask.",
  "why_calibrated": "Science data are gain-calibrated before redundant baselines are stacked. The raw stack adds per-input phases at chance efficiency (0.035-0.065); calibrated, the fixed-direction signal stacks at 0.14-0.19. The noise normalization is the same on both scales. Band 35's direct calibrated reading gives 0.078.",
  "provenance": {
   "script": "derive_coherent_fraction.py",
   "script_sha256": "a36d4b2acd585db420d31ada1de2e4e09a42f9515f01e5d16f2a02e4f9e5df72",
-  "generated": "2026-10-17T21:29:23+00:00"
+  "generated": "2026-10-19T01:15:23+00:00"
  }
 }

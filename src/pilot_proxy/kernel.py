@@ -96,6 +96,13 @@ class KernelFeatures:
         }
 
 
+# The core major this wrapper binds. Core 3.0.0 changed entry signatures
+# (FStat_Create takes the packed input and the row count only; a 2.x library's
+# takes an output buffer between them), so a library of any other major is
+# refused before a single entry is bound.
+REQUIRED_CORE_MAJOR = 3
+
+
 @dataclass(frozen=True)
 class KernelVersion:
     """Locked kernel core version."""
@@ -232,6 +239,16 @@ class FStatKernel:
         if self._has_last_error:
             self._lib.FStat_LastError.argtypes = []
             self._lib.FStat_LastError.restype = ctypes.c_char_p
+
+        version = self._get_version()
+        if version.major != REQUIRED_CORE_MAJOR:
+            raise RuntimeError(
+                f"Kernel library reports core {version.as_string()}; this "
+                f"package drives core {REQUIRED_CORE_MAJOR}.x only (its entry "
+                "signatures differ from those of other majors). Build the "
+                "library from this checkout's cuda/ or use the release that "
+                "matches the library."
+            )
 
         if not _has_symbol(self._lib, "FStat_Create"):
             raise RuntimeError("Kernel library does not expose FStat_Create.")

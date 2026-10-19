@@ -25,28 +25,41 @@ local non-DTV power on either side of that target.
 
 ## Target and reference powers
 
-For each detector row `r`, the kernel returns three powers:
+The kernel first forms the exact integer matched-filter row projections
+`z[n, m]` for each weight term `n` (target, lower reference, upper
+reference) and detector row `m`, and then the exact fine power spectrum
+`S[n, f]` of each term: the frozen fixed-point 256-point transform
+(`fxfft256_v1`) of each stream's 128 projections, squared and summed over
+streams (see "Time-coherent fine reduction" below). Since kernel core 3.0.0
+the three frame powers are defined from that spectrum:
 
 ```text
-P_target,r
-P_ref_lower,r
-P_ref_upper,r
+P_target    = sum_f S[target, f]
+P_ref_lower = sum_f S[ref_lower, f]
+P_ref_upper = sum_f S[ref_upper, f]
+P_ref_sum   = P_ref_lower + P_ref_upper
 ```
 
-We sum the powers over rows before forming a ratio:
+as exact `uint64` sums over the 256 fine bins. Every power is summed over
+streams, windows and bins before a ratio is formed. This order matters.
+Averaging per-row or per-bin F-statistics is not equivalent to the specified
+detector.
 
-```text
-P_target = sum_r(P_target,r)
-P_ref_sum = sum_r(P_ref_lower,r) + sum_r(P_ref_upper,r)
-```
-
-This order matters. Averaging per-row F-statistics is not equivalent to the
-specified detector.
+Before kernel core 3.0.0 the frame powers were a second sum, of
+`|z[n, m]|^2` over detector rows. The schema v5 products of record carry that
+row-domain sum in `p_*_u64`; readers replace it by the sums of the stored
+`fine_power_u64` (see `PRODUCT_SCHEMA.md`). An exact transform of length
+`L_F = 256` would make the two differ by the factor `L_F` in every term,
+which cancels in every ratio; the rounded fixed-point transform does not
+conserve energy exactly, so the two definitions agree only up to that
+rounding: at deployed amplitudes the archive frames differ by a median
+relative `2.75e-6` (p99 `1.65e-5`), and near-empty (small-amplitude) frames
+by up to about 2 per cent.
 
 ## F-statistic
 
-The detector compares the target power with the mean of the two reference
-powers:
+The detector compares the target frame power with the mean of the two
+reference frame powers:
 
 ```text
 F = 2 * P_target / P_ref_sum
@@ -58,7 +71,7 @@ Equivalently,
 F = P_target / mean(P_ref_lower, P_ref_upper)
 ```
 
-where the lower and upper powers are the row-summed quantities defined above.
+where the lower and upper powers are the frame powers defined above.
 The uncorrected one-bin pilot excess is
 
 ```text
@@ -113,16 +126,17 @@ The corrected pilot excess is
 rho_corrected = F / null_power_ratio - 1
 ```
 
-and is stored per frame as `normalized_pilot_excess`. The CUDA ABI can express
-the same comparison through the rational half-threshold
-`half_num : half_den = target_norm_sq : reference_norm_sum_sq`. The current
-`chime-scan` path reads the uint64 powers and applies the decision on the
-host.
+and is stored per frame as `normalized_pilot_excess`. The comparison is
+applied on the host in exact integer arithmetic from the uint64 frame powers.
+The runtime bundle still records it as the rational half-threshold
+`half_num : half_den = target_norm_sq : reference_norm_sum_sq`; kernel core
+3.0.0 removed the device entry that applied it to the row-domain powers,
+because `P_target * half_den` no longer fits `uint64` at the new scale.
 
 Masked frames are omitted from before/after averages. They are not replaced
 with zeros.
 
-## v2 time-coherent fine reduction
+## Time-coherent fine reduction
 
 Kernel core 2.0.0 adds an exact int32 complex row-sum front end: for each
 weight term `n` and detector row `m`, stage 1 returns
@@ -132,21 +146,31 @@ z[n, m] = sum_k w_term[n, k] * x[m, k]        (exact integer complex)
 ```
 
 Stage 2 reshapes each term's rows to `[num_streams, windows_per_stream]`,
-applies an FFT along the window axis with `pad = 2` zero padding, and sums
-incoherently over streams:
+applies the frozen fixed-point transform `fxfft256_v1` along the window axis
+with `pad = 2` zero padding, and sums incoherently over streams:
 
 ```text
-S[n, b] = sum_streams |FFT_pad(z[n, stream, :])[b]|^2
+S[n, b] = sum_streams |fxfft256(z[n, stream, :])[b]|^2      (exact uint64)
 F2[b]   = 2 * S_target[b] / (S_ref_lower[b] + S_ref_upper[b])
+P[n]    = sum_b S[n, b]                                      (frame power)
 ```
 
 The reduction is coherent in time within a frame and incoherent across
-streams and frames. Two identities tie it to the v1 statistic and are
-enforced, not assumed: the exact int64 marginal identity (the integer sum
-over rows of `|z[n, m]|^2` reproduces the deployed v1 power kernel
-bit-for-bit, checked per frame at runtime) and the float Parseval identity
-`sum_b S[n, b] = pad * windows * P[n]`, gated at ULP tolerance on the FFT
-path.
+streams and frames. The frame powers of the previous sections are the all-bin
+sums of the same `S` (kernel core 3.0.0), so the coarse ratio and the fine
+statistic come from one spectrum and no second power path exists. The library
+reduces `P[n]` on the device for the fused entry points and the host sums the
+staged `FStat_Compute_FinePowers_U64` output; both equal
+`fxfft.fine_power_fx(z).sum(axis=-1)` exactly, and that equality is the gate
+(`tests/kernel`, the per-frame product invariant in `PRODUCT_SCHEMA.md`).
+
+The float prototype `fine_reduction.fine_reduce` uses `numpy.fft` or
+`cupy.fft` instead of the fixed-point transform. Its float Parseval identity
+`sum_b S[n, b] = pad * windows * sum_m |z[n, m]|^2` is a property of that
+float prototype only, gated at ULP tolerance in its own tests. The row-domain
+marginal identity that detector contract revision 1 enforced per frame
+(the integer `sum_m |z[n, m]|^2` against the removed
+`FStat_Compute_Powers_U64`) is retired with that branch.
 
 Detection over fine bins uses a pre-registered null-bulk CFAR: the null is
 calibrated on the independent non-designated bins (every `pad`-th bin,
@@ -173,14 +197,18 @@ The repository currently contains two decision implementations with different
 operational status:
 
 - Current CHIME archive products store `reject_mask` from the exact,
-  norm-corrected coarse positive-excess comparison `F > null_power_ratio`.
+  norm-corrected coarse positive-excess comparison `F > null_power_ratio` on
+  the frame powers (schema v6: the fine-power sums; a schema v5 product's
+  stored mask used the row-domain powers, and readers recompute it from the
+  fine sums).
 - The floating-point fine reduction is a measurement, not a decision. The scan
   stores only the exact `fine_power_u64` terms; the fine-bin statistic, the
   robust per-frame null-bulk threshold, and any threshold exceedances are
   recomputed from those terms in post-processing and do not replace
   `reject_mask`.
-- Kernel core 2.3.0 implements the fixed-point designated-set order-statistic
-  CFAR decision and has bit-equality tests against the Python reference. Its
+- Kernel core 2.3.0 and later (current 3.0.0) implement the fixed-point
+  designated-set order-statistic CFAR decision and have bit-equality tests
+  against the Python reference. Its
   per-channel runtime-bundle calibration remains `pending_campaign`; a pending
   profile must not enable that rejection path.
 

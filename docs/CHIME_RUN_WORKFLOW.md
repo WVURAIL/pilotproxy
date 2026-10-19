@@ -205,9 +205,11 @@ CANFAR, and review systems.
 `run_config.json` and `stats.json` use schema versions
 `pilotproxy_chime_run_config_v1` and `pilotproxy_chime_stats_v1`. Both carry a matching
 `detector_contract` object with schema
-`pilotproxy_detector_contract_v1`. The contract records the `K = 128`
+`pilotproxy_detector_contract_v2`. The contract records the `K = 128`
 geometry, the positive-excess rule, the `uint64` accumulator, and the
-all-row-sum statistic.
+all-row-sum statistic, whose frame powers are the all-bin sums of the exact
+`fxfft256` fine powers (kernel core 3.0.0; runs made before it record contract
+revision 1 and the row-domain powers).
 
 The frame arrays have shape `(num_frames, num_pilots)`. Before/after baseband
 summaries exclude invalid frames, and the after-mask value averages only frames

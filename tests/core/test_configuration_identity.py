@@ -50,7 +50,9 @@ def test_canonical_detector_core_identity_and_filename() -> None:
     assert "statistic" not in contract
     assert "pilot_excess" not in contract
     assert contract["coarse_power_ratio_definition"] == (
-        "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
+        "R_coarse = 2 * sum_f S_target[f] / "
+        "(sum_f S_ref_lower[f] + sum_f S_ref_upper[f]); "
+        "S = fxfft256_v1 fine powers"
     )
     assert contract["raw_pilot_excess_definition"] == (
         "rho_raw = R_coarse - 1 (diagnostic only)"
@@ -92,12 +94,54 @@ def test_detector_contract_validates_optional_fine_reduction_block() -> None:
         "guard_fine_bins": 1,
         "designated_bins": [0, 1],
         "census_excluded_bins": [0, 1, 255],
-        "v1_marginal_identity": "exact_int64_enforced_per_frame",
+        "coarse_power_definition": "sum_of_fxfft256_fine_powers",
     }
     validate_detector_contract(contract)
 
     contract["fine_reduction"]["p_fa"] = 0.0
     with pytest.raises(ValueError, match="fine_reduction.p_fa"):
+        validate_detector_contract(contract)
+
+
+def test_detector_contract_revision_two_defines_frame_powers_from_fine_powers() -> None:
+    contract = build_detector_contract(
+        detector_window_samples=128,
+        skipped_guard_bins=1,
+        reference_offset_bins=2,
+        num_weight_terms=3,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    )
+    assert contract["schema_version"] == "pilotproxy_detector_contract_v2"
+    assert contract["coarse_power_ratio_definition"] == (
+        "R_coarse = 2 * sum_f S_target[f] / "
+        "(sum_f S_ref_lower[f] + sum_f S_ref_upper[f]); "
+        "S = fxfft256_v1 fine powers"
+    )
+    assert contract["all_rows_coarse_power_ratio_definition"] == (
+        "R_coarse = 2 * sum(sum_f S_target[f]) / "
+        "(sum(sum_f S_ref_lower[f]) + sum(sum_f S_ref_upper[f])); "
+        "S = fxfft256_v1 fine powers"
+    )
+    contract["fine_reduction"] = {
+        "pad_factor": 2,
+        "cfar_policy": "null_bulk_median_left_side_scale",
+        "p_fa": 1.0e-3,
+        "guard_fine_bins": 1,
+        "designated_bins": [0],
+        "census_excluded_bins": [],
+        "coarse_power_definition": "sum_of_fxfft256_fine_powers",
+    }
+    validate_detector_contract(contract)
+    # The revision-1 field is retired, and so is any other definition.
+    retired = dict(contract["fine_reduction"])
+    retired["v1_marginal_identity"] = retired.pop("coarse_power_definition")
+    with pytest.raises(ValueError, match="coarse_power_definition"):
+        validate_detector_contract({**contract, "fine_reduction": retired})
+    contract["fine_reduction"]["coarse_power_definition"] = "row_domain_marginal"
+    with pytest.raises(ValueError, match="coarse_power_definition"):
+        validate_detector_contract(contract)
+    contract["schema_version"] = "pilotproxy_detector_contract_v1"
+    with pytest.raises(ValueError, match="schema_version"):
         validate_detector_contract(contract)
 
 

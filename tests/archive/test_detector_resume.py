@@ -33,18 +33,10 @@ from pilot_proxy.chime import baseband_format as fmt
 from pilot_proxy.archive.instruments import load_instrument
 from pilot_proxy.archive.interfaces import RunContext
 
-from pilot_proxy.detector_contract import (
-    normalized_positive_excess,
-    weight_term_norms_sq,
-)
-from pilot_proxy.detector_reference import (
-    INT4_COMPONENT_BITS,
-    coarse_power_ratio_cpu_reference,
-    unpack_packed_complex,
-)
 from pilot_proxy.archive.detector import PilotProxyDetectorAnalyzer
 from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader
 from pilot_proxy.archive.scan import run_chime_scan
+from cpu_detector import exact_cpu_detector_fn
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NFFT = 16384
@@ -66,38 +58,15 @@ _CLOSE = ("coarse_power_ratio", "normalized_coarse_power_ratio_db", "pilot_exces
           "integrated_spectrum_after_mask", "unit_time0_ctime", "unit_delta_time")
 
 
-def _cpu_ref_detector_fn(*, packed, weights, kernel):
-    """Input-dependent CPU reference standing in for the GPU kernel."""
-    pk = np.asarray(packed)
-    if pk.ndim == 2:
-        pk = pk[None, ...]
-    w = unpack_packed_complex(np.asarray(weights, dtype=np.int8), INT4_COMPONENT_BITS)
-    _nt, _nl, _nu = weight_term_norms_sq(np.asarray(weights, dtype=np.int8))
-    _nrs = int(_nl + _nu)
-    results = []
-    for b in range(int(pk.shape[0])):
-        samples = unpack_packed_complex(pk[b], INT4_COMPONENT_BITS)
-        _fstat, sums = coarse_power_ratio_cpu_reference(samples, w)
-        num = int(round(float(sums[0])))
-        lower = int(round(float(sums[1])))
-        upper = int(round(float(sums[2])))
-        den = lower + upper
-        results.append({
-            "block_index": b,
-            "mask": normalized_positive_excess(
-                num, den, target_norm_sq=_nt, reference_norm_sum_sq=_nrs
-            ),
-            "p_target_u64": num,
-            "p_ref_lower_u64": lower,
-            "p_ref_upper_u64": upper,
-            "p_ref_sum_u64": den,
-        })
-    return {
-        "batch": int(pk.shape[0]),
-        "detector_rows_per_block": int(pk.shape[1]),
-        "rational_overflow_count": 0,
-        "results": results,
-    }
+def _cpu_ref_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
+    """Input-dependent CPU reference standing in for the GPU kernel: the exact
+    kernel chain (rows -> fxfft256 -> all-bin sums)."""
+    return exact_cpu_detector_fn(
+        packed=packed,
+        weights=weights,
+        kernel=kernel,
+        emit_row_projections=emit_row_projections,
+    )
 
 
 def _stub_kernel(detector_window_samples: int, reference_offset_bins: int = 2):
@@ -203,7 +172,7 @@ def test_analyzer_resume_matches_uninterrupted(tmp_path):
     _assert_products_equal(clean, got)
 
 
-def test_analyzer_resume_rejects_changed_fine_retention(tmp_path):
+def test_analyzer_resume_refuses_fine_products_off(tmp_path):
     rng = np.random.default_rng(17)
     weights = rng.integers(-120, 121, size=(3, K)).astype(np.int8)
     files = _make_files(tmp_path / "data", n_events=2)
@@ -238,7 +207,9 @@ def test_analyzer_resume_rejects_changed_fine_retention(tmp_path):
     )
     resumed = PilotProxyDetectorAnalyzer()
     assert resumed.resume(str(checkpoint), changed_ctx)
-    with pytest.raises(SystemExit, match="fine-product retention mode differs"):
+    # The frame powers are the fine powers' sums (product schema v6): there
+    # is no retention mode to change.
+    with pytest.raises(ValueError, match="fine products are mandatory"):
         resumed.begin(changed_ctx, _meta(1))
 
 
@@ -679,7 +650,12 @@ def test_scan_refuses_incompatible_cap(tmp_path, monkeypatch):
 
 # -- fine-width invariants across resume --------------------------------------
 
-def test_resume_normalizes_zero_fine_placeholders(tmp_path):
+@pytest.mark.parametrize(
+    "status", ["disabled_by_option", "not_applicable_pilot_out_of_band"]
+)
+def test_resume_refuses_an_in_band_checkpoint_without_fine_powers(tmp_path, status):
+    # The v5 placeholders for a scan without fine terms have no v6 meaning:
+    # an in-band product's frame powers are the sums of its fine powers.
     weights = np.ones((3, K), dtype=np.int8)
     files = _make_files(tmp_path / "data", n_events=1)
     path = files[("evt0", FREQ_ID)]
@@ -690,7 +666,6 @@ def test_resume_normalizes_zero_fine_placeholders(tmp_path):
             "detector_fn": _cpu_ref_detector_fn,
             "kernel": _stub_kernel(K),
             "weights": weights,
-            "fine_products": "off",
         },
     )
     reader = ChimeBasebandPackedReader()
@@ -698,7 +673,7 @@ def test_resume_normalizes_zero_fine_placeholders(tmp_path):
     meta["unit_key"] = "synth:0"
     meta["scope"] = "local"
 
-    checkpoint = tmp_path / "disabled.npz"
+    checkpoint = tmp_path / "stripped.npz"
     original = PilotProxyDetectorAnalyzer()
     original.begin(ctx, meta)
     original.consume_file(reader.iter_arrays(str(path), ctx), meta)
@@ -707,19 +682,14 @@ def test_resume_normalizes_zero_fine_placeholders(tmp_path):
     with np.load(checkpoint, allow_pickle=False) as saved:
         fields = {name: saved[name] for name in saved.files}
     frame_count = int(np.asarray(fields["frame_index"]).size)
-    fields["fine_num_bins"] = np.asarray(4, dtype=np.int64)
-    fields["fine_power_u64"] = np.zeros(
-        (frame_count, 3, 4), dtype=np.uint64
-    )
+    fields["fine_status"] = np.asarray(status)
+    fields["fine_num_bins"] = np.asarray(0, dtype=np.int64)
+    fields["fine_power_u64"] = np.zeros((frame_count, 0, 0), dtype=np.uint64)
     np.savez_compressed(checkpoint, **fields)
 
-    resumed = PilotProxyDetectorAnalyzer()
-    assert resumed.resume(str(checkpoint), ctx)
-    resumed.begin(ctx, meta)
-    resumed.save(str(checkpoint))
-    with np.load(checkpoint, allow_pickle=False) as normalized:
-        assert int(normalized["fine_num_bins"]) == 0
-        assert normalized["fine_power_u64"].shape == (frame_count, 0, 0)
+    with pytest.raises(SystemExit, match="remove it and rebuild"):
+        PilotProxyDetectorAnalyzer().resume(str(checkpoint), ctx)
+
 
 def test_zero_frame_checkpoint_resume_keeps_fine_width(tmp_path):
     rng = np.random.default_rng(11)
@@ -825,11 +795,11 @@ def _tone_matched_filter_row_projections_detector_fn(*, packed, weights, kernel,
     """Injected detector emitting v2 row sums with a guaranteed fine tone.
 
     The target term carries a pure envelope tone (detected bin every frame);
-    the references are small broadband integers. Kernel powers are computed
-    from the same integer row sums, so the exact coarse marginal identity holds
-    by construction.
+    the references are small broadband integers. The frame powers are the
+    all-bin sums of the same rows' fixed-point fine spectra, so the v6
+    frame-power invariant holds by construction.
     """
-    from pilot_proxy.fine_reduction import exact_coarse_power_by_term
+    from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 
     pk = np.asarray(packed)
     if pk.ndim == 2:
@@ -847,7 +817,7 @@ def _tone_matched_filter_row_projections_detector_fn(*, packed, weights, kernel,
                    + 1j * rng.integers(-3, 4, (streams, windows)))
     zi = np.stack([np.round(z.real), np.round(z.imag)], axis=-1)
     zi = zi.astype(np.int32).reshape(3, rows, 2)
-    powers = exact_coarse_power_by_term(zi, num_weight_terms=3)
+    powers = frame_powers_from_fine_u64(zi, num_streams=streams, windows_per_stream=windows)
     result = {
         "block_index": 0,
         "mask": True,

@@ -2,8 +2,8 @@
 """Smoke gate for the coherent-gain Monte Carlo tool.
 
 The critical assertion is the verify stage: the tool's batched
-reduction must equal the packaged pipeline (bit-exact integer marginals,
-float32-identical fine spectra). The MC smoke then checks the machinery
+reduction must equal the packaged pipeline (float32-identical fine spectra,
+coarse F from the all-bin sums of the fine powers). The MC smoke then checks the machinery
 end to end at a reduced geometry: sane H0 thresholds and Pd -> 1 at
 strong injection.
 """

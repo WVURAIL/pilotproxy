@@ -25,6 +25,7 @@ from pilot_proxy.integration.sdr_upgrade_adapter import (  # noqa: E402
     DigitalAdapterConfig, adapt_record,
 )
 from pilot_proxy.detector_reference import unpack_packed_complex  # noqa: E402
+from pilot_proxy.fxfft import fine_power_fx  # noqa: E402
 
 STAGES = ('natural_float', 'quantized_weights_float', 'packed')
 CONFIG = DigitalAdapterConfig(2_000_000, 100_000., 0, 5.)
@@ -119,8 +120,32 @@ def powers_and_ratio(z):
     return powers, 2*powers[:, 0]/denominator
 
 
+def packed_ratio(result):
+    """The deployed integer path's ratio (kernel core 3.0.0).
+
+    Formed from the adapter's frame powers, the all-bin sums of the frozen
+    fxfft256 fine powers (which packed_recount checks independently), and
+    required to equal the adapter's coarse_ratio. The two float stages keep
+    the row-domain ratio of their float projections (powers_and_ratio); they
+    are prototypes, not the deployed statistic.
+    """
+    powers = np.asarray(result['term_power_sums']).astype(np.float64)
+    denominator = powers[:, 1]+powers[:, 2]
+    if not np.all(denominator > 0):
+        raise ValueError('Zero reference power; preserve failed record')
+    ratio = 2*powers[:, 0]/denominator
+    if not np.allclose(ratio, result['coarse_ratio'], rtol=1e-14, atol=1e-14):
+        raise ValueError('Packed fine-sum ratio differs from the adapter ratio')
+    return ratio
+
+
 def packed_recount(result):
-    """Independent int64 nibble arithmetic (no projection or unpack helper)."""
+    """Independent int64 nibble arithmetic (no projection or unpack helper).
+
+    The adapter's frame powers are the all-bin sums of the frozen fxfft256
+    fine powers of the same projections (kernel core 3.0.0) and are checked
+    against that definition. Returns the projection count.
+    """
     x = result['packed_frames'].astype(np.uint8)
     w = result['packed_weights'].astype(np.uint8)
     def decode(a):
@@ -132,8 +157,11 @@ def packed_recount(result):
     check = np.stack([re, im], axis=-1)
     if not np.array_equal(check, result['projections_i32']):
         raise ValueError('Independent packed projection mismatch')
-    power = np.sum(re*re+im*im, axis=2)
-    if not np.array_equal(power, result['term_power_sums']):
+    frame_powers = np.stack([
+        fine_power_fx(frame, num_streams=1).sum(axis=1, dtype=np.uint64)
+        for frame in check
+    ])
+    if not np.array_equal(frame_powers, result['term_power_sums']):
         raise ValueError('Independent integer frame power mismatch')
     return int(re.size)
 
@@ -173,9 +201,10 @@ def run(out):
         weight_float = np.einsum('frk,tk->ftr', used, weights.conj())
         packed = (result['projections_i32'][..., 0]+1j*result['projections_i32'][..., 1])/(CONFIG.sample_scale*7)
         arrays = {name: z for name, z in zip(STAGES, (natural, weight_float, packed))}
-        arrays.update({name+'_ratio': powers_and_ratio(z)[1] for name, z in list(arrays.items())})
-        if not np.allclose(arrays['packed_ratio'], result['coarse_ratio'], rtol=1e-14, atol=1e-14):
-            raise ValueError('Packed normalization changes ratio')
+        # Float stages: row-domain ratios of their projections. The packed
+        # stage is the deployed statistic: the fine-sum ratio (core 3.0.0).
+        arrays.update({name+'_ratio': powers_and_ratio(arrays[name])[1] for name in STAGES[:2]})
+        arrays['packed_ratio'] = packed_ratio(result)
         arrays['frame_start_seconds'] = result['frame_start_seconds']
         np.savez_compressed(folder/'projections.npz', **arrays)
         record = {**spec, 'directory': str(folder.relative_to(out)),
@@ -213,6 +242,7 @@ def report(out):
     for case in ('noise', 'steady'):
         members = [r for r in records if r['case'] == case]
         cubes = {stage: [] for stage in STAGES}
+        ratios = {stage: [] for stage in STAGES}
         for r in members:
             path = out/r['directory']/'projections.npz'
             if sha(path) != r['projection_sha256']:
@@ -220,6 +250,7 @@ def report(out):
             with np.load(path, allow_pickle=False) as data:
                 for stage in STAGES:
                     cubes[stage].append(data[stage])
+                    ratios[stage].append(data[stage+'_ratio'])
         distribution = f(256, 512) if case == 'noise' else ncf(256, 512, 2304)
         info = {'ideal_reference': {'dof': [256, 512], 'noncentrality': 0 if case == 'noise' else 2304,
                                     'mean': float(distribution.mean()), 'std': float(distribution.std()),
@@ -233,7 +264,9 @@ def report(out):
         edges = np.array(plan[case+'_histogram_edges'])
         for stage in STAGES:
             zs = cubes[stage]
-            qs = [powers_and_ratio(z)[1] for z in zs]
+            # The ratio each stage stored: row-domain for the float stages,
+            # the fine-sum ratio for the packed (deployed) stage.
+            qs = ratios[stage]
             q = np.concatenate(qs)
             rows = [z.transpose(0, 2, 1).reshape(-1, 3) for z in zs]
             pooled = np.concatenate(rows)

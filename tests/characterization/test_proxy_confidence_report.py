@@ -25,7 +25,8 @@ def sample_frames():
         weight=np.full(4, .25),
         supported=np.array([True, False, True, True]),
         event=np.array([3, 3, 9, 9]),
-        excess=np.array([-.2, .1, .3, .4]),
+        # dyadic, so the excess formed from integer frame powers is exact
+        excess=np.array([-.25, .125, .25, .375]),
         knee_word=20,
         current_word=30,
         time=np.array([86400 - 10, 86400 + 10, 3 * 86400, 3 * 86400 + 1], dtype=float),
@@ -38,10 +39,15 @@ def score_fixture(tmp_path):
     product = tmp_path / "original-product.npz"
     frames = sample_frames()
     rows = np.array([3, 0, 2, 1])
-    source = np.empty((4, 2))
-    source[rows, 0] = frames.excess
-    source[:, 1] = 77.
-    np.savez(product, normalized_pilot_excess=source)
+    # The excess is formed from the frame powers, the fine powers' all-bin
+    # sums (kernel core 3.0.0): with norms 1 : 2 (mu_0 = 1), P_1 = P_2 = 2**40
+    # and P_0 = (e + 1) 2**40, exact for these dyadic excesses.
+    fine = np.zeros((4, 3, 4), dtype=np.uint64)
+    fine[rows, 0, 0] = np.rint((np.asarray(frames.excess) + 1.0) * 2.0**40).astype(np.uint64)
+    fine[:, 1, 1] = 1 << 40
+    fine[:, 2, 2] = 1 << 40
+    np.savez(product, fine_power_u64=fine, target_norm_sq=np.asarray([1], dtype=np.int64),
+             reference_norm_sum_sq=np.asarray([2], dtype=np.int64))
     meta = {
         "original_product_identity": {"path": str(product), "bytes": product.stat().st_size},
         "knee_threshold": {"eta_q16": str(frames.knee_word)},

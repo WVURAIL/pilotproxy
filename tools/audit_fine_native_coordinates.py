@@ -76,7 +76,8 @@ def projection_powers(rows, weights, streams):
     )
     transformed = np.fft.fft(z, n=FINE, axis=-1)
     fine = np.sum(abs(transformed) ** 2, axis=1, dtype=np.float64)
-    coarse = np.sum(abs(z) ** 2, axis=(1, 2), dtype=np.float64)
+    # Frame powers: the all-bin sums of the fine powers (kernel core 3.0.0).
+    coarse = np.sum(fine, axis=-1, dtype=np.float64)
     return z, fine, coarse
 
 
@@ -140,11 +141,10 @@ def native_pack(normal_rows, *, streams, channel, coarse_channel):
 
 def gpu_integer(packed, weights, kernel, cp):
     device_packed = cp.asarray(packed)
-    diagnostic = cp.zeros(1, dtype=cp.float32)
     fine = cp.empty((3, FINE), dtype=cp.uint64)
     coarse = cp.empty(3, dtype=cp.uint64)
     rows = cp.empty((3, packed.shape[0], 2), dtype=cp.int32)
-    handle = kernel.create_raw(packed.shape[0], device_packed.data.ptr, diagnostic.data.ptr)
+    handle = kernel.create_raw(packed.shape[0], device_packed.data.ptr)
     try:
         kernel.compute_fused_fine_u64(
             handle, weights.ctypes.data, fine.data.ptr, coarse.data.ptr, rows.data.ptr
@@ -320,7 +320,7 @@ def main():
             del device_pack, dequantized
             integer_cpu = matched_filter_row_projections_cpu_reference_packed(packed, packed_weights, 4)
             fine_cpu = fine_power_fx(integer_cpu, num_streams=streams)
-            coarse_cpu = np.sum(integer_cpu.astype(np.int64)**2, axis=(1, 2), dtype=np.int64).astype(np.uint64)
+            coarse_cpu = fine_cpu.sum(axis=-1, dtype=np.uint64)
             integer_gpu, fine_gpu, coarse_gpu = gpu_integer(packed, packed_weights, kernel, cp)
             np.testing.assert_array_equal(integer_cpu, integer_gpu)
             np.testing.assert_array_equal(fine_cpu, fine_gpu)
@@ -329,7 +329,7 @@ def main():
             normal_packed = quantize_complex_numpy(normal, 4, DEFAULT_INPUT_SCALE)
             normal_integer = matched_filter_row_projections_cpu_reference_packed(normal_packed, packed_weights, 4)
             normal_fine = fine_power_fx(normal_integer, num_streams=streams)
-            normal_coarse = np.sum(normal_integer.astype(np.int64)**2, axis=(1, 2), dtype=np.int64).astype(np.uint64)
+            normal_coarse = normal_fine.sum(axis=-1, dtype=np.uint64)
             arrays = {"normal_ideal_fine": powers[0], "normal_ideal_coarse": powers[1], "raw_ideal_fine": powers[2], "raw_ideal_coarse": powers[3], "raw_fixed_fine": fine_cpu, "raw_fixed_coarse": coarse_cpu, "normal_fixed_fine": normal_fine, "normal_fixed_coarse": normal_coarse}
             out = args.output / f"cases/M{streams}_ch{ch}.npz"
             np.savez_compressed(out, **arrays)

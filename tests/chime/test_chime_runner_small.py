@@ -281,7 +281,7 @@ def test_chime_runner_small_writes_expected_shapes(tmp_path) -> None:
     assert stats["schema_version"] == "pilotproxy_chime_stats_v1"
     assert run_config["detector_contract"] == stats["detector_contract"]
     assert stats["detector_contract"]["schema_version"] == (
-        "pilotproxy_detector_contract_v1"
+        "pilotproxy_detector_contract_v2"
     )
     assert stats["detector_contract"]["per_frequency_threshold"] is False
     assert stats["detector_contract"]["mask_source"] == "normalized_positive_excess_decision"

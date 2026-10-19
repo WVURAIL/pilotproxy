@@ -634,3 +634,22 @@ def test_parser_accepts_repeated_summary_and_trial_inputs() -> None:
     assert args.conditioning_weights_sha256 == "1" * 64
     assert args.conditioning_weight_manifest_sha256 == "2" * 64
     assert args.y_min_db == -60.0
+
+
+def test_clean_terms_refuse_results_without_the_fine_sum_frame_powers(tmp_path) -> None:
+    """Trial powers from before kernel core 3.0.0 are row-domain sums, which
+    the fine-sum clean terms cannot be compared with."""
+    from pilot_proxy.testbench.plot_results import _clean_packed_terms
+
+    for metadata in (
+        {},
+        {"result_schema": {"schema_version": "pilotproxy_result_schema_v1"}},
+    ):
+        with pytest.raises(ValueError, match="frame-power definition"):
+            _clean_packed_terms(
+                metadata,
+                tmp_path / "dtv_snr_eval.json",
+                frequency_offset_hz=0.0,
+                channel_gain_db=0.0,
+                channel_phase_deg=0.0,
+            )

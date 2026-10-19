@@ -227,6 +227,52 @@ def test_validate_products_accepts_consistent_run(tmp_path) -> None:
     assert saved["valid"] is True
 
 
+def _as_revision_1_record(contract) -> None:
+    # What a run written before kernel core 3.0.0 carries.
+    contract["schema_version"] = "pilotproxy_detector_contract_v1"
+    contract["coarse_power_ratio_definition"] = (
+        "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
+    )
+    contract["all_rows_coarse_power_ratio_definition"] = (
+        "R_coarse = 2 * sum(P_target) / (sum(P_ref_lower) + sum(P_ref_upper))"
+    )
+    if "fine_reduction" in contract:
+        fine = contract["fine_reduction"]
+        fine.pop("coarse_power_definition")
+        fine["v1_marginal_identity"] = "exact_int64_enforced_per_frame"
+
+
+def test_validate_products_accepts_a_contract_v1_run_as_a_record(tmp_path) -> None:
+    run_dir = tmp_path / "run"
+    _write_products(run_dir)
+    report = validate_products(run_dir=run_dir)
+    assert report["detector_contract_revision"] == 2
+    assert "record_note" not in report
+
+    _mutate_detector_contract(run_dir, _as_revision_1_record)
+    report = validate_products(run_dir=run_dir)
+    assert report["valid"] is True, report["errors"]
+    assert report["detector_contract_revision"] == 1
+    assert "row-domain" in report["record_note"]
+
+
+def test_validate_products_refuses_a_v1_token_with_current_definitions(tmp_path) -> None:
+    run_dir = tmp_path / "run"
+    _write_products(run_dir)
+
+    def mislabel(contract) -> None:
+        contract["schema_version"] = "pilotproxy_detector_contract_v1"
+
+    _mutate_detector_contract(run_dir, mislabel)
+    report = validate_products(run_dir=run_dir)
+    assert report["valid"] is False
+    assert any(
+        "revision-1 detector contract coarse_power_ratio_definition"
+        in error["message"]
+        for error in report["errors"]
+    )
+
+
 def test_validate_products_accepts_current_scan_manifest(tmp_path) -> None:
     run_dir = tmp_path / "scan"
     _write_products(run_dir)

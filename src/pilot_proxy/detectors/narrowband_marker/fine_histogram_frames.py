@@ -179,8 +179,9 @@ def process_channel(frames, item, output):
         raise ValueError("input already contains fine export fields")
     with Product(product_path, require_health=True) as product:
         raw_archive = product.archive
-        # The original coarse exporter uses the same header-only health gate.
-        product._z = coarse.HeaderFineArchive(raw_archive, product_path)
+        # The coarse exporter's archive wrapper: frame powers from the fine
+        # sums, spectral members forbidden.
+        product._z = coarse.FrameExportArchive(raw_archive, product_path)
         if (product.view.physical_channel, product.view.freq_id) != (item["channel"], item["freq_id"]):
             raise ValueError("source product identity differs")
         if int(product.scalar("nfft")) != NFFT or metadata["health"]["schema"] != HEALTH_GATE_SCHEMA:

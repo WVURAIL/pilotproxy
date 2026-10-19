@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from pilot_proxy.product_contract import coarse_columns_from_fine
+
 
 SCRIPT = Path(__file__).parents[2] / "tools" / "audit_local_archive_run.py"
 SPEC = importlib.util.spec_from_file_location("audit_local_archive_run", SCRIPT)
@@ -43,7 +45,7 @@ def _fixture(tmp_path: Path) -> dict[str, object]:
     kernel_sha256 = "2" * 64
     np.savez(
         product_dir / "506.npz",
-        schema_version=np.asarray("pilotproxy_per_pilot_product_v5"),
+        schema_version=np.asarray("pilotproxy_per_pilot_product_v6"),
         freq_id=np.asarray([506], dtype=np.int64),
         physical_channel=np.asarray([36], dtype=np.int32),
         chime_frequency_hz=np.asarray([800e6 - 506 * 390625.0]),
@@ -235,11 +237,12 @@ def test_common_identity_allows_channel_specific_norms_and_decisions() -> None:
     second["freq_id"] = np.asarray([829], dtype=np.int64)
     second["target_norm_sq"] = np.asarray([2], dtype=np.int64)
     second["reference_norm_sum_sq"] = np.asarray([3], dtype=np.int64)
-    second["p_target_u64"] = np.asarray([[2]], dtype=np.uint64)
-    second["p_ref_lower_u64"] = np.asarray([[1]], dtype=np.uint64)
-    second["p_ref_upper_u64"] = np.asarray([[1]], dtype=np.uint64)
-    second["p_ref_sum_u64"] = np.asarray([[2]], dtype=np.uint64)
-    second["reject_mask"] = np.asarray([[1]], dtype=np.uint8)
+    # Twice the target fine power: P = (2, 1, 1), and every column follows
+    # from the fine sums (per-pilot v6).
+    second["fine_power_u64"] = second["fine_power_u64"].copy()
+    second["fine_power_u64"][0, 0, 0] = 2
+    second.update(coarse_columns_from_fine(second))
+    assert int(second["p_target_u64"][0, 0]) == 2 and int(second["reject_mask"][0, 0]) == 1
     second["weights_hash"] = np.asarray("channel-15-row")
     second["reference_placement_json"] = np.asarray("{\"channel\":15}")
     second["detector_contract_json"] = np.asarray(

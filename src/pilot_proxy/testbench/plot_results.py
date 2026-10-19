@@ -44,6 +44,7 @@ from pilot_proxy.paths import (
 )
 from pilot_proxy.plot_style import setup_matplotlib
 from pilot_proxy.provenance import file_sha256, sidecar_manifest_path
+from pilot_proxy.result_schema import RESULT_SCHEMA_TOKEN
 from pilot_proxy.reference_channelizer import (
     REFERENCE_PFB_FFT_SIZE,
     REFERENCE_PFB_TAPS,
@@ -662,6 +663,13 @@ def _clean_packed_terms(
     conditioning_weights_sha256: str | None = None,
     conditioning_weight_manifest_sha256: str | None = None,
 ) -> _CleanPackedTerms:
+    if (metadata.get("result_schema") or {}).get("schema_version") != RESULT_SCHEMA_TOKEN:
+        raise ValueError(
+            f"{metadata_path}: the trial powers do not carry the kernel core "
+            "3.0.0 frame-power definition (all-bin sums of the fxfft256 fine "
+            "powers); the clean terms here use that definition, so re-run "
+            "evaluate-snr before conditioning on these results."
+        )
     geometry = metadata["detector_geometry"]
     layout = geometry["input_layout"]
     testbench = metadata["testbench"]
@@ -758,9 +766,9 @@ def _clean_packed_terms(
     target_norm, lower_norm, upper_norm = weight_term_norms_sq(weights)
     return _CleanPackedTerms(
         scale=float(scale),
-        p_target=int(round(float(powers[0]))),
-        p_ref_lower=int(round(float(powers[1]))),
-        p_ref_upper=int(round(float(powers[2]))),
+        p_target=int(powers[0]),
+        p_ref_lower=int(powers[1]),
+        p_ref_upper=int(powers[2]),
         target_norm_sq=int(target_norm),
         reference_norm_sum_sq=int(lower_norm + upper_norm),
         input_iq=input_iq,

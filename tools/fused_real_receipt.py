@@ -2,10 +2,12 @@
 # coding=utf-8
 """Compare the fused fine-mask entry point with the staged path on CHIME frames.
 
-Every real-data product was made with the library's staged entry points
-(``FStat_Compute_Powers_U64``, ``FStat_Compute_RowSums_I32`` and
-``FStat_Compute_FinePowers_U64``, called by ``detect_packed_detector_input``),
-with the fine decision made in Python by ``fine_decision.fine_mask_decision``.
+The staged path is the library's staged entry points
+(``FStat_Compute_RowSums_I32`` and ``FStat_Compute_FinePowers_U64``, called by
+``detect_packed_detector_input``), whose frame powers are the host's exact
+uint64 all-bin sums of the staged fine powers (kernel core 3.0.0:
+``P_r = sum_f S_r[f]``), with the fine decision made in Python by
+``fine_decision.fine_mask_decision``.
 kotekan instead calls the fused entry point,
 ``FStat_Compute_FusedFineMaskWithSupport_U64`` (or
 ``FStat_Compute_FusedFineMask_U64`` when no support buffer is bound). This tool
@@ -13,14 +15,19 @@ replays CHIME baseband files through both and compares every output word:
 
 * the fused mask, ``rank_valid`` and ``n_bulk`` against ``fine_mask_decision``
   on the staged fine powers, at each channel's working word and rank;
-* the fused fine-power and coarse-power taps against the staged powers;
+* the fused fine-power tap against the staged fine powers, and the fused
+  frame-power tap (the device's all-bin sums) against the host sums of the
+  staged fine powers;
 * the legacy fused entry point, without taps, against the same decision;
 * optionally, a boundary probe at the frame's exact required multiplier
   (``fine_required_multiplier_q16``) and one below it, so both mask values are
   exercised on every valid frame;
-* optionally, the staged powers against the stored ``fine_power_u64`` and
-  coarse powers of a per-pilot product, which ties the frames to the products
-  the results were computed from.
+* optionally, the staged fine powers against the stored ``fine_power_u64`` of
+  a per-pilot product, and the staged frame powers against the sums of those
+  stored fine powers (``product_contract.frame_powers_from_fine``), which ties
+  the frames to the products the results were computed from. A schema v5
+  product's stored ``p_*_u64`` are the retired row-domain powers and are not
+  compared; a v6 product's equal the fine sums by its invariant.
 
 Frames are packed exactly as the archive analyzer packs them (native
 offset-binary int4, lossless, ``pilot_proxy.archive.detector``). Geometry and
@@ -64,8 +71,9 @@ from pilot_proxy.fine_decision import (  # noqa: E402
     fine_required_multiplier_q16,
     pack_bulk_mask,
 )
+from pilot_proxy.product_contract import frame_powers_from_fine  # noqa: E402
 
-SCHEMA = "pilot-proxy-fused-real-receipt-v1"
+SCHEMA = "pilot-proxy-fused-real-receipt-v2"
 TERMS = 3
 GEOMETRY_KEYS = ("channel", "freq_id", "anchor_bin", "designated_half_width",
                  "bulk_bins", "cfar_rank_zero_based", "multiplier_q16")
@@ -171,7 +179,9 @@ def compare_frame(
 
     Returns (differences, counted words by field, reference mask bit).
     ``fused`` holds ``mask`` and optionally ``rank_valid``, ``n_bulk``,
-    ``fine`` ([3, 256] uint64) and ``powers`` ([3] uint64).
+    ``fine`` ([3, 256] uint64) and ``powers`` ([3] uint64, the device's frame
+    powers). ``staged_powers`` are the staged frame powers, the host's exact
+    all-bin sums of ``staged_fine``.
     """
     staged_fine = np.asarray(staged_fine)
     if staged_fine.shape != (TERMS, FINE_BINS) or staged_fine.dtype != np.uint64:
@@ -212,10 +222,10 @@ def compare_frame(
     if fused.get("powers") is not None:
         got_powers = [int(v) for v in np.asarray(fused["powers"]).reshape(-1)]
         want_powers = [int(v) for v in staged_powers]
-        counted["coarse_powers"] = len(want_powers)
+        counted["frame_powers"] = len(want_powers)
         if got_powers != want_powers:
             differences.append({
-                "field": "coarse_powers",
+                "field": "frame_powers",
                 "fused": [str(v) for v in got_powers],
                 "reference": [str(v) for v in want_powers],
             })
@@ -223,7 +233,12 @@ def compare_frame(
 
 
 class ProductIndex:
-    """Stored exact powers of one per-pilot product, keyed by (event, frame)."""
+    """Stored exact fine powers of one per-pilot product, keyed by (event, frame).
+
+    ``powers`` are the frame powers summed from the stored fine powers
+    (``frame_powers_from_fine``), never the stored ``p_*_u64``: in a schema v5
+    product those are the retired row-domain powers.
+    """
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -234,12 +249,7 @@ class ProductIndex:
             frame_in_unit = np.asarray(data["frame_in_unit"], dtype=np.int64)
             self.fine = np.asarray(data["fine_power_u64"])
             self.powers = np.stack(
-                [
-                    np.asarray(data["p_target_u64"], dtype=np.uint64).reshape(-1),
-                    np.asarray(data["p_ref_lower_u64"], dtype=np.uint64).reshape(-1),
-                    np.asarray(data["p_ref_upper_u64"], dtype=np.uint64).reshape(-1),
-                ],
-                axis=1,
+                frame_powers_from_fine({"fine_power_u64": self.fine}), axis=1
             )
             self.weights_hash = str(np.asarray(data["weights_hash"]).reshape(-1)[0])
         if len(np.unique(unit_event)) != len(unit_event):
@@ -414,7 +424,7 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
         "launches": {
             "staged": "detect_packed_detector_input(emit_row_projections=True) "
                       "+ fine_decision.fine_mask_decision",
-            "fused_with_support": "FStat_Compute_FusedFineMaskWithSupport_U64, coarse-power tap on, row tap off",
+            "fused_with_support": "FStat_Compute_FusedFineMaskWithSupport_U64, frame-power tap on, row tap off",
             "fused_legacy": "FStat_Compute_FusedFineMask_U64, no taps",
             "boundary_probe": bool(args.boundary_probe),
         },
@@ -522,13 +532,13 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
                     want = product.fine[product_row]
                     want_powers = [int(v) for v in product.powers[product_row]]
                     words["product_fine_powers"] = words.get("product_fine_powers", 0) + int(want.size)
-                    words["product_coarse_powers"] = words.get("product_coarse_powers", 0) + 3
+                    words["product_fine_power_sums"] = words.get("product_fine_power_sums", 0) + 3
                     if not np.array_equal(np.asarray(want, dtype=np.uint64), staged_fine) or want_powers != [int(v) for v in staged_powers]:
                         record["first_difference"] = {
                             **context, "launch": "stored product vs staged",
                             "product_row": int(product_row),
                             "fine_mismatches": int(np.count_nonzero(np.asarray(want, dtype=np.uint64) != staged_fine)),
-                            "product_powers": [str(v) for v in want_powers],
+                            "product_fine_power_sums": [str(v) for v in want_powers],
                             "staged_powers": [str(int(v)) for v in staged_powers],
                         }
                         stop = True
@@ -547,11 +557,10 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
                 cases += [("probe_below_required", probe[0], True, False),
                           ("probe_at_required", probe[1], True, False)]
             d_in = cp.asarray(np.ascontiguousarray(packed))
-            d_diag = cp.zeros(1, dtype=cp.float32)
             if packed.ndim == 3 and packed.shape[0] != 1:
                 raise SystemExit(f"{path}: expected one frame per packed block")
             rows = int(packed.shape[-2]) if packed.ndim == 3 else int(packed.shape[0])
-            handle = kernel.create_raw(rows, d_in.data.ptr, d_diag.data.ptr)
+            handle = kernel.create_raw(rows, d_in.data.ptr)
             try:
                 for name, multiplier, with_support, with_taps in cases:
                     t5 = time.perf_counter()

@@ -146,12 +146,24 @@ openssl x509 -in $HOME/.ssl/cadcproxy.pem -noout -dates
 The run is pinned to the already preserved SM89 library. Do not replace or
 rebuild it during this run.
 
+Status 2026-10-18: the 2026-09 run of record was pinned to the preserved core
+2.3.0 library `pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so` (sha256
+`f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2`, manifest
+sha256 `d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0`)
+with that run's frozen source, which wrote schema v5 products. The current
+checkout is kernel core 3.0.0 (frame powers are the all-bin sums of the fine
+powers, schema v6, `FStat_Create` without the float output), and its
+`FStatKernel` refuses a library of any other core major. A run with this
+checkout first preserves a core 3.0.0 build with its manifest under
+`$HOME/rail/kernels` and sets the four variables below to it; the block stops
+if any is unset.
+
 ```bash
 set -euo pipefail
-KERNEL_LIB=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so
-KERNEL_SHA256=f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2
-KERNEL_MANIFEST=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.manifest.json
-KERNEL_MANIFEST_SHA256=d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0
+: "${KERNEL_LIB:?path of the preserved core 3.0.0 SM89 library}"
+: "${KERNEL_SHA256:?sha256 of that library}"
+: "${KERNEL_MANIFEST:?path of its preservation manifest}"
+: "${KERNEL_MANIFEST_SHA256:?sha256 of that manifest}"
 printf '%s  %s\n' \
   "$KERNEL_SHA256" "$KERNEL_LIB" \
   "$KERNEL_MANIFEST_SHA256" "$KERNEL_MANIFEST" | sha256sum --check --strict
@@ -162,7 +174,7 @@ import sys
 from pilot_proxy.kernel import FStatKernel
 
 kernel = FStatKernel(sys.argv[1])
-assert kernel.version.as_string() == "2.3.0"
+assert kernel.version.as_string() == "3.0.0"
 assert kernel.supports_fine_powers()
 assert kernel.supports_fused_fine()
 print("kernel", kernel.version.as_string(), kernel.get_fine_specs())
@@ -255,7 +267,7 @@ with np.load(sys.argv[1], allow_pickle=False) as product:
     scopes = np.asarray(product["unit_scope"]).astype(str)
     tags = np.asarray(product["unit_git_version_tag"]).astype(str)
     input_hashes = np.asarray(product["unit_input_map_sha256"]).astype(str)
-    assert str(product["schema_version"]) == "pilotproxy_per_pilot_product_v5"
+    assert str(product["schema_version"]) == "pilotproxy_per_pilot_product_v6"
     assert f"source={sys.argv[2]}" in version
     assert f"kernel_sha256={sys.argv[3]}" in version
     assert str(product["fine_status"]) == "enabled"
@@ -436,10 +448,10 @@ STAGING_DIR="$RUN_ROOT/staging"
 LOG_DIR="$RUN_ROOT/logs"
 RUN_LOG="$LOG_DIR/chime_pilots_local_v5.log"
 WEIGHTS_PATH="$PWD/weights/chime_dtv_weights_k128.bin"
-KERNEL_LIB=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so
-KERNEL_SHA256=f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2
-KERNEL_MANIFEST=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.manifest.json
-KERNEL_MANIFEST_SHA256=d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0
+: "${KERNEL_LIB:?set to the preserved core 3.0.0 library (Preserved detector library)}"
+: "${KERNEL_SHA256:?set in Preserved detector library}"
+: "${KERNEL_MANIFEST:?set in Preserved detector library}"
+: "${KERNEL_MANIFEST_SHA256:?set in Preserved detector library}"
 
 git fetch origin --prune --tags
 test -z "$(git status --porcelain)"
@@ -507,7 +519,10 @@ fivefold compared with 50. A stop can repeat up to 249 successfully analyzed
 units plus downloads that were prefetched but not represented by the last
 checkpoint. Complete the production-profile rehearsal before launch.
 
-`fine_products=on` retains exact fine powers. It does not enable fine detection.
+`fine_products=on` retains exact fine powers. It does not enable fine
+detection. It is also the only accepted value: since kernel core 3.0.0 the
+frame powers are the all-bin sums of the fine powers, so `off` and `auto`
+are refused.
 
 ## Live run checks
 
@@ -546,7 +561,9 @@ resume. Do not delete staging files while any old worker is alive.
 
 After the first 250-unit product checkpoint appears, stop the scan cleanly and
 inspect it before continuing. The terminal combined files do not exist yet, so
-run the deep per-pilot audit and verify the frozen identities and exact terms:
+run the deep per-pilot audit and verify the frozen identities, the exact
+terms, and the frame-power invariant (each `p_*_u64` equals the all-bin sum
+of its term's `fine_power_u64`):
 
 ```bash
 set -euo pipefail
@@ -578,7 +595,7 @@ with np.load(sys.argv[1], allow_pickle=False) as product:
     scopes = np.asarray(product["unit_scope"]).astype(str)
     tags = np.asarray(product["unit_git_version_tag"]).astype(str)
     input_hashes = np.asarray(product["unit_input_map_sha256"]).astype(str)
-    assert str(product["schema_version"]) == "pilotproxy_per_pilot_product_v5"
+    assert str(product["schema_version"]) == "pilotproxy_per_pilot_product_v6"
     assert f"source={sys.argv[3]}" in version
     assert f"kernel_sha256={sys.argv[4]}" in version
     assert all(x.dtype == np.uint64 and x.shape == (frames, 1)
@@ -586,6 +603,11 @@ with np.load(sys.argv[1], allow_pickle=False) as product:
     assert all(int(a) + int(b) == int(c)
                for a, b, c in zip(lower[:, 0], upper[:, 0], reference[:, 0]))
     assert fine.dtype == np.uint64 and fine.shape == (frames, 3, 256)
+    # Kernel core 3.0.0: each frame power is the exact all-bin sum of its
+    # term's fine powers, checked here in Python integers.
+    for term, power in enumerate((target, lower, upper)):
+        assert all(sum(int(v) for v in fine[row, term]) == int(power[row, 0])
+                   for row in range(frames))
     assert scopes.size == tags.size == input_hashes.size == unit_count
     assert all(scopes) and all(tags) and all(input_hashes)
     assert all(len(value) == 64 and set(value) <= set("0123456789abcdef")
@@ -703,8 +725,10 @@ OUTPUT_DIR="$RUN_ROOT/products"
 STAGING_DIR="$RUN_ROOT/staging"
 WEIGHTS_PATH="$PWD/weights/chime_dtv_weights_k128.bin"
 PROFILE_PATH="$PWD/configs/receiver_profiles/chime_dtv_fengine.json"
-KERNEL_LIB=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so
-KERNEL_MANIFEST=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.manifest.json
+: "${KERNEL_LIB:?set in Preserved detector library}"
+: "${KERNEL_SHA256:?set in Preserved detector library}"
+: "${KERNEL_MANIFEST:?set in Preserved detector library}"
+: "${KERNEL_MANIFEST_SHA256:?set in Preserved detector library}"
 
 test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_REVISION"
@@ -713,8 +737,7 @@ from pilot_proxy.provenance import package_source_sha256
 print(package_source_sha256())
 PY
 )" = "$EXPECTED_PACKAGE_SOURCE_SHA256"
-test "$EXPECTED_KERNEL_SHA256" = \
-  f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2
+test "$EXPECTED_KERNEL_SHA256" = "$KERNEL_SHA256"
 printf '%s  %s\n' \
   b2cfef752a6f2cf88317141a974161439299668a37a5464d710b3800b9a872d8 "$INVENTORY_PATH" \
   d0ab78db9dec847fb5270fb94e3fc45efd6bbbc71adc376830fb71467693079a "$BUNDLE_DIR/exclusions.jsonl" \
@@ -724,7 +747,7 @@ printf '%s  %s\n' \
   1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259 "$WEIGHTS_PATH" \
   d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7 "$WEIGHTS_PATH.manifest.json" \
   "$EXPECTED_KERNEL_SHA256" "$KERNEL_LIB" \
-  d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0 "$KERNEL_MANIFEST" | \
+  "$KERNEL_MANIFEST_SHA256" "$KERNEL_MANIFEST" | \
   sha256sum --check --strict
 if pgrep -af '[p]ilot-proxy chime-scan'; then
   exit 1

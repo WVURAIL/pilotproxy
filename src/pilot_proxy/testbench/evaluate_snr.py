@@ -564,7 +564,6 @@ def _pack_streams_for_kernel(
 
 def _kernel_measurements(
     *,
-    cp: Any,
     kernel: FStatKernel,
     packed: np.ndarray,
     weights: np.ndarray,
@@ -574,69 +573,32 @@ def _kernel_measurements(
     dtv_bandwidth_hz: float,
     threshold: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run diagnostic float and exact uint64 power readbacks."""
-    d_in = cp.asarray(packed)
-    d_diag = cp.zeros(1, dtype=cp.float32)
-    d_powers = cp.zeros(int(kernel.specs.N), dtype=cp.uint64)
-    d_mask_num = cp.zeros(1, dtype=cp.uint64)
-    d_mask_den = cp.zeros(1, dtype=cp.uint64)
-    d_mask = cp.zeros(1, dtype=cp.uint8)
-    d_overflow = cp.zeros(1, dtype=cp.uint32)
-    handle = kernel.create_raw(d_in.shape[0], d_in.data.ptr, d_diag.data.ptr)
-    try:
-        kernel.compute_diagnostic_float(handle, weights.ctypes.data)
-        cp.cuda.Device().synchronize()
-        diagnostic_float = float(d_diag[0].get())
+    """Run the deployed exact chain on the device and read back frame powers.
 
-        kernel.compute_powers_u64(handle, weights.ctypes.data, d_powers.data.ptr)
-        cp.cuda.Device().synchronize()
-        powers = cp.asnumpy(d_powers).astype(np.uint64, copy=False)
+    Kernel core 3.0.0: the device computes the exact row projections and the
+    frozen fxfft256 fine powers (``detect_packed_detector_input``), and the
+    frame powers are their exact uint64 all-bin sums. The library has no
+    float coarse path and no coarse rational-half mask any more, so the
+    float32 diagnostic ratio and the rational-half mask are formed from those
+    exact powers on the host, exactly as ``_cpu_reference_measurements``
+    forms them from the CPU reference.
+    """
+    from pilot_proxy.detect import detect_packed_detector_input
 
-        mask = 0
-        overflow = 0
-        if threshold is not None:
-            if getattr(kernel, "_has_numden_mask_rational_half_checked", False):
-                kernel.compute_numden_mask_rational_half_checked(
-                    handle,
-                    weights.ctypes.data,
-                    threshold["threshold_half_num"],
-                    threshold["threshold_half_den"],
-                    d_mask_num.data.ptr,
-                    d_mask_den.data.ptr,
-                    d_mask.data.ptr,
-                    d_overflow.data.ptr,
-                )
-                cp.cuda.Device().synchronize()
-                overflow = int(cp.asnumpy(d_overflow)[0])
-            else:
-                kernel.compute_numden_mask_rational_half(
-                    handle,
-                    weights.ctypes.data,
-                    threshold["threshold_half_num"],
-                    threshold["threshold_half_den"],
-                    d_mask_num.data.ptr,
-                    d_mask_den.data.ptr,
-                    d_mask.data.ptr,
-                )
-                cp.cuda.Device().synchronize()
-                overflow = 0
-            mask = int(cp.asnumpy(d_mask)[0])
-    finally:
-        kernel.destroy(handle)
-
-    return _measurements_from_powers(
-        diagnostic_float=diagnostic_float,
-        p_target=int(powers[REFERENCE_TARGET_TERM_INDEX]),
-        p_ref_lower=int(powers[REFERENCE_LOWER_TERM_INDEX]),
-        p_ref_upper=int(powers[REFERENCE_UPPER_TERM_INDEX]),
+    detection = detect_packed_detector_input(
+        packed=np.ascontiguousarray(packed), weights=weights, kernel=kernel
+    )
+    result = detection["results"][0]
+    return _measurements_from_exact_powers(
+        p_target=int(result["p_target_u64"]),
+        p_ref_lower=int(result["p_ref_lower_u64"]),
+        p_ref_upper=int(result["p_ref_upper_u64"]),
         weights=weights,
         pilot_below_data_db=pilot_below_data_db,
         bin_enbw_hz=bin_enbw_hz,
         pilot_capture_efficiency=pilot_capture_efficiency,
         dtv_bandwidth_hz=dtv_bandwidth_hz,
         threshold=threshold,
-        mask=mask,
-        overflow=overflow,
     )
 
 
@@ -653,32 +615,66 @@ def _cpu_reference_measurements(
 ) -> dict[str, Any]:
     """CPU exact-integer sibling of ``_kernel_measurements``.
 
-    Uses the validated CPU reference (``coarse_power_ratio_cpu_reference_packed``) for the
+    Uses the exact CPU reference (``coarse_power_ratio_cpu_reference_packed``:
+    rows -> fxfft256 -> all-bin sums, the kernel core 3.0.0 frame powers) for the
     power sums and Python-integer arithmetic for the rational-half threshold
     decision, so the fields are the kernel's semantics without a GPU. The
     kernel <-> reference equivalence itself is CI-gated by the kernel parity
     suite; a small same-seed GPU spot check ties a CPU-produced sweep to the
     deployed kernel (see docs/PUBLICATION_VALIDATION.md@30e50c2, item 2).
     """
-    fstat, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, int(bits))
-    p_target = int(round(float(sums[0])))
-    p_ref_lower = int(round(float(sums[1])))
-    p_ref_upper = int(round(float(sums[2])))
-    diagnostic_float = float(np.float32(fstat))
+    _fstat, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, int(bits))
+    return _measurements_from_exact_powers(
+        p_target=int(sums[REFERENCE_TARGET_TERM_INDEX]),
+        p_ref_lower=int(sums[REFERENCE_LOWER_TERM_INDEX]),
+        p_ref_upper=int(sums[REFERENCE_UPPER_TERM_INDEX]),
+        weights=weights,
+        pilot_below_data_db=pilot_below_data_db,
+        bin_enbw_hz=bin_enbw_hz,
+        pilot_capture_efficiency=pilot_capture_efficiency,
+        dtv_bandwidth_hz=dtv_bandwidth_hz,
+        threshold=threshold,
+    )
+
+
+def _measurements_from_exact_powers(
+    *,
+    p_target: int,
+    p_ref_lower: int,
+    p_ref_upper: int,
+    weights: np.ndarray,
+    pilot_below_data_db: float,
+    bin_enbw_hz: float,
+    pilot_capture_efficiency: float,
+    dtv_bandwidth_hz: float,
+    threshold: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Host-side diagnostic ratio and rational-half mask, then all fields.
+
+    Both backends hand over the exact frame powers. The float32 diagnostic is
+    ``2 P_0 / (P_1 + P_2)`` rounded to float32 (0.0 when the reference power
+    is zero), and the rational-half mask is the exact Python-integer
+    comparison ``P_0 * half_den > half_num * (P_1 + P_2)``, so no overflow can
+    occur and the overflow count is always 0.
+    """
+    p_ref_sum = int(p_ref_lower) + int(p_ref_upper)
+    diagnostic_float = (
+        float(np.float32(2.0 * float(p_target) / float(p_ref_sum)))
+        if p_ref_sum != 0
+        else 0.0
+    )
     mask = 0
-    overflow = 0
     if threshold is not None:
-        p_ref_sum = p_ref_lower + p_ref_upper
         mask = int(
             p_ref_sum != 0
-            and p_target * int(threshold["threshold_half_den"])
+            and int(p_target) * int(threshold["threshold_half_den"])
             > int(threshold["threshold_half_num"]) * p_ref_sum
         )
     return _measurements_from_powers(
         diagnostic_float=diagnostic_float,
-        p_target=p_target,
-        p_ref_lower=p_ref_lower,
-        p_ref_upper=p_ref_upper,
+        p_target=int(p_target),
+        p_ref_lower=int(p_ref_lower),
+        p_ref_upper=int(p_ref_upper),
         weights=weights,
         pilot_below_data_db=pilot_below_data_db,
         bin_enbw_hz=bin_enbw_hz,
@@ -686,7 +682,7 @@ def _cpu_reference_measurements(
         dtv_bandwidth_hz=dtv_bandwidth_hz,
         threshold=threshold,
         mask=mask,
-        overflow=overflow,
+        overflow=0,
     )
 
 
@@ -1065,15 +1061,9 @@ def _evaluate_one_trial(
         weights,
         int(args.bits),
     )
-    cpu_packed_p_target = int(
-        round(float(cpu_packed_powers[REFERENCE_TARGET_TERM_INDEX]))
-    )
-    cpu_packed_p_ref_lower = int(
-        round(float(cpu_packed_powers[REFERENCE_LOWER_TERM_INDEX]))
-    )
-    cpu_packed_p_ref_upper = int(
-        round(float(cpu_packed_powers[REFERENCE_UPPER_TERM_INDEX]))
-    )
+    cpu_packed_p_target = int(cpu_packed_powers[REFERENCE_TARGET_TERM_INDEX])
+    cpu_packed_p_ref_lower = int(cpu_packed_powers[REFERENCE_LOWER_TERM_INDEX])
+    cpu_packed_p_ref_upper = int(cpu_packed_powers[REFERENCE_UPPER_TERM_INDEX])
     cpu_packed_p_ref_sum = cpu_packed_p_ref_lower + cpu_packed_p_ref_upper
     packed_target_norm_sq, packed_lower_norm_sq, packed_upper_norm_sq = (
         weight_term_norms_sq(np.asarray(weights, dtype=np.int8))
@@ -1117,7 +1107,6 @@ def _evaluate_one_trial(
         )
     else:
         gpu = _kernel_measurements(
-            cp=cp,
             kernel=kernel,
             packed=packed,
             weights=weights,
@@ -1829,6 +1818,12 @@ def run(args: argparse.Namespace) -> int:
             "--frame-size-samples must be an integer multiple of the locked "
             "128-sample detector window."
         )
+    if (args.frame_size_samples // args.detector_window_samples) % 128 != 0:
+        raise SystemExit(
+            "--frame-size-samples must give a multiple of 128 detector windows "
+            "per stream: the frame powers are the all-bin sums of the frozen "
+            "fxfft256 fine powers over whole 128-window streams."
+        )
     if args.noise_source == "gnuradio":
         gnuradio_python = str(args.gnuradio_python)
         if not _command_or_path_exists(gnuradio_python):
@@ -2123,7 +2118,8 @@ def run(args: argparse.Namespace) -> int:
         "pilot_capture_efficiency": float(args.pilot_capture_efficiency),
         "stable_combine_mode": COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO,
         "power_sum_rule": (
-            "sum target/reference powers over all detector rows before forming F"
+            "sum each term's frame powers (the all-bin sums of its fxfft256 "
+            "fine powers) over all detector rows before forming F"
         ),
         "selected_channel_index": int(channel_index),
         "dtv_pilot_hz": float(args.dtv_pilot_mhz) * HZ_PER_MHZ,
@@ -2132,7 +2128,7 @@ def run(args: argparse.Namespace) -> int:
         "spectral_sense": str(args.spectral_sense),
     }
     summary = {
-        "schema_version": "pilotproxy_snr_validation_report_v1",
+        "schema_version": "pilotproxy_snr_validation_report_v2",
         "result_schema_version": RESULT_SCHEMA_TOKEN,
         "project_identity": (
             "Standalone CUDA F-statistic DTV pilot detector and GNU Radio "
@@ -2197,7 +2193,10 @@ def run(args: argparse.Namespace) -> int:
             "snr_bias_db_std": _nanstd_or_nan(pooled_errors),
         },
         "detector_output": {
-            "fstat_definition": "F = 2*P_target/(P_ref_lower + P_ref_upper)",
+            "fstat_definition": (
+                "F = 2*P_target/(P_ref_lower + P_ref_upper); "
+                "P_r = sum_f S_r[f], S = fxfft256_v1 fine powers"
+            ),
             "normalized_coarse_power_ratio_definition": (
                 "Q = P_target*reference_norm_sum_sq/"
                 "((P_ref_lower + P_ref_upper)*target_norm_sq)"

@@ -52,7 +52,7 @@ def test_export_runtime_weight_bundle_writes_compact_profiles(tmp_path) -> None:
     profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
     manifest = json.loads(outputs["weights_manifest"].read_text("utf-8"))
 
-    assert contract["schema_version"] == "pilotproxy_detector_contract_v1"
+    assert contract["schema_version"] == "pilotproxy_detector_contract_v2"
     assert contract["per_frequency_threshold"] is False
     assert contract["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
     assert (

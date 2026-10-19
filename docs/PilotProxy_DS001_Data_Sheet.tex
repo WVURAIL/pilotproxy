@@ -145,12 +145,12 @@ ATSC A/53 Part 2 specifies that the 8-VSB pilot is approximately 11.3 dB below t
   \item Compile-time 64- or 128-sample detector rows using packed complex
         4+4 bit input; the shipped CHIME bank selects 128.
   \item Three matched-filter terms: target pilot bin, lower reference bin, upper reference bin.
-  \item Exact \code{uint64} target/reference power readback.
+  \item Exact \code{uint64} fine powers per term and fine bin; the target/reference frame powers are their all-bin sums.
   \item Time-coherent front end: \code{int32} row sums, padded fine
         spectrum, any-bin CFAR detection.
-  \item Synthetic-evaluator detection by rational fixed-point threshold comparison; no division in that mask path.
+  \item Synthetic-evaluator detection by an exact integer rational threshold comparison on the host; no division in that mask path.
   \item Synthetic-evaluator threshold coordinate is DTV shelf SNR in dB.
-  \item The corresponding kernel threshold coordinate is a fixed-point F-statistic half-threshold.
+  \item The corresponding threshold coordinate is a rational F-statistic half-threshold.
   \item GNU Radio ATSC 1.0 waveform generation, audit, AWGN injection, quantization, and SNR evaluation.
   \item Physical-channel helpers and shipped weights for U.S. UHF channels 14-36.
 \end{itemize}
@@ -171,7 +171,7 @@ Weight terms & 3: target, lower reference, upper reference \\ \hline
 Reference bins & Two total reference bins \\ \hline
 Raw statistic & \(F=2P_t/(P_{r1}+P_{r2})\) \\ \hline
 Raw/basic pilot excess & \(\rho=F-1\); positive raw excess begins at \(F>1\) \\ \hline
-Kernel outputs & \code{mask} (deployment; 1 = reject), \code{uint64} powers, \code{int32} row sums \\ \hline
+Kernel outputs & \code{mask} (deployment; 1 = reject), \code{uint64} fine powers and frame powers, \code{int32} row sums \\ \hline
 Power accumulation & \code{uint64} \\ \hline
 \multicolumn{2}{|c|}{\bfseries User-Facing Controls}\\ \hline
 Target selection & \code{physical_channel} or \code{dtv_pilot_mhz} selects precomputed weights \\ \hline
@@ -206,7 +206,7 @@ Execution policy & Device-affine, default stream \\ \hline
 
 The DTV data shelf occupies most of a nominal 6 MHz channel, but the ATSC pilot is narrow. Therefore, we measure the pilot against two nearby reference bins and use that excess to estimate the equivalent data-shelf SNR. This estimate is conditional on the stated bandwidth, pilot-to-data relationship, and pilot-capture efficiency.
 
-The CUDA kernel implements only the fixed-point measurement. It receives a row-major detector matrix, three packed weight vectors, and a rational half-threshold. It returns accumulated powers and a mask. Host software supplies the ATSC frequencies, dB conversions, receiver geometry, and physical-channel interpretation.
+The CUDA kernel implements only the fixed-point measurement. It receives a row-major detector matrix and three packed weight vectors. It returns the exact \code{uint64} fine powers of the three terms and the frame powers, their all-bin sums; the fused mask entries also return the per-frame mask bit of the fine decision. Host software applies the coarse threshold comparison in exact integer arithmetic and supplies the ATSC frequencies, dB conversions, receiver geometry, and physical-channel interpretation.
 
 
 \begin{figure}[H]
@@ -236,19 +236,19 @@ must be re-measured for the current core.}
 
 \subsection{Raw F-Statistic}
 
-For one evaluated frame, the kernel accumulates three powers:
+For one evaluated frame, the kernel produces three frame powers:
 \begin{equation}
-  P_t,\qquad P_{r1},\qquad P_{r2}.
+  P_t,\qquad P_{r1},\qquad P_{r2},\qquad
+  P_n=\sum_{f}S[n,f],
 \end{equation}
-The target term \(P_t\) is centered on the ATSC pilot. The lower and upper reference terms, \(P_{r1}\) and \(P_{r2}\), sample the nearby non-pilot floor. We form the raw F-statistic as
+each the exact \code{uint64} all-bin sum of that term's fine power spectrum
+\(S[n,f]\) (Section~\ref{ssec:fine}; kernel core 3.0.0). The target term \(P_t\) is centered on the ATSC pilot. The lower and upper reference terms, \(P_{r1}\) and \(P_{r2}\), sample the nearby non-pilot floor. We form the raw F-statistic as
 \begin{equation}
   \boxed{F=\frac{2P_t}{P_{r1}+P_{r2}}.}
 \end{equation}
-The production \code{NumDen} API writes:
-\begin{equation}
-  \code{num}=P_t,\qquad \code{den}=P_{r1}+P_{r2}.
-\end{equation}
-Therefore, host code must use \(F=2\,\code{num}/\code{den}\). Using \(\code{num}/\code{den}\) would omit the factor of two in the detector definition.
+The fine-transform length cancels in this ratio. The library forms no ratio:
+host code receives the three exact powers and must use
+\(F=2P_t/(P_{r1}+P_{r2})\). Using \(P_t/(P_{r1}+P_{r2})\) would omit the factor of two in the detector definition.
 
 \subsection{Pilot Excess and PNR}
 
@@ -289,6 +289,7 @@ For these constants, the bandwidth spreading term is
 \end{equation}
 
 \subsection{Time-Coherent Fine Statistic}
+\label{ssec:fine}
 
 The time-coherent front end replaces the reduction after the dot product:
 instead of squaring each window's dot product and summing incoherently over
@@ -302,10 +303,11 @@ product
   z[n,m]=\sum_{k=0}^{K-1} w_n[k]\,x_m[k]
   \qquad(\text{exact \code{int32} components}).
 \end{equation}
-Host software reshapes each term's rows to
+The fine stage reshapes each term's rows to
 \([N_{\mathrm{streams}},\,W]\) with \(W=\mathrm{frame\_size\_samples}/K\)
-windows per stream, applies an FFT along the window axis with
-\(\times\ppFinePadFactor\) zero padding, and sums incoherently over streams:
+windows per stream, applies the frozen fixed-point FFT (\code{fxfft256_v1})
+along the window axis with \(\times\ppFinePadFactor\) zero padding, and sums
+incoherently over streams:
 \begin{equation}
   S[n,b]=\sum_{\mathrm{streams}}\bigl|\mathrm{FFT}_{\mathrm{pad}}(z[n,\cdot])[b]\bigr|^2,
   \qquad
@@ -321,13 +323,17 @@ window-to-window phase survives stage 1 exactly
 \emph{intra-window} fine rotation \(e^{-2\pi i kb/(\mathrm{pad}\cdot WK)}\)
 is the window capture factor documented in \code{docs/METHOD_SPEC.md}
 (\(\mathrm{sinc}^2\) scalloping: \ppCaptureLossThreeHundredDb~dB at
-300\,Hz, at most \ppCaptureLossEdgeDb~dB at the fine-span edge). Two
-identities are enforced at run time, not assumed: the exact int64
-marginal identity, \(\sum_m|z[n,m]|^2\) reproduces the
-\code{FStat_Compute_Powers_U64} output bit-for-bit; and the float Parseval
-identity, \(\sum_b S[n,b]=\mathrm{pad}\cdot W\cdot P_n\), gated at ULP
-tolerance. \(F\) therefore remains the exact all-bin marginal of the fine
-spectrum. Fine-bin detection uses a pre-registered null-bulk CFAR over the
+300\,Hz, at most \ppCaptureLossEdgeDb~dB at the fine-span edge). The frame
+powers of the coarse statistic are \emph{defined} as the all-bin sums of this
+spectrum, \(P_n=\sum_b S[n,b]\) (kernel core 3.0.0), so \(F\) is exactly the
+all-bin marginal of the fine spectrum and no second power path exists; each
+product stores both and the readers check \(P_n=\sum_b S[n,b]\) exactly. The
+rounded fixed-point transform does not conserve energy exactly, so \(P_n\) is
+not \(\mathrm{pad}\cdot W\sum_m|z[n,m]|^2\): the two agree to a median
+relative \(3\times10^{-6}\) on archive frames and depart by up to about 2 per
+cent on near-empty frames. Earlier cores computed that row-domain sum as a
+separate power and enforced a per-frame marginal identity against it; both
+are retired. Fine-bin detection uses a pre-registered null-bulk CFAR over the
 independent non-designated bins with an any-bin decision rule; the stored
 fields, CFAR calibration modes, and detection-list layout are specified in
 \code{docs/PRODUCT_SCHEMA.md}.
@@ -356,7 +362,10 @@ therefore literal, not borrowed.
 
 The deployed statistic sums powers over \(M\) rows before the ratio
 (\code{all_rows_summed_before_ratio}), which replaces \((2,4)\) by
-\((2M,\,4M)\): under the same assumptions \(F \sim F(2M, 4M)\). Two
+\((2M,\,4M)\): under the same assumptions \(F \sim F(2M, 4M)\). The frame
+powers are the all-bin sums of the fine spectrum, which an exact transform
+makes \(\mathrm{pad}\cdot W\) times the row sums in every term, so the same
+distribution holds up to the fixed-point rounding of the transform. Two
 location facts prevent a common misreading. The per-row \(F(2,4)\) has
 mean \(4/(4-2)=2\) and a heavy right tail; the frame statistic with
 \(M=\ppChimeRowsPerFrame\) rows concentrates tightly, with
@@ -387,10 +396,10 @@ to \ppFineBinHz\ Hz. The fine path is an implemented, inactive decision
 candidate: coherent window integration recovers up to
 \ppCoherentGainDb~dB of deflection sensitivity over the all-incoherent
 reduction, and the designated-set CFAR can form a per-frame candidate mask bit
-using a deterministic (bit-exact host/device) FFT implementation. The coarse
-path supplies the current archive $F>\mu_0$ rejection flag and the bit-exact
-marginal check of the fine path's inputs
-(\code{docs/DESIGN_DECISIONS.md}).}
+using a deterministic (bit-exact host/device) FFT implementation. The frame
+powers are the all-bin sums of the same fine powers and supply the current
+archive $F>\mu_0$ rejection flag; since kernel core 3.0.0 there is no
+separate coarse power path (\code{docs/DESIGN_DECISIONS.md}).}
 \label{fig:detector_datapath}
 \end{figure}
 
@@ -426,7 +435,7 @@ marginal check of the fine path's inputs
 
 \section{Threshold Interpretation}
 
-For synthetic threshold tests, the user supplies \code{threshold_data_shelf_snr_db}. Host software converts this shelf-SNR threshold to the raw F-statistic coordinate and then to the rational half-threshold used by the kernel:
+For synthetic threshold tests, the user supplies \code{threshold_data_shelf_snr_db}. Host software converts this shelf-SNR threshold to the raw F-statistic coordinate and then to a rational half-threshold, which it applies to the integer frame powers:
 
 \begin{align}
 \mathrm{PNR}_{\mathrm{bin,thr},dB} &= S_{\mathrm{shelf,thr},dB} - \mathrm{pilot\_below\_data\_db} + 10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})+10\log_{10}(\eta_p),\\
@@ -434,11 +443,11 @@ For synthetic threshold tests, the user supplies \code{threshold_data_shelf_snr_
 F_{\mathrm{thr}} &= 1+\rho_{\mathrm{thr}},\\
 T_{\mathrm{half}} &= \frac{F_{\mathrm{thr}}}{2}=\frac{N_{\mathrm{half}}}{D_{\mathrm{half}}}.
 \end{align}
-The CUDA kernel evaluates:
+The host evaluates, in exact integer arithmetic:
 \begin{equation}
   P_t D_{\mathrm{half}} > N_{\mathrm{half}}(P_{r1}+P_{r2}).
 \end{equation}
-Exact equality is not a positive detection. The rational-half API and the CHIME positive-excess path both use a strict greater-than comparison.
+Exact equality is not a positive detection. The synthetic threshold path and the CHIME positive-excess path both use a strict greater-than comparison.
 
 
 \notebox{We independently recomputed the following example from the checked-in conversion code. For a \(-26\dB\) shelf-SNR threshold and the included reference geometry, \(\mathrm{PNR}_{\mathrm{bin}}=-4.363988\dB\), \(F_{\mathrm{thr}}=1.36610123\), and \(T_{\mathrm{half}}\approx0.68305\).}
@@ -463,7 +472,7 @@ The CUDA detector core does not interpret receiver metadata. A receiver adapter 
 \begin{itemize}
   \item \code{DetectorCoreProfile}: locked kernel contract, including the
         selected \(K\in\{64,128\}\), \(N=3\), int4 packed input, uint64
-        powers, and rational half-threshold input.
+        fine and frame powers, and no threshold input.
   \item \code{ReceiverProfile}: RF band, channelizer geometry, spectral sense, baseband frame convention (\field{baseband_frame.channel_center_normalized}), frame size, input-stream count, quantization defaults, detector-bin ENBW, and pilot-capture efficiency.
   \item \code{stream_map}: stream-index metadata for feed, polarization, beam, or other receiver paths.
   \item \code{check-profile}, \code{check-layout}, \code{make-weights}, and \code{chime-run} consume the applicable profile or stream-map records. The standalone \code{detect} command selects shipped weights from its sidecar or channel flag, while \code{evaluate-snr} uses the fixed testbench geometry.
@@ -484,7 +493,7 @@ The frame size is not a free detector parameter: the adapter matches the correla
 
 \section{Result Schema and Mask Convention}
 
-Detector and synthetic SNR-evaluator JSON outputs include a versioned \field{result_schema} object with \code{schema_version=pilotproxy_result_schema_v1}. This object records the statistic definitions, layout metadata, calibration constants, threshold fields, fixed-point contract, and mask convention needed to interpret those results. Audit, quantization, summary, injection, and CHIME products use their own documented top-level schemas rather than this object.
+Detector and synthetic SNR-evaluator JSON outputs include a versioned \field{result_schema} object with \code{schema_version=pilotproxy_result_schema_v2}. This object records the statistic definitions, layout metadata, calibration constants, threshold fields, fixed-point contract, and mask convention needed to interpret those results. Audit, quantization, summary, injection, and CHIME products use their own documented top-level schemas rather than this object.
 
 The fixed-point contract records:
 \begin{itemize}
@@ -511,9 +520,9 @@ The basic uncorrected convention would call \(F>1\) positive excess. The current
 
 The operating point itself is carried as per-channel rational data in the
 runtime bundle (\field{positive_excess_half_threshold_num},
-\field{positive_excess_half_threshold_den}); the kernel comparison is
-threshold-agnostic, so recalibrating the recorded rule is a bundle
-regeneration alone, with no kernel or schema change. The active archive
+\field{positive_excess_half_threshold_den}); the host applies it to the
+frame powers and the kernel takes no threshold, so recalibrating the recorded
+rule is a bundle regeneration alone, with no kernel or schema change. The active archive
 decision remains the norm-corrected coarse positive-excess comparison above.
 The implemented fine designated-set CFAR is a candidate whose calibration
 status is \code{pending_campaign}; its spectrum, threshold, and exceedances are
@@ -570,8 +579,13 @@ samples. We conservatively bound one real or imaginary complex-product
 component by 128 per tap. Therefore, the largest supported window, 128 taps,
 has an absolute component bound of 16,384 and fits in signed 16-bit storage; a
 256-sample window could reach 32,768 and exceed the positive signed-int16
-limit. Under the same bound, one magnitude-squared term fits in \code{uint32},
-and the configured block power sum fits in \code{uint64}.
+limit. Under the same bound the fixed-point transform stays inside
+\code{int32}, the feed-summed fine powers fit in \code{uint64}, and so do
+their all-bin sums, the frame powers: with \(R=16{,}384\),
+\(P_n\le 256\cdot 2R^2\cdot W\cdot N_{\mathrm{streams}}\cdot 1.001\), about
+\(2^{55}\) at 2048 streams and \(2^{60}\) at the 65,536-stream capacity the
+build asserts (the factor 1.001 bounds the fixed-point transform's departure
+from Parseval at these amplitudes; \code{cuda/config.h}).
 
 \section{C API Summary}
 
@@ -584,29 +598,28 @@ and the configured block power sum fits in \code{uint64}.
 \apicode{FStat_GetOptimizationFeatures} & Query weight-lane placement and grid cap.\\ \hline
 \apicode{FStat_GetVersion} & Query the locked kernel version.\\ \hline
 \apicode{FStat_LastError} & Read the last CUDA/API error recorded by the calling thread.\\ \hline
-\apicode{FStat_Create} / \apicode{FStat_Create_Batch} & Create default-stream device-affine handle.\\ \hline
-\apicode{FStat_Compute_NumDen_Mask_RationalHalf} & Production detection path without overflow counter.\\ \hline
-\apicode{FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount} & Production detection path with rational multiplication overflow counter.\\ \hline
-\apicode{FStat_Compute_Powers_U64} & Integer diagnostic/reference readback of all three power terms.\\ \hline
-\apicode{FStat_Compute_RowSums_I32} & Exact \code{int32} complex per-row dot products (term-major, stream-major rows, interleaved re/im); the int64 sum of \(|z|^2\) over rows reproduces \apicode{FStat_Compute_Powers_U64} exactly.\\ \hline
+\apicode{FStat_Create} / \apicode{FStat_Create_Batch} & Create a device-affine handle over the packed input (no output buffer since core 3.0.0).\\ \hline
+\apicode{FStat_SetStream} & Select the CUDA stream for a handle's launches (core 2.4.0).\\ \hline
+\apicode{FStat_Compute_RowSums_I32} & Exact \code{int32} complex per-row dot products (term-major, stream-major rows, interleaved re/im); the input to the fine stage.\\ \hline
 \apicode{FStat_Supports_RowSums} & Runtime capability probe; returns 1 when the loaded library provides the row-sum entry.\\ \hline
 \apicode{FStat_Compute_FinePowers_U64} & On-device fine-reduction power stage (core 2.1.0): frozen fxfft256 v1 fixed-point FFT over the row-sum buffer plus exact \code{uint64} feed-power sums per fine bin; handle-free, composes directly with \apicode{FStat_Compute_RowSums_I32} output; bit-reproducible for any launch schedule. Policy-free: the fine statistic, CFAR, and designated-set decision form downstream.\\ \hline
 \apicode{FStat_Supports_FinePowers} / \apicode{FStat_GetFineSpecs} & Fine-stage capability probe and frozen geometry query (128 windows, pad 2, 256 bins).\\ \hline
-\apicode{FStat_Compute_DiagnosticFloat} & Diagnostic float32 ratio output; not the primary validation path.\\ \hline
+\apicode{FStat_Compute_FusedFine_U64} & One launch from packed samples to the exact fine powers (core 2.2.0); its required \code{d_power_out} receives the frame powers \(P_n=\sum_b S[n,b]\), reduced on the device (core 3.0.0).\\ \hline
+\apicode{FStat_Compute_FusedFineMask_U64} / \apicode{FStat_Compute_FusedFineMaskWithSupport_U64} & Fused fine powers plus the fine decision v1 epilogue: one mask bit per frame (core 2.3.0), and rank-valid and usable-bulk outputs (core 2.5.0); frame powers and row sums are optional taps.\\ \hline
 \apicode{FStat_Destroy} & Destroy handle.\\ \hline
 \end{longtable}
 \normalsize
 
-A zero reference denominator cannot define \(F\). The kernel therefore sets the mask to zero. Unchecked C and Python conversion helpers return zero pilot excess for this case. The checked C helper exposes the invalid denominator; Python callers must inspect \code{den} or \field{p_ref_sum_u64} before interpreting the conversion.
+A zero reference denominator cannot define \(F\). The host therefore forces the mask to zero and marks the frame invalid; Python callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before interpreting any conversion. Core 3.0.0 removed the float and rational C helpers that formed these conversions in the library.
 
 The outputs serve three roles. Deployment consumes only the per-frame
 \code{mask} (1 = reject, 0 = keep); in the proposed Kotekan interface, this
 bit is the entire queue payload. The science-product path consumes the exact
-\code{uint64} powers --- the archive pipeline forms the norm-corrected
-decision on the host and stores the statistic --- and the exact \code{int32}
-row sums, the input to the fine spectrum. The float ratio is a debugging
-diagnostic, and the power readbacks double as cross-checks; none of these
-cross the deployment interface.
+\code{uint64} fine powers and the frame powers that are their all-bin sums
+--- the archive pipeline forms the norm-corrected decision on the host and
+stores the statistic --- and the exact \code{int32} row sums, the input to
+the fine spectrum, through an optional debug tap; none of these cross the
+deployment interface.
 
 \section{Build and Validation}
 
@@ -653,7 +666,7 @@ The repository provides separate Python, CPU, CUDA, and GNU Radio checks. A rele
   \item Receiver profiles define an adapter contract; they do not establish that a telescope pipeline has been deployed or validated.
   \item The CHIME mask uses $F>\mu_0$, where $\mu_0$ comes from fixed weight norms. It is not a threshold fitted to telescope null statistics, and no operational false-positive rate is claimed.
   \item The kernel measures pilot excess. It does not decode an ATSC transport stream or prove that every excess is DTV.
-  \item Fine products require a library that exposes the row-sum entry. \code{fine_products=auto} degrades with \field{fine_status=kernel_library_lacks_matched_filter_row_projections}; \code{fine_products=on} hard-fails on a stale library, which is the intended production behavior.
+  \item Fine products are mandatory: the frame powers are the all-bin sums of the fine powers, so a library without the row-sum and fine-power entries cannot produce a product. \code{fine_products} accepts only \code{on}; \code{off} and \code{auto} are refused.
   \item On DTV-occupied channels, a real pilot at a nonzero frequency offset occupies non-designated fine bins; an elevated non-designated flag rate can therefore be signal rather than CFAR miscalibration. The stored fine spectrum resolves which.
   \item Standard conversion uses the ATSC 11.3 dB relationship. Any calibrated override must be recorded with the result that used it.
 \end{itemize}

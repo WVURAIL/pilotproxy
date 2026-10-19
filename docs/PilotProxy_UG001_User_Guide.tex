@@ -499,7 +499,7 @@ input to the batched file automatically.  If neither file exists, run
 The detector JSON includes:
 \begin{itemize}
   \item \field{selected_weight_layout}
-  \item \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v1}
+  \item \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v2}
   \item \field{layout} with \field{frame_size_samples}, \field{num_input_streams}, \field{windows_per_stream}, and \field{detector_rows_per_frame}
   \item \field{mask_rule}, \field{target_norm_sq}, \field{reference_norm_sum_sq}, and \field{null_power_ratio}
   \item per-block \field{mask} and \field{normalized_positive_excess_mask}, exact powers, \field{coarse_power_ratio}, raw \field{raw_pilot_excess}, norm-corrected \field{normalized_pilot_excess}, and estimated shelf SNR.
@@ -558,7 +558,7 @@ the standalone ATSC testbench.
 \section{Thresholds}
 \label{sec:thresholds}
 
-For the synthetic threshold path, the user provides \code{threshold_data_shelf_snr_db}. Host code converts it to a rational half-threshold, after which the kernel compares integer powers and integer threshold terms.
+For the synthetic threshold path, the user provides \code{threshold_data_shelf_snr_db}. Host code converts it to a rational half-threshold and compares the integer frame powers with the integer threshold terms; the kernel takes no threshold.
 
 
 \begin{figure}[H]
@@ -569,13 +569,13 @@ For the synthetic threshold path, the user provides \code{threshold_data_shelf_s
 \node[block,below=of a] (b) {$\mathrm{PNR}_{\mathrm{bin,thr},dB}=S_{\mathrm{shelf,thr},dB}-\mathrm{pilot\_below\_data\_db}+10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})+10\log_{10}(\eta_p)$};
 \node[block,below=of b] (c) {$\rho_{\mathrm{thr}}=10^{\mathrm{PNR}_{\mathrm{bin,thr},dB}/10}$};
 \node[block,below=of c] (d) {$F_{\mathrm{thr}}=1+\rho_{\mathrm{thr}}$};
-\node[block,below=of d] (e) {Kernel half-threshold: $T_{\mathrm{half}}=F_{\mathrm{thr}}/2=N_{\mathrm{half}}/D_{\mathrm{half}}$};
+\node[block,below=of d] (e) {Host half-threshold: $T_{\mathrm{half}}=F_{\mathrm{thr}}/2=N_{\mathrm{half}}/D_{\mathrm{half}}$};
 \draw[->,thick] (a) -- (b);
 \draw[->,thick] (b) -- (c);
 \draw[->,thick] (c) -- (d);
 \draw[->,thick] (d) -- (e);
 \end{tikzpicture}
-\caption{Synthetic threshold conversion. The user supplies a shelf-SNR threshold, while the kernel receives a fixed-point rational half-threshold.}
+\caption{Synthetic threshold conversion. The user supplies a shelf-SNR threshold, and the host compares the integer frame powers with a fixed-point rational half-threshold.}
 \label{fig:threshold_conversion}
 \end{figure}
 
@@ -636,24 +636,29 @@ The output report records the values used, so an analysis can reproduce the conv
 The time-coherent front end replaces the reduction after the dot product:
 the windows are integrated coherently (up to \ppCoherentGainDb~dB of
 deflection sensitivity over the all-incoherent reduction) and only the feed
-sum remains incoherent. From the exact \code{int32} row sums, the host
+sum remains incoherent. From the exact \code{int32} row sums, the kernel
 forms a per-frame fine spectrum:
-each weight term's rows reshape to \([N_{\mathrm{streams}},W]\) windows, an
-FFT along the window axis with \(\times\ppFinePadFactor\) zero padding gives
+each weight term's rows reshape to \([N_{\mathrm{streams}},W]\) windows, the
+frozen fixed-point FFT (\code{fxfft256_v1}) along the window axis with
+\(\times\ppFinePadFactor\) zero padding gives
 \ppFineNumBins\ fine bins of \ppFineBinHz\ Hz, and an incoherent sum over
-streams yields the fine-bin statistic
-\(F_2[b]=2S_t[b]/(S_{r1}[b]+S_{r2}[b])\). The coarse statistic is preserved
-exactly: the integer sum of \(|z|^2\) over rows reproduces the coarse powers
-bit-for-bit, so \(F\) is exactly the all-bin marginal of the fine spectrum.
+streams yields the exact \code{uint64} fine powers \(S_n[b]\) and the
+fine-bin statistic \(F_2[b]=2S_t[b]/(S_{r1}[b]+S_{r2}[b])\). Since kernel
+core 3.0.0 the coarse statistic is formed from the same spectrum: the frame
+powers are defined as the all-bin sums \(P_n=\sum_b S_n[b]\), so \(F\) is
+exactly the all-bin marginal of the fine spectrum and there is no separate
+coarse power path. Every product stores both, and the readers check
+\(P_n=\sum_b S_n[b]\) exactly.
 The Data Sheet
 and \code{docs/PRODUCT_SCHEMA.md} give the definitions and stored fields;
 \code{docs/METHOD_SPEC.md} states the CFAR calibration.
 
 In CHIME archive products (\code{pilot-proxy chime-scan}), fine products are
-controlled by \code{--set fine_products=auto|on|off}. \code{auto} enables
-them when the loaded library exposes the row-sum entry and otherwise records
-\field{fine_status=kernel_library_lacks_matched_filter_row_projections}; \code{on} hard-fails on a
-stale library, which is the intended production setting.
+mandatory, because the frame powers are their sums: \code{--set
+fine_products} accepts only \code{on} (the default), and a library without the
+row-sum and fine-power entries fails at launch. The only product without fine
+terms is a pilot outside the measured band
+(\field{fine_status=not_applicable_pilot_out_of_band}).
 
 \begin{figure}[H]
 \centering
@@ -682,39 +687,42 @@ the stored fine spectrum and the detected-line stability across frames.
 
 \section{C API Overview}
 
-The public C API is declared in \code{cuda/f_statistic.h}. In this example, \code{d_in}, \code{d_num_out}, \code{d_den_out}, \code{d_mask_out}, and \code{d_overflow_count} are device pointers. The overflow counter must address one device \code{unsigned int}; \code{host_weights} is a host pointer. A typical thresholded call is
+The public C API is declared in \code{cuda/f_statistic.h}. In this example, \code{d_in}, \code{d_fine_power_out}, and \code{d_power_out} are device pointers; \code{host_weights} is a host pointer. A typical measurement call is
 \begin{lstlisting}[style=cstyle,language=C]
 int K, N, bits, ref_offset;
 FStat_GetSpecs(&K, &N, &bits, &ref_offset);
 
-void* h = FStat_Create(d_in, NULL, detector_rows_per_block);
+void* h = FStat_Create(d_in, detector_rows_per_block);
 if (h == NULL) {
     /* Read FStat_LastError() and stop. */
     return;
 }
-FStat_Compute_NumDen_Mask_RationalHalf_WithOverflowCount(
+FStat_Compute_FusedFine_U64(
     h,
     host_weights,
-    threshold_half_num,
-    threshold_half_den,
-    d_num_out,
-    d_den_out,
-    d_mask_out,
-    d_overflow_count);
+    d_fine_power_out,   /* batch * N * 256 uint64: S_n[b] */
+    d_power_out,        /* batch * N uint64: P_n = sum_b S_n[b] */
+    NULL);              /* optional int32 row-sum debug tap */
 if (FStat_LastError()[0] != 0) {
     /* Handle the recorded CUDA/API error. */
 }
 FStat_Destroy(h);
 \end{lstlisting}
-The compute call writes
+The compute call writes the three frame powers
 \begin{equation}
-  \mathrm{d\_num\_out}=P_t,\qquad \mathrm{d\_den\_out}=P_{r1}+P_{r2}.
+  \mathrm{d\_power\_out}=(P_t,\;P_{r1},\;P_{r2}),\qquad P_n=\sum_b S_n[b],
 \end{equation}
-Host code then computes
+and host code then computes
 \begin{equation}
-  F=\frac{2\,\mathrm{num}}{\mathrm{den}}.
+  F=\frac{2P_t}{P_{r1}+P_{r2}}
 \end{equation}
-A zero denominator cannot define \(F\). The kernel sets the mask to zero for this case. Unchecked C and Python conversion helpers return zero pilot excess. The checked C helper exposes the invalid denominator; Python callers must inspect \code{den} or \field{p_ref_sum_u64} before interpreting the conversion.
+and the norm-corrected mask in exact integer arithmetic; the library forms no
+ratio and no coarse mask (kernel core 3.0.0). A zero denominator cannot
+define \(F\): the host marks the frame invalid and forces its mask to zero, so
+Python callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before
+interpreting any conversion. The deployed mask bit comes from
+\apicode{FStat_Compute_FusedFineMask_U64} or
+\apicode{FStat_Compute_FusedFineMaskWithSupport_U64}.
 
 A capability probe guards the row-sum entry:
 \begin{lstlisting}[style=cstyle,language=C]
@@ -724,26 +732,29 @@ if (FStat_Supports_RowSums()) {
     FStat_Compute_RowSums_I32(h, host_weights, d_matched_filter_row_projections_out);
 }
 \end{lstlisting}
-The values are exact integers, and the int64 sum of \(|z|^2\) over rows
-reproduces \apicode{FStat_Compute_Powers_U64} exactly (the marginal
-identity). Rows keep the packer's stream-major order, so a term slice
-reshapes to \code{[num_streams, windows_per_stream]} with no gather.
+The values are exact integers, the input of
+\apicode{FStat_Compute_FinePowers_U64}; the staged path sums that stage's
+fine powers over bins on the host and obtains the same frame powers as the
+fused entry, bit for bit. Rows keep the packer's stream-major order, so a term
+slice reshapes to \code{[num_streams, windows_per_stream]} with no gather.
 
 In deployment terms, only the per-frame \code{mask} (1 = reject) crosses
-the proposed interface; the power and row-sum readbacks feed the archive
-science products and diagnostics.
+the proposed interface; the fine-power, frame-power and row-sum readbacks
+feed the archive science products and diagnostics.
 
 \section{JSON Output Policy}
 
 JSON reports do not emit NaN or infinity; values that are not finite are serialized as \code{null}. CSV files may retain NaN text when analysis software can represent it.
 
-Detector and synthetic SNR-evaluator JSON reports include \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v1}. This object records the statistic definition, layout, calibration constants, threshold conversion, fixed-point contract, and mask convention needed to interpret those reports. Audit, quantization, summary, injection, and CHIME products use their own documented top-level schemas; in particular, CHIME per-pilot archive products use \field{schema_version}=\texttt{\ppPerPilotSchema} as defined in \code{docs/PRODUCT_SCHEMA.md}.
+Detector and synthetic SNR-evaluator JSON reports include \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v2}. This object records the statistic definition, layout, calibration constants, threshold conversion, fixed-point contract, and mask convention needed to interpret those reports. Audit, quantization, summary, injection, and CHIME products use their own documented top-level schemas; in particular, CHIME per-pilot archive products use \field{schema_version}=\texttt{\ppPerPilotSchema} as defined in \code{docs/PRODUCT_SCHEMA.md}.
 
 The combined-row statistic is:
 \begin{equation}
 F = \frac{2\sum_r P_{t,r}}{\sum_r P_{r1,r}+\sum_r P_{r2,r}},
 \end{equation}
-where \(r\) indexes detector rows. We sum powers first and form one ratio; averaging per-row F-statistics would define a different estimator.
+where \(r\) indexes the summed blocks and each \(P_{n,r}\) is a frame power,
+the all-bin sum of that block's fine powers. We sum powers first and form one
+ratio; averaging per-block F-statistics would define a different estimator.
 
 When a product averages masked data, it excludes rejected blocks rather than zero-filling them:
 \begin{equation}
@@ -775,7 +786,7 @@ intentionally part of the diagnostic.
   \item Synthetic threshold tests accept a shelf-SNR threshold. The CHIME path instead uses $F>\mu_0$, with \(\mu_0\) fixed by the weight norms. Neither rule is an empirically calibrated telescope false-positive threshold.
   \item Receiver profiles define an adapter contract; they do not establish that a telescope pipeline has been deployed or validated.
   \item Installed packages carry the weight bank and \code{configs/} resources, so default-resource commands can run outside the repository. Repository-relative examples, helper scripts, second-interpreter subprocesses, and the CUDA build require a checkout or explicit paths. The CUDA kernel itself is not packaged and builds from the cloned source tree (\code{make build-kernel}).
-  \item Fine products require a library exposing the row-sum entry; \code{fine_products=on} hard-fails on a stale library by design, and \code{fine_products=auto} degrades with a recorded \field{fine_status}.
+  \item Fine products are mandatory: the frame powers are their all-bin sums, so a library without the row-sum and fine-power entries fails at launch, and \code{fine_products} accepts only \code{on}.
 \end{itemize}
 
 \section{Troubleshooting}
@@ -797,8 +808,13 @@ The shipped bank covers physical channels 14-36.  Use \code{pilot-proxy list-cha
 \subsection{PNR is null}
 If \(F\leq1\), the raw pilot-excess ratio is non-positive and \(10\log_{10}(F-1)\) is undefined. The JSON value is therefore \code{null}; this can occur for noise-only and weak-signal trials.
 
-\subsection{fine\_products=on fails at launch}
-The loaded \code{libfstatistic.so} predates the row-sum entry. Rebuild and restage it with \code{make build-kernel}, confirm \code{FStat_Supports_RowSums()} returns 1 (the kernel-load check in \code{scripts/setup_env.sh} prints the loaded version), and relaunch. This hard failure is intentional for production runs; use \code{fine_products=auto} only when degrading to coarse-only products is acceptable.
+\subsection{A scan fails at launch for want of fine powers}
+The loaded \code{libfstatistic.so} lacks the row-sum or fine-power entry, or is
+older than core 3.0.0. Rebuild and restage it with \code{make build-kernel},
+confirm \code{FStat_Supports_RowSums()} and \code{FStat_Supports_FinePowers()}
+return 1 (the kernel-load check in \code{scripts/setup_env.sh} prints the loaded
+version), and relaunch. There is no degraded mode: the frame powers are the
+sums of the fine powers.
 
 \subsection{High nd flag rate on an occupied channel}
 \field{fine_null_bulk_exceedance_fraction} counts detections in non-designated bins. A real transmitter at a nonzero pilot offset occupies those bins persistently, so a high rate on a DTV-occupied channel is expected signal (see Section~\ref{sec:fineproducts}). Evaluate CFAR calibration on channels without detected lines instead.

@@ -49,7 +49,14 @@ BANNED = {
     "pilot_excess_" + "linear": "raw_pilot_excess",
     "ref_norm_" + "sum_sq": "reference_norm_sum_sq",
     "norm_corrected_" + "mu0": "null_power_ratio_from_weight_norms",
-    "v1_" + "fstat": "coarse_power_ratio_from_marginal",
+    "v1_" + "fstat": "coarse_power_ratio_from_powers",
+    # Retired with the row-domain frame powers (kernel core 3.0.0): the frame
+    # powers are the all-bin sums of the fine powers.
+    "exact_coarse_" + "power_by_term": "fine_reduction.frame_powers_from_fine_u64",
+    "check_coarse_power_" + "marginal_identity": (
+        "the v6 frame-power invariant (product_contract.frame_powers_from_fine)"
+    ),
+    "coarse_power_ratio_from_" + "marginal": "coarse_power_ratio_from_powers",
     "norm_corrected_" + "positive_excess": "normalized_positive_excess",
     "emit_row_" + "sums": "emit_row_projections",
     "supports_row_" + "sums": "supports_row_projections",

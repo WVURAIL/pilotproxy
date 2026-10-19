@@ -771,8 +771,9 @@ def run_chime_scan(
         if previous_scope.get("fine_retention") != fine_retention:
             raise SystemExit(
                 "chime-scan: fine-product retention differs from the existing "
-                "scan scope; restore the original fine_products setting and "
-                "backend capability or use a fresh --output-dir"
+                "scan scope (fine products are mandatory since kernel core "
+                "3.0.0); resume with the backend that started the scan or use "
+                "a fresh --output-dir"
             )
     if source == "cadc-datatrail" and previous_scope is not None:
         previous_input = previous_scope.get("input")

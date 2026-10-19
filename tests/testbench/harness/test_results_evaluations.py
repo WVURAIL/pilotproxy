@@ -74,6 +74,16 @@ def test_reader_refuses_an_unknown_report_schema(tmp_path):
         ev.load_evaluation(root)
 
 
+def test_reader_refuses_a_report_from_before_core_3(tmp_path):
+    # Revision 1 reports hold row-domain powers under the same column names.
+    root = _write_evaluation(tmp_path / "e", (-30.0,))
+    report = json.loads((root / ev.REPORT_NAME).read_text())
+    report["schema_version"] = "pilotproxy_snr_validation_report_v1"
+    (root / ev.REPORT_NAME).write_text(json.dumps(report))
+    with pytest.raises(ValueError, match="before kernel core 3.0.0"):
+        ev.load_evaluation(root)
+
+
 def test_pooled_ratio_sums_powers_before_dividing(tmp_path):
     e = ev.load_evaluation(_write_evaluation(tmp_path / "e", (-30.0,)))
     pt = sum(r["p_target_u64"] for r in e.trials); pr = sum(r["p_ref_sum_u64"] for r in e.trials)

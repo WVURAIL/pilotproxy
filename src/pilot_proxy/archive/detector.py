@@ -53,6 +53,7 @@ from pilot_proxy.chime.hdf5_input import (
 from pilot_proxy.chime.products import SAMPLE_RATE_HZ, atomic_savez_compressed
 from pilot_proxy.detect import detect_packed_detector_input
 from pilot_proxy.detector_contract import (
+    COARSE_POWER_DEFINITION,
     NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
     WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
     WEIGHT_COORDINATE_RAW_INPUT,
@@ -92,7 +93,9 @@ from pilot_proxy.fine_reduction import (
 )
 from pilot_proxy.fxfft import fine_power_fx
 from pilot_proxy.product_contract import (
-    FINE_STATUS_WITHOUT_TERMS,
+    FINE_STATUS_ENABLED,
+    FINE_STATUS_OUT_OF_BAND,
+    FINE_STATUS_PENDING,
     PER_PILOT_PRODUCT_SCHEMA_NAME,
     PER_PILOT_PRODUCT_SCHEMA_REVISION,
     PER_PILOT_PRODUCT_SCHEMA_TOKEN,
@@ -542,11 +545,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._p_ref_lower: list[int] = []
         self._p_ref_upper: list[int] = []
         self._coarse_power_ratio: list[float] = []
-        # Fine-diagnostic products in the current per-pilot contract.
-        self._fine_mode_opt: str = "auto"
-        self._fine_supported: bool | None = None
+        # Fine products: mandatory for an in-band pilot (product schema v6),
+        # because the frame powers are their exact all-bin sums.
         self._fine_status: str = "not_configured"
-        self._resumed_fine_retention: bool | None = None
         self._fine_bins: int = 0
         self._fine_p_fa: float = float(CFAR_DEFAULT_P_FA)
         self._fine_guard: int = int(CFAR_DEFAULT_GUARD_FINE_BINS)
@@ -771,18 +772,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         # these fields even when there are zero frames.
         self._fine_status = str(np.asarray(data["fine_status"]).reshape(()).item())
         _fine_u64 = np.asarray(data["fine_power_u64"], dtype=np.uint64)
-        legacy_empty_fine = (
-            self._fine_status in FINE_STATUS_WITHOUT_TERMS
-            and _fine_u64.ndim == 3
-            and _fine_u64.shape[1] == REFERENCE_WEIGHT_TERMS
-            and _fine_u64.shape[2] > 0
-        )
-        if legacy_empty_fine:
-            self._fine_bins = 0
-        elif _fine_u64.ndim == 3:
-            self._fine_bins = int(_fine_u64.shape[2])
-        else:
-            self._fine_bins = 0
+        # validate_current_product_identity has already required the v6 shapes:
+        # (N, 3, B) when enabled, (N, 0, 0) otherwise.
+        self._fine_bins = int(_fine_u64.shape[2]) if _fine_u64.ndim == 3 else 0
         psd_codes = np.asarray(data["psd_frame_db_i16"], dtype=np.int16)
         psd_ref = np.asarray(data["psd_db_reference"], dtype=np.float64)
         if psd_codes.ndim == 2 and psd_codes.shape[1]:
@@ -792,9 +784,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             self._psd_codes = []
             self._psd_ref = []
         self._fine_power_u64 = (
-            []
-            if legacy_empty_fine
-            else [_fine_u64[i] for i in range(_fine_u64.shape[0])]
+            [_fine_u64[i] for i in range(_fine_u64.shape[0])]
+            if _fine_u64.ndim == 3 and _fine_u64.shape[1] == REFERENCE_WEIGHT_TERMS
+            else []
         )
         self._fine_p_fa = float(np.asarray(data["fine_p_fa"]))
         self._fine_guard = int(np.asarray(data["fine_guard_fine_bins"]))
@@ -806,10 +798,6 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._fine_census = [
             int(x) for x in _col("fine_census_excluded_bins")
         ]
-        if self._fine_status in {"enabled", "pending"}:
-            self._resumed_fine_retention = True
-        elif self._fine_status != "not_applicable_pilot_out_of_band":
-            self._resumed_fine_retention = False
         self._valid = [int(x) for x in _col("valid")]
         self._baseband_power = [float(x) for x in _col("baseband_power_linear")]
         self._railed_count = [int(x) for x in _col("railed_sample_count")]
@@ -865,19 +853,27 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         detector_fn: Any = None,
         kernel: Any = None,
     ) -> dict[str, str]:
-        requested = str(opts.get("fine_products", "auto")).lower()
-        if requested not in {"auto", "on", "off"}:
+        # Since product schema v6 the frame powers are the all-bin sums of the
+        # fine powers, so fine products cannot be switched off or degraded:
+        # the option survives only so existing launch scripts that state
+        # fine_products=on keep working, and anything else is refused.
+        requested = str(opts.get("fine_products", "on")).lower()
+        if requested != "on":
             raise ValueError(
-                "detector analyzer: fine_products must be auto|on|off, got "
+                "detector analyzer: fine products are mandatory (per-pilot "
+                "product schema v6 defines the frame powers as the all-bin sums "
+                "of the fine powers); fine_products accepts only 'on', got "
                 f"{requested!r}."
             )
-        if requested == "off":
-            return {"requested": requested, "resolved": "disabled_by_option"}
 
         if detector_fn is None:
             detector_fn = opts.get("detector_fn")
         if detector_fn is None:
             detector_fn = detect_packed_detector_input
+        if detector_fn is not detect_packed_detector_input:
+            # An injected backend proves its fine powers frame by frame: the
+            # analyzer refuses any frame without them.
+            return {"requested": requested, "resolved": FINE_STATUS_ENABLED}
 
         if kernel is None:
             kernel = opts.get("kernel")
@@ -887,17 +883,16 @@ class PilotProxyDetectorAnalyzer(Analyzer):
 
             kernel = FStatKernel(opts.get("lib_path", DEFAULT_LIB_PATH))
 
-        detector_supports = _callable_accepts_keyword(
-            detector_fn, "emit_row_projections"
+        supports = [
+            getattr(kernel, name, None)
+            for name in ("supports_row_projections", "supports_fine_powers")
+        ]
+        kernel_supports = all(callable(probe) and bool(probe()) for probe in supports)
+        resolved = (
+            FINE_STATUS_ENABLED
+            if kernel_supports
+            else "kernel_library_lacks_fine_powers"
         )
-        probe = getattr(kernel, "supports_row_projections", None)
-        kernel_supports = bool(probe()) if callable(probe) else False
-        if kernel_supports and detector_supports:
-            resolved = "enabled"
-        elif kernel_supports:
-            resolved = "detector_fn_lacks_matched_filter_row_projections"
-        else:
-            resolved = "kernel_library_lacks_matched_filter_row_projections"
         return {"requested": requested, "resolved": resolved}
 
     def fine_retention_scope(self, ctx: RunContext) -> dict[str, str]:
@@ -929,13 +924,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             problems.append(f"detector preflight failed: {type(exc).__name__}: {exc}")
         try:
             fine_retention = self.fine_retention_scope(ctx)
-            if (
-                fine_retention["requested"] == "on"
-                and fine_retention["resolved"] != "enabled"
-            ):
+            if fine_retention["resolved"] != FINE_STATUS_ENABLED:
                 problems.append(
-                    "fine_products=on requires matched-filter row projections; "
-                    f"resolved status is {fine_retention['resolved']}"
+                    "the frame powers require the kernel's row-projection and "
+                    "fine-power entries (kernel core 3.0.0); resolved status is "
+                    f"{fine_retention['resolved']}"
                 )
         except Exception as exc:  # noqa: BLE001 - preflight reports all failures.
             problems.append(
@@ -1068,32 +1061,19 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             detector_fn=self._detector_fn,
             kernel=self._kernel,
         )
-        self._fine_mode_opt = fine_retention["requested"]
-        resolved_fine_status = fine_retention["resolved"]
-        if self._fine_mode_opt == "on" and resolved_fine_status != "enabled":
+        if fine_retention["resolved"] != FINE_STATUS_ENABLED:
             raise RuntimeError(
-                "detector analyzer: fine_products=on but the configured "
-                "kernel/detector backend does not explicitly support row-sum "
-                f"emission ({resolved_fine_status})."
+                "detector analyzer: the configured kernel library cannot emit "
+                "the fine powers the frame powers are summed from "
+                f"({fine_retention['resolved']}); rebuild libfstatistic.so "
+                "with kernel core 3.0.0."
             )
-        fine_enabled = resolved_fine_status == "enabled"
-        if (
-            self._resumed_fine_retention is not None
-            and self._resumed_fine_retention != fine_enabled
-        ):
-            raise SystemExit(
-                "pilot-proxy-detector: resumed product fine-product retention "
-                "mode differs from the current backend or fine_products option. "
-                "Restore the original setting and capability, or use a clean "
-                "--output-dir."
-            )
-        self._fine_supported = fine_enabled
         self._fine_status = (
-            "not_applicable_pilot_out_of_band"
+            FINE_STATUS_OUT_OF_BAND
             if not self._pilot_in_band
-            else "pending"
-            if fine_enabled
-            else resolved_fine_status
+            else FINE_STATUS_ENABLED
+            if self._n_frames
+            else FINE_STATUS_PENDING
         )
         self._K = int(getattr(getattr(self._kernel, "specs", None), "K",
                               DETECTOR_WINDOW_SAMPLES))
@@ -1345,7 +1325,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             "guard_fine_bins": int(self._fine_guard),
             "designated_bins": [int(b) for b in self._fine_designated],
             "census_excluded_bins": [int(b) for b in self._fine_census],
-            "v1_marginal_identity": "exact_int64_enforced_per_frame",
+            "coarse_power_definition": COARSE_POWER_DEFINITION,
         }
         self._detector_contract_json = json.dumps(
             contract_with_fine,
@@ -1513,7 +1493,6 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             "_overflow": self._overflow,
             "_n_frames": self._n_frames,
             "_fine_bins": self._fine_bins,
-            "_fine_supported": self._fine_supported,
             "_fine_status": self._fine_status,
         }
         keys = set(self._keys)
@@ -1611,33 +1590,13 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 selected_coarse_channel=0,   # unused on the native (lossless) path
                 physical_channel=self._physical_channel,
             )
-            want_fine = self._fine_mode_opt != "off"
-            if want_fine and self._fine_supported is None:
-                probe = getattr(self._kernel, "supports_row_projections", None)
-                kernel_supports_row_projections = bool(probe()) if callable(probe) else False
-                self._fine_supported = bool(
-                    kernel_supports_row_projections and self._detector_fn_accepts_matched_filter_row_projections
-                )
-                if not self._fine_supported:
-                    if self._fine_mode_opt == "on":
-                        raise RuntimeError(
-                            "detector analyzer: fine_products=on but the configured "
-                            "kernel/detector backend does not explicitly support "
-                            "row-sum emission."
-                        )
-                    self._fine_status = (
-                        "detector_fn_lacks_matched_filter_row_projections"
-                        if kernel_supports_row_projections
-                        else "kernel_library_lacks_matched_filter_row_projections"
-                    )
-                else:
-                    self._fine_status = "enabled"
-            emit_fine = bool(want_fine and self._fine_supported)
-            if emit_fine:
-                self._fine_status = "enabled"
-                self._ensure_fine_width(
-                    fine_bin_count(int(self._nfft) // int(self._K))
-                )
+            self._fine_status = FINE_STATUS_ENABLED
+            self._ensure_fine_width(
+                fine_bin_count(int(self._nfft) // int(self._K))
+            )
+            if self._detector_fn_accepts_matched_filter_row_projections:
+                # The rows are only the host fallback for a backend that
+                # returns no fine powers; the device chain returns both.
                 detection = self._detector_fn(
                     packed=packed.packed,
                     weights=self._weights,
@@ -1710,25 +1669,25 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                     )
                 power_rows.append((num, lower, upper, den))
 
-            matched_filter_row_projections = (
-                detection.get("matched_filter_row_projections")
-                if emit_fine
-                else None
+            # The exact fine terms are the measurement, and the frame powers
+            # are their all-bin sums (product schema v6). The float
+            # reduction and its CFAR are recomputable from these and neither
+            # was bit-equal to the deployed statistic, so the scan does not
+            # spend a transform on them.
+            self._append_exact_fine_powers(detection)
+            fine_sums = tuple(
+                sum(int(value) for value in self._fine_power_u64[-1][term])
+                for term in range(REFERENCE_WEIGHT_TERMS)
             )
-            if emit_fine and matched_filter_row_projections is None:
-                raise RuntimeError(
-                    "detector analyzer: fine support was enabled but the backend "
-                    "returned no matched-filter row projections"
-                )
-            if matched_filter_row_projections is not None:
-                rs0 = matched_filter_row_projections[0]
-                # The exact terms are the measurement. The float reduction
-                # and its CFAR ran here; both are recomputable from these
-                # and neither was bit-equal to the deployed statistic, so
-                # the scan no longer spends a transform on them.
-                self._append_exact_fine_powers(detection, rs0)
             for local_index, powers in enumerate(power_rows):
                 num, lower, upper, den = powers
+                if (num, lower, upper) != fine_sums:
+                    raise ValueError(
+                        "detector analyzer: backend frame powers "
+                        f"{(num, lower, upper)} are not the all-bin sums of its "
+                        f"fine powers {fine_sums}; per-pilot product schema v6 "
+                        "requires P_r = sum_f S_r[f] exactly"
+                    )
                 self._p_target.append(num)
                 self._p_ref_lower.append(lower)
                 self._p_ref_upper.append(upper)
@@ -1770,7 +1729,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 self._normalized_pilot_excess.append(normalized_excess)
                 # The backend mask is not authoritative product identity.
                 # Reconstruct the declared host-exact policy from the stored
-                # uint64 marginals and weight norms; this same bit controls the
+                # uint64 frame powers and weight norms; this same bit controls the
                 # after-mask integrated spectrum below.
                 self._reject_mask.append(
                     normalized_positive_excess(
@@ -1838,12 +1797,14 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             self._unit_scope.append(str(meta.get("scope", "")))
         return n
 
-    def _append_exact_fine_powers(self, detection: Mapping[str, Any], rs0) -> None:
+    def _append_exact_fine_powers(self, detection: Mapping[str, Any]) -> None:
         """Retain the exact uint64 fine terms for this frame.
 
         Prefers the device stage (the deployed implementation). Falls back to
-        the frozen CPU reference, which the kernel contract requires to be
-        bit-identical, so an older library still yields the same integers.
+        the frozen CPU reference over the backend's integer row projections,
+        which the kernel contract requires to be bit-identical. A backend that
+        returns neither has no frame powers under product schema v6 and is
+        refused.
         """
         exact = detection.get("fine_powers_u64")
         if exact is not None:
@@ -1856,6 +1817,14 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 )
             self._fine_power_u64.append(np.ascontiguousarray(arr[0]))
             return
+        projections = detection.get("matched_filter_row_projections")
+        if projections is None:
+            raise RuntimeError(
+                "detector analyzer: the backend returned neither fine_powers_u64 "
+                "nor matched-filter row projections; the frame powers are the "
+                "all-bin sums of the fine powers, so the frame cannot be stored"
+            )
+        rs0 = projections[0]
         host = rs0.get() if hasattr(rs0, "get") else np.asarray(rs0)
         host = np.asarray(host)
         if host.dtype.kind not in "iu":
@@ -1911,7 +1880,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         frame_index = np.arange(n, dtype=np.int64)
         col_f = lambda lst: np.asarray(lst, dtype=np.float64).reshape(n, 1)
         col_u = lambda lst, dt: np.asarray(lst, dtype=dt).reshape(n, 1)
-        if self._fine_status == "enabled":
+        if self._fine_status == FINE_STATUS_ENABLED:
             if len(self._fine_power_u64) != n:
                 raise RuntimeError(
                     "detector analyzer: enabled fine measurements do not match "

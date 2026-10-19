@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import tempfile
+import weakref
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
@@ -68,7 +69,13 @@ from pilot_proxy.fine_reduction import (
     p_fa_to_threshold_k,
 )
 from pilot_proxy.json_utils import json_safe
-from pilot_proxy.product_contract import fine_power_ratio_of, null_power_ratio_of
+from pilot_proxy.product_contract import (
+    FINE_DERIVED_FRAME_COLUMNS,
+    CurrentProductContractError,
+    coarse_columns_from_fine,
+    fine_power_ratio_of,
+    null_power_ratio_of,
+)
 from pilot_proxy.provenance import file_sha256, package_source_sha256
 
 FRAME_HEALTH_GATE_SCHEMA_VERSION = "pilotproxy_archive_frame_health_gate_v1"
@@ -259,6 +266,9 @@ class CorrectedSpectrumResult:
     parseval_pass: bool
     exact: bool
     unavailable_reason: str | None
+    # Healthy valid frames whose stored reject_mask (the one the after-mask
+    # spectrum was accumulated with) differs from the current decision.
+    accumulation_reject_disagreements: int = 0
 
 
 # current spelling -> the spelling the 2020--2026 archive used.
@@ -287,9 +297,63 @@ def _scalar(product: Mapping[str, Any], name: str) -> Any:
     return arr.reshape(()).item()
 
 
+# The detector columns (frame powers, ratio floats, reject_mask, valid) of a
+# product that retains its exact fine powers are read through
+# product_contract.coarse_columns_from_fine: since kernel core 3.0.0 the frame
+# powers are the all-bin sums of fine_power_u64. In a v6 product these equal
+# the stored columns; in a v5 product of record they replace the stored
+# row-domain powers, so every gate, summary and ledger row here describes the
+# products by the current definition. Archived products without fine powers
+# keep their stored columns. One computation per open product is cached
+# (weakly, so a closed product releases it).
+_FINE_DERIVED_COLUMNS = frozenset(FINE_DERIVED_FRAME_COLUMNS)
+_FINE_COLUMN_CACHE: dict[int, tuple[Any, dict[str, np.ndarray]]] = {}
+
+
+def _fine_derived_columns(product: Mapping[str, Any]) -> dict[str, np.ndarray] | None:
+    if "fine_power_u64" not in product:
+        return None
+    key = id(product)
+    cached = _FINE_COLUMN_CACHE.get(key)
+    if cached is not None and cached[0]() is product:
+        return cached[1]
+    try:
+        columns = {
+            name: values[:, 0]
+            for name, values in coarse_columns_from_fine(product).items()
+        }
+    except (CurrentProductContractError, KeyError) as exc:
+        raise ArchiveHealthError(
+            f"cannot form the frame powers from fine_power_u64: {exc}"
+        ) from exc
+    try:
+        ref = weakref.ref(product, lambda _ref, k=key: _FINE_COLUMN_CACHE.pop(k, None))
+    except TypeError:  # a plain dict: recompute on every call
+        return columns
+    _FINE_COLUMN_CACHE[key] = (ref, columns)
+    return columns
+
+
 def _frame_vector(
     product: Mapping[str, Any], name: str, n_frames: int
 ) -> np.ndarray:
+    if name in _FINE_DERIVED_COLUMNS:
+        derived = _fine_derived_columns(product)
+        if derived is not None:
+            values = derived[name]
+            if values.shape != (n_frames,):
+                raise ArchiveHealthError(
+                    f"{name} from fine_power_u64 has {values.shape[0]} frames; "
+                    f"expected {n_frames}"
+                )
+            return values
+    return _stored_frame_vector(product, name, n_frames)
+
+
+def _stored_frame_vector(
+    product: Mapping[str, Any], name: str, n_frames: int
+) -> np.ndarray:
+    """The column as the product stores it, never re-derived from fine powers."""
     arr = _array(product, name)
     if arr.shape == (n_frames, 1):
         return arr[:, 0]
@@ -301,9 +365,10 @@ def _frame_vector(
 
 
 def _binary_frame_vector(
-    product: Mapping[str, Any], name: str, n_frames: int
+    product: Mapping[str, Any], name: str, n_frames: int, *, stored: bool = False
 ) -> np.ndarray:
-    values = _frame_vector(product, name, n_frames)
+    reader = _stored_frame_vector if stored else _frame_vector
+    values = reader(product, name, n_frames)
     if not np.all((values == 0) | (values == 1)):
         raise ArchiveHealthError(f"{name} must contain only exact 0/1 values")
     return values.astype(bool, copy=False)
@@ -437,7 +502,11 @@ def write_residual_health_view(source: Path, destination: Path) -> Path:
         n_frames = int(health.include.size)
         arrays: dict[str, np.ndarray] = {}
         for name in _RESIDUAL_FRAME_FIELDS:
-            value = _array(product, name)
+            value = (
+                _frame_vector(product, name, n_frames).reshape(n_frames, 1)
+                if name in _FINE_DERIVED_COLUMNS
+                else _array(product, name)
+            )
             if value.ndim == 0 or value.shape[0] != n_frames:
                 raise ArchiveHealthError(
                     f"residual frame field {name!r} must have leading length "
@@ -1013,12 +1082,25 @@ def health_correct_integrated_spectra(
     Detector-invalid rows were never accumulated.  A valid ceiling-power row
     is the constant native byte ``0x00`` and contributes only one known DC-bin
     value.  Any other excluded valid row makes exact correction unavailable.
+
+    The stored spectra were accumulated by the writer with the product's own
+    stored ``valid`` and ``reject_mask``, so the frame accounting here uses
+    those stored columns, not the columns re-derived from ``fine_power_u64``.
+    In a v6 product the two are identical (the frame-power invariant). In a
+    v5 product of record the stored ``reject_mask`` is the row-domain
+    decision, and the after-mask spectrum is the spectrum of the frames that
+    decision kept; ``accumulation_reject_disagreements`` counts the healthy
+    valid frames on which it differs from the current (fine-sum) decision.
     """
 
     gate = evaluate_frame_health(product) if health is None else health
     n_frames = gate.include.size
-    valid = _binary_frame_vector(product, "valid", n_frames)
-    reject = _binary_frame_vector(product, "reject_mask", n_frames)
+    valid = _binary_frame_vector(product, "valid", n_frames, stored=True)
+    reject = _binary_frame_vector(product, "reject_mask", n_frames, stored=True)
+    current_reject = _binary_frame_vector(product, "reject_mask", n_frames)
+    reject_disagreements = int(
+        np.count_nonzero(gate.include & valid & (reject != current_reject))
+    )
     ceiling = np.asarray(
         _frame_vector(product, "baseband_power_linear", n_frames), dtype=np.float64
     ) == 128.0
@@ -1058,6 +1140,7 @@ def health_correct_integrated_spectra(
             parseval_pass=False,
             exact=False,
             unavailable_reason=reason,
+            accumulation_reject_disagreements=reject_disagreements,
         )
 
     if np.any(unknown_valid_exclusions):
@@ -1134,6 +1217,7 @@ def health_correct_integrated_spectra(
         parseval_pass=parseval_pass,
         exact=True,
         unavailable_reason=None,
+        accumulation_reject_disagreements=reject_disagreements,
     )
 
 
@@ -1666,6 +1750,13 @@ def audit_product(
             "product_bytes": int(product_path.stat().st_size),
             "product_sha256": digest,
             "stored_schema_version": str(_scalar(product, "schema_version")),
+            # Where the frame powers, valid, reject_mask and the coarse
+            # columns below come from (kernel core 3.0.0 definition).
+            "frame_power_source": (
+                "all_bin_sums_of_fine_power_u64"
+                if "fine_power_u64" in product
+                else "stored_columns_archived_product"
+            ),
             "detector_version": version,
             "detector_version_tokens": _version_tokens(version),
             "weight_bank_sha256": str(_scalar(product, "weight_bank_sha256")),
@@ -1858,6 +1949,13 @@ def audit_product(
             "integrated_spectrum_health_correction": {
                 "exact": spectra.exact,
                 "unavailable_reason": spectra.unavailable_reason,
+                # The spectra are accumulated with the stored valid and
+                # reject_mask; on a v5 product that reject_mask is the
+                # row-domain decision of record.
+                "accumulation_masks": "stored_valid_and_reject_mask",
+                "accumulation_reject_disagreements": (
+                    spectra.accumulation_reject_disagreements
+                ),
                 "healthy_before_frame_count": spectra.healthy_before_count,
                 "healthy_after_frame_count": spectra.healthy_after_count,
                 "ceiling_frames_subtracted_before": spectra.ceiling_count_before,

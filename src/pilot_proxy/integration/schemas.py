@@ -11,7 +11,11 @@ from pilot_proxy.detector_geometry import (
 from pilot_proxy.schema_identity import schema_token
 
 DETECTOR_CORE_PROFILE_SCHEMA_NAME = "pilotproxy_detector_core_profile"
-DETECTOR_CORE_PROFILE_SCHEMA_REVISION = 1
+# Revision 3 (kernel core 3.0.0): the coarse ratio is formed from the all-bin
+# sums of the fine powers and the int32 |z|^2 limit is gone with the
+# row-domain branch. Revision 2 is skipped: its token is a retired
+# pre-ground-zero name (scripts/check_current_schema_identity.py).
+DETECTOR_CORE_PROFILE_SCHEMA_REVISION = 3
 DETECTOR_CORE_PROFILE_SCHEMA_TOKEN = schema_token(
     DETECTOR_CORE_PROFILE_SCHEMA_NAME, DETECTOR_CORE_PROFILE_SCHEMA_REVISION
 )

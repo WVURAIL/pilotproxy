@@ -107,7 +107,7 @@ def test_candidate_staircase_is_the_distinct_deployable_values_plus_the_floor() 
         candidate_multipliers_q16([])
 
 
-def test_normalized_excess_uses_the_exact_integer_marginals() -> None:
+def test_normalized_excess_uses_the_exact_integer_frame_powers() -> None:
     excess = coarse_normalized_excess(
         2200, 1000, 1000, target_norm_sq=11, reference_norm_sum_sq=20
     )

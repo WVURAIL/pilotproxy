@@ -268,7 +268,7 @@ def test_exact_reference_matches_scalar_projection_and_fft(k, reverse):
     assert result.decisions[0] == fine_required_multiplier_q16(fine, **args)
     assert result.masks[0] == fine_mask_decision(fine, multiplier_q16=65536, **args).mask
     assert result.decisions[0].valid
-    np.testing.assert_array_equal(result.powers[0], (oracle * oracle).sum(axis=(1, 2), dtype=np.uint64))
+    np.testing.assert_array_equal(result.powers[0], fine.sum(axis=1, dtype=np.uint64))
     assert result.decisions[1] is None and result.masks[1] == 0
     assert result.powers[1].tolist() == [0, 0, 0]
 

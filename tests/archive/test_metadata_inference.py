@@ -37,6 +37,8 @@ from pilot_proxy.archive.scan import (
 )
 from pilot_proxy.detect import _resolve_pilot_request
 
+from cpu_detector import stub_detector_fn  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NFFT = 16384
 N_FEEDS = 4
@@ -47,26 +49,9 @@ CHAN_MHZ = {844: 470.3125, 829: 476.171875, 752: 506.171875}
 
 
 def _stub_detector_fn(*, packed, weights, kernel):
-    pk = np.asarray(packed)
-    if pk.ndim == 2:
-        pk = pk[None, ...]
-    n = int(pk.shape[0])
-    return {
-        "batch": n,
-        "detector_rows_per_block": int(pk.shape[1]),
-        "rational_overflow_count": 0,
-        "results": [
-            {
-                "block_index": b,
-                "mask": 0,
-                "p_target_u64": 10,
-                "p_ref_lower_u64": 10,
-                "p_ref_upper_u64": 10,
-                "p_ref_sum_u64": 20,
-            }
-            for b in range(n)
-        ],
-    }
+    # Fixed fine spectra (all power in bin 0) and their all-bin sums 10/10/10,
+    # the per-pilot v6 frame powers (plumbing only; no parity claim).
+    return stub_detector_fn(packed=packed, weights=weights, kernel=kernel)
 
 
 def _stub_kernel(k):

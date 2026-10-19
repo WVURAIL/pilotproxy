@@ -375,8 +375,11 @@ class ExpectedProducts:
 def expected_products(
     block_bytes: Any, bundle: dict[str, Any], weight_bank: bytes, *, geometry: CaptureGeometry,
 ) -> ExpectedProducts:
-    """Compute fine masks, exact coarse powers and exact Q16 keep boundaries.
+    """Compute fine masks, exact frame powers and exact Q16 keep boundaries.
 
+    The frame powers are the all-bin sums of the exact fxfft256 fine powers,
+    ``P_r = sum_f S_r[f]`` in uint64 (kernel core 3.0.0), which is what the
+    stage's ``d_power_out`` carries.
     Unbound frequencies have zero mask/powers and a ``None`` decision, matching
     the submitted stage. Every bound frequency must have a fine calibration.
     Invalid rank support remains a decision with ``valid=False`` and mask zero.
@@ -410,8 +413,8 @@ def expected_products(
             raise ValueError("profile weight range does not match geometry/weight bank")
         real, imag = detector_rows_from_voltage(block_bytes, index, reverse, geometry=geometry)
         projections = expected_matched_filter_row_projections(real, imag, weight_bank[offset:offset + nbytes])
-        powers[index] = (projections * projections).sum(axis=(1, 2), dtype=np.uint64)
         fine = fine_power_fx(projections, num_streams=geometry.num_streams)
+        powers[index] = fine.sum(axis=1, dtype=np.uint64)
         words = calibration["bulk_mask_words_hex"]
         if not isinstance(words, list) or len(words) != 4 or any(not isinstance(word, str) for word in words):
             raise ValueError("bulk_mask_words_hex must contain four hexadecimal strings")

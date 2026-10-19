@@ -906,7 +906,6 @@ class GpuCaptureDetector:
         ):
             raise RuntimeError("Detector quantization clipping exceeds the limit.")
         measured = _kernel_measurements(
-            cp=self.cp,
             kernel=self.kernel,
             packed=packed,
             weights=self.weights,

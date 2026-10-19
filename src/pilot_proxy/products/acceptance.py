@@ -23,7 +23,7 @@ from pilot_proxy.config.project import default_project
 
 from .reader import (
     FINE_BINS,
-    PRODUCT_SCHEMA_TOKEN,
+    READABLE_SCHEMA_TOKENS,
     ProductContractError,
     _array,
     _float_scalar,
@@ -446,9 +446,16 @@ def _product_record(path: Path) -> tuple[ArchiveProductAccounting, dict]:
         raise ArchiveAcceptanceError(f"{path.name} is not an NPZ product")
     try:
         with loaded as product:
+            # A cohort is per-pilot v6 products, or the v5 products of
+            # record; open_product reads either through its fine-power sums
+            # (and verifies a v6 product stores exactly those). One cohort
+            # cannot mix the two: their detector contracts differ.
             view = open_product(product)
-            if view.schema != PRODUCT_SCHEMA_TOKEN:
-                raise ArchiveAcceptanceError("archive cohort requires current v5 products")
+            if view.schema not in READABLE_SCHEMA_TOKENS.values():
+                raise ArchiveAcceptanceError(
+                    "archive cohort requires per-pilot v6 products or the v5 "
+                    "products of record"
+                )
             frame_count = int(view.valid.size)
             detector, _ = _json_record(
                 product, "detector_contract_json")

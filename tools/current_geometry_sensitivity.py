@@ -1014,8 +1014,7 @@ def _gpu_fine_and_mask(
     cp = gpu.cp
     kernel = gpu.kernel
     d_input = cp.asarray(packed)
-    d_diag = cp.zeros(1, dtype=cp.float32)
-    handle = kernel.create_raw(int(packed.shape[0]), d_input.data.ptr, d_diag.data.ptr)
+    handle = kernel.create_raw(int(packed.shape[0]), d_input.data.ptr)
     d_fine = cp.zeros((3, FINE_BINS), dtype=cp.uint64)
     d_powers = cp.zeros(3, dtype=cp.uint64)
     try:

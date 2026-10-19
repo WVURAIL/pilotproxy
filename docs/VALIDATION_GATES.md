@@ -6,6 +6,8 @@ host or a CANFAR GPU session. The coarse positive-excess flag is
 retained as a bootstrap diagnostic; the fine rank/eta decision is inactive and
 no calibrated detection policy is applied.
 
+Note (2026-10-18): kernel core 3.0.0 superseded this frame-power definition (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
+
 Gate evidence must match one clean source revision, its package-source digest,
 and the exact detector library that will run: the preserved SM89 artifact on
 the local path, or the node-built SM90 artifact on the CANFAR path. A source

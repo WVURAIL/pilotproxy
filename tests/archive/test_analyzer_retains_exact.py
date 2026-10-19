@@ -5,7 +5,9 @@ Complements ``tests/core/test_fine_power_retention.py``, which pins the
 arithmetic. This one drives the real ``PilotProxyDetectorAnalyzer`` over a
 synthetic baseband file and asserts the saved product carries
 ``fine_power_u64`` as exact uint64 -- covering both the device path (kernel
-supplies the terms) and the host fallback (kernel does not).
+supplies the terms) and the host fallback (kernel does not) -- and that the
+writer enforces the per-pilot v6 invariant: every frame power is the exact
+all-bin sum of its fine powers.
 """
 from __future__ import annotations
 
@@ -28,7 +30,7 @@ from pilot_proxy.detector_contract import (
 )
 from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED
 from pilot_proxy.detector_reference import REFERENCE_WEIGHT_TERMS
-from pilot_proxy.fine_reduction import exact_coarse_power_by_term
+from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 from pilot_proxy.fine_decision import FINE_BINS
 from pilot_proxy.fxfft import fine_power_fx
 from pilot_proxy.integration.receiver_profile import default_reference_receiver_profile
@@ -52,6 +54,7 @@ def _make_detector_fn(
     omit_projections: bool = False,
     missing_power_field: str | None = None,
     reference_sum_delta: int = 0,
+    target_delta: int = 0,
 ):
     """CPU reference that emits row projections, optionally with fine terms."""
 
@@ -67,9 +70,10 @@ def _make_detector_fn(
         rows = int(pk.shape[1])
         streams = rows // WINDOWS
 
-        # Deterministic row sums, and coarse powers derived *from them*, so the
-        # analyzers exact marginal identity holds. A fake that reports
-        # powers unrelated to its row sums is correctly rejected upstream.
+        # Deterministic row sums, and frame powers derived *from them* the
+        # kernel's way (the all-bin sums of their fixed-point fine spectra),
+        # so the writer's v6 invariant holds. A fake that reports powers
+        # unrelated to its fine powers is rejected (target_delta).
         rng = np.random.default_rng(7)
         rs = rng.integers(
             -14336, 14337, size=(batch, REFERENCE_WEIGHT_TERMS, rows, 2)
@@ -77,12 +81,12 @@ def _make_detector_fn(
 
         results = []
         for b in range(batch):
-            marginal = exact_coarse_power_by_term(
-                rs[b], num_weight_terms=REFERENCE_WEIGHT_TERMS
+            powers = frame_powers_from_fine_u64(
+                rs[b], num_streams=streams, windows_per_stream=WINDOWS
             )
-            num = int(marginal[0])
-            lo = int(marginal[1])
-            up = int(marginal[2])
+            num = int(powers[0]) + target_delta
+            lo = int(powers[1])
+            up = int(powers[2])
             result = {
                 "block_index": b,
                 "mask": normalized_positive_excess(
@@ -131,6 +135,7 @@ def _stub_kernel():
         specs=specs,
         version=SimpleNamespace(as_string=lambda: "test"),
         supports_row_projections=lambda: True,
+        supports_fine_powers=lambda: True,
     )
 
 
@@ -141,8 +146,10 @@ def _run(
     omit_projections: bool = False,
     missing_power_field: str | None = None,
     reference_sum_delta: int = 0,
+    target_delta: int = 0,
     detector_fn=None,
     weights: np.ndarray | None = None,
+    fine_products: str = "on",
 ):
     rng = np.random.default_rng(11)
     if weights is None:
@@ -174,10 +181,11 @@ def _run(
                 omit_projections=omit_projections,
                 missing_power_field=missing_power_field,
                 reference_sum_delta=reference_sum_delta,
+                target_delta=target_delta,
             ),
             "kernel": _stub_kernel(),
             "weights": weights,
-            "fine_products": "on",
+            "fine_products": fine_products,
         },
     )
     reader = ChimeBasebandPackedReader()
@@ -203,6 +211,21 @@ def test_product_carries_exact_fine_powers(tmp_path, supply_fine_powers):
     assert S.shape == (N_FRAMES, REFERENCE_WEIGHT_TERMS, FINE_BINS), S.shape
     # A real reduction, not a placeholder block of zeros.
     assert int(S.sum()) > 0
+    # The v6 invariant: each frame power is the exact all-bin sum.
+    for term, field in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
+        stored = [int(v) for v in np.asarray(got[field]).reshape(-1)]
+        assert stored == [sum(int(x) for x in S[f, term]) for f in range(N_FRAMES)]
+
+
+def test_frame_powers_that_are_not_the_fine_sums_are_fatal(tmp_path):
+    with pytest.raises(ValueError, match="not the all-bin sums"):
+        _run(tmp_path, supply_fine_powers=True, target_delta=1)
+
+
+@pytest.mark.parametrize("option", ["off", "auto"])
+def test_fine_products_cannot_be_switched_off(tmp_path, option):
+    with pytest.raises(ValueError, match="fine products are mandatory"):
+        _run(tmp_path, supply_fine_powers=True, fine_products=option)
 
 
 def test_device_and_host_paths_agree_bit_for_bit(tmp_path):
@@ -274,8 +297,8 @@ def test_reference_sum_overflow_is_fatal(tmp_path):
         )
 
 
-def test_enabled_fine_measurement_requires_projections(tmp_path):
-    with pytest.raises(RuntimeError, match="returned no matched-filter"):
+def test_frame_without_fine_powers_or_projections_is_fatal(tmp_path):
+    with pytest.raises(RuntimeError, match="neither fine_powers_u64"):
         _run(
             tmp_path,
             supply_fine_powers=False,
@@ -293,11 +316,9 @@ def test_both_excess_signs_keep_exact_terms(tmp_path):
         target, lower, upper = (
             (5, 6, 6) if frame == 0 else (10, 4, 4)
         )
-        fine = np.full(
-            (1, REFERENCE_WEIGHT_TERMS, FINE_BINS),
-            frame + 1,
-            dtype=np.uint64,
-        )
+        # Fine spectra whose all-bin sums are exactly those frame powers.
+        fine = np.zeros((1, REFERENCE_WEIGHT_TERMS, FINE_BINS), dtype=np.uint64)
+        fine[0, :, frame + 1] = np.asarray([target, lower, upper], dtype=np.uint64)
         return {
             "batch": 1,
             "detector_rows_per_block": rows,
@@ -334,5 +355,6 @@ def test_both_excess_signs_keep_exact_terms(tmp_path):
     assert np.asarray(product["reject_mask"]).reshape(-1).tolist() == [0, 1]
     assert np.isnan(np.asarray(product["pilot_excess_db"]).reshape(-1)[0])
     fine = np.asarray(product["fine_power_u64"])
-    assert np.all(fine[0] == 1)
-    assert np.all(fine[1] == 2)
+    assert fine[0, :, 1].tolist() == [5, 6, 6]
+    assert fine[1, :, 2].tolist() == [10, 4, 4]
+    validate_current_product_identity(product)

@@ -241,13 +241,17 @@ with np.load(npz, allow_pickle=False) as z:
     dv = str(z["detector_version"])
     assert pkg in dv, "frozen package sha NOT stamped: " + dv
     assert ksha in dv, "qualified sm90 kernel sha NOT stamped: " + dv
-    assert str(z["schema_version"]) == "pilotproxy_per_pilot_product_v5"
+    assert str(z["schema_version"]) == "pilotproxy_per_pilot_product_v6"
     order = [str(k) for k in z["unit_order"]]
     assert len(order) == len(set(order)), "duplicate units"
     pairs = list(zip(z["frame_unit_index"].tolist(), z["frame_in_unit"].tolist()))
     assert len(pairs) == len(set(pairs)), "duplicate frames"
     fine = z["fine_power_u64"]
     assert fine.dtype == np.uint64 and fine.shape[1:] == (3, 256), fine.shape
+    # v6: each frame power is the exact all-bin sum of its fine powers
+    sums = fine.sum(axis=2, dtype=np.uint64)
+    for term, key in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
+        assert np.array_equal(z[key][:, 0], sums[:, term]), key + " is not the fine-power sum"
     assert int(z["rational_overflow_count"]) == 0
     valid = z["valid"]
     print("product          :", os.path.basename(npz))

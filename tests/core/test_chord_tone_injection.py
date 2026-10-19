@@ -13,8 +13,9 @@ These tests close that gap from first principles:
   upright/true-sense frame, the kotekan chord data-product convention);
 * quantize to packed int4, apply the bundle's declared input preprocessing
   (``time_reverse_detector_windows_before_kernel``), and run the exact
-  integer power sums plus the rational half-threshold mask, the deployed
-  kernel decision, computed independently with numpy integers;
+  integer frame powers (row projections through the frozen fxfft256, summed
+  over fine bins: kernel core 3.0.0) plus the rational half-threshold mask,
+  the deployed kernel decision, computed independently with numpy integers;
 * require the pilot tone to assert the mask with the target term dominant
   on every ATSC channel 14-36; require a sense-flipped tone to collapse
   the target response (this is the check that catches spectral-sense and
@@ -61,7 +62,7 @@ CHORD_BANK = REPO_ROOT / "weights" / "chord_dtv_weights_k64.bin"
 
 COARSE_WIDTH_HZ = 195312.5  # CHORD coarse width == channelized sample rate
 K = 64                      # detector window samples
-WINDOWS = 64                # synthesized windows per case (plenty of SNR)
+WINDOWS = 128               # synthesized windows per case: one whole fxfft256 stream
 BITS = 4
 ATSC_CHANNELS = list(range(14, 37))
 TONE_AMP = 5.5              # LSB; comfortably inside the int4 range
@@ -135,20 +136,28 @@ def synth_packed(
 def deployed_powers(
     packed_samples: np.ndarray, weight_bytes: bytes, time_reverse: bool
 ) -> list[int]:
-    """Exact integer P[target, ref_lower, ref_upper] per the deployed chain."""
+    """Exact integer P[target, ref_lower, ref_upper] per the deployed chain.
+
+    Integer row projections ``z = x . conj(w)``, the frozen fxfft256 over each
+    128-window stream, and the all-bin sum of the fine powers (kernel core
+    3.0.0), computed here with numpy integers independently of the packed
+    CPU reference.
+    """
+    from pilot_proxy.fxfft import fine_power_fx
+
     if time_reverse:
         packed_samples = packed_samples[:, ::-1]
     x = unpack_packed_complex(packed_samples, BITS)
     w = unpack_packed_complex(
         np.frombuffer(weight_bytes, dtype=np.int8).reshape(3, K), BITS
     )
-    powers = []
+    rows = np.empty((3, x.shape[0], 2), dtype=np.int64)
     for term in range(3):
         z = (x * np.conjugate(w[term])).sum(axis=1)
-        z_re = np.round(z.real).astype(np.int64)
-        z_im = np.round(z.imag).astype(np.int64)
-        powers.append(int((z_re * z_re + z_im * z_im).sum()))
-    return powers
+        rows[term, :, 0] = np.round(z.real).astype(np.int64)
+        rows[term, :, 1] = np.round(z.imag).astype(np.int64)
+    fine = fine_power_fx(rows, num_streams=x.shape[0] // 128)
+    return [sum(int(v) for v in fine[term]) for term in range(3)]
 
 
 def deployed_mask(powers: list[int], row: dict) -> int:

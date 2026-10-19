@@ -1,4 +1,10 @@
-"""Current product adaptation and archive acceptance tests."""
+"""Per-pilot product adaptation and archive acceptance tests.
+
+The fixture writes the v5 layout of the products of record (row-domain frame
+powers stored beside fine powers whose sums differ from them) and, with
+``revision=6``, the current layout (frame powers stored as the fine sums). The
+gate reads both through the fine-power sums.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -10,6 +16,7 @@ import pytest
 
 from pilot_proxy.products.acceptance import (
     ArchiveAcceptanceError, validate_archive_products)
+from pilot_proxy.product_contract import coarse_columns_from_fine
 from pilot_proxy.products.reader import MASK_RULE
 
 from pilot_proxy.config.project import default_project
@@ -46,9 +53,12 @@ def _decision_contract() -> dict:
     }
 
 
-def _detector_contract(spec: dict) -> dict:
-    return {
+def _detector_contract(spec: dict, revision: int = 5) -> dict:
+    contract = {
         "schema_version": "pilotproxy_detector_contract_v1",
+        "coarse_power_ratio_definition": (
+            "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
+        ),
         "detector_window_samples": 128,
         "skipped_guard_bins": 1,
         "reference_offset_bins": 2,
@@ -80,6 +90,17 @@ def _detector_contract(spec: dict) -> dict:
             "census_excluded_bins": spec["fine_census_excluded_bins"],
         },
     }
+    if revision == 6:
+        contract["schema_version"] = "pilotproxy_detector_contract_v2"
+        contract["coarse_power_ratio_definition"] = (
+            "R_coarse = 2 * sum_f S_target[f] / "
+            "(sum_f S_ref_lower[f] + sum_f S_ref_upper[f]); "
+            "S = fxfft256_v1 fine powers"
+        )
+        contract["fine_reduction"]["coarse_power_definition"] = (
+            "sum_of_fxfft256_fine_powers"
+        )
+    return contract
 
 
 def _frame_coordinates(frames: int, units: int):
@@ -108,7 +129,9 @@ def _unit_times(spec: dict, units: int) -> np.ndarray:
     return np.asarray(values, dtype=np.float64)
 
 
-def _write_product(path: Path, channel: int, *, frames=None, units=None) -> Path:
+def _write_product(
+    path: Path, channel: int, *, frames=None, units=None, revision: int = 5
+) -> Path:
     spec = _fixture_spec()
     frame_count = int(spec["frames"] if frames is None else frames)
     unit_count = int(spec["units"] if units is None else units)
@@ -174,19 +197,45 @@ def _write_product(path: Path, channel: int, *, frames=None, units=None) -> Path
     detector_version = (
         "pilot-proxy/fixture "
         f"source={source_digest} kernel=2.3.0 kernel_sha256={kernel} "
-        "pilotproxy_per_pilot_product_v5 K=128"
+        f"pilotproxy_per_pilot_product_v{revision} K=128"
     )
     chime_frequency = 800e6 - freq_id * spec["sample_rate_hz"]
     zeros_u64 = np.zeros((frame_count, 1), dtype=np.uint64)
+    columns = dict(
+        p_target_u64=target,
+        p_ref_lower_u64=lower,
+        p_ref_upper_u64=upper,
+        p_ref_sum_u64=reference,
+        valid=np.ones((frame_count, 1), dtype=np.uint8),
+        reject_mask=rejected,
+        coarse_power_ratio=coarse,
+        normalized_coarse_power_ratio_db=ratio_db,
+        normalized_pilot_excess=excess,
+        pilot_excess_db=excess_db,
+        estimated_data_shelf_snr_db=shelf,
+    )
+    if revision == 6:
+        # The current layout stores the frame powers as the fine sums.
+        columns = coarse_columns_from_fine({
+            "fine_power_u64": fine,
+            "target_norm_sq": np.asarray([target_norm], dtype=np.int64),
+            "reference_norm_sum_sq": np.asarray([reference_norm], dtype=np.int64),
+            "pilot_below_data_db": np.asarray(spec["pilot_below_data_db"]),
+            "bin_enbw_hz": np.asarray(spec["bin_enbw_hz"]),
+            "dtv_bandwidth_hz": np.asarray(spec["dtv_bandwidth_hz"]),
+            "pilot_capture_efficiency": np.asarray(spec["pilot_capture_efficiency"]),
+        })
     np.savez(
         path,
+        **columns,
         schema_name=np.asarray(spec["schema_name"]),
-        schema_revision=np.asarray(spec["schema_revision"], dtype=np.int64),
-        schema_version=np.asarray(spec["schema_version"]),
+        schema_revision=np.asarray(revision, dtype=np.int64),
+        schema_version=np.asarray(f"pilotproxy_per_pilot_product_v{revision}"),
         source_event_key_schema_version=np.asarray(
             spec["source_event_key_schema_version"]),
         decision_contract_json=np.asarray(json.dumps(_decision_contract())),
-        detector_contract_json=np.asarray(json.dumps(_detector_contract(spec))),
+        detector_contract_json=np.asarray(
+            json.dumps(_detector_contract(spec, revision))),
         detector_version=np.asarray(detector_version),
         mask_rule=np.asarray(MASK_RULE),
         reference_placement_json=np.asarray(json.dumps({
@@ -202,19 +251,8 @@ def _write_product(path: Path, channel: int, *, frames=None, units=None) -> Path
         frame_index=np.arange(frame_count, dtype=np.int64),
         frame_unit_index=frame_unit,
         frame_in_unit=frame_in_unit,
-        p_target_u64=target,
-        p_ref_lower_u64=lower,
-        p_ref_upper_u64=upper,
-        p_ref_sum_u64=reference,
         target_norm_sq=np.asarray([target_norm], dtype=np.int64),
         reference_norm_sum_sq=np.asarray([reference_norm], dtype=np.int64),
-        valid=np.ones((frame_count, 1), dtype=np.uint8),
-        reject_mask=rejected,
-        coarse_power_ratio=coarse,
-        normalized_coarse_power_ratio_db=ratio_db,
-        normalized_pilot_excess=excess,
-        pilot_excess_db=excess_db,
-        estimated_data_shelf_snr_db=shelf,
         pilot_below_data_db=np.asarray(
             spec["pilot_below_data_db"], dtype=np.float64),
         bin_enbw_hz=np.asarray(spec["bin_enbw_hz"], dtype=np.float64),
@@ -271,6 +309,38 @@ def _write_product(path: Path, channel: int, *, frames=None, units=None) -> Path
     return path
 
 
+def fine_powers_with_sums(fine, target, lower, upper) -> np.ndarray:
+    """Fine powers of ``fine``'s spectral shape whose all-bin sums are exact.
+
+    Since kernel core 3.0.0 a product's frame powers are the all-bin sums of
+    its fine powers, so a fixture that wants given frame powers must carry fine
+    powers that sum to them. Each (frame, term) spectrum is scaled to its
+    wanted total by largest remainders: the shape (and so every fine ratio up
+    to one factor per frame) is kept and the sum is exact. A zero-shape
+    spectrum with a nonzero total is filled flat.
+    """
+    fine = np.asarray(fine, dtype=np.int64)
+    frames, terms, bins = fine.shape
+    want = np.stack([np.asarray(v, dtype=np.int64).reshape(-1)
+                     for v in (target, lower, upper)], axis=1)
+    if want.shape != (frames, terms):
+        raise ValueError("one wanted total per frame and term")
+    shape = np.where(fine.sum(axis=2, keepdims=True) > 0, fine, 1)
+    total = shape.sum(axis=2, keepdims=True)
+    quota = shape * want[:, :, None]
+    if np.any(quota < 0) or float(np.max(shape)) * float(np.max(want)) >= 2.0 ** 62:
+        raise ValueError("fixture totals are outside the exact int64 range")
+    base = quota // total
+    remainder = want - base.sum(axis=2)
+    order = np.argsort(-(quota % total), axis=2, kind="stable")
+    rank = np.empty_like(order)
+    np.put_along_axis(rank, order, np.arange(bins)[None, None, :].repeat(frames, 0).repeat(terms, 1), axis=2)
+    base += (rank < remainder[:, :, None]).astype(np.int64)
+    out = base.astype(np.uint64)
+    assert np.array_equal(out.sum(axis=2, dtype=np.uint64), want.astype(np.uint64))
+    return out
+
+
 def _replace(path: Path, **changes) -> None:
     with np.load(path, allow_pickle=False) as archive:
         values = {name: np.array(archive[name], copy=True)
@@ -279,7 +349,7 @@ def _replace(path: Path, **changes) -> None:
     np.savez(path, **values)
 
 
-def _cohort(tmp_path: Path) -> list[Path]:
+def _cohort(tmp_path: Path, revision: int = 5) -> list[Path]:
     tmp_path.mkdir(parents=True, exist_ok=True)
     paths = []
     for channel in range(14, 37):
@@ -287,8 +357,34 @@ def _cohort(tmp_path: Path) -> list[Path]:
         units = 12 if channel == 14 else 2
         paths.append(_write_product(
             tmp_path / f"{products.freq_id(channel)}.npz",
-            channel, frames=frames, units=units))
+            channel, frames=frames, units=units, revision=revision))
     return paths
+
+
+def test_archive_gate_accepts_a_v6_cohort_and_counts_fine_sum_decisions(tmp_path):
+    report = validate_archive_products(_cohort(tmp_path, revision=6))
+    with np.load(report.products[0].path, allow_pickle=False) as product:
+        reject = np.asarray(product["reject_mask"])
+    assert report.products[0].rejected_frames == int(reject.sum())
+
+
+def test_archive_gate_reads_v5_rejections_from_the_fine_sums(tmp_path):
+    # The v5 fixture stores row-domain powers that reject some frames; the
+    # fine sums decide differently, and the gate counts the fine-sum view.
+    paths = _cohort(tmp_path, revision=5)
+    report = validate_archive_products(paths)
+    with np.load(paths[0], allow_pickle=False) as product:
+        stored = int(np.asarray(product["reject_mask"]).sum())
+        expected = int(coarse_columns_from_fine(product)["reject_mask"].sum())
+    assert stored != expected
+    assert report.products[0].rejected_frames == expected
+
+
+def test_archive_gate_refuses_a_cohort_mixing_v5_and_v6(tmp_path):
+    paths = _cohort(tmp_path / "v5", revision=5)
+    v6 = _cohort(tmp_path / "v6", revision=6)
+    with pytest.raises(ArchiveAcceptanceError):
+        validate_archive_products(paths[:-1] + v6[-1:])
 
 
 def test_archive_gate_refuses_missing_duplicate_and_mixed_products(tmp_path):
@@ -299,7 +395,7 @@ def test_archive_gate_refuses_missing_duplicate_and_mixed_products(tmp_path):
         validate_archive_products(paths[:-1] + [paths[0]])
 
     _replace(paths[-1], fine_status=np.asarray("disabled_by_option"))
-    with pytest.raises(ArchiveAcceptanceError, match="fine measurement"):
+    with pytest.raises(ArchiveAcceptanceError, match="retains no fine powers"):
         validate_archive_products(paths)
 
 

@@ -41,8 +41,12 @@ the high nibble and imaginary in the low nibble. Weight scale is 7. Sample
 scale is explicit and fixed by the caller; the adapter does not fit it to
 each frame. Receipts count components that require clipping and save the
 weight norms. Integer row projections use the existing CPU kernel reference.
-The reported coarse ratio is exactly `2*sum(target power)/sum(reference
-powers)` without weight-norm renormalization. Zero denominators remain
+The frame powers (`term_power_sums`, exact uint64) are the kernel core 3.0.0
+definition: each term's 128 row projections go through the frozen `fxfft256`
+and the fine powers are summed over all 256 bins (receipt schema
+`sdr-upgrade-digital-adapter-v2`; v1 summed `|z|^2` over the rows). The
+reported coarse ratio is exactly `2*P_target/(P_lower + P_upper)` from those
+powers, without weight-norm renormalization. Zero denominators remain
 explicitly infinite or undefined rather than becoming noise observations.
 
 ## Timing and framing
@@ -64,7 +68,8 @@ history, mixer phase and output-lattice state, and explicit transport-gap
 handling before it can feed a live detector.
 
 An ideal unfiltered, unquantized, equal-norm IID Gaussian input would produce
-an F(256,512) coarse frame ratio for this one-input geometry. Filtering,
+an F(256,512) coarse frame ratio for this one-input geometry (the
+fixed-point transform departs from it only by its rounding). Filtering,
 quantized weights, rounding, clipping and measured receiver behavior require
 their own validation. One SDR stream does not become 2048 independent CHIME
 inputs by copying or reweighting it.

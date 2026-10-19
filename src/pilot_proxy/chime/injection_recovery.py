@@ -43,6 +43,7 @@ from pilot_proxy.chime.injection import INJECTION_MANIFEST_FILENAME
 from pilot_proxy.chime.products import (
     CHIME_DETECTOR_OUTPUTS_FILENAME,
     CHIME_SPECTROGRAM_CACHE_FILENAME,
+    require_current_detector_contract,
 )
 
 RECOVERY_CSV_FILENAME = "injection_recovery.csv"
@@ -70,6 +71,10 @@ def _load_point(point_dir: Path) -> dict[str, Any]:
                 "injection_manifest.json (copy the manifest from the "
                 "injected-input directory)"
             )
+    try:
+        require_current_detector_contract(point_dir)
+    except ValueError as exc:
+        raise SystemExit(f"ladder point {point_dir}: {exc}") from None
     detector = np.load(detector_path)
     for key in ("coarse_power_ratio", "normalized_pilot_excess", "valid"):
         if key not in detector:

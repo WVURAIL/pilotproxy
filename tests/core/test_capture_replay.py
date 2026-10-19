@@ -73,7 +73,8 @@ def test_example_preserves_exact_valid_and_invalid_scores(tmp_path):
     ) == (2, 2, 2, 1)
     assert report["telescope_qualification"] is False
     rows = read(output / "scores_CH14.json")["scores"]
-    assert rows[0]["expected_coarse_powers"] == ["35040840", "29834371", "35519122"]
+    # Frame powers are the all-bin sums of the exact fxfft256 fine powers.
+    assert rows[0]["expected_coarse_powers"] == ["8970668558", "7637471792", "9092521196"]
     assert {
         key: rows[0][key]
         for key in (

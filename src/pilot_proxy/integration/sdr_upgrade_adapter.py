@@ -19,6 +19,7 @@ from pilot_proxy.detector_reference import (
     quantize_complex_numpy,
     unpack_packed_complex,
 )
+from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 
 INPUT_RATE_HZ = 2_000_000
 OUTPUT_RATE_HZ = 390_625
@@ -128,12 +129,45 @@ def projector_weights(config: DigitalAdapterConfig) -> tuple[np.ndarray, np.ndar
     return weights, quantize_complex_numpy(weights, bits=4, scale=7.0)
 
 
-def adapt_record(iq: np.ndarray, config: DigitalAdapterConfig) -> dict:
-    """Return exact packed CPU row projections and per-frame coarse powers.
+RATIO_DEFINITION = (
+    "2 * sum_f S_target[f] / (sum_f S_lower[f] + sum_f S_upper[f]); "
+    "S = fxfft256_v1 fine powers of the 128 exact row projections, "
+    "without weight-norm renormalization"
+)
 
-    Frame sums pool 128 rows of one input. The ideal unfiltered, unquantized
-    IID equal-power null has F(256,512), not the 2048-input array degrees of
-    freedom. Filtered or measured SDR data need empirical validation.
+
+def frame_power_sums(projections: np.ndarray) -> np.ndarray:
+    """Exact uint64 [3] frame powers of one single-input frame.
+
+    The kernel's definition (core 3.0.0): the 128 exact row projections of
+    each term go through the frozen fxfft256 and the fine powers are summed
+    over all 256 bins, ``P_r = sum_f S_r[f]``.
+    """
+    return frame_powers_from_fine_u64(
+        np.asarray(projections, dtype=np.int64), num_streams=1
+    )
+
+
+def frame_ratio(powers: np.ndarray) -> tuple[float, str]:
+    """``2 P_0 / (P_1 + P_2)`` in float64 with the zero-denominator status."""
+    target = int(powers[0])
+    denominator = int(powers[1]) + int(powers[2])
+    if denominator > 0:
+        return 2.0 * float(target) / float(denominator), "finite"
+    if target > 0:
+        return float(np.inf), "infinite"
+    return float(np.nan), "undefined_both_zero"
+
+
+def adapt_record(iq: np.ndarray, config: DigitalAdapterConfig) -> dict:
+    """Return exact packed CPU row projections and per-frame frame powers.
+
+    Frame powers pool 128 rows of one input through the frozen fxfft256 and
+    sum the fine powers over all bins (:func:`frame_power_sums`). The ideal
+    unfiltered, unquantized IID equal-power null has F(256,512), not the
+    2048-input array degrees of freedom; the fixed-point transform departs
+    from it only by its rounding. Filtered or measured SDR data need empirical
+    validation.
     """
     y, timing = digital_resample(iq, config)
     count = y.size // FRAME_SAMPLES
@@ -146,11 +180,10 @@ def adapt_record(iq: np.ndarray, config: DigitalAdapterConfig) -> dict:
         matched_filter_row_projections_cpu_reference_packed(frame, weights, 4)
         for frame in packed
     ])
-    powers = (projections.astype(np.float64) ** 2).sum(axis=(2, 3))
-    denominator = powers[:, 1] + powers[:, 2]
-    ratio = np.full(count, np.nan)
-    np.divide(2 * powers[:, 0], denominator, out=ratio, where=denominator > 0)
-    ratio[(denominator == 0) & (powers[:, 0] > 0)] = np.inf
+    powers = np.stack([frame_power_sums(frame) for frame in projections])
+    ratio_and_status = [frame_ratio(frame) for frame in powers]
+    ratio = np.array([value for value, _ in ratio_and_status], dtype=np.float64)
+    status = [label for _, label in ratio_and_status]
     w = unpack_packed_complex(weights, 4)
     norms = np.sum(abs(w) ** 2, axis=1)
     rounded_r = np.rint(used.real * config.sample_scale)
@@ -161,7 +194,7 @@ def adapt_record(iq: np.ndarray, config: DigitalAdapterConfig) -> dict:
     return {
         "config": asdict(config),
         "metadata": {
-            "schema": "sdr-upgrade-digital-adapter-v1",
+            "schema": "sdr-upgrade-digital-adapter-v2",
             "scope": "single-input CPU digital adapter; no hardware operation, physical RF mapping, array replication or calibrated null claim",
             "input_rate_hz": INPUT_RATE_HZ, "output_rate_hz": OUTPUT_RATE_HZ,
             "frame_size_samples": FRAME_SAMPLES, "K": K, "L": L,
@@ -183,11 +216,11 @@ def adapt_record(iq: np.ndarray, config: DigitalAdapterConfig) -> dict:
                 "component_count": int(2 * used.size),
                 "scale_estimation": "none; caller must supply a scale frozen independently of evaluation frames",
             },
-            "ratio_definition": "2 * sum_rows(|z_target|^2) / sum_rows(|z_lower|^2 + |z_upper|^2), without weight-norm renormalization",
+            "ratio_definition": RATIO_DEFINITION,
             "ratio_status": {
-                "positive_denominator": int(np.count_nonzero(denominator > 0)),
-                "infinite": int(np.count_nonzero(np.isinf(ratio))),
-                "undefined_both_zero": int(np.count_nonzero(np.isnan(ratio))),
+                "positive_denominator": status.count("finite"),
+                "infinite": status.count("infinite"),
+                "undefined_both_zero": status.count("undefined_both_zero"),
             },
             "ideal_iid_unquantized_equal_norm_null_dof": [2 * L, 4 * L],
             "timing": timing,

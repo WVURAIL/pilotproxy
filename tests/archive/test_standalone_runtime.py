@@ -128,10 +128,15 @@ def test_archive_imports_injection_and_local_scan_are_standalone(tmp_path) -> No
             blocks = np.asarray(packed)
             if blocks.ndim == 2:
                 blocks = blocks[None, ...]
+            # Fixed fine spectra (all power in bin 0) whose all-bin sums are
+            # the frame powers 10/10/10 (per-pilot v6 invariant).
+            fine = np.zeros((int(blocks.shape[0]), 3, 256), dtype=np.uint64)
+            fine[:, :, 0] = 10
             return {
                 "batch": int(blocks.shape[0]),
                 "detector_rows_per_block": int(blocks.shape[1]),
                 "rational_overflow_count": 0,
+                "fine_powers_u64": fine,
                 "results": [
                     {
                         "block_index": index,

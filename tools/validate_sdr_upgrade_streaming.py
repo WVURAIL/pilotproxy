@@ -16,6 +16,7 @@ import sys
 import numpy as np
 import scipy
 
+from pilot_proxy.fxfft import fine_power_fx
 from pilot_proxy.integration.sdr_upgrade_adapter import (
     DigitalAdapterConfig, FRAME_SAMPLES, INPUT_RATE_HZ, adapt_record,
     array_sha256, projector_weights, resampler_coefficients,
@@ -179,7 +180,10 @@ def compare_record(spec):
         np.testing.assert_array_equal(frame["projections_i32"], batch["projections_i32"][index])
         independent = scalar_projections(frame["packed_frame"], weights)
         np.testing.assert_array_equal(frame["projections_i32"], independent)
-        independent_power = np.sum(independent.astype(np.int64) ** 2, axis=(1, 2))
+        # Frame powers are the all-bin sums of the frozen fxfft256 fine powers.
+        independent_power = fine_power_fx(
+            independent.astype(np.int64), num_streams=1
+        ).sum(axis=1, dtype=np.uint64)
         np.testing.assert_array_equal(frame["term_power_sums"], independent_power)
         np.testing.assert_array_equal(frame["coarse_ratio"], batch["coarse_ratio"][index])
         projection_count += 3 * 128

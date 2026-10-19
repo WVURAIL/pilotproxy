@@ -39,7 +39,9 @@ SELECTED_CHANNEL_INDICES = [179, 180]
 REFERENCE_WEIGHT_TERMS = 3
 COMBINED_TEST_WINDOW = 4
 COMBINED_TEST_FEEDS = 2
-COMBINED_TEST_WINDOWS_PER_FEED = 3
+# One whole fxfft256 stream per feed: the frame powers are the all-bin sums
+# of the fine powers (kernel core 3.0.0), which add over streams.
+COMBINED_TEST_WINDOWS_PER_FEED = 128
 COARSE_POWER_RATIO_SCALE = 2.0
 INT4_COMPONENT_BITS = 4
 COMBINED_TEST_RNG_SEED = 12345
@@ -247,7 +249,7 @@ def test_combined_feed_cpu_reference_equals_manual_power_sum() -> None:
         weights,
         bits=INT4_COMPONENT_BITS,
     )
-    manual_powers = np.zeros(REFERENCE_WEIGHT_TERMS, dtype=np.float64)
+    manual_powers = np.zeros(REFERENCE_WEIGHT_TERMS, dtype=np.uint64)
     for feed_index in range(COMBINED_TEST_FEEDS):
         _, feed_powers = coarse_power_ratio_cpu_reference_packed(
             packed_by_feed[feed_index],
@@ -261,7 +263,7 @@ def test_combined_feed_cpu_reference_equals_manual_power_sum() -> None:
         / (manual_powers[1] + manual_powers[2])
     )
 
-    np.testing.assert_allclose(combined_powers, manual_powers)
+    np.testing.assert_array_equal(combined_powers, manual_powers)
     assert combined_fstat == pytest.approx(float(manual_fstat))
 
 

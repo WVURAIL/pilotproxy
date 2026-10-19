@@ -95,6 +95,12 @@ EXPECTED = {
     "runtime_pilots": (RUNTIME_PILOT_PROFILES_SCHEMA_NAME, RUNTIME_PILOT_PROFILES_SCHEMA_REVISION, RUNTIME_PILOT_PROFILES_SCHEMA_TOKEN, "pilotproxy_runtime_pilot_profiles"),
     "runtime_validation": (RUNTIME_BUNDLE_VALIDATION_SCHEMA_NAME, RUNTIME_BUNDLE_VALIDATION_SCHEMA_REVISION, RUNTIME_BUNDLE_VALIDATION_SCHEMA_TOKEN, "pilotproxy_runtime_bundle_validation"),
 }
+# Every current schema is at revision 1 except the three whose meaning kernel
+# core 3.0.0 changed (frame powers are the all-bin sums of the fine powers):
+# the detector contract (2), the result schema (2) and the detector-core
+# profile (3; its revision 2 token is retired above). The earlier revisions
+# survive only in outputs of record.
+EXPECTED_REVISION = {"detector_contract": 2, "result_schema": 2, "detector_core_profile": 3}
 PROFILE_FILES = ("reference_800mhz_pfb.json", "chime_dtv_fengine.json", "chord_dtv_fengine.json", "chord_pathfinder_dtv_fengine.json")
 STREAM_MAP_FILES = ("chime_feed_pol_example.json", "chord_dish_pol_example.json", "chord_pathfinder_dish_pol_example.json")
 ACTIVE_MANIFESTS = ("chime_dtv_weights_k128.bin.manifest.json", "chord_dtv_weights_k64.bin.manifest.json")
@@ -158,7 +164,8 @@ def _load_json(path: Path) -> dict:
 def main() -> int:
     errors: list[str] = []
     for label, (name, revision, token, expected_name) in EXPECTED.items():
-        if name != expected_name or revision != 1 or token != schema_token(name, revision):
+        if (name != expected_name or revision != EXPECTED_REVISION.get(label, 1)
+                or token != schema_token(name, revision)):
             errors.append(f"{label}: identity mismatch name={name!r} revision={revision!r} token={token!r}")
     build_root = ROOT / "build"
     build_files = (

@@ -23,7 +23,7 @@ def test_generated_specs_use_current_schema_and_canonical_geometry() -> None:
     )
     rendered = generator.render_specs()
 
-    assert r"pilotproxy\_per\_pilot\_product\_v5" in rendered
+    assert r"pilotproxy\_per\_pilot\_product\_v6" in rendered
     assert r"pilotproxy\_detector\_datatrawl" not in rendered
     assert r"\newcommand{\ppDetectorWindowSamples}{128}" in rendered
     assert r"\newcommand{\ppFineNumBins}{256}" in rendered

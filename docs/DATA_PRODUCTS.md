@@ -87,7 +87,12 @@ created merely by running the detector. Its principal fields are:
 
 - `valid`;
 - `num_errors`;
-- `errors`.
+- `errors`;
+- `detector_contract_revision`: 2 for a current run. A run written before
+  kernel core 3.0.0 carries revision 1 (row-domain frame powers, no fine
+  powers to recompute them from); it is validated as a record and the report
+  adds a `record_note`. The CHIME plots and `injection_recovery` refuse such a
+  run rather than analyse it under the current definition.
 
 ### `.pilotproxy-combine-generation.json`
 
@@ -118,8 +123,8 @@ This is the canonical frame-by-pilot detector product.
 | `pilot_frequency_hz` | `(num_pilots,)` | `float64` | Hz | ATSC pilot RF frequency |
 | `chime_frequency_hz` | `(num_pilots,)` | `float64` | Hz | CHIME coarse-channel center |
 | `frame_index` | `(num_frames,)` | `int64` | frame | Contiguous positional frame index |
-| `p_target_u64` | `(num_frames, num_pilots)` | `uint64` | power | Target-bin power |
-| `p_ref_sum_u64` | `(num_frames, num_pilots)` | `uint64` | power | Lower plus upper reference power |
+| `p_target_u64` | `(num_frames, num_pilots)` | `uint64` | power | Target frame power: the all-bin sum of the target term's exact fine powers |
+| `p_ref_sum_u64` | `(num_frames, num_pilots)` | `uint64` | power | Lower plus upper reference frame power, each an all-bin fine-power sum |
 | `coarse_power_ratio` | `(num_frames, num_pilots)` | `float64` | unitless | `2*p_target/p_ref_sum` |
 | `normalized_coarse_power_ratio_db` | `(num_frames, num_pilots)` | `float64` | dB | `10*log10(F/null_power_ratio)` |
 | `pilot_excess_db` | `(num_frames, num_pilots)` | `float64` | dB | One-bin pilot-excess PNR |
@@ -137,7 +142,13 @@ The current mask is the norm-corrected positive-excess comparison:
 valid && (p_target * reference_norm_sum_sq > target_norm_sq * p_ref_sum)
 ```
 
-This is the integer form of `F > null_power_ratio`. Because
+This is the integer form of `F > null_power_ratio`. The frame powers are the
+kernel core 3.0.0 definition, `P_r = sum_f S_r[f]` over the exact `fxfft256`
+fine powers (`METHOD_SPEC.md`); outputs written before core 3.0.0 carry the
+retired row-domain powers `sum_m |z|^2` in the same fields; `chime-run`
+outputs identify them by `kernel_version` and `coarse_power_ratio_definition`
+in `stats.json`, and `chime-scan` combines by the per-pilot product schema
+(v5 or v6). Because
 `normalized_coarse_power_ratio_db` is referenced to `null_power_ratio`, the
 null and the positive-excess boundary both sit at exactly 0 dB. The current
 product contract requires the exact powers, all norm-related arrays, schema

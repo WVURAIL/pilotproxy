@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import json
 
 import numpy as np
 import pytest
@@ -16,6 +17,14 @@ from pilot_proxy.chime.plots import (
     clean_known_figures,
     generate_chime_plots,
 )
+from pilot_proxy.detector_contract import DETECTOR_CONTRACT_SCHEMA_TOKEN
+
+
+def _write_run_config(run_dir, token: str = DETECTOR_CONTRACT_SCHEMA_TOKEN) -> None:
+    (run_dir / "run_config.json").write_text(
+        json.dumps({"detector_contract": {"schema_version": token}}),
+        encoding="utf-8",
+    )
 
 
 def test_setup_matplotlib_keeps_tex_opt_in(monkeypatch) -> None:
@@ -52,6 +61,7 @@ def test_survival_probability_on_grid_uses_greater_equal_grid_values() -> None:
 def test_chime_plots_write_expected_files_and_summary_rows(tmp_path) -> None:
     run_dir = tmp_path / "run"
     run_dir.mkdir()
+    _write_run_config(run_dir)
     physical_channel = np.asarray([14, 30], dtype=np.int32)
     pilot_frequency_hz = np.asarray([470_309_441.0, 566_309_441.0])
     chime_frequency_hz = np.asarray([470_214_843.75, 566_406_250.0])
@@ -150,6 +160,27 @@ def test_chime_plots_write_expected_files_and_summary_rows(tmp_path) -> None:
     assert float(spectrum_rows[0]["chime_frequency_hz"]) == pytest.approx(
         float(chime_frequency_hz[0])
     )
+
+
+@pytest.mark.parametrize(
+    ("token", "message"),
+    [
+        ("pilotproxy_detector_contract_v1", "revision 1"),
+        (None, "missing"),
+    ],
+)
+def test_chime_plots_refuse_a_run_without_the_current_contract(
+    tmp_path, token, message
+) -> None:
+    # The detector outputs carry no schema token and no fine powers; the run
+    # config names the frame-power definition they use.
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    np.savez_compressed(run_dir / "chime_detector_outputs.npz", valid=np.ones((1, 1)))
+    if token is not None:
+        _write_run_config(run_dir, token)
+    with pytest.raises(ValueError, match=message):
+        generate_chime_plots(run_dir)
 
 
 def test_clean_known_figures_removes_current_figure_names_only(tmp_path) -> None:

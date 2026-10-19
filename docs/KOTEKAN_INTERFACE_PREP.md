@@ -33,8 +33,9 @@ stability during a run have not been verified.
 
 The Python CHIME path currently reads exact `uint64` target and reference powers
 back to the host and forms the norm-corrected positive-excess decision there.
-The CUDA library also exposes the rational-half-threshold mask API needed to
-form the same comparison on the device.
+The CUDA library has no device entry for that comparison: kernel core 3.0.0
+removed the rational-half-threshold mask API, because `P_target * half_den`
+no longer fits `uint64` at the fine-sum scale of the frame powers.
 
 ## 2. Runtime State Machine
 
@@ -216,10 +217,11 @@ The proposed stage must bind the following CUDA inputs:
 - packed complex int4 detector rows;
 - a device pointer to the selected packed int4 target, lower-reference, and
   upper-reference weights;
-- the rational half-threshold numerator and denominator stored in the selected
-  profile;
-- device storage for the target power, summed reference power, and rejection
-  mask.
+- device storage for the exact fine powers, the three frame powers (their
+  all-bin sums), and the per-frame mask bit of the fused fine decision.
+
+The kernel takes no threshold. The rational half-threshold numerator and
+denominator stored in the selected profile are applied on the host.
 
 For the norm-corrected positive-excess rule, the bundle stores:
 
@@ -241,8 +243,9 @@ The remaining decision arithmetic --- F2 ratio, CFAR estimate,
 designated-set compare with the per-channel fine calibration fields
 described in Section 2a --- forms downstream of those exact sums and
 moves on-device once the calibration campaign fixes its inputs. The
-rational half-threshold path remains the coarse flag recorded by the
-Python archive path; the kotekan stage does not bind it. The target
+rational half-threshold remains the coarse flag recorded by the Python
+archive path, applied on the host in exact integers; the kotekan stage does
+not bind it, and kernel core 3.0.0 removed its device entry. The target
 deployed form is a single fused kernel --- packed samples, packed
 weights, and bundle constants in; one mask bit per aligned frame out;
 row sums and exact powers as optional debug taps --- per the candidate-decision section of `docs/DESIGN_DECISIONS.md`.
@@ -345,10 +348,14 @@ DC-shifted, wrapping the frame edge).
 - **Frame length**: carried in kotekan config (`num_times` for the ring
   advance; `samples_per_detector_frame` for the detector block). Not
   inferred from this repository.
-- **Debug comparison**: the stage always emits the exact `uint64` coarse
-  power marginals (`dtv_powers`, `[F][3]`) alongside the mask byte
+- **Debug comparison**: the stage always emits the exact `uint64` frame
+  powers (`dtv_powers`, `[F][3]`) alongside the mask byte
   (`dtv_mask`, `[F]`), so Kotekan-vs-Python parity can be checked on real
-  data before any production trimming. At the kernel level,
+  data before any production trimming. Since kernel core 3.0.0 these are the
+  fused entry's `d_power_out`, the all-bin sums of the stage's own fine
+  powers; a stage that vendors an older core emits the retired row-domain
+  sums `sum_m |z|^2` instead and must be re-vendored before its powers are
+  compared with a current replay. At the kernel level,
   `testPilotProxyDetector` bit-compares the full GPU datapath (packer, row
   sums, coarse powers, fine powers, fine designated-set CFAR mask)
   against CPU references, including a bit-exact C++ port of

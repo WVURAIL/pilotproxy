@@ -25,7 +25,6 @@ from pilot_proxy.detector_constants import (
     LOCKED_REFERENCE_OFFSET_BINS,
     LOCKED_SAMPLE_BITS_PER_COMPONENT,
     LOCKED_SKIPPED_GUARD_BINS,
-    MAG_SQUARED_ACCUMULATOR_BITS_TARGET,
     POWER_SUM_ACCUMULATOR_BITS,
     SUPPORTED_DETECTOR_WINDOW_SAMPLES,
 )
@@ -57,7 +56,6 @@ _KERNEL_CONTRACT_FIELDS = frozenset(
 _FIXED_POINT_LIMIT_FIELDS = frozenset(
     {
         "dot_product_component_accumulator_bits_target",
-        "mag_squared_accumulator_bits_target",
         "power_sum_accumulator_bits",
     }
 )
@@ -244,9 +242,6 @@ class DetectorCoreProfile:
         expected_limits = {
             "dot_product_component_accumulator_bits_target": (
                 DOT_PRODUCT_COMPONENT_ACCUMULATOR_BITS_TARGET
-            ),
-            "mag_squared_accumulator_bits_target": (
-                MAG_SQUARED_ACCUMULATOR_BITS_TARGET
             ),
             "power_sum_accumulator_bits": POWER_SUM_ACCUMULATOR_BITS,
         }

@@ -11,9 +11,11 @@ below. The fine transform here uses floating arithmetic; this experiment
 does not measure int4 input quantization, integer weights, or fixed-transform
 representation loss in the production fine path:
 
-  coarse:  F = 2 sum|z_t|^2 / (sum|z_r1|^2 + sum|z_r2|^2), exact int64
-           sums (null_power_ratio = 1: simulated weight norms are equal by
-           construction, stated in the output).
+  coarse:  F = 2 sum_b S_t[b] / (sum_b S_l[b] + sum_b S_u[b]), the ratio of
+           the frame powers (the all-bin sums of the fine powers below; the
+           float transform makes them 256 sum|z|^2 per term), with
+           null_power_ratio = 1: simulated weight norms are equal by
+           construction, stated in the output.
   fine:    fine_power_ratio[b] = 2 S_t[b] / (S_l[b] + S_u[b]) from the x2
            zero-padded window-axis FFT, then the deployed designated-set
            statistic max over the anchor +/- 2 window.
@@ -77,17 +79,17 @@ def reduce_batch(zi):
     """Batched deployed reductions. zi: int32 [batch, 3, streams, W, 2].
 
     Returns (coarse F, fine window-max) per trial. Identical math to the
-    packaged pipeline: exact int64 marginals; complex128 x2-padded FFT,
+    packaged float prototype (``fine_reduce``): complex128 x2-padded FFT,
     incoherent stream sum, fine_power_ratio ratio, designated-window max.
+    The coarse F is formed from the frame powers, the all-bin sums of the
+    fine powers (the kernel core 3.0.0 definition, ``P_r = sum_b S_r[b]``),
+    which this float transform makes ``BINS`` times the row energy.
     """
-    wide = zi.astype(np.int64)
-    powers = (wide[..., 0] ** 2 + wide[..., 1] ** 2).sum(axis=(2, 3))
-    den = powers[:, 1] + powers[:, 2]
-    coarse = 2.0 * powers[:, 0] / den
-
     zc = zi[..., 0].astype(np.complex128) + 1j * zi[..., 1].astype(np.complex128)
     spec = np.fft.fft(zc, n=BINS, axis=-1)
     p = (spec.real ** 2 + spec.imag ** 2).sum(axis=2)      # [batch, 3, BINS]
+    frame = p.sum(axis=-1)                                  # [batch, 3]
+    coarse = 2.0 * frame[:, 0] / (frame[:, 1] + frame[:, 2])
     f2 = 2.0 * p[:, 0] / (p[:, 1] + p[:, 2])
     fine = f2[:, WINDOW].max(axis=1)
     return coarse, fine
@@ -96,33 +98,35 @@ def reduce_batch(zi):
 def verify(seed=0, trials=3, streams=64):
     """Gate: the batched reduction equals the packaged pipeline.
 
-    Exact integer marginals must match bit-for-bit; the fine spectrum
-    must match at the product's own precision (``fine_reduce`` emits
-    float32; the batched path carries the same float64 operations, so
-    the float32 casts must be identical).
+    The fine powers and the fine ratio must match at the product's own
+    precision (``fine_reduce`` emits float32; the batched path carries the
+    same float64 operations, so the float32 casts must be identical), and
+    the coarse F must be the ratio of the all-bin sums of those fine powers.
     """
     from pilot_proxy import fine_reduction
     rng = np.random.default_rng(seed)
     zi = gen_rows(rng, trials, streams, amp=300.0, b0=ANCHOR)
-    wide = zi.astype(np.int64)
-    powers = (wide[..., 0] ** 2 + wide[..., 1] ** 2).sum(axis=(2, 3))
     zc = zi[..., 0].astype(np.complex128) + 1j * zi[..., 1].astype(np.complex128)
     spec = np.fft.fft(zc, n=BINS, axis=-1)
     p = (spec.real ** 2 + spec.imag ** 2).sum(axis=2)
     f2 = 2.0 * p[:, 0] / (p[:, 1] + p[:, 2])
+    coarse, _ = reduce_batch(zi)
     for t in range(trials):
         rows = zi[t].reshape(3, streams * WINDOWS, 2)
         res = fine_reduction.fine_reduce(
             rows, num_streams=streams, windows_per_stream=WINDOWS)
-        assert np.array_equal(res.coarse_power_by_term.astype(np.int64), powers[t]), \
-            "integer marginals diverge"
+        assert np.array_equal(np.asarray(res.fine_power, dtype=np.float32),
+                              p[t].astype(np.float32)), "fine powers diverge"
+        frame = p[t].sum(axis=-1)
+        assert coarse[t] == 2.0 * frame[0] / (frame[1] + frame[2]), \
+            "coarse F is not the ratio of the fine-power sums"
         ref32 = np.asarray(res.fine_power_ratio, dtype=np.float32)
         got32 = f2[t].astype(np.float32)
         assert np.array_equal(ref32, got32), (
             "fine spectrum diverges at product precision: max|d|="
             f"{np.abs(ref32.astype(np.float64) - got32.astype(np.float64)).max()}")
     print(f"verify: batched reduction == fine_reduce on {trials} trials "
-          f"(streams={streams}; exact marginals, float32-identical spectra)")
+          f"(streams={streams}; float32-identical spectra, coarse F from fine sums)")
 
 
 def run_stage(out, stage, trials, seed, snr_db=None, b0=ANCHOR, streams=STREAMS,

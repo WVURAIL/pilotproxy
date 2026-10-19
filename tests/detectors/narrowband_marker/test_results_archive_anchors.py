@@ -22,6 +22,7 @@ _SPEC.loader.exec_module(v5_fixture)
 FRAMES = 120
 BASE = 1000                     # every exact term; T = 2 S_0 / (S_1 + S_2) = 1 on a flat null
 NOMINAL = 62                    # channel 36's grid residual, +739.7 Hz, the worked example's f_a
+PEDESTAL_BIN = 129              # odd: not an independent null-bulk bin, far from every line
 
 
 def _product(tmp_path, *, on_lines=(), static_lines=(), late_on_lines=()) -> Path:
@@ -35,8 +36,12 @@ def _product(tmp_path, *, on_lines=(), static_lines=(), late_on_lines=()) -> Pat
     """
     path = v5_fixture._write_product(tmp_path / "506.npz", 36)
     v5_fixture._replace(path, baseband_power_linear=np.full((FRAMES, 1), 4.0))
-    with Product(path) as p:
-        rejected, units = p.rejected.copy(), p.frame_unit_index.copy()
+    with np.load(path, allow_pickle=False) as z:
+        # the coarse-detected frames the fixture's levels make (60 of 120)
+        rejected = np.asarray(z["reject_mask"])[:, 0].astype(bool)
+        units = np.asarray(z["frame_unit_index"]).astype(np.int64)
+        nt = int(z["target_norm_sq"][0])
+        nrs = int(z["reference_norm_sum_sq"][0])
     fine = np.full((FRAMES, 3, FINE_BINS), BASE, dtype=np.uint64)
     for b, level in static_lines:
         fine[:, 0, b] = int(level * BASE)
@@ -44,7 +49,19 @@ def _product(tmp_path, *, on_lines=(), static_lines=(), late_on_lines=()) -> Pat
         fine[rejected, 0, b] = int(level * BASE)
     for b, level in late_on_lines:
         fine[rejected & (units >= 6), 0, b] = int(level * BASE)
+    # The coarse flag is decided by the frame powers, the all-bin sums of these
+    # fine powers (kernel core 3.0.0). A reference pedestal, equal in every
+    # frame, at an odd bin (outside the independent null bulk and every line)
+    # puts the decision between the quiet frames' target sum and the on
+    # frames' larger one, so the flag is exactly the coarse-detected set
+    # above; the pedestal's contrast between cohorts is zero.
+    quiet_target = int(fine[~rejected, 0].sum(axis=1).max())
+    reference_sum = (quiet_target + 2 * BASE) * nrs // nt
+    fine[:, 1, PEDESTAL_BIN] += np.uint64((reference_sum - 2 * FINE_BINS * BASE) // 2)
+    fine[:, 2, PEDESTAL_BIN] += np.uint64((reference_sum - 2 * FINE_BINS * BASE) // 2)
     v5_fixture._replace(path, fine_power_u64=fine)
+    with Product(path) as p:
+        assert np.array_equal(p.rejected, rejected)
     return path
 
 

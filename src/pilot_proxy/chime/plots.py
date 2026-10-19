@@ -25,6 +25,7 @@ from pilot_proxy.plot_style import setup_matplotlib
 from .products import (
     CHIME_DETECTOR_OUTPUTS_FILENAME,
     CHIME_SPECTROGRAM_CACHE_FILENAME,
+    require_current_detector_contract,
     spectrum_before_after,
     write_spectrum_table,
 )
@@ -407,7 +408,7 @@ def _fstat_survival_plot_bounds(
 
 def plot_snr_shelf_histogram(run_dir: Path) -> list[Path]:
     plt = _setup_matplotlib()
-    detector = np.load(Path(run_dir) / CHIME_DETECTOR_OUTPUTS_FILENAME)
+    detector = _load_detector_outputs(run_dir)
     physical_channel = detector["physical_channel"]
     pilot_frequency_hz = detector["pilot_frequency_hz"]
     chime_frequency_hz = _run_frequency_hz(Path(run_dir), detector)
@@ -515,7 +516,7 @@ def plot_snr_shelf_histogram(run_dir: Path) -> list[Path]:
 
 def plot_coarse_power_ratio_survival(run_dir: Path) -> list[Path]:
     plt = _setup_matplotlib()
-    detector = np.load(Path(run_dir) / CHIME_DETECTOR_OUTPUTS_FILENAME)
+    detector = _load_detector_outputs(run_dir)
     physical_channel = detector["physical_channel"]
     chime_frequency_hz = _run_frequency_hz(Path(run_dir), detector)
     normalized_coarse_power_ratio_db = detector["normalized_coarse_power_ratio_db"]
@@ -615,6 +616,12 @@ def plot_coarse_power_ratio_survival(run_dir: Path) -> list[Path]:
         _save_figure(fig, path)
     plt.close(fig)
     return outputs
+
+
+def _load_detector_outputs(run_dir: Path):
+    """The run's detector outputs, once its contract is the current one."""
+    require_current_detector_contract(Path(run_dir))
+    return np.load(Path(run_dir) / CHIME_DETECTOR_OUTPUTS_FILENAME)
 
 
 def _load_json_object(path: Path) -> dict[str, object]:
@@ -850,7 +857,7 @@ def plot_baseband_spectrogram(run_dir: Path) -> list[Path]:
 
 
 def plot_normalized_coarse_power_ratio_db_spectrogram(run_dir: Path) -> list[Path]:
-    detector = np.load(Path(run_dir) / CHIME_DETECTOR_OUTPUTS_FILENAME)
+    detector = _load_detector_outputs(run_dir)
     cache = np.load(Path(run_dir) / CHIME_SPECTROGRAM_CACHE_FILENAME)
     return _plot_spectrogram(
         run_dir=Path(run_dir),

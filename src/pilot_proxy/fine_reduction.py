@@ -13,15 +13,23 @@ stage 2:
 3. square and sum incoherently over streams -> ``S[n, b]``,
 4. form the fine-bin statistic ``F2[b] = 2 S_t[b] / (S_l[b] + S_u[b])``.
 
-Invariants (enforced, not assumed):
+The deployed transform is the frozen fixed-point ``fxfft256``
+(:func:`pilot_proxy.fxfft.fine_power_fx`), and since kernel core 3.0.0 the
+frame powers are defined from it: ``P[n] = sum_b S[n, b]`` over the exact
+uint64 fine powers (:func:`frame_powers_from_fine_u64`, the reference for
+``FStat_Compute_FinePowers_U64`` summed over bins and for the fused entry's
+``d_power_out``). The rounded transform does not conserve energy exactly, so
+``P[n]`` is not ``pad * windows * sum_m |z[n, m]|^2``; the row-domain
+marginal identity of detector contract revision 1 is retired, and nothing
+compares the two.
 
-* **Exact coarse marginal identity.** The int64 sum over rows of ``|z[n, m]|^2``
-  reproduces the deployed ``FStat_Compute_Powers_U64`` output bit-for-bit;
-  ``fine_reduce`` computes it in the integer domain and
-  ``check_coarse_power_marginal_identity`` asserts it against kernel powers at
-  runtime. The float Parseval identity
-  ``sum_b S[n, b] == pad * windows * P[n]`` is the ULP-level gate on the
-  FFT path itself.
+:func:`fine_reduce` is the float prototype (``numpy.fft``/``cupy.fft``). It is
+not the deployed statistic. Its float Parseval identity
+``sum_b S[n, b] == pad * windows * sum_m |z[n, m]|^2`` is a property of the
+float prototype only, gated at ULP tolerance in its own tests.
+
+Properties of the CFAR prototype:
+
 * **Null-bulk CFAR calibration** (pre-registered): location = median and
   scale = left-side spread (median minus the 15.87th percentile) of the
   *independent, non-designated* fine bins — every ``FINE_PAD_FACTOR``-th
@@ -36,8 +44,8 @@ Invariants (enforced, not assumed):
   threshold is reported as ``null_bulk_exceedance_fraction``. It is an
   in-sample threshold diagnostic, not an independent false-alarm-rate estimate.
 
-The module is backend-agnostic: pass ``xp=numpy`` (default) or
-``xp=cupy``. Integer marginals are computed with integer dtypes on either
+The float prototype is backend-agnostic: pass ``xp=numpy`` (default) or
+``xp=cupy``. Its integer row energies are computed with integer dtypes on either
 backend; FFTs use complex128 under numpy (prototype/parity reference) and
 complex64 under cupy (production), with the GPU-vs-prototype comparison
 gated at ULP tolerance in ``tests/kernel/test_matched_filter_row_projections_gpu.py``.
@@ -146,12 +154,18 @@ class CfarCalibration:
 
 @dataclass
 class FineReductionResult:
-    """Per-frame fine-reduction products."""
+    """Per-frame products of the float prototype.
+
+    ``coarse_power_by_term`` is the prototype's row energy
+    ``sum_m |z[n, m]|^2`` (exact int64 for integer input), which its float
+    spectra reproduce as ``sum_b fine_power[n, b] / (pad * windows)`` by the
+    float transform's Parseval identity. It is not the deployed frame power;
+    that is :func:`frame_powers_from_fine_u64`.
+    """
 
     fine_power: np.ndarray  # [num_weight_terms, num_bins] float
     fine_power_ratio: np.ndarray  # [num_bins] float
-    coarse_power_by_term: np.ndarray  # [num_weight_terms] int64 (exact)
-    coarse_power_ratio_from_marginal: float
+    coarse_power_by_term: np.ndarray  # [num_weight_terms] int64 row energy
     num_streams: int
     windows_per_stream: int
     pad_factor: int
@@ -181,31 +195,49 @@ def _as_complex_rows(matched_filter_row_projections: Any, num_weight_terms: int,
     return arr
 
 
-def exact_coarse_power_by_term(
-    matched_filter_row_projections: Any,
-    *,
-    num_weight_terms: int = 3,
-    xp: Any = np,
-) -> np.ndarray:
-    """Exact int64 coarse power terms from integer row sums.
-
-    Computed entirely in the integer domain so the result is bit-identical
-    to ``FStat_Compute_Powers_U64`` regardless of backend or ordering.
-    Complex inputs are rejected: exactness requires the integer form.
-    """
-    arr = xp.asarray(matched_filter_row_projections)
-    if arr.dtype.kind == "c":
-        raise TypeError(
-            "exact_coarse_power_by_term requires integer row sums; complex "
-            "floats cannot guarantee the bit-exact v1 identity."
-        )
-    arr = _as_complex_rows(arr, num_weight_terms, xp)  # [terms, rows, 2] ints
-    wide = arr.astype(xp.int64)
+def _row_energy_by_term(arr: Any, num_weight_terms: int, xp: Any) -> np.ndarray:
+    """Exact int64 ``sum_m |z[n, m]|^2`` of integer rows (the float prototype's
+    Parseval reference; not a frame power)."""
+    rows = _as_complex_rows(arr, num_weight_terms, xp)  # [terms, rows, 2] ints
+    wide = rows.astype(xp.int64)
     mags = wide[..., 0] * wide[..., 0] + wide[..., 1] * wide[..., 1]
     out = mags.sum(axis=1)
     if hasattr(out, "get"):
         out = out.get()
     return np.asarray(out, dtype=np.int64)
+
+
+def frame_powers_from_fine_u64(
+    matched_filter_row_projections: Any,
+    *,
+    num_streams: int,
+    windows_per_stream: int = 128,
+    num_weight_terms: int = 3,
+) -> np.ndarray:
+    """The deployed frame powers ``P[n] = sum_b S[n, b]``, exact uint64.
+
+    ``S`` is :func:`pilot_proxy.fxfft.fine_power_fx` of the integer row sums
+    (the frozen fxfft256, summed over streams), so this is the CPU reference
+    for the kernel's frame powers: ``FStat_Compute_FinePowers_U64`` summed
+    over bins on the host, and the fused entry's device-reduced
+    ``d_power_out``. Returns ``uint64[num_weight_terms]``. The sum fits uint64
+    for every deployed geometry (the per-bin bound of ``fxfft`` summed over
+    256 bins stays below ``2**64``); numpy uint64 addition would wrap
+    silently, so the total is checked in Python integers.
+    """
+    from pilot_proxy.fxfft import fine_power_fx
+
+    fine = fine_power_fx(
+        matched_filter_row_projections,
+        num_streams=int(num_streams),
+        windows_per_stream=int(windows_per_stream),
+        num_weight_terms=int(num_weight_terms),
+    )
+    powers = fine.sum(axis=-1, dtype=np.uint64)
+    for term in range(fine.shape[0]):
+        if sum(int(value) for value in fine[term]) != int(powers[term]):
+            raise OverflowError("frame power exceeds uint64")
+    return powers
 
 
 def coarse_power_ratio_from_powers(powers: Sequence[int]) -> float:
@@ -217,21 +249,6 @@ def coarse_power_ratio_from_powers(powers: Sequence[int]) -> float:
     return float(2.0 * p[WEIGHT_TERM_TARGET] / den)
 
 
-def check_coarse_power_marginal_identity(
-    coarse_power_by_term: Sequence[int],
-    kernel_powers: Sequence[int],
-) -> None:
-    """Assert the exact all-bin marginal identity against kernel powers."""
-    a = np.asarray(coarse_power_by_term, dtype=np.uint64)
-    b = np.asarray(kernel_powers, dtype=np.uint64)
-    if a.shape != b.shape or not bool(np.all(a == b)):
-        raise AssertionError(
-            "coarse marginal identity violated: row-sum marginal "
-            f"{a.tolist()} != kernel powers {b.tolist()}. Stage-1 output "
-            "is corrupt or mismatched; do not trust downstream products."
-        )
-
-
 def fine_reduce(
     matched_filter_row_projections: Any,
     *,
@@ -241,13 +258,15 @@ def fine_reduce(
     pad_factor: int = FINE_PAD_FACTOR,
     xp: Any = np,
 ) -> FineReductionResult:
-    """Reduce exact row sums to fine-bin spectra and the fine statistic.
+    """The float prototype: row sums to fine-bin spectra and the fine statistic.
 
     ``matched_filter_row_projections`` accepts the kernel's flat int32 buffer, an
     ``[terms, rows, 2]`` integer array, or a complex ``[terms, rows]``
-    array (integer forms preserve the exact marginal; complex input skips
-    it and records ``coarse_power_by_term`` from the float spectra Parseval
-    sum, rounded — prefer integers).
+    array (integer forms record the exact integer row energy; complex input
+    records ``coarse_power_by_term`` from the float spectra's Parseval sum,
+    rounded — prefer integers). The deployed spectra and frame powers are
+    the fixed-point ones (:func:`pilot_proxy.fxfft.fine_power_fx`,
+    :func:`frame_powers_from_fine_u64`), not these.
     """
     terms = int(num_weight_terms)
     streams = int(num_streams)
@@ -263,7 +282,7 @@ def fine_reduce(
             raise ValueError(
                 f"row count {norm.shape[1]} != num_streams * windows_per_stream = {rows}."
             )
-        marginal = exact_coarse_power_by_term(arr, num_weight_terms=terms, xp=xp)
+        row_energy = _row_energy_by_term(arr, terms, xp)
         complex_dtype = xp.complex128 if xp is np else xp.complex64
         z = norm[..., 0].astype(complex_dtype) + 1j * norm[..., 1].astype(
             complex_dtype
@@ -274,7 +293,7 @@ def fine_reduce(
                 f"row count {norm.shape[1]} != num_streams * windows_per_stream = {rows}."
             )
         z = norm
-        marginal = None
+        row_energy = None
 
     z = z.reshape(terms, streams, windows)
     spectra = xp.fft.fft(z, n=p2, axis=-1)
@@ -282,11 +301,11 @@ def fine_reduce(
         axis=1
     )
 
-    if marginal is None:
+    if row_energy is None:
         approx = power.sum(axis=-1) / float(p2)
         if hasattr(approx, "get"):
             approx = approx.get()
-        marginal = np.rint(np.asarray(approx, dtype=np.float64)).astype(np.int64)
+        row_energy = np.rint(np.asarray(approx, dtype=np.float64)).astype(np.int64)
 
     s_t = power[WEIGHT_TERM_TARGET]
     s_l = power[WEIGHT_TERM_REF_LOWER]
@@ -300,8 +319,7 @@ def fine_reduce(
     return FineReductionResult(
         fine_power=np.asarray(power_host, dtype=np.float32),
         fine_power_ratio=np.asarray(fstat_host, dtype=np.float32),
-        coarse_power_by_term=np.asarray(marginal, dtype=np.int64),
-        coarse_power_ratio_from_marginal=coarse_power_ratio_from_powers(marginal),
+        coarse_power_by_term=np.asarray(row_energy, dtype=np.int64),
         num_streams=streams,
         windows_per_stream=windows,
         pad_factor=int(pad_factor),

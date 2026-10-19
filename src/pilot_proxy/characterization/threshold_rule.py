@@ -59,6 +59,7 @@ from pathlib import Path
 import numpy as np
 
 from pilot_proxy.config.project import default_project
+from pilot_proxy.product_contract import pilot_excess_from_fine_powers
 
 Q16 = 65536
 _TEMPLATE = default_project().interference
@@ -138,7 +139,13 @@ class ChannelFrames:
 def load_frames(channel: int, scores_dir) -> ChannelFrames:
     """Read ``ch<N>.json`` and ``ch<N>.npz`` of the score cache and the marker
     excess from the archive product they name, and check the keep rule
-    reproduces the accepted mask at the current word."""
+    reproduces the accepted mask at the current word.
+
+    The excess is ``product_contract.pilot_excess_from_fine_powers``: formed
+    from the frame powers ``P_r = sum_f fine_power_u64[:, r, f]`` (kernel core
+    3.0.0) for v5 and v6 products alike, never from a v5 product's stored
+    row-domain ``normalized_pilot_excess``. The product file is unchanged, so
+    the cache's identity binding (path and size) still holds."""
     scores_dir = Path(scores_dir)
     meta = json.loads((scores_dir / f"ch{channel}.json").read_text())
     product = meta["original_product_identity"]
@@ -153,7 +160,7 @@ def load_frames(channel: int, scores_dir) -> ChannelFrames:
                                current_keep=z["current_keep"],
                                time=z["frame_time"] if "frame_time" in z.files else None)
     with np.load(product["path"], allow_pickle=False) as p:
-        frames.excess = p["normalized_pilot_excess"][:, 0][rows]
+        frames.excess = pilot_excess_from_fine_powers(p, rows)
     if not np.array_equal(keep(frames, frames.current_word), frames.current_keep):
         raise ValueError(f"channel {channel}: the keep rule does not reproduce the accepted mask")
     return frames

@@ -20,7 +20,7 @@ ROOT = HERE.parents[1]
 if str(ROOT / "tests" / "products") not in sys.path:
     sys.path.insert(0, str(ROOT / "tests" / "products"))
 
-from test_pilotproxy_v5 import _replace, _write_product  # noqa: E402
+from test_pilotproxy_v5 import _replace, _write_product, fine_powers_with_sums  # noqa: E402
 
 from pilot_proxy.characterization import eras, run  # noqa: E402
 from pilot_proxy.config.project import default_project, default_project_dir  # noqa: E402
@@ -56,6 +56,10 @@ def populated_product(path: Path, channel: int, *, frames: int = 384, units: int
     shelf_offset = (float(values["pilot_below_data_db"])
                     - 10 * np.log10(float(values["dtv_bandwidth_hz"]) / float(values["bin_enbw_hz"]))
                     - 10 * np.log10(float(values["pilot_capture_efficiency"])))
+    # The frame powers are the all-bin sums of the fine powers (kernel core
+    # 3.0.0): keep the fine shape and scale it to these levels exactly.
+    changes["fine_power_u64"] = fine_powers_with_sums(
+        fine, target, values["p_ref_lower_u64"], values["p_ref_upper_u64"])
     changes.update(p_target_u64=target, coarse_power_ratio=2.0 * target / reference,
                    normalized_coarse_power_ratio_db=10 * np.log10(ratio), normalized_pilot_excess=excess,
                    pilot_excess_db=excess_db, estimated_data_shelf_snr_db=excess_db + shelf_offset,

@@ -29,7 +29,7 @@ def test_integer_bounds_are_safe_for_full_geometry_and_all_signed_nibbles():
     assert bounds["row_component_abs_bound"] == 2 * 128 * 7 * 8
     assert bounds["fft_component_abs_bound"] < 2**31
     assert bounds["fine_power_sum_bound"] < 2**63
-    assert bounds["coarse_power_sum_bound"] < 2**63
+    assert bounds["frame_power_sum_bound"] < 2**63
     assert (
         integer_bounds(1, packed)["fine_power_sum_bound"] * 2048
         == bounds["fine_power_sum_bound"]

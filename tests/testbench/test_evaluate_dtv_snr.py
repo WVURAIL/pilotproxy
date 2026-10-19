@@ -559,7 +559,9 @@ def test_cpu_reference_measurements_match_exact_integers() -> None:
     from pilot_proxy.testbench.evaluate_snr import _cpu_reference_measurements
 
     rng = np.random.default_rng(42)
-    packed = rng.integers(-128, 128, size=(64, 128), dtype=np.int16).astype(np.int8)
+    # One whole 128-window stream: the kernel's frame powers are the all-bin
+    # sums of the fxfft256 fine powers (kernel core 3.0.0).
+    packed = rng.integers(-128, 128, size=(128, 128), dtype=np.int16).astype(np.int8)
     weights = rng.integers(-128, 128, size=(3, 128), dtype=np.int16).astype(np.int8)
 
     calib = dict(pilot_below_data_db=11.3, bin_enbw_hz=3051.7578125,
@@ -567,8 +569,21 @@ def test_cpu_reference_measurements_match_exact_integers() -> None:
     out = _cpu_reference_measurements(packed=packed, weights=weights, bits=4, **calib)
 
     fstat, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, 4)
-    assert out["p_target_u64"] == int(round(float(sums[0])))
-    assert out["p_ref_sum_u64"] == int(round(float(sums[1] + sums[2])))
+    assert sums.dtype == np.dtype(np.uint64)
+    assert out["p_target_u64"] == int(sums[0])
+    assert out["p_ref_sum_u64"] == int(sums[1]) + int(sums[2])
+    # The kernel's semantics, by the independent exact chain.
+    from pilot_proxy.detector_reference import (
+        matched_filter_row_projections_cpu_reference_packed,
+    )
+    from pilot_proxy.fxfft import fine_power_fx
+
+    fine = fine_power_fx(
+        matched_filter_row_projections_cpu_reference_packed(packed, weights, 4).astype(np.int64),
+        num_streams=1,
+    )
+    assert out["p_target_u64"] == sum(int(v) for v in fine[0])
+    assert out["p_ref_sum_u64"] == sum(int(v) for v in fine[1]) + sum(int(v) for v in fine[2])
     assert out["coarse_power_ratio"] == pytest.approx(
         2.0 * out["p_target_u64"] / out["p_ref_sum_u64"]
     )
@@ -642,7 +657,7 @@ def test_cpu_reference_threshold_mask_is_exact_at_the_boundary() -> None:
 
     # End-to-end through the CPU backend with a crafted threshold.
     rng = np.random.default_rng(7)
-    packed = rng.integers(-128, 128, size=(16, 4), dtype=np.int16).astype(np.int8)
+    packed = rng.integers(-128, 128, size=(128, 4), dtype=np.int16).astype(np.int8)
     out = _cpu_reference_measurements(
         packed=packed, weights=weights, bits=4,
         threshold={"threshold_half_num": 1, "threshold_half_den": 2}, **calib)
@@ -650,6 +665,43 @@ def test_cpu_reference_threshold_mask_is_exact_at_the_boundary() -> None:
                    and 2 * out["p_target_u64"] > out["p_ref_sum_u64"])
     assert out["mask"] == expected
     assert out["rational_overflow_count"] == 0
+
+
+@pytest.mark.cuda
+def test_kernel_measurements_equal_the_cpu_reference_exactly() -> None:
+    """The CUDA backend reads the device frame powers (core 3.0.0: the
+    all-bin sums of the device fine powers) and forms the diagnostic and the
+    rational-half mask on the host; every field equals the CPU reference."""
+    import numpy as np
+
+    cp = pytest.importorskip("cupy")
+    if not cp.cuda.runtime.getDeviceCount():
+        pytest.skip("CUDA unavailable")
+    from pilot_proxy.kernel import FStatKernel
+    from pilot_proxy.paths import DEFAULT_LIB_PATH
+    from pilot_proxy.testbench.evaluate_snr import (
+        _cpu_reference_measurements,
+        _kernel_measurements,
+    )
+
+    try:
+        kernel = FStatKernel(DEFAULT_LIB_PATH)
+    except FileNotFoundError:
+        pytest.skip("libfstatistic.so is not built")
+    rng = np.random.default_rng(20261018)
+    packed = rng.integers(-128, 128, size=(256, 128), dtype=np.int16).astype(np.int8)
+    weights = rng.integers(-128, 128, size=(3, 128), dtype=np.int16).astype(np.int8)
+    calib = dict(pilot_below_data_db=11.3, bin_enbw_hz=3051.7578125,
+                 pilot_capture_efficiency=1.0, dtv_bandwidth_hz=6.0e6,
+                 threshold={"threshold_half_num": 1, "threshold_half_den": 2})
+    device = _kernel_measurements(kernel=kernel, packed=packed, weights=weights, **calib)
+    host = _cpu_reference_measurements(packed=packed, weights=weights, bits=4, **calib)
+    assert device.keys() == host.keys()
+    for key, value in host.items():
+        if isinstance(value, float) and math.isnan(value):
+            assert math.isnan(device[key]), key
+        else:
+            assert device[key] == value, key
 
 
 def test_detector_backend_flag_parses() -> None:

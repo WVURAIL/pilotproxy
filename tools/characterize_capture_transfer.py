@@ -245,6 +245,7 @@ def reduce_one(args):
     from pilot_proxy.detect import detect_packed_detector_input
     from pilot_proxy.detector_weights import DetectorWeightBank
     from pilot_proxy.fine_decision import fine_mask_decision
+    from pilot_proxy.fxfft import fxfft256
     from pilot_proxy.kernel import FStatKernel
 
     p, protocol_hash = load_protocol(args.protocol, args.source_amendment)
@@ -321,7 +322,11 @@ def reduce_one(args):
                                                      kernel=kernel, emit_row_projections=True)
                 rows = cp.asnumpy(result['matched_filter_row_projections'])[0].astype(np.int64)
                 rows = rows.reshape(3, 2048, 128, 2)
-                per = np.sum(rows * rows, axis=(2, 3), dtype=np.uint64)
+                # Per-input frame powers: each input's all-bin sum of its own
+                # fixed-point fine powers (kernel core 3.0.0), so the inputs
+                # sum exactly to the global frame powers.
+                spectra = fxfft256(rows).astype(np.int64)
+                per = np.sum(spectra * spectra, axis=(2, 3), dtype=np.uint64)
                 glob = np.array([result['results'][0][name] for name in
                                  ['p_target_u64', 'p_ref_lower_u64', 'p_ref_upper_u64']], dtype=np.uint64)
                 fp = result['fine_powers_u64'][0]
@@ -346,7 +351,7 @@ def reduce_one(args):
                     os.fsync(handle.fileno())
                 temporary.rename(cache)
             if not np.array_equal(per.sum(1, dtype=np.uint64), glob):
-                raise ValueError('per-input/global coarse sum identity failed')
+                raise ValueError('per-input/global frame power sum identity failed')
             fine.append(fp); per_input.append(per); global_power.append(glob); keeps.append(keep)
             print(json.dumps({'checkpoint': str(cache), 'frame': row, 'reused': reused}), flush=True)
     arrays = dict(frame_fpga0=origins, input_ids=ids, powers=np.array(global_power),

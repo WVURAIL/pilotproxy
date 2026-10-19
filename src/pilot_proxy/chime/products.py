@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 from pathlib import Path
 from typing import Any, Sequence
@@ -15,7 +16,11 @@ from pilot_proxy.atomic_io import (
     fsync_directory,
 )
 from pilot_proxy.config.project import default_project
-from pilot_proxy.detector_contract import NORMALIZED_POSITIVE_EXCESS_MASK_RULE
+from pilot_proxy.detector_contract import (
+    DETECTOR_CONTRACT_SCHEMA_TOKEN,
+    DETECTOR_CONTRACT_V1_SCHEMA_TOKEN,
+    NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
+)
 from pilot_proxy.json_utils import write_json_strict
 from pilot_proxy.schema_identity import schema_token
 
@@ -60,6 +65,43 @@ SCAN_INPUT_MANIFEST_SCHEMA_TOKEN = schema_token(
 )
 # The channel sample rate of the project's instrument (390625 Hz on CHIME).
 SAMPLE_RATE_HZ = default_project().instrument.sample_rate_hz
+
+
+def require_current_detector_contract(run_dir: Path) -> None:
+    """Refuse to analyse a run whose detector outputs use another power definition.
+
+    ``chime_detector_outputs.npz`` carries no schema token and no fine powers;
+    the run's ``run_config.json`` names its detector contract. Revision 2
+    (kernel core 3.0.0) defines the frame powers as the all-bin sums of the
+    fine powers. A revision-1 run (written before core 3.0.0) stores row-domain
+    powers that cannot be re-expressed, so it is a record: ``validate-products``
+    validates it, and analyses of it under the current definition are refused.
+    """
+    path = Path(run_dir) / "run_config.json"
+    try:
+        run_config = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise ValueError(
+            f"{path} is missing, so the frame-power definition of the run's "
+            f"{CHIME_DETECTOR_OUTPUTS_FILENAME} is unknown"
+        ) from None
+    contract = run_config.get("detector_contract") if isinstance(run_config, dict) else None
+    token = contract.get("schema_version") if isinstance(contract, dict) else None
+    if token == DETECTOR_CONTRACT_SCHEMA_TOKEN:
+        return
+    if token == DETECTOR_CONTRACT_V1_SCHEMA_TOKEN:
+        raise ValueError(
+            f"{Path(run_dir)} was written under detector contract revision 1 "
+            "(kernel core < 3.0.0): its frame powers are row-domain sums of "
+            "|z|^2 and it carries no fine powers to recompute them from, so it "
+            "is a record (validate it with validate-products) and is not "
+            "analysed under the current definition. Re-run the detector with "
+            "this release to analyse the data."
+        )
+    raise ValueError(
+        f"{path} does not name the current detector contract "
+        f"{DETECTOR_CONTRACT_SCHEMA_TOKEN!r}; got {token!r}"
+    )
 
 
 def atomic_savez_compressed(path: Path, **arrays: np.ndarray) -> Path:

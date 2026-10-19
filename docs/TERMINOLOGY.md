@@ -10,6 +10,8 @@ sides use, with the same code names.
 
 | Dissertation | Code |
 |---|---|
+| P_r (frame power) = Σ_f S_r[f] | `p_target_u64`, `p_ref_lower_u64`, `p_ref_upper_u64` (`pilot_proxy.product_contract.frame_powers_from_fine`) |
+| S_r[f] (fine power) | `fine_power_u64[:, r, f]` |
 | F (coarse power ratio) | `coarse_power_ratio` (product field) |
 | μ0 | `null_power_ratio` (`pilot_proxy.detector_contract.null_power_ratio_from_weight_norms`) |
 | Q = F/μ0 | `normalized_coarse_power_ratio`; OC column `statistic` = `Q` |
@@ -98,6 +100,15 @@ R_\mathrm{coarse}
   = \frac{2P_\mathrm{target}}
          {P_\mathrm{ref,lower}+P_\mathrm{ref,upper}}.
 \]
+
+Each **frame power** is the all-bin sum of that term's exact fine power
+spectrum, \(P_r = \sum_f S_r[f]\), with \(S_r\) the uint64 output of the
+frozen `fxfft256_v1` summed over streams (kernel core 3.0.0, product schema v6,
+detector contract v2). The schema v5 products of record store a different
+quantity under the same field names, the row-domain sum
+\(\sum_m |z_r[m]|^2\); readers recompute their frame powers from the stored
+fine powers. "Coarse" names the one-number-per-frame statistic, not a separate
+measurement path: since core 3.0.0 there is only the fine spectrum.
 
 The exact integer squared norms of the packed target and reference weights set
 the flat-noise null ratio

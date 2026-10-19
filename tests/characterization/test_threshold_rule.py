@@ -136,11 +136,35 @@ def test_evidence_below_the_knee_beyond_the_time_limit_is_still_reported():
     assert d["reason"] == "out of time" and d["deployed_word"] is None
 
 
+REFERENCE_HALF = 1 << 40
+
+
+def fine_for_excess(excess):
+    """Fine powers whose all-bin sums give ``excess`` (norms 1 : 2, so mu_0 = 1).
+
+    ``P_0 = round((e + 1) 2**40)``, ``P_1 = P_2 = 2**40``: the excess formed
+    from the sums is ``P_0 / 2**40 - 1``, within ``2**-41`` of ``e``.
+    """
+    excess = np.asarray(excess, dtype=np.float64)
+    finite = np.isfinite(excess)
+    fine = np.zeros((len(excess), 3, 4), dtype=np.uint64)
+    # A frame power is nonnegative, so an excess below -1 has no fine form.
+    fine[finite, 0, 0] = np.rint(np.maximum(excess[finite] + 1.0, 0.0) * REFERENCE_HALF).astype(np.uint64)
+    fine[finite, 1, 1] = REFERENCE_HALF  # a NaN excess is a zero reference power
+    fine[finite, 2, 2] = REFERENCE_HALF
+    return fine
+
+
 def write_cache(tmp_path, f, current_keep, product_rows=None):
     n = len(f.required)
     rows = np.arange(n) if product_rows is None else product_rows
     product = tmp_path / "product.npz"
-    np.savez(product, normalized_pilot_excess=np.c_[f.excess, f.excess])
+    # The excess is read from the frame powers, the fine powers' all-bin sums
+    # (kernel core 3.0.0); the stored v5 column is decoy row-domain data.
+    np.savez(product, normalized_pilot_excess=np.c_[f.excess, f.excess] + 0.5,
+             fine_power_u64=fine_for_excess(f.excess),
+             target_norm_sq=np.asarray([1], dtype=np.int64),
+             reference_norm_sum_sq=np.asarray([2], dtype=np.int64))
     meta = {"original_product_identity": {"path": str(product), "bytes": product.stat().st_size},
             "knee_threshold": {"eta_q16": str(f.knee_word)}, "current_threshold": {"eta_q16": str(f.current_word)}}
     (tmp_path / "ch99.json").write_text(json.dumps(meta))
@@ -152,7 +176,10 @@ def test_loading_a_score_cache(tmp_path):
     f = synthetic()
     write_cache(tmp_path, f, t.keep(f, f.current_word))
     g = t.load_frames(99, tmp_path)
-    assert np.array_equal(g.excess, f.excess) and g.knee_word == f.knee_word
+    fine = fine_for_excess(f.excess)
+    from_fine = np.where(fine[:, 1, 1] > 0, fine[:, 0, 0].astype(np.float64) / REFERENCE_HALF - 1.0, np.nan)
+    assert np.array_equal(g.excess, from_fine, equal_nan=True) and g.knee_word == f.knee_word
+    np.testing.assert_allclose(g.excess, np.maximum(f.excess, -1.0), rtol=0, atol=1e-12)
     assert t.sweep(g)["kappa"][-1] == pytest.approx(f.weight[f.supported].sum() / f.weight.sum())
 
 

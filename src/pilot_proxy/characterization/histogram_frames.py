@@ -71,23 +71,23 @@ def member_header(path,name):
             "compressed_member_bytes":info.compress_size}
 
 
-class HeaderFineArchive(Mapping):
-    """Cache small fields and expose ONLY fine metadata through a read-only zero-stride view.
+class FrameExportArchive(Mapping):
+    """Cache the fields a frame export reads, and forbid the spectral members.
 
-    Current exact-uint health logic reads fine ndim/shape/dtype only. All uint
-    bit patterns are finite/nonnegative. No returned fine value is a measurement
-    or exported array; PSD and alternative fine-value reads are forbidden.
+    Since kernel core 3.0.0 the frame powers, and so Q, the valid flag and the
+    health gate, are the all-bin sums of ``fine_power_u64``: the fine member is
+    decoded (once, cached) to form them. Its header and full byte length are
+    validated first. No fine value is exported; PSD, integrated spectra and
+    any other fine member stay forbidden.
     """
     def __init__(self,archive,path):
         self.archive=archive;self.files=archive.files;self.cache={};self.read_fields=[]
         self.fine_header=member_header(path,"fine_power_u64")
         shape=tuple(self.fine_header["shape"]);dtype=np.dtype(self.fine_header["dtype"])
         if len(shape)!=3 or shape[0]<=0 or shape[2]<=0 or dtype.kind!="u":
-            raise ValueError("fine unsigned-integer metadata required for header-only gate")
-        self.fine_metadata=np.broadcast_to(np.zeros((),dtype=dtype),shape)
+            raise ValueError("fine unsigned-integer terms of shape (N, 3, B) required for the frame powers")
     def __getitem__(self,key):
-        if key=="fine_power_u64":return self.fine_metadata
-        if key.startswith("psd_") or key.startswith("fine_power") or key.startswith("integrated_spectrum"):
+        if key!="fine_power_u64" and (key.startswith("psd_") or key.startswith("fine_power") or key.startswith("integrated_spectrum")):
             raise RuntimeError(f"large/spectral member forbidden in coarse export:{key}")
         if key not in self.cache:
             self.cache[key]=self.archive[key];self.read_fields.append(key)
@@ -131,11 +131,11 @@ def process_channel(product_path,ledger_path,eras_path,output,preflight):
         raise ValueError("saved era identities differ from ledger")
     if era_record["config_digest"]!=source_era["config_digest"]:raise ValueError("saved era configuration differs")
     with Product(product_path,require_health=True) as product:
-        proxy=HeaderFineArchive(product.archive,product_path);product._z=proxy
+        proxy=FrameExportArchive(product.archive,product_path);product._z=proxy
         view=product.view
         if view.physical_channel!=channel or view.freq_id!=fid:raise ValueError("product identity differs")
         if int(product.scalar("nfft"))!=NFFT:raise ValueError("unexpected frame geometry")
-        # Mandatory original gate; exact uint fine metadata suffices for its two structural checks.
+        # Mandatory original gate, over the frame powers from the fine sums.
         health=evaluate_frame_health(proxy)
         valid=np.asarray(view.valid,dtype=bool);health_include=np.asarray(health.include,dtype=bool)
         selected=valid&health_include;Q=np.asarray(view.statistic,dtype=np.float64)
@@ -206,7 +206,7 @@ def process_channel(product_path,ledger_path,eras_path,output,preflight):
             "timestamp_rule":"unit_time0_ctime[frame_unit_index]+frame_in_unit*nfft*unit_delta_time[frame_unit_index]; no fabricated frame interval",
             "acquisition_rule":"acquisition_id is stored unit_event_id mapped by frame_unit_index; original unit_keys/source_event_keys also retained to disambiguate units",
             "health":{"schema":HEALTH_GATE_SCHEMA,"reason_counts":reasons,
-                "member_header_optimization":"Original v1 gate invoked. Its unsigned fine terms branch inspects only shape/dtype; header and full member byte length validated, then a read-only zero-stride metadata view is supplied. No fine numerical values or PSD are read or exported.",
+                "fine_member_use":"Original v1 gate invoked. Header and full byte length of fine_power_u64 validated; the member is decoded once because the frame powers (Q, valid, the gate's power checks) are its all-bin sums (kernel core 3.0.0). No fine value or PSD is exported.",
                 "fine_member_header":proxy.fine_header},
             "geometry":geometry,"decoded_npz_members":proxy.read_fields,"export_sha256":sha(output_path)}
         write_json(output/f"ch{channel:02d}.json",metadata)
@@ -246,7 +246,7 @@ def process_control(product_path,project,output):
     """Export a control band's frames with the screened fields and rules, but no ledger and one period."""
     initial_stat=product_path.stat();digest=sha(product_path)
     with Product(product_path,require_health=True) as product:
-        proxy=HeaderFineArchive(product.archive,product_path);product._z=proxy
+        proxy=FrameExportArchive(product.archive,product_path);product._z=proxy
         view=product.view
         channel=int(view.physical_channel);fid=int(view.freq_id)
         band=control_band(project,channel,fid,float(product.scalar("pilot_frequency_hz")))
@@ -304,7 +304,7 @@ def process_control(product_path,project,output):
             "timestamp_rule":"unit_time0_ctime[frame_unit_index]+frame_in_unit*nfft*unit_delta_time[frame_unit_index]; no fabricated frame interval",
             "acquisition_rule":"acquisition_id is stored unit_event_id mapped by frame_unit_index; original unit_keys/source_event_keys also retained to disambiguate units",
             "health":{"schema":HEALTH_GATE_SCHEMA,"reason_counts":reasons,
-                "member_header_optimization":"Original v1 gate invoked. Its unsigned fine terms branch inspects only shape/dtype; header and full member byte length validated, then a read-only zero-stride metadata view is supplied. No fine numerical values or PSD are read or exported.",
+                "fine_member_use":"Original v1 gate invoked. Header and full byte length of fine_power_u64 validated; the member is decoded once because the frame powers (Q, valid, the gate's power checks) are its all-bin sums (kernel core 3.0.0). No fine value or PSD is exported.",
                 "fine_member_header":proxy.fine_header},
             "geometry":geometry,"decoded_npz_members":proxy.read_fields,"export_sha256":sha(output_path)}
         write_json(output/f"ch{channel:02d}.json",metadata)
@@ -386,5 +386,5 @@ def main(argv=None):
     return 0
 
 
-__all__ = ["CONTROL_PERIOD_RULE", "HeaderFineArchive", "control_band", "control_period", "main", "member_header",
+__all__ = ["CONTROL_PERIOD_RULE", "FrameExportArchive", "control_band", "control_period", "main", "member_header",
            "memberships", "process_channel", "process_control", "run", "run_control"]

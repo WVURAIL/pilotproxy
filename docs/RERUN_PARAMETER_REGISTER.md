@@ -10,6 +10,8 @@ the actual launch values belong in the run ledger for the launched path. Neither
 venue guide can override this chain. Rows below marked local or CANFAR are
 venue-specific; every unmarked row applies identically to both paths.
 
+Note (2026-10-18): kernel core 3.0.0 superseded this frame-power definition (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
+
 The run is historical estimation and sufficient-statistic reprocessing. The
 coarse positive-excess flag is retained as a bootstrap diagnostic; the fine
 rank/eta decision is inactive and no calibrated detection policy is applied.

@@ -13,6 +13,7 @@ import numpy as np
 
 from pilot_proxy.detect import detect_packed_detector_input
 from pilot_proxy.detector_contract import (
+    ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION,
     CHIME_RUN_CONFIG_SCHEMA_TOKEN,
     CHIME_STATS_SCHEMA_TOKEN,
     COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO,
@@ -924,7 +925,7 @@ def run_chime_analysis(
 
     valid = ((valid != 0) & (p_ref_sum_u64 != 0)).astype(np.uint8)
     # _append_detection_rows derives the declared norm-corrected rule from the
-    # exact stored marginals rather than trusting a backend mask bit. Fold in
+    # exact stored frame powers rather than trusting a backend mask bit. Fold in
     # the final validity here, including the weights-validity policy.
     mask = ((valid != 0) & (mask != 0)).astype(np.uint8)
 
@@ -1005,8 +1006,7 @@ def run_chime_analysis(
         "detector_rows_per_frame": int(layout_check["detector_rows_per_frame"]),
         "combine_mode": "all_rows_summed_before_ratio",
         "coarse_power_ratio_definition": (
-            "R_coarse = 2 * sum(P_target) / "
-            "(sum(P_ref_lower) + sum(P_ref_upper))"
+            ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION
         ),
         "num_frames": int(num_frames),
         "num_pilots": int(len(selected)),

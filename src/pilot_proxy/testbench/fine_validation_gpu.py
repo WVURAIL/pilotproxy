@@ -11,7 +11,13 @@ The joint quantized floating stage transforms exact integer row sums divided
 by the two dequantization scales. This avoids recomputing an algebraically
 identical dot product. Audits independently compare the explicitly unpacked
 floating dot product, every fixed integer row, every fixed fine bin, and every
-coarse marginal. No finite-stream pool or modeled aggregate is used.
+frame power. No finite-stream pool or modeled aggregate is used.
+
+Every stage's frame powers (``coarse_by_stage``) are the all-bin sums of that
+stage's fine powers, ``P_r = sum_f S_r[f]`` (the kernel's definition since
+core 3.0.0). For the floating stages the exact transform makes that
+``L_F * sum_m |z_m|^2``; for the fixed stage it is the uint64 sum of the
+fixed-point fine powers, which the device's frame-power output must equal.
 """
 
 from __future__ import annotations
@@ -29,6 +35,7 @@ from pilot_proxy.detector_reference import (
     unpack_packed_complex,
 )
 from pilot_proxy.fine_decision import fine_mask_decision, pack_bulk_mask
+from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 from pilot_proxy.fxfft import TWIDDLE_Q15, fine_power_fx
 from pilot_proxy.testbench.sensitivity_study import (
     STAGE_ATSC_FLOAT,
@@ -45,7 +52,7 @@ FINE_BINS = 256
 BITS = 4
 WEIGHT_SCALE = 7.0
 DEFAULT_INPUT_SCALE = 7.0 / (3.0 / math.sqrt(2.0))
-SCHEMA = "pilotproxy-literal-fine-gpu-v1"
+SCHEMA = "pilotproxy-literal-fine-gpu-v2"
 FLOAT_STAGES = (
     STAGE_IDEAL_TONE_FLOAT,
     STAGE_ATSC_FLOAT,
@@ -91,11 +98,16 @@ def integer_bounds(num_streams, packed_weights):
     for _ in range(8):
         transformed += (twiddle_l1 * transformed + 16384) // 32768 + 1
     fine_sum = 2 * transformed * transformed * streams
-    coarse_sum = 2 * row * row * streams * WINDOWS
+    # Frame power P_r = sum_f S_r[f]: Parseval bound of the exact transform,
+    # L_F * 2 * row^2 * W per stream, with the kernel's 1.001 fixed-point
+    # slack (cuda/config.h, frame-power closure). The per-bin bound summed
+    # over 256 bins is far looser and is not used.
+    frame_sum = FINE_BINS * 2 * row * row * streams * WINDOWS
+    frame_sum += frame_sum // 1000
     if (
         row > (1 << 20)
         or transformed >= (1 << 31)
-        or max(fine_sum, coarse_sum) >= (1 << 63)
+        or max(fine_sum, frame_sum) >= (1 << 63)
     ):
         raise OverflowError(
             "declared geometry exceeds exact signed accumulation bounds"
@@ -104,7 +116,7 @@ def integer_bounds(num_streams, packed_weights):
         "row_component_abs_bound": row,
         "fft_component_abs_bound": transformed,
         "fine_power_sum_bound": fine_sum,
-        "coarse_power_sum_bound": coarse_sum,
+        "frame_power_sum_bound": frame_sum,
         "num_streams": streams,
     }
 
@@ -319,11 +331,8 @@ class FineValidationEngine:
             axis=1,
             dtype=cp.float64,
         )
-        coarse = cp.sum(
-            projected.real * projected.real + projected.imag * projected.imag,
-            axis=(1, 2),
-            dtype=cp.float64,
-        )
+        # Frame powers: the all-bin sums of the fine powers.
+        coarse = cp.sum(fine, axis=-1, dtype=cp.float64)
         return cp.asnumpy(fine), cp.asnumpy(coarse)
 
     def clear_noise_cache(self):
@@ -472,12 +481,12 @@ class FineValidationEngine:
         del dequantized
 
         rows = self.streams * WINDOWS
-        diagnostic = cp.zeros(1, dtype=cp.float32)
         fixed_rows = cp.zeros((3, rows, 2), dtype=cp.int32)
         fixed_fine = cp.zeros((3, FINE_BINS), dtype=cp.uint64)
         fixed_coarse = cp.zeros(3, dtype=cp.uint64)
-        handle = self.kernel.create_raw(rows, packed.data.ptr, diagnostic.data.ptr)
+        handle = self.kernel.create_raw(rows, packed.data.ptr)
         device_mask = None
+        device_frame_powers = False
         try:
             if selected_decision is not None:
                 d_mask = cp.zeros(1, dtype=cp.int32)
@@ -496,7 +505,8 @@ class FineValidationEngine:
                 )
                 cp.cuda.get_current_stream().synchronize()
                 device_mask = int(cp.asnumpy(d_mask)[0])
-                execution = "fused_fine_coarse_device_q16_with_exact_row_tap"
+                device_frame_powers = True
+                execution = "fused_fine_frame_power_device_q16_with_exact_row_tap"
             elif self.kernel.supports_fused_fine():
                 self.kernel.compute_fused_fine_u64(
                     handle,
@@ -505,7 +515,8 @@ class FineValidationEngine:
                     fixed_coarse.data.ptr,
                     fixed_rows.data.ptr,
                 )
-                execution = "fused_fine_coarse_with_exact_row_tap"
+                device_frame_powers = True
+                execution = "fused_fine_frame_power_with_exact_row_tap"
             else:
                 self.kernel.compute_row_projections_i32(
                     handle, self.packed_weights.ctypes.data, fixed_rows.data.ptr
@@ -513,13 +524,21 @@ class FineValidationEngine:
                 self.kernel.compute_fine_powers_u64(
                     fixed_rows.data.ptr, self.streams, WINDOWS, 1, fixed_fine.data.ptr
                 )
-                self.kernel.compute_powers_u64(
-                    handle, self.packed_weights.ctypes.data, fixed_coarse.data.ptr
-                )
-                execution = "composed_exact_row_fine_coarse"
+                execution = "composed_exact_row_fine_frame_power"
             cp.cuda.get_current_stream().synchronize()
             fine[STAGE_FIXED_FLOAT_DECISION] = cp.asnumpy(fixed_fine)
-            coarse[STAGE_FIXED_FLOAT_DECISION] = cp.asnumpy(fixed_coarse)
+            # Frame powers: the exact uint64 all-bin sums of the fine powers.
+            # The fused entries also reduce them on the device; both must agree.
+            host_frame_powers = fine[STAGE_FIXED_FLOAT_DECISION].sum(
+                axis=-1, dtype=np.uint64
+            )
+            if device_frame_powers and not np.array_equal(
+                cp.asnumpy(fixed_coarse), host_frame_powers
+            ):
+                raise AssertionError(
+                    "device frame powers differ from the all-bin sums of the fine powers"
+                )
+            coarse[STAGE_FIXED_FLOAT_DECISION] = host_frame_powers
             fixed_float_projection = fixed_rows[..., 0].astype(
                 cp.float64
             ) + 1j * fixed_rows[..., 1].astype(cp.float64)
@@ -543,7 +562,7 @@ class FineValidationEngine:
                     )
                 if (
                     int(fine[stage].max()) > self.bounds["fine_power_sum_bound"]
-                    or int(coarse[stage].max()) > self.bounds["coarse_power_sum_bound"]
+                    or int(coarse[stage].max()) > self.bounds["frame_power_sum_bound"]
                 ):
                     raise OverflowError("fixed powers exceed proven bound")
             elif not (
@@ -607,9 +626,7 @@ def audit_against_cpu(engine, result, *, rtol=2e-11, atol=1e-8):
     )
     np.testing.assert_array_equal(rows, data["integer_rows"])
     fixed_fine = fine_power_fx(rows, num_streams=engine.streams)
-    fixed_coarse = np.sum(
-        rows.astype(np.int64) ** 2, axis=(1, 2), dtype=np.int64
-    ).astype(np.uint64)
+    fixed_coarse = frame_powers_from_fine_u64(rows, num_streams=engine.streams)
     np.testing.assert_array_equal(
         fixed_fine, result["powers_by_stage"][STAGE_FIXED_FLOAT_DECISION]
     )
@@ -632,7 +649,7 @@ def audit_against_cpu(engine, result, *, rtol=2e-11, atol=1e-8):
         )
         transformed = np.fft.fft(z, n=FINE_BINS, axis=-1)
         fine = np.sum(np.abs(transformed) ** 2, axis=1, dtype=np.float64)
-        coarse = np.sum(np.abs(z) ** 2, axis=(1, 2), dtype=np.float64)
+        coarse = np.sum(fine, axis=-1, dtype=np.float64)
         for name, expected, actual in (
             ("fine", fine, result["powers_by_stage"][stage]),
             ("coarse", coarse, result["coarse_by_stage"][stage]),

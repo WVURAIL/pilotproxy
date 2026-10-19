@@ -615,3 +615,93 @@ def test_inventory_scope_join_exports_health_filtered_observation_classes(
     assert scheduled["health_included_exposure_seconds"] == pytest.approx(
         frame_seconds
     )
+
+
+def _current_form(product: dict[str, np.ndarray], fine_sums: np.ndarray) -> dict[str, np.ndarray]:
+    """The fixture with exact fine powers (per-pilot v5/v6) whose all-bin sums
+    are ``fine_sums`` (frames x [target, lower, upper]); the stored coarse
+    columns are left as they were, as in a v5 product of record."""
+    product = dict(product)
+    product.pop(ARCHIVED_FINE_POWER_RATIO)
+    n = len(product["frame_index"])
+    fine = np.full((n, 3, FINE_BINS), 1, dtype=np.uint64)
+    fine[:, :, 0] = np.asarray(fine_sums, dtype=np.uint64) - np.uint64(FINE_BINS - 1)
+    product["fine_power_u64"] = fine
+    product["pilot_capture_efficiency"] = np.asarray(1.0)
+    return product
+
+
+def test_release_summaries_and_gate_read_the_fine_sums(tmp_path) -> None:
+    # Stored (row-domain) powers say F = 1 on every frame and frame 1 invalid;
+    # the fine powers sum to F = 0.5, 0.8, 0.5, 0.8 with every frame valid.
+    # The gate, the ledger and the released distributions follow the fine sums.
+    product = _product(
+        valid=[1, 0, 1, 1],
+        reject=[0, 0, 0, 0],
+        baseband_power=[4.0, 4.0, 4.0, 128.0],
+        p_target=[10, 0, 10, 10],
+        p_reference=[20, 0, 20, 20],
+    )
+    sums = np.asarray(
+        [[500, 1000, 1000], [800, 1000, 1000], [500, 1000, 1000], [800, 1000, 1000]]
+    )
+    product = _current_form(product, sums)
+    # The writer accumulated the spectra with its stored masks: frame 1 was
+    # stored invalid, so one ceiling frame's DC and two healthy frames'
+    # Parseval total in both spectra.
+    for name in ("integrated_spectrum_before_mask", "integrated_spectrum_after_mask"):
+        product[name] = np.zeros(NFFT)
+        product[name][0] = 2 * 34_359_736_320.0
+        product[name][9] = float(NFFT**2 * 2 * 8.0)
+    path = _save_product(tmp_path / "798.npz", product)
+
+    with np.load(path, allow_pickle=False) as archive:
+        health = evaluate_frame_health(archive)
+    # only the ceiling frame is excluded: frame 1 is valid by its fine sums
+    assert health.include.tolist() == [True, True, True, False]
+    assert "detector_invalid" not in health.reason_counts
+
+    summary, ledger, _spectra = audit_product(path)
+    assert summary["frame_power_source"] == "all_bin_sums_of_fine_power_u64"
+    assert summary["frame_counts"]["stored_valid"] == 4
+    coarse = summary["scalar_distributions_health_included"]["coarse_power_ratio"]
+    assert coarse["count_finite"] == 3
+    assert coarse["mean"] == pytest.approx((0.5 + 0.8 + 0.5) / 3.0)
+    assert coarse["quantiles"]["p00"] == pytest.approx(0.5)
+    assert coarse["quantiles"]["p100"] == pytest.approx(0.8)
+    over_mu0 = summary["scalar_distributions_health_included"]["coarse_power_ratio_over_mu0"]
+    assert over_mu0["mean"] == pytest.approx(coarse["mean"])  # mu_0 = 2 * 1 / 2
+    [row] = ledger
+    assert row["frame_index"] == 3
+    assert (row["p_target_u64"], row["p_ref_sum_u64"]) == (800, 2000)
+    assert row["valid"] is True and row["reject_mask"] is False
+
+
+def test_stored_spectra_are_checked_with_the_masks_they_were_accumulated_with() -> None:
+    # A v5 product of record: the stored (row-domain) reject_mask kept frames
+    # 0 and 2, the fine sums (F = 1.2, 0.5, 0.5 against mu_0 = 1) reject frame
+    # 0 and keep 1 and 2. The stored after-mask spectrum holds the frames the
+    # stored mask kept, so its Parseval check must use that mask.
+    product = _product(
+        valid=[1, 1, 1],
+        reject=[0, 1, 0],
+        baseband_power=[4.0, 6.0, 5.0],
+        p_target=[10, 30, 10],
+        p_reference=[20, 20, 20],
+    )
+    product = _current_form(
+        product, np.asarray([[1200, 1000, 1000], [500, 1000, 1000], [500, 1000, 1000]])
+    )
+    product["integrated_spectrum_before_mask"] = np.zeros(NFFT)
+    product["integrated_spectrum_before_mask"][9] = float(NFFT**2 * 2 * 15.0)
+    product["integrated_spectrum_after_mask"] = np.zeros(NFFT)
+    product["integrated_spectrum_after_mask"][9] = float(NFFT**2 * 2 * 9.0)
+    health = evaluate_frame_health(product)
+    assert health.include.tolist() == [True, True, True]
+
+    result = health_correct_integrated_spectra(product, health)
+    assert result.exact is True and result.parseval_pass is True
+    assert result.healthy_before_count == 3
+    assert result.healthy_after_count == 2
+    assert result.after_parseval_relative_error == 0.0
+    assert result.accumulation_reject_disagreements == 2

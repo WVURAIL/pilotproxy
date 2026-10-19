@@ -11,6 +11,7 @@ from pilot_proxy.product_contract import (
     PER_PILOT_PRODUCT_SCHEMA_NAME,
     PER_PILOT_PRODUCT_SCHEMA_REVISION,
     PER_PILOT_PRODUCT_SCHEMA_TOKEN,
+    PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN,
     current_decision_contract,
     current_decision_contract_json,
 )
@@ -18,8 +19,22 @@ from pilot_proxy.product_contract import (
 
 def test_current_product_schema_identity_is_structured() -> None:
     assert PER_PILOT_PRODUCT_SCHEMA_NAME == "pilotproxy_per_pilot_product"
-    assert PER_PILOT_PRODUCT_SCHEMA_REVISION == 5
-    assert PER_PILOT_PRODUCT_SCHEMA_TOKEN == "pilotproxy_per_pilot_product_v5"
+    assert PER_PILOT_PRODUCT_SCHEMA_REVISION == 6
+    assert PER_PILOT_PRODUCT_SCHEMA_TOKEN == "pilotproxy_per_pilot_product_v6"
+    # The products of record keep their v5 token; readers recognize it.
+    assert PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN == "pilotproxy_per_pilot_product_v5"
+
+
+def test_decision_contract_states_the_frame_power_definition() -> None:
+    frame_powers = current_decision_contract()["frame_powers"]
+    assert frame_powers["definition"] == "sum_of_fxfft256_fine_powers"
+    assert frame_powers["terms_field"] == "fine_power_u64"
+    assert frame_powers["fields"] == [
+        "p_target_u64",
+        "p_ref_lower_u64",
+        "p_ref_upper_u64",
+    ]
+    assert "fine_power_u64[:, r, :].sum(axis=1)" in frame_powers["invariant"]
 
 
 def test_decision_contract_distinguishes_active_diagnostic_and_candidate() -> None:

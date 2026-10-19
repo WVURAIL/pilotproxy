@@ -11,7 +11,11 @@ through steps 4 and 5.
 CHIME baseband and writes one product per pilot freq_id under
 `<run>/_per_pilot/`. CHIME freq_id f sits at 800 MHz - f x 390625 Hz: channels
 14 to 36 are freq_ids 844 down to 506, the channel 37 control band is 491
-(`projects/chime_atsc/frequency_plan.yaml`). Runbooks:
+(`projects/chime_atsc/frequency_plan.yaml`). Since kernel core 3.0.0 a product
+is schema v6: its three frame powers are the all-bin sums of its exact fine
+powers `fine_power_u64`. The archive products of record are schema v5 and are
+read through those same sums, never through their stored row-domain powers
+([PRODUCT_SCHEMA.md](PRODUCT_SCHEMA.md)). Runbooks:
 [LOCAL_PROCESSING.md](LOCAL_PROCESSING.md), [CANFAR_RUNBOOK.md](CANFAR_RUNBOOK.md).
 
     pilot-proxy chime-survey --name chime-pilots --freq-ids <freq_ids>

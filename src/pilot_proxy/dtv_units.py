@@ -3,7 +3,10 @@
 
 The deployed coarse detector stores
 
-``R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)``.
+``R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)``,
+
+each frame power the all-bin sum of its exact fine power spectrum,
+``P_r = sum_f S_r[f]`` (kernel core 3.0.0).
 
 Exact squared norms of the packed target and reference weights set the
 flat-noise null ratio

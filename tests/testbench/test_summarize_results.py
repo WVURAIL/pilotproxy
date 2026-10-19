@@ -29,7 +29,7 @@ HISTOGRAM_BINS = 5
 
 def test_extract_result_rows_accepts_validation_payload() -> None:
     payload = {
-        "schema_version": "pilotproxy_snr_validation_report_v1",
+        "schema_version": "pilotproxy_snr_validation_report_v2",
         "results": [
             {FSTAT_COLUMN: FSTAT_RAW_0, SNR_SHELF_COLUMN: SNR_SHELF_0},
             {FSTAT_COLUMN: FSTAT_RAW_1, SNR_SHELF_COLUMN: SNR_SHELF_1},

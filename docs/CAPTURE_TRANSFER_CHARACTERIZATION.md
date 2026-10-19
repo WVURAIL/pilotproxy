@@ -35,14 +35,16 @@ activates the review-only candidate or constructs a production configuration.
 The raw high/low nibbles are decoded as real/imaginary offset-binary components,
 then ordered by input ID. Each exact saved FPGA origin defines one16384-sample
 frame. The detector applies its inverted-spectrum convention in128-sample windows.
-The per-input row-power sums must reproduce the global coarse integer sums exactly;
+The per-input frame powers (each input's all-bin sum of its own fixed-point
+fine powers, the kernel core 3.0.0 definition) must reproduce the global frame
+powers exactly;
 the raw per-input autos must reproduce the saved pilot-cell autos exactly. Input
 serial maps must match across native pilot/control/payload captures. The fine
 decision uses all2048 inputs and the exact frozen channel word.
 
 The signed pilot coordinate is
 `x = SHELF * (P_target / (P_lower + P_upper) * ref_norm / target_norm - 1)`.
-This same formula is applied to global and per-input coarse powers; global power
+This same formula is applied to global and per-input frame powers; global power
 ratios and an equal-input mean of ratios are distinct quantities. Zero reference
 power is missing, never zero. No negative estimate is clipped.
 

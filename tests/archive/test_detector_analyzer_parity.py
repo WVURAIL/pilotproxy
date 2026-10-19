@@ -25,19 +25,12 @@ from pilot_proxy.archive.instruments import load_instrument
 from pilot_proxy.archive.interfaces import RunContext
 
 from pilot_proxy.chime.runner import run_chime_analysis
-from pilot_proxy.detector_contract import (
-    normalized_positive_excess,
-    weight_term_norms_sq,
-)
 from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED
-from pilot_proxy.detector_reference import (
-    INT4_COMPONENT_BITS,
-    coarse_power_ratio_cpu_reference,
-    unpack_packed_complex,
-)
 from pilot_proxy.integration.receiver_profile import default_reference_receiver_profile
 from pilot_proxy.archive.detector import PilotProxyDetectorAnalyzer
 from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader
+
+from cpu_detector import exact_cpu_detector_fn  # noqa: E402
 
 NFFT = 16384
 K = 128
@@ -48,39 +41,15 @@ F_CENTER_MHZ = 470.3125
 FREQ_ID = 844  # coarse channel for 470.3125 MHz (== chime_freq_id_from_hz)
 
 
-def _cpu_ref_detector_fn(*, packed, weights, kernel):
-    """Input-dependent CPU reference: float F-stat power sums per block."""
-    pk = np.asarray(packed)
-    if pk.ndim == 2:
-        pk = pk[None, ...]
-    w_packed = np.asarray(weights, dtype=np.int8)
-    w = unpack_packed_complex(w_packed, INT4_COMPONENT_BITS)
-    nt, nl, nu = weight_term_norms_sq(w_packed)
-    nrs = int(nl + nu)
-    results = []
-    for b in range(int(pk.shape[0])):
-        samples = unpack_packed_complex(pk[b], INT4_COMPONENT_BITS)
-        _fstat, sums = coarse_power_ratio_cpu_reference(samples, w)
-        num = int(round(float(sums[0])))
-        lower = int(round(float(sums[1])))
-        upper = int(round(float(sums[2])))
-        den = lower + upper
-        results.append({
-            "block_index": b,
-            "mask": normalized_positive_excess(
-                num, den, target_norm_sq=nt, reference_norm_sum_sq=nrs
-            ),
-            "p_target_u64": num,
-            "p_ref_lower_u64": lower,
-            "p_ref_upper_u64": upper,
-            "p_ref_sum_u64": den,
-        })
-    return {
-        "batch": int(pk.shape[0]),
-        "detector_rows_per_block": int(pk.shape[1]),
-        "rational_overflow_count": 0,
-        "results": results,
-    }
+def _cpu_ref_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
+    """Input-dependent CPU reference standing in for the GPU kernel: the exact
+    kernel core 3.0.0 chain (rows -> fxfft256 -> all-bin sums)."""
+    return exact_cpu_detector_fn(
+        packed=packed,
+        weights=weights,
+        kernel=kernel,
+        emit_row_projections=emit_row_projections,
+    )
 
 
 def _stub_kernel(detector_window_samples: int):

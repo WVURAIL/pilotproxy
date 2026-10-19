@@ -77,9 +77,13 @@ The detector core is telescope-independent. A receiver integration supplies the
 metadata and arrays needed to satisfy the CUDA kernel contract; it does not
 change that contract. Install with `python -m pip install -e ".[test]"`; the
 CUDA shared library is built from source (`make build-kernel`, section CUDA
-kernel below). The current detector core is 2.5.0 (local build sha256
-`bfdbdc7e67378f2bdeb94facdb80b7318c1521980adc2343e9d354e26bc10041`); it adds
-optional rank-validity outputs and leaves the mask path unchanged. The results
+kernel below). The current detector core is 3.0.0: the three frame powers are
+defined as the all-bin sums of the exact fine powers, `P_r = sum_f S_r[f]`,
+and the separate row-domain power branch is removed (`CHANGELOG.md`,
+`docs/DESIGN_DECISIONS.md`). It writes per-pilot product schema v6 under
+detector contract revision 2. Core 2.5.0 (local build sha256
+`bfdbdc7e67378f2bdeb94facdb80b7318c1521980adc2343e9d354e26bc10041`) had added
+optional rank-validity outputs. The results
 of record were made with detector core 2.3.0: build `33b6e1c45c47` made the v5
 archive products of record on CANFAR, the local SM89
 reference build `pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so` (sha256
@@ -87,7 +91,11 @@ reference build `pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so` (sha256
 their integer fields, and the frozen local build `b129bb5c` reduced the pilot
 dump, the 2026 captures, the channel 37 control and the fine null campaign.
 Each product records the SHA-256 of the library that produced it in its
-`detector_version`.
+`detector_version`. Those v5 products store the retired row-domain powers in
+`p_*_u64`; they are not edited or migrated, and the current readers form
+their frame powers from the `fine_power_u64` every one of them carries
+(`docs/PRODUCT_SCHEMA.md`). The current Python package cannot drive a 2.x
+library, because the 3.0.0 ABI changed `FStat_Create`.
 
 ---
 
@@ -309,12 +317,13 @@ After this translation, the CUDA kernel sees only:
 
 - packed int4 detector rows;
 - packed int4 weights;
-- uint64 target/reference powers.
+- uint64 fine powers per term and fine bin, and the uint64 target/reference
+  frame powers that are their all-bin sums.
 
 CHIME run products record the detector contract in
 `run_config.json` and `stats.json` with:
 
-- `schema_version = pilotproxy_detector_contract_v1`;
+- `schema_version = pilotproxy_detector_contract_v2`;
 - K, weight-term, skipped-guard, and reference-offset geometry;
 - packed input and uint64 accumulator metadata;
 - the all-row summation rule;
@@ -544,9 +553,10 @@ For the target CHIME profile and one selected coarse channel, the row count is:
 ```
 
 Thus, one frame in this profile is packed as `(262144, 128)`, and a batch is
-packed as `(frames_in_chunk, 262144, 128)`. The kernel sums the target and
-reference powers over every detector row before it forms one local-reference power ratio for the
-frame or block. This geometry is conditional on the profile's 16384-sample
+packed as `(frames_in_chunk, 262144, 128)`. The kernel forms the fine power
+spectrum of each term over every stream and window, and the frame powers are
+its all-bin sums; one local-reference power ratio is formed from those sums
+for the frame or block. This geometry is conditional on the profile's 16384-sample
 frame. Use `check-layout` to print and validate the geometry derived from the
 profile:
 

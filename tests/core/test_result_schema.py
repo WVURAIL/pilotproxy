@@ -75,3 +75,26 @@ def test_fixed_point_contract_describes_selected_supported_window(window) -> Non
     assert contract["supported_detector_window_samples"] == [64, 128]
     assert contract["packed_complex_bits"] == 8
     assert contract["sample_bits_per_component"] == 4
+
+
+def test_statistic_contract_defines_frame_powers_as_fine_power_sums() -> None:
+    from pilot_proxy.detector_constants import (
+        LOCKED_COARSE_POWER_DEFINITION,
+        LOCKED_COARSE_POWER_RATIO_DEFINITION,
+    )
+    from pilot_proxy.result_schema import statistic_contract
+
+    contract = statistic_contract()
+    assert contract["frame_power_definition"].startswith("P_r = sum_f S_r[f]")
+    assert "fxfft256_v1" in contract["frame_power_definition"]
+    assert contract["coarse_power_ratio_definition"] == LOCKED_COARSE_POWER_RATIO_DEFINITION == (
+        "R_coarse = 2 * sum_f S_target[f] / "
+        "(sum_f S_ref_lower[f] + sum_f S_ref_upper[f]); "
+        "S = fxfft256_v1 fine powers"
+    )
+    assert contract["all_rows_coarse_power_ratio_definition"] == (
+        "R_coarse = 2 * sum_r(sum_f S_target,r[f]) / "
+        "(sum_r(sum_f S_ref_lower,r[f]) + sum_r(sum_f S_ref_upper,r[f])); "
+        "S = fxfft256_v1 fine powers"
+    )
+    assert LOCKED_COARSE_POWER_DEFINITION == "sum_of_fxfft256_fine_powers"

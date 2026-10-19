@@ -42,7 +42,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-MASK_FRONTIER_SCHEMA = "pilotproxy_mask_residual_frontier_v1"
+MASK_FRONTIER_SCHEMA = "pilotproxy_mask_residual_frontier_v2"
 
 FINE_BINS = 256
 Q16_FRACTION_BITS = 16
@@ -178,8 +178,9 @@ def coarse_normalized_excess(
     """Return ``p_target * ref_norm / (p_ref_sum * target_norm) - 1`` exactly.
 
     This is the archive's per-frame one-bin normalized pilot excess, formed
-    from the same exact uint64 marginals and the same exact integer weight
-    norms the deployed product carries.
+    from the same exact uint64 frame powers (the all-bin sums of the fine
+    powers, kernel core 3.0.0) and the same exact integer weight norms the
+    deployed product carries.
     """
     numerator = int(p_target) * int(reference_norm_sum_sq)
     denominator = (int(p_ref_lower) + int(p_ref_upper)) * int(target_norm_sq)

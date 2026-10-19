@@ -7,6 +7,7 @@ from typing import Any
 
 from pilot_proxy.detector_constants import (
     DEFAULT_DETECTOR_WINDOW_SAMPLES,
+    LOCKED_COARSE_POWER_RATIO_DEFINITION,
     LOCKED_NUM_WEIGHT_TERMS,
     LOCKED_PACKED_COMPLEX_BITS,
     LOCKED_REFERENCE_OFFSET_BINS,
@@ -18,7 +19,10 @@ from pilot_proxy.detector_constants import (
 from pilot_proxy.schema_identity import schema_token
 
 RESULT_SCHEMA_NAME = "pilotproxy_result_schema"
-RESULT_SCHEMA_REVISION = 1
+# Revision 2 (kernel core 3.0.0): the statistic's frame powers are the
+# all-bin sums of the fxfft256 fine powers (frame_power_definition). Revision
+# 1 results carry row-domain powers under the same field names.
+RESULT_SCHEMA_REVISION = 2
 RESULT_SCHEMA_TOKEN = schema_token(RESULT_SCHEMA_NAME, RESULT_SCHEMA_REVISION)
 COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO = "all_rows_summed_before_ratio"
 MASK_CONVENTION_SCHEMA_NAME = "pilotproxy_mask_convention"
@@ -32,12 +36,15 @@ SUPPORTED_DETECTOR_WINDOW_SAMPLES = tuple(
     sorted(_SUPPORTED_DETECTOR_WINDOW_SAMPLES)
 )
 
-COARSE_POWER_RATIO_DEFINITION = (
-    "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
+FRAME_POWER_DEFINITION = (
+    "P_r = sum_f S_r[f]; S_r = exact uint64 fxfft256_v1 fine power spectrum "
+    "of weight term r, summed over input streams"
 )
+COARSE_POWER_RATIO_DEFINITION = LOCKED_COARSE_POWER_RATIO_DEFINITION
 ALL_ROWS_COARSE_POWER_RATIO_DEFINITION = (
-    "R_coarse = 2 * sum_r(P_target,r) / "
-    "(sum_r(P_ref_lower,r) + sum_r(P_ref_upper,r))"
+    "R_coarse = 2 * sum_r(sum_f S_target,r[f]) / "
+    "(sum_r(sum_f S_ref_lower,r[f]) + sum_r(sum_f S_ref_upper,r[f])); "
+    "S = fxfft256_v1 fine powers"
 )
 NULL_POWER_RATIO_DEFINITION = (
     "R_null = 2*target_norm_sq/reference_norm_sum_sq"
@@ -70,6 +77,7 @@ REFERENCE_OFFSET_LOCK_REASON = (
 def statistic_contract() -> dict[str, str]:
     """Return exact definitions for current detector measurements."""
     return {
+        "frame_power_definition": FRAME_POWER_DEFINITION,
         "coarse_power_ratio_definition": COARSE_POWER_RATIO_DEFINITION,
         "all_rows_coarse_power_ratio_definition": (
             ALL_ROWS_COARSE_POWER_RATIO_DEFINITION

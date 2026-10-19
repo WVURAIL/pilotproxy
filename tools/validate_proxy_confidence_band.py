@@ -201,10 +201,13 @@ def load_frontier():
             scores = fixed_scores(z["fine_power_u64"], construct_geometry(255))
             if not scores["valid"][:, 1].all() or scores["always_masked"][:, 1].any():
                 raise ValueError("Unsupported fixture score")
-            coarse = z["coarse_marginals_u64"].astype(float)
-            excess = coarse[:, 0] * c["reference_norm_sum_sq"] / (
-                (coarse[:, 1] + coarse[:, 2]) * c["target_norm_sq"]) - 1
-            np.testing.assert_allclose(excess, z["normalized_excess"], atol=2e-15, rtol=0)
+            # Kernel core 3.0.0: the frame powers are the all-bin sums of the
+            # stored exact fine powers. The shard's coarse_marginals_u64 and
+            # normalized_excess are the retired row-domain powers and are not
+            # read.
+            powers = z["fine_power_u64"].sum(axis=2, dtype=np.uint64).astype(float)
+            excess = powers[:, 0] * c["reference_norm_sum_sq"] / (
+                (powers[:, 1] + powers[:, 2]) * c["target_norm_sq"]) - 1
             population.append(dict(required=scores["required_q16"][:, 1], proxy=SHELF*excess))
     return {k: np.concatenate([v[k] for v in population]) for k in ("required", "proxy")}, receipts
 
@@ -253,7 +256,9 @@ def campaign_diagnostics(campaign):
             levels = selected_levels
             with np.load(path, allow_pickle=False) as z:
                 fine = z["fixed_fine"][:, columns]
-                coarse = z["fixed_coarse"][:, columns].astype(float)
+                # Frame powers are the all-bin fine sums (kernel core 3.0.0);
+                # the shard's row-domain fixed_coarse is not read.
+                coarse = fine.sum(axis=-1, dtype=np.uint64).astype(float)
                 scored = fixed_scores(fine.reshape(-1, 3, 256), geometry)
                 if not scored["valid"][:, 1].all() or scored["always_masked"][:, 1].any():
                     raise ValueError("Unsupported campaign median score")
@@ -301,6 +306,7 @@ def run(args):
         correlated_population="One Gaussian component shared by groups of four consecutive events; wrong-event and correct-block resampling are separate diagnostics",
         selection="Diagnostic knee from current equal-event rule; choose loosest eligible word no greater than knee satisfying both-window upper <= 0.75 times maximum absolute complete-population target (floor 1e-7), and full retention >= 0.2; population budget is fixed before dataset draws",
         empirical_population="IID draws with replacement from the fixed saved (score,proxy) row distribution; exact finite-population conditional mean; not new independent physical waveform trials",
+        empirical_proxy="SHELF * (P0 * reference_norm_sum_sq / ((P1 + P2) * target_norm_sq) - 1) with P_r the all-bin sums of the stored fine_power_u64 (kernel core 3.0.0); the stored row-domain coarse_marginals_u64 are not read",
         campaign_cells=[list(c) for c in CASES], requested_campaign_levels=list(REQUESTED_LEVELS),
         qualification="Qualified95 only if no unavailable datasets and the one-sided family-adjusted 95% exact binomial miss upper limit is <=0.05; otherwise nominal diagnostic. No tuning after results.",
         family_size=len(names), script_sha256=sha(__file__),

@@ -7,7 +7,11 @@ from pathlib import Path
 import numpy as np
 
 from pilot_proxy.detector_contract import NORMALIZED_POSITIVE_EXCESS_MASK_RULE
-from pilot_proxy.product_contract import PER_PILOT_PRODUCT_SCHEMA_TOKEN
+from pilot_proxy.product_contract import (
+    PER_PILOT_PRODUCT_SCHEMA_TOKEN,
+    PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN,
+    coarse_columns_from_fine,
+)
 
 
 SCRIPT = Path(__file__).parents[2] / "tools" / "audit_per_pilot.py"
@@ -20,7 +24,9 @@ SPEC.loader.exec_module(audit_per_pilot)
 def _product() -> dict[str, np.ndarray]:
     nfft = 16384
     total_samples = 2 * nfft * 2048
-    fine = np.ones((1, 3, 256), dtype=np.uint64)
+    # Frame powers (3, 2, 2) are the all-bin sums of these fine powers.
+    fine = np.zeros((1, 3, 256), dtype=np.uint64)
+    fine[0, :, 0] = (3, 2, 2)
     return {
         "schema_version": np.asarray(PER_PILOT_PRODUCT_SCHEMA_TOKEN),
         "decision_contract_json": np.asarray(
@@ -29,13 +35,16 @@ def _product() -> dict[str, np.ndarray]:
         "detector_contract_json": np.asarray(
             json.dumps(
                 {
-                    "schema_version": "pilotproxy_detector_contract_v1",
-                    "fine_reduction": {"pad_factor": 2},
+                    "schema_version": "pilotproxy_detector_contract_v2",
+                    "fine_reduction": {
+                        "pad_factor": 2,
+                        "coarse_power_definition": "sum_of_fxfft256_fine_powers",
+                    },
                 }
             )
         ),
         "detector_version": np.asarray(
-            "pilot-proxy/0 kernel=2.3.0 K=128 "
+            "pilot-proxy/0 kernel=3.0.0 K=128 "
             f"{PER_PILOT_PRODUCT_SCHEMA_TOKEN} source={'1' * 64}"
         ),
         "mask_rule": np.asarray(NORMALIZED_POSITIVE_EXCESS_MASK_RULE),
@@ -83,11 +92,85 @@ def _product() -> dict[str, np.ndarray]:
         "unit_scope": np.asarray(["triggered"], dtype=str),
         "frame_unit_index": np.asarray([0], dtype=np.int32),
         "frame_in_unit": np.asarray([0], dtype=np.int32),
+        "pilot_below_data_db": np.asarray(11.3),
+        "bin_enbw_hz": np.asarray(3051.7578125),
+        "dtv_bandwidth_hz": np.asarray(6.0e6),
+        "pilot_capture_efficiency": np.asarray(1.0),
     }
 
 
+def _consistent(product: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    product.update(coarse_columns_from_fine(product))
+    return product
+
+
+def test_audit_accepts_a_v6_product_and_enforces_the_fine_sum_invariant(tmp_path: Path) -> None:
+    product = _consistent(_product())
+    path = tmp_path / "844.npz"
+    np.savez(path, **product)
+    audit, _stats = audit_per_pilot.audit_file(path, None, None)
+    assert audit.failures == []
+
+    # One count added to one fine bin breaks the exact sum.
+    product["fine_power_u64"] = product["fine_power_u64"].copy()
+    product["fine_power_u64"][0, 0, 1] += np.uint64(1)
+    np.savez(path, **product)
+    audit, _stats = audit_per_pilot.audit_file(path, None, None)
+    assert "frame powers == all-bin sums of fine_power_u64 (v6 invariant)" in audit.failures
+
+
+def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
+    product = _consistent(_product())
+    product["schema_version"] = np.asarray(PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN)
+    product["detector_version"] = np.asarray(
+        f"pilot-proxy/0 kernel=2.3.0 K=128 {PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN} source={'1' * 64}"
+    )
+    product["detector_contract_json"] = np.asarray(json.dumps(
+        {"schema_version": "pilotproxy_detector_contract_v1", "fine_reduction": {"pad_factor": 2}}
+    ))
+    product["decision_contract_json"] = np.asarray(
+        json.dumps(audit_per_pilot.v5_decision_contract())
+    )
+    # v5 stored row-domain powers that are not the fine sums: reported, not failed.
+    product["fine_power_u64"] = product["fine_power_u64"] * np.uint64(256)
+    path = tmp_path / "844.npz"
+    np.savez(path, **product)
+    audit, _stats = audit_per_pilot.audit_file(path, None, None)
+    assert audit.failures == []
+    assert any("v5 coarse ratio from fine sums" in note for note in audit.notes)
+
+    # Any other change to the v5 decision contract fails, not only a method.
+    decision = audit_per_pilot.v5_decision_contract()
+    decision["active_decision"]["output_field"] = "mask"
+    product["decision_contract_json"] = np.asarray(json.dumps(decision))
+    np.savez(path, **product)
+    audit, _stats = audit_per_pilot.audit_file(path, None, None)
+    assert "decision_contract_json" in audit.failures
+
+
+def test_v5_decision_contract_is_the_stored_record() -> None:
+    # The exact decision_contract_json a v5 product of record stores.
+    stored = (
+        '{"active_decision":{"implementation":"host_exact_integer_comparison",'
+        '"method":"coarse_normalized_positive_excess","output_field":"reject_mask"},'
+        '"fine_candidate_decision":{"active":false,"calibration_status":"pending_campaign",'
+        '"method":"fine_order_statistic_cfar"},"fine_measurement":{"method":'
+        '"exact_fine_power_terms","no_scan_time_decision":"The scan applies no fine '
+        'decision. A float ratio formed with numpy.fft was previously stored and was '
+        'never bit-equal to the deployed statistic; it is no longer written.",'
+        '"role":"measurement_only_no_scan_time_decision","terms_field":"fine_power_u64",'
+        '"terms_note":"exact uint64 [3, num_bins] from the frozen fxfft256: the deployed '
+        "fine statistic's numerators and denominators. The scan stores these and nothing "
+        "derived from them, so the ratio, the CFAR baseline, the designated-set decision, "
+        'and any threshold are recomputed in post-processing at whatever operating point '
+        'is calibrated."},"measurements":["coarse_local_reference_power_ratio",'
+        '"fine_local_reference_power_ratio"]}'
+    )
+    assert json.loads(stored) == audit_per_pilot.v5_decision_contract()
+
+
 def test_audit_rejects_corrupt_reference_split(tmp_path: Path) -> None:
-    product = _product()
+    product = _consistent(_product())
     valid_path = tmp_path / "valid.npz"
     np.savez(valid_path, **product)
     valid_audit, _stats = audit_per_pilot.audit_file(valid_path, None, None)

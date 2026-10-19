@@ -25,8 +25,13 @@ from pathlib import Path
 import numpy as np
 
 from pilot_proxy.product_contract import (
+    FINE_STATUS_ENABLED,
     PER_FRAME_PRODUCT_KEYS,
     PER_PILOT_PRODUCT_SCHEMA_TOKEN,
+    PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN,
+    CurrentProductContractError,
+    coarse_columns_from_fine,
+    frame_powers_from_fine,
 )
 
 # Historic cohorts stay checkable: the gate accepts the schema tokens whose
@@ -37,6 +42,7 @@ KNOWN_SCHEMAS = {
     "pilotproxy_per_pilot_product_v3": tuple(
         k for k in PER_FRAME_PRODUCT_KEYS if k not in _V5_ONLY
     ),
+    PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN: PER_FRAME_PRODUCT_KEYS,
     PER_PILOT_PRODUCT_SCHEMA_TOKEN: PER_FRAME_PRODUCT_KEYS,
 }
 PER_UNIT = ("unit_order", "unit_time0_ctime", "unit_time0_fpga", "unit_event_id",
@@ -123,6 +129,12 @@ def check_per_pilot(path: Path, r: Report):
     reject = _1d(z, "reject_mask").astype(bool)
     r.check(not np.any(reject & ~valid),
             "reject_mask=1 only on valid frames (positive excess needs valid)")
+    if token == PER_PILOT_PRODUCT_SCHEMA_TOKEN:
+        # The v6 frame-power invariant: P_r is the exact all-bin fine sum.
+        sums = frame_powers_from_fine(z)
+        r.check(all(np.array_equal(_1d(z, k), v) for k, v in zip(
+            ("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64"), sums)),
+            "frame powers == all-bin sums of fine_power_u64 (v6)")
 
     nfft = int(_scalar(z, "nfft"))
     before = _1d(z, "integrated_spectrum_before_mask")
@@ -162,12 +174,37 @@ def check_per_pilot(path: Path, r: Report):
     else:
         r.bad(f"rational_overflow_count == {overflow} of {n} frames (high)")
 
-    masked = float(reject.sum() / n_valid) if n_valid else float("nan")
+    # The summary's decision is the current one (kernel core 3.0.0): the
+    # valid flag and reject_mask of the frame powers summed from
+    # fine_power_u64. A v6 product stores exactly these (checked above); an
+    # older product's stored columns are the row-domain decision, so they are
+    # recomputed and the stored masked fraction is printed beside them.
+    powers = "stored"
+    summary_valid, summary_reject = valid, reject
+    if token != PER_PILOT_PRODUCT_SCHEMA_TOKEN:
+        if str(_scalar(z, "fine_status")) == FINE_STATUS_ENABLED:
+            try:
+                columns = coarse_columns_from_fine(z)
+            except (CurrentProductContractError, KeyError) as exc:
+                r.bad(f"cannot form the frame powers from fine_power_u64: {exc}")
+            else:
+                summary_valid = columns["valid"][:, 0].astype(bool)
+                summary_reject = columns["reject_mask"][:, 0].astype(bool)
+                powers = "fine_sums"
+        else:
+            powers = "stored_row_domain"
+    n_summary_valid = int(summary_valid.sum())
+    masked = (float(summary_reject.sum() / n_summary_valid)
+              if n_summary_valid else float("nan"))
+    stored_masked = ""
+    if powers == "fine_sums":
+        stored = float(reject.sum() / n_valid) if n_valid else float("nan")
+        stored_masked = f" stored_masked_frac={stored:.4f}"
     span = (float(np.nanmax(t0)) - float(np.nanmin(t0))) if n_timed else float("nan")
     print(f"   summary: freq_id={int(_scalar(z,'freq_id'))} "
           f"chan={int(_scalar(z,'physical_channel'))} frames={n} units={u} "
-          f"valid={n_valid} masked_frac={masked:.4f} t_span={span:.3f}s "
-          f"overflow={overflow}")
+          f"powers={powers} valid={n_summary_valid} masked_frac={masked:.4f}"
+          f"{stored_masked} t_span={span:.3f}s overflow={overflow}")
     return {"freq_id": int(_scalar(z, "freq_id")), "n": n, "u": u,
             "before": before, "path": path}
 

@@ -174,7 +174,9 @@ def main() -> int:
         if "statistic" in core_doc or "pilot_excess" in core_doc:
             errors.append("detector-core contract retains ambiguous retired keys")
         if core_doc.get("coarse_power_ratio_definition") != (
-            "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
+            "R_coarse = 2 * sum_f S_target[f] / "
+            "(sum_f S_ref_lower[f] + sum_f S_ref_upper[f]); "
+            "S = fxfft256_v1 fine powers"
         ):
             errors.append("detector-core coarse power-ratio definition is incorrect")
         if core_doc.get("raw_pilot_excess_definition") != (
@@ -191,6 +193,8 @@ def main() -> int:
         num_weight_terms=3,
         weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
     )
+    if public_contract.get("schema_version") != "pilotproxy_detector_contract_v2":
+        errors.append("public detector contract is not revision 2")
     if "statistic" in public_contract or "all_rows_statistic" in public_contract:
         errors.append("public detector contract retains ambiguous statistic keys")
     if public_contract.get("coarse_power_ratio_definition") != (

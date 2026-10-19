@@ -35,13 +35,17 @@ def test_schema_token_is_strict_and_deterministic() -> None:
 
 
 def test_current_schema_tokens_are_ground_zero_revision_one() -> None:
-    assert DETECTOR_CORE_PROFILE_SCHEMA_TOKEN == "pilotproxy_detector_core_profile_v1"
+    # Every token is revision one except those kernel core 3.0.0 redefined
+    # (frame powers are the all-bin sums of the fine powers): the detector
+    # contract and result schema (2) and the detector-core profile (3; its
+    # revision 2 token is a retired pre-ground-zero name).
+    assert DETECTOR_CORE_PROFILE_SCHEMA_TOKEN == "pilotproxy_detector_core_profile_v3"
     assert RECEIVER_PROFILE_SCHEMA_TOKEN == "pilotproxy_receiver_profile_v1"
     assert STREAM_MAP_SCHEMA_TOKEN == "pilotproxy_stream_map_v1"
     assert STREAM_LAYOUT_SCHEMA_TOKEN == "pilotproxy_stream_layout_v1"
-    assert RESULT_SCHEMA_TOKEN == "pilotproxy_result_schema_v1"
+    assert RESULT_SCHEMA_TOKEN == "pilotproxy_result_schema_v2"
     assert MASK_CONVENTION_SCHEMA_TOKEN == "pilotproxy_mask_convention_v1"
-    assert DETECTOR_CONTRACT_SCHEMA_TOKEN == "pilotproxy_detector_contract_v1"
+    assert DETECTOR_CONTRACT_SCHEMA_TOKEN == "pilotproxy_detector_contract_v2"
     assert CHIME_RUN_CONFIG_SCHEMA_TOKEN == "pilotproxy_chime_run_config_v1"
     assert CHIME_STATS_SCHEMA_TOKEN == "pilotproxy_chime_stats_v1"
     assert WEIGHT_MANIFEST_SCHEMA_TOKEN == "pilotproxy_weight_manifest_v1"

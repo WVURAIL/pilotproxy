@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 
 from pilot_proxy.detector_constants import (
+    LOCKED_COARSE_POWER_DEFINITION,
+    LOCKED_COARSE_POWER_RATIO_DEFINITION,
     LOCKED_INPUT_FORMAT,
     LOCKED_NUM_WEIGHT_TERMS,
     LOCKED_POWER_ACCUMULATOR,
@@ -24,11 +26,22 @@ from pilot_proxy.json_utils import json_dumps_strict
 from pilot_proxy.schema_identity import schema_token
 
 DETECTOR_CONTRACT_SCHEMA_NAME = "pilotproxy_detector_contract"
-DETECTOR_CONTRACT_SCHEMA_REVISION = 1
+# Revision 2 (kernel core 3.0.0): the frame powers are the all-bin sums of the
+# exact fxfft256 fine power spectra, and the fine_reduction block names that
+# definition (coarse_power_definition) instead of the retired row-domain
+# marginal identity. Revision 1 is the contract of every output written before
+# core 3.0.0 (inside the per-pilot v5 products of record, and in the
+# run_config.json/stats.json of CHIME run outputs such as the 2026 capture
+# reductions). Those outputs are records: readers that re-express them (the
+# v5 per-pilot reader) or only validate them (validate-products) accept
+# revision 1; analyses of CHIME run outputs, which carry no fine powers to
+# re-express, refuse it.
+DETECTOR_CONTRACT_SCHEMA_REVISION = 2
 DETECTOR_CONTRACT_SCHEMA_TOKEN = schema_token(
     DETECTOR_CONTRACT_SCHEMA_NAME,
     DETECTOR_CONTRACT_SCHEMA_REVISION,
 )
+DETECTOR_CONTRACT_V1_SCHEMA_TOKEN = schema_token(DETECTOR_CONTRACT_SCHEMA_NAME, 1)
 CHIME_RUN_CONFIG_SCHEMA_NAME = "pilotproxy_chime_run_config"
 CHIME_RUN_CONFIG_SCHEMA_REVISION = 1
 CHIME_RUN_CONFIG_SCHEMA_TOKEN = schema_token(
@@ -56,8 +69,20 @@ NORMALIZED_POSITIVE_EXCESS_EQUIVALENT_RULE = (
     "2*target_norm_sq/reference_norm_sum_sq"
 )
 UINT64_MAX = (1 << 64) - 1
-DETECTOR_POWER_RATIO_DEFINITION = "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
+DETECTOR_POWER_RATIO_DEFINITION = LOCKED_COARSE_POWER_RATIO_DEFINITION
 ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION = (
+    "R_coarse = 2 * sum(sum_f S_target[f]) / "
+    "(sum(sum_f S_ref_lower[f]) + sum(sum_f S_ref_upper[f])); "
+    "S = fxfft256_v1 fine powers"
+)
+COARSE_POWER_DEFINITION = LOCKED_COARSE_POWER_DEFINITION
+# The revision-1 strings, as the v5 products of record carry them: P_r was the
+# row-domain sum of |z|^2 and was tied to the fine spectra by a per-frame
+# marginal identity. Kept only so readers can recognize those products.
+DETECTOR_POWER_RATIO_DEFINITION_V1 = (
+    "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
+)
+ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION_V1 = (
     "R_coarse = 2 * sum(P_target) / (sum(P_ref_lower) + sum(P_ref_upper))"
 )
 COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO = "all_rows_summed_before_ratio"
@@ -109,7 +134,7 @@ _FINE_REDUCTION_FIELDS = frozenset(
         "guard_fine_bins",
         "designated_bins",
         "census_excluded_bins",
-        "v1_marginal_identity",
+        "coarse_power_definition",
     }
 )
 
@@ -195,9 +220,10 @@ def _validate_fine_reduction(value: object) -> None:
         raise ValueError(
             "detector contract fine_reduction.cfar_policy must be non-empty."
         )
-    if value["v1_marginal_identity"] != "exact_int64_enforced_per_frame":
+    if value["coarse_power_definition"] != COARSE_POWER_DEFINITION:
         raise ValueError(
-            "detector contract fine_reduction.v1_marginal_identity is invalid."
+            "detector contract fine_reduction.coarse_power_definition must be "
+            f"{COARSE_POWER_DEFINITION!r}."
         )
     for field in ("designated_bins", "census_excluded_bins"):
         bins = value[field]
@@ -229,10 +255,16 @@ def validate_detector_contract(contract: Mapping[str, Any]) -> None:
     if unknown:
         raise ValueError(f"detector contract contains unknown fields: {unknown}")
     if contract["schema_version"] != DETECTOR_CONTRACT_SCHEMA_TOKEN:
+        record = (
+            " Revision 1 describes outputs written before kernel core 3.0.0 "
+            "(row-domain frame powers); regenerate with this release."
+            if contract["schema_version"] == DETECTOR_CONTRACT_V1_SCHEMA_TOKEN
+            else ""
+        )
         raise ValueError(
             "detector contract schema_version does not match the current schema: "
             f"{contract['schema_version']!r} != "
-            f"{DETECTOR_CONTRACT_SCHEMA_TOKEN!r}."
+            f"{DETECTOR_CONTRACT_SCHEMA_TOKEN!r}.{record}"
         )
     detector_window = _contract_int(contract, "detector_window_samples")
     if detector_window not in SUPPORTED_DETECTOR_WINDOW_SAMPLES:
@@ -308,6 +340,69 @@ def validate_detector_contract(contract: Mapping[str, Any]) -> None:
         raise ValueError("detector contract per_frequency_threshold must be false.")
     if "fine_reduction" in contract:
         _validate_fine_reduction(contract["fine_reduction"])
+
+
+# fine_reduction.v1_marginal_identity, the one revision-1 field revision 2
+# replaced (by coarse_power_definition), as that release wrote it.
+DETECTOR_CONTRACT_V1_MARGINAL_IDENTITY = "exact_int64_enforced_per_frame"
+
+
+def validate_record_or_current_detector_contract(
+    contract: Mapping[str, Any],
+) -> int:
+    """Validate a current contract or a revision-1 record; return its revision.
+
+    A revision-2 document is checked by :func:`validate_detector_contract`. A
+    revision-1 document (an output written before kernel core 3.0.0, whose
+    frame powers are row-domain sums of ``|z|^2``) must carry exactly the
+    strings that release wrote: the two revision-1 ratio definitions and
+    ``fine_reduction.v1_marginal_identity``. Every other field is checked as
+    for revision 2, since nothing else changed between the revisions.
+    """
+    if contract.get("schema_version") != DETECTOR_CONTRACT_V1_SCHEMA_TOKEN:
+        validate_detector_contract(contract)
+        return DETECTOR_CONTRACT_SCHEMA_REVISION
+    translated = dict(contract)
+    for field, v1_value, current_value in (
+        (
+            "coarse_power_ratio_definition",
+            DETECTOR_POWER_RATIO_DEFINITION_V1,
+            DETECTOR_POWER_RATIO_DEFINITION,
+        ),
+        (
+            "all_rows_coarse_power_ratio_definition",
+            ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION_V1,
+            ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION,
+        ),
+    ):
+        if contract.get(field) != v1_value:
+            raise ValueError(
+                f"revision-1 detector contract {field} must be {v1_value!r}; "
+                f"got {contract.get(field)!r}."
+            )
+        translated[field] = current_value
+    if "fine_reduction" in contract:
+        fine = contract["fine_reduction"]
+        if not isinstance(fine, Mapping):
+            raise ValueError("detector contract fine_reduction must be an object.")
+        fine = dict(fine)
+        if "coarse_power_definition" in fine:
+            raise ValueError(
+                "revision-1 detector contract fine_reduction must not contain "
+                "coarse_power_definition."
+            )
+        if fine.pop("v1_marginal_identity", None) != (
+            DETECTOR_CONTRACT_V1_MARGINAL_IDENTITY
+        ):
+            raise ValueError(
+                "revision-1 detector contract fine_reduction.v1_marginal_identity "
+                f"must be {DETECTOR_CONTRACT_V1_MARGINAL_IDENTITY!r}."
+            )
+        fine["coarse_power_definition"] = COARSE_POWER_DEFINITION
+        translated["fine_reduction"] = fine
+    translated["schema_version"] = DETECTOR_CONTRACT_SCHEMA_TOKEN
+    validate_detector_contract(translated)
+    return 1
 
 
 def normalized_positive_excess_policy() -> dict[str, Any]:
@@ -476,6 +571,11 @@ def detector_contract_sha256(contract: dict[str, Any]) -> str:
 
 __all__ = [
     "ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION",
+    "ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION_V1",
+    "COARSE_POWER_DEFINITION",
+    "DETECTOR_CONTRACT_V1_MARGINAL_IDENTITY",
+    "DETECTOR_CONTRACT_V1_SCHEMA_TOKEN",
+    "DETECTOR_POWER_RATIO_DEFINITION_V1",
     "DETECTOR_CONTRACT_SCHEMA_NAME",
     "DETECTOR_CONTRACT_SCHEMA_REVISION",
     "DETECTOR_CONTRACT_SCHEMA_TOKEN",
@@ -502,4 +602,5 @@ __all__ = [
     "normalize_weight_coordinate_system",
     "normalized_positive_excess_policy",
     "validate_detector_contract",
+    "validate_record_or_current_detector_contract",
 ]

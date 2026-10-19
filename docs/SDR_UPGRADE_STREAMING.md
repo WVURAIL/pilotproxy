@@ -98,7 +98,9 @@ test separately verifies that streaming remains invariant to chunk boundaries.
 Zero target and reference powers give `undefined_both_zero` with NaN; a positive
 target with zero references gives `infinite`. Neither is silently accepted as
 noise, a finite statistic or a qualified detection. Saturated components are
-counted. The ratio remains `2*target/(lower+upper)` with no weight-norm adjustment.
+counted. The ratio remains `2*target/(lower+upper)` with no weight-norm adjustment,
+formed from the same frame powers as the batch adapter (all-bin sums of the
+`fxfft256` fine powers).
 
 ## Qualification
 

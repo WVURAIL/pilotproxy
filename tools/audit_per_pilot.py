@@ -28,7 +28,11 @@ from pilot_proxy.detector_contract import null_power_ratio_from_weight_norms, NO
 from pilot_proxy.fine_reduction import fine_bin_count
 from pilot_proxy.product_contract import (
     PER_PILOT_PRODUCT_SCHEMA_TOKEN,
+    PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN,
     current_decision_contract,
+    fine_derived_column_mismatches,
+    v5_decision_contract,
+    frame_powers_from_fine,
 )
 
 CHIME_HZ_PER_CHANNEL = 400e6 / 1024.0          # 390625 Hz
@@ -103,22 +107,31 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
 
     # ---- provenance -------------------------------------------------------
     # Historic cohorts stay auditable: v3 (the pre-flight and any archive
-    # cohort scanned before the railed/fill counts existed) and the current
-    # token are both accepted; the railed audit below applies only where the
-    # fields exist.
+    # cohort scanned before the railed/fill counts existed), v5 (the archive
+    # of record: kernel core 2.x, detector contract v1, row-domain frame
+    # powers) and the current v6 (kernel core 3.x, detector contract v2,
+    # frame powers = all-bin sums of the fine powers). The railed audit below
+    # applies only where the fields exist.
     known_schemas = ("pilotproxy_per_pilot_product_v3",
+                     PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN,
                      PER_PILOT_PRODUCT_SCHEMA_TOKEN)
     sv = str(scalar("schema_version"))
     dv = str(scalar("detector_version"))
+    current = sv == PER_PILOT_PRODUCT_SCHEMA_TOKEN
+    with_counts = sv in (PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN, PER_PILOT_PRODUCT_SCHEMA_TOKEN)
     a.check(sv in known_schemas, f"schema_version={sv}")
-    a.check(json.loads(str(scalar("decision_contract_json"))) == current_decision_contract(),
+    # Earlier products carry their release's decision contract exactly: the
+    # current one without the frame-power block (v5_decision_contract).
+    decision = json.loads(str(scalar("decision_contract_json")))
+    a.check(decision == (current_decision_contract() if current else v5_decision_contract()),
             "decision_contract_json")
-    # kernel core 2.x family: additive minor bumps (2.0.0 survey cohort,
-    # 2.1.0 fine-power stage) share the detector contract; a major bump
-    # must still fail this check loudly. Cohort binary hashes are pinned
-    # in the run ledger, not here.
-    a.check(re.search(r"kernel=2\.\d+\.\d+", dv) is not None and "K=128" in dv
-            and sv in dv,
+    # Kernel core major per schema: 2.x for v3/v5 (additive minor bumps share
+    # the detector contract), 3.x for v6 (frame powers from the fine sums). A
+    # major bump must still fail this check loudly. Cohort binary hashes are
+    # pinned in the run ledger, not here.
+    kernel_major = "3" if current else "2"
+    a.check(re.search(rf"kernel={kernel_major}\.\d+\.\d+", dv) is not None
+            and "K=128" in dv and sv in dv,
             "detector_version tokens")
     src = next((t[len("source="):][:12] for t in dv.split() if t.startswith("source=")), "?")
     a.check(str(scalar("mask_rule")) == NORMALIZED_POSITIVE_EXCESS_MASK_RULE, "mask_rule string")
@@ -128,8 +141,14 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
         a.check(str(scalar("weight_manifest_sha256")) == manifest_sha,
                 "weight_manifest_sha256 vs shipped manifest")
     contract = json.loads(str(scalar("detector_contract_json")))
-    a.check(contract.get("schema_version") == "pilotproxy_detector_contract_v1",
+    a.check(contract.get("schema_version")
+            == ("pilotproxy_detector_contract_v2" if current
+                else "pilotproxy_detector_contract_v1"),
             "detector_contract schema")
+    if current:
+        a.check(contract.get("fine_reduction", {}).get("coarse_power_definition")
+                == "sum_of_fxfft256_fine_powers",
+                "contract coarse_power_definition")
     a.check(contract.get("fine_reduction", {}).get("pad_factor") == 2, "contract fine pad_factor")
 
     # ---- geometry / identity ---------------------------------------------
@@ -159,7 +178,7 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
                  "normalized_coarse_power_ratio_db", "pilot_excess_db", "estimated_data_shelf_snr_db",
                  "baseband_power_linear", "frame_index", "frame_unit_index",
                  "frame_in_unit", "normalized_pilot_excess"]
-    if sv == PER_PILOT_PRODUCT_SCHEMA_TOKEN:
+    if with_counts:
         per_frame += ["p_ref_lower_u64", "p_ref_upper_u64",
                       "railed_sample_count", "fill_sample_count",
                       "railed_sample_total"]
@@ -167,10 +186,10 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
         a.check(r(k).size == n, f"len({k})=={n}")
     a.check(np.array_equal(r("frame_index"), np.arange(n)), "frame_index == arange")
 
-    # ---- railed/fill counts (current schema only) ------------------------
+    # ---- railed/fill counts (v5 and v6) -----------------------------------
     # Counted from raw samples the product does not retain, so a wrong value
     # is unrepairable; audit the full invariant set, not just presence.
-    if sv == PER_PILOT_PRODUCT_SCHEMA_TOKEN:
+    if with_counts:
         rc = r("railed_sample_count"); fc = r("fill_sample_count")
         rt = r("railed_sample_total")
         a.check(rc.dtype == fc.dtype == rt.dtype == np.uint64,
@@ -185,7 +204,7 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     pt_array = g("p_target_u64"); pr_array = g("p_ref_sum_u64")
     pt = pt_array.reshape(-1); pr = pr_array.reshape(-1)
     a.check(pt.dtype == np.uint64 and pr.dtype == np.uint64, "u64 dtypes")
-    if sv == PER_PILOT_PRODUCT_SCHEMA_TOKEN:
+    if with_counts:
         lower_array = g("p_ref_lower_u64")
         upper_array = g("p_ref_upper_u64")
         for field, values in (
@@ -235,6 +254,30 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     # of every term: a valid frame with zero fine power everywhere is corrupt.
     a.check(bool(np.all(ff[v].sum(axis=(1, 2)) > 0)) if v.any() else True,
             "fine terms carry power on valid frames")
+    # The frame powers are the all-bin sums of the fine powers (kernel core
+    # 3.0.0). A v6 product stores exactly those, and every column derived
+    # from them; a v5 product of record stored row-domain powers, which
+    # readers replace by the fine sums, so its deviation is reported only.
+    if ff.ndim == 3 and ff.shape == (n, 3, bins) and ff.dtype == np.uint64:
+        fine_sums = frame_powers_from_fine(z)
+        stored = (pt, r("p_ref_lower_u64"), r("p_ref_upper_u64")) if with_counts else None
+        if current:
+            a.check(all(np.array_equal(st, fs) for st, fs in zip(stored, fine_sums)),
+                    "frame powers == all-bin sums of fine_power_u64 (v6 invariant)")
+            try:
+                mismatches = fine_derived_column_mismatches(z)
+            except (KeyError, ValueError) as exc:
+                mismatches = [f"unformable ({exc})"]
+            a.check(not mismatches,
+                    "derived columns follow the fine-power sums"
+                    + (f" ({', '.join(mismatches)})" if mismatches else ""))
+        elif stored is not None and v.any():
+            with np.errstate(divide="ignore", invalid="ignore"):
+                deviation = (fine_sums[0].astype(np.float64)
+                             / (fine_sums[1].astype(np.float64) + fine_sums[2].astype(np.float64))
+                             / (pt.astype(np.float64) / pr.astype(np.float64)) - 1.0)
+            a.note(f"v5 coarse ratio from fine sums vs stored row domain: median "
+                   f"{float(np.nanmedian(deviation[v])):+.2e}")
     # The deployed ratio is a post-processing quantity; check it is recoverable
     # from what is stored rather than expecting a stored column. Bins whose
     # reference pair sums to zero are legitimately undefined, not corrupt.

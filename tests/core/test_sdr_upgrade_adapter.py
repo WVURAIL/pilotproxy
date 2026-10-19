@@ -53,6 +53,26 @@ def test_signed_target_and_reference_placement(target, term):
     )
 
 
+def test_frame_powers_are_the_all_bin_sums_of_the_fixed_point_fine_powers():
+    from pilot_proxy.fxfft import fxfft256_scalar
+
+    cfg = DigitalAdapterConfig(INPUT_RATE_HZ, 100_000.0, 4, 5.0)
+    rng = np.random.default_rng(1318)
+    x = rng.normal(size=100_000) + 1j * rng.normal(size=100_000)
+    result = adapt_record(x, cfg)
+    projections = scalar_projections(result["packed_frames"][0], result["packed_weights"])
+    expected = [
+        sum(re * re + im * im for re, im in fxfft256_scalar(projections[term]))
+        for term in range(3)
+    ]
+    powers = result["term_power_sums"][0]
+    assert powers.dtype == np.uint64
+    assert [int(value) for value in powers] == expected
+    assert result["coarse_ratio"][0] == 2.0 * expected[0] / (expected[1] + expected[2])
+    assert result["metadata"]["schema"] == "sdr-upgrade-digital-adapter-v2"
+    assert "fxfft256_v1" in result["metadata"]["ratio_definition"]
+
+
 def test_resampler_matches_direct_convolution_and_time_origin():
     cfg = DigitalAdapterConfig(INPUT_RATE_HZ, -23_456.0, 0, 3.0)
     rng = np.random.default_rng(1109)

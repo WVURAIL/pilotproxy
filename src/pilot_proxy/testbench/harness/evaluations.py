@@ -4,7 +4,7 @@ them into estimator-transfer points.
 ``pilot-proxy evaluate-snr`` writes one directory per run:
 
 - ``dtv_snr_eval.json``: the report (schema
-  ``pilotproxy_snr_validation_report_v1``) with the waveform audit, the
+  ``pilotproxy_snr_validation_report_v2``) with the waveform audit, the
   pilot calibration, the detector geometry and a per-point summary;
 - ``dtv_snr_eval.csv``: one row per noise trial, the exact ``uint64``
   detector power terms beside the float estimates of every implementation;
@@ -36,7 +36,11 @@ import numpy as np
 
 from .estimator_transfer import Calibration
 
-REPORT_SCHEMA = "pilotproxy_snr_validation_report_v1"
+# Revision 2 (kernel core 3.0.0): the trial u64 powers are the all-bin sums of
+# the fxfft256 fine powers. A revision-1 report holds row-domain powers under
+# the same column names and is refused, not read as current.
+REPORT_SCHEMA = "pilotproxy_snr_validation_report_v2"
+REPORT_SCHEMA_V1 = "pilotproxy_snr_validation_report_v1"
 REPORT_NAME = "dtv_snr_eval.json"
 TRIALS_NAME = "dtv_snr_eval.csv"
 SUMMARY_NAME = "dtv_snr_summary.csv"
@@ -116,6 +120,12 @@ def load_evaluation(path: Path | str) -> Evaluation:
     path = Path(path)
     report = json.loads((path / REPORT_NAME).read_text(encoding="utf-8"))
     schema = report.get("schema_version")
+    if schema == REPORT_SCHEMA_V1:
+        raise ValueError(
+            f"{path}: report schema {schema!r} was written before kernel core "
+            "3.0.0 (row-domain frame powers); re-run evaluate-snr to compare it "
+            "with current results"
+        )
     if schema != REPORT_SCHEMA:
         raise ValueError(f"{path}: report schema {schema!r}, expected {REPORT_SCHEMA!r}")
     trials = read_numeric_csv(path / TRIALS_NAME, required=(REQUESTED_SNR,))

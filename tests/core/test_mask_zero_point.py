@@ -29,6 +29,7 @@ from pilot_proxy.detector_contract import (
     weight_term_norms_sq,
 )
 from pilot_proxy.detector_reference import (
+    frame_powers_cpu_reference_packed,
     quantize_complex_numpy,
     unpack_packed_complex,
 )
@@ -159,24 +160,28 @@ def test_normalized_mask_rule_string_is_current_and_stable() -> None:
 
 def _mc_h0_frames(weights_packed: np.ndarray, *, rows: int, trials: int,
                   seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """White noise through the real int4 path: per-frame (F, p_target, p_ref)."""
+    """White noise through the real int4 path: per-frame (F, p_target, p_ref).
+
+    The frame powers are the kernel's (core 3.0.0): exact row projections
+    through the frozen fxfft256, summed over all fine bins, so the zero point
+    is tested on the deployed statistic.
+    """
     rng = np.random.default_rng(seed)
-    conj_w = np.conj(unpack_packed_complex(weights_packed, 4)).T.astype(np.complex64)
     fstats = np.empty(trials, dtype=np.float64)
-    p_targets = np.empty(trials, dtype=np.int64)
-    p_refs = np.empty(trials, dtype=np.int64)
+    p_targets = []
+    p_refs = []
     k = weights_packed.shape[1]
     for trial in range(trials):
         x = (
             rng.standard_normal((rows, k)) + 1j * rng.standard_normal((rows, k))
         ).astype(np.complex64)
-        xq = unpack_packed_complex(
-            quantize_complex_numpy(x, 4, 2.0), 4
-        ).astype(np.complex64)
-        powers = (np.abs(xq @ conj_w) ** 2).sum(axis=0)
-        p_targets[trial] = int(round(float(powers[0])))
-        p_refs[trial] = int(round(float(powers[1] + powers[2])))
-        fstats[trial] = 2.0 * powers[0] / (powers[1] + powers[2])
+        packed = quantize_complex_numpy(x, 4, 2.0)
+        powers = frame_powers_cpu_reference_packed(packed, weights_packed, 4)
+        p_target = int(powers[0])
+        p_ref = int(powers[1]) + int(powers[2])
+        p_targets.append(p_target)
+        p_refs.append(p_ref)
+        fstats[trial] = 2.0 * p_target / p_ref
     return fstats, p_targets, p_refs
 
 

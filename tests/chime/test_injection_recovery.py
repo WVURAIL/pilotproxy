@@ -22,6 +22,10 @@ from pilot_proxy.chime.products import (
     CHIME_DETECTOR_OUTPUTS_FILENAME,
     CHIME_SPECTROGRAM_CACHE_FILENAME,
 )
+from pilot_proxy.detector_contract import (
+    DETECTOR_CONTRACT_SCHEMA_TOKEN,
+    DETECTOR_CONTRACT_V1_SCHEMA_TOKEN,
+)
 
 MU0 = 10.0 / 9.0
 GAIN_TRUE = 0.05      # rho per LSB^2
@@ -68,6 +72,9 @@ def _write_point(point_dir, amplitude: float, *, seed: int,
         }],
     }
     (point_dir / INJECTION_MANIFEST_FILENAME).write_text(json.dumps(manifest))
+    (point_dir / "run_config.json").write_text(
+        json.dumps({"detector_contract": {"schema_version": DETECTOR_CONTRACT_SCHEMA_TOKEN}})
+    )
 
 
 def _ladder(tmp_path, amplitudes=(0.0, 1.0, 2.0, 4.0)):
@@ -129,6 +136,17 @@ def test_unsupported_pfa_is_refused(tmp_path) -> None:
         analyze_injection_recovery(
             _ladder(tmp_path), false_alarm_rates=[1e-6]
         )
+
+
+def test_a_contract_v1_point_is_refused(tmp_path) -> None:
+    # A point run before kernel core 3.0.0 stores row-domain powers and no
+    # fine powers to recompute them from.
+    dirs = _ladder(tmp_path)
+    (dirs[2] / "run_config.json").write_text(
+        json.dumps({"detector_contract": {"schema_version": DETECTOR_CONTRACT_V1_SCHEMA_TOKEN}})
+    )
+    with pytest.raises(SystemExit, match="revision 1"):
+        analyze_injection_recovery(dirs)
 
 
 def test_mixed_amplitude_manifest_is_refused(tmp_path) -> None:

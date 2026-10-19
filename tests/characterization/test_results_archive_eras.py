@@ -295,7 +295,10 @@ def product_path(tmp_path):
         path, unit_time0_ctime=time0, unit_delta_time=delta, p_target_u64=target.reshape(-1, 1),
         p_ref_lower_u64=half.reshape(-1, 1), p_ref_upper_u64=half.reshape(-1, 1), p_ref_sum_u64=p_ref_sum.reshape(-1, 1),
         valid=valid_frames.astype(np.uint8).reshape(-1, 1), reject_mask=rejected.reshape(-1, 1),
-        fine_power_u64=fine, unit_input_map_sha256=maps, unit_git_version_tag=tags,
+        # the frame powers are the fine powers' all-bin sums (kernel core 3.0.0):
+        # scale the spectral shape so its sums are the levels above
+        fine_power_u64=v5_fixture.fine_powers_with_sums(fine, target, half, p_ref_sum - half),
+        unit_input_map_sha256=maps, unit_git_version_tag=tags,
         baseband_power_linear=np.full((frames, 1), 4.0),
         **_derived_arrays(target, p_ref_sum, target_norm, reference_norm, spec),
     )

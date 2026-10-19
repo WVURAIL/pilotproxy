@@ -218,10 +218,7 @@ class DeviceFrameSource:
         cp = self.cp
         packed, clipped = self.packed(seed=seed, amplitude=amplitude)
         kernel = self.gpu.kernel
-        diagnostic = cp.zeros(1, dtype=cp.float32)
-        handle = kernel.create_raw(
-            int(packed.shape[0]), packed.data.ptr, diagnostic.data.ptr
-        )
+        handle = kernel.create_raw(int(packed.shape[0]), packed.data.ptr)
         fine = cp.zeros((3, FINE_BINS), dtype=cp.uint64)
         powers = cp.zeros(3, dtype=cp.uint64)
         try:
@@ -309,7 +306,7 @@ def _run_generate(args, profile, gpu) -> int:
         injected_linear = 0.0 if shelf_db is None else 10.0 ** (shelf_db / 10.0)
         required = np.zeros((count, bulk_size), dtype=np.uint64)
         fine = np.zeros((count, 3, FINE_BINS), dtype=np.uint64)
-        marginals = np.zeros((count, 3), dtype=np.uint64)
+        frame_powers = np.zeros((count, 3), dtype=np.uint64)
         excess = np.zeros(count, dtype=np.float64)
         shelf_estimate = np.zeros(count, dtype=np.float64)
         clip = np.zeros(count, dtype=np.float64)
@@ -328,7 +325,7 @@ def _run_generate(args, profile, gpu) -> int:
                 dtype=np.uint64,
             )
             fine[index] = powers
-            marginals[index] = np.asarray(terms, dtype=np.uint64)
+            frame_powers[index] = np.asarray(terms, dtype=np.uint64)
             value = coarse_normalized_excess(
                 terms[0],
                 terms[1],
@@ -375,7 +372,7 @@ def _run_generate(args, profile, gpu) -> int:
             path,
             required_multiplier_q16=required,
             fine_power_u64=fine,
-            coarse_marginals_u64=marginals,
+            frame_powers_u64=frame_powers,
             normalized_excess=excess,
             shelf_estimate_db=shelf_estimate,
             clip_fraction=clip,
@@ -421,12 +418,11 @@ def _run_audit(args, profile, gpu) -> int:
             cpu_fine = cgs._fixed_fine_powers_by_stream(
                 projections.astype(np.int32), num_streams=int(args.num_streams)
             ).sum(axis=0, dtype=np.uint64)
-            cpu_marginals = tuple(
-                int(np.sum(projections[term, :, 0].astype(object) ** 2
-                           + projections[term, :, 1].astype(object) ** 2))
-                for term in range(3)
+            # Frame powers: the all-bin sums of the fine powers (core 3.0.0).
+            cpu_frame_powers = tuple(
+                sum(int(value) for value in cpu_fine[term]) for term in range(3)
             )
-            gpu_fine, gpu_marginals, _ = source.frame(seed=seed, amplitude=amplitude)
+            gpu_fine, gpu_frame_powers, _ = source.frame(seed=seed, amplitude=amplitude)
             rows.append(
                 {
                     "population": label,
@@ -435,8 +431,8 @@ def _run_audit(args, profile, gpu) -> int:
                     "fine_powers_bit_identical": bool(
                         np.array_equal(cpu_fine, gpu_fine)
                     ),
-                    "coarse_marginals_bit_identical": bool(
-                        cpu_marginals == gpu_marginals
+                    "frame_powers_bit_identical": bool(
+                        cpu_frame_powers == gpu_frame_powers
                     ),
                 }
             )
@@ -452,7 +448,7 @@ def _run_audit(args, profile, gpu) -> int:
             "all_identical": all(
                 row["packing_bit_identical"]
                 and row["fine_powers_bit_identical"]
-                and row["coarse_marginals_bit_identical"]
+                and row["frame_powers_bit_identical"]
                 for row in rows
             ),
         },

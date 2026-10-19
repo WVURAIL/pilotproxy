@@ -409,6 +409,40 @@ surface and is retired. Products that violate the public contract are
 unsupported development outputs and must be regenerated from authoritative
 inputs.
 
+## The frame powers are the sums of the fine powers
+
+Status (2026-10-18): kernel core 3.0.0 removes the coarse branch. Until then
+the library computed the three frame powers twice in effect: once as the
+row-domain sum `sum_m |z[n, m]|^2` in an int32 `|z|^2` register
+(`FStat_Compute_Powers_U64`, the fused `d_power_out`), and once implicitly as
+the fixed-point fine spectrum the fine statistic is built from. The two were
+tied only by the row-domain marginal identity, an exact check of one integer
+sum against another, and by an approximate fixed-point Parseval relation the
+rounded `fxfft256` does not satisfy exactly (median relative `2.75e-6` on the
+archive frames, up to about 2 per cent on near-empty fill frames). Defining
+`P_r = sum_f S_r[f]` makes the coarse ratio and the fine statistic two
+readings of one spectrum, so there is one measurement path to validate and no
+identity to enforce between paths.
+
+What went with the branch: the row-domain power entries, the float diagnostic
+entry, the device rational-half coarse mask (its `P_0 * half_den` no longer
+fits `uint64` at the new scale; the host applies the same rule in exact
+integers), the float `d_out` handle buffer, and the per-frame marginal
+tripwire. The product schema moved to v6 and the detector contract to
+revision 2 (`coarse_power_definition = sum_of_fxfft256_fine_powers`); field
+names did not change. The schema v5 products of record stay on disk unedited:
+each stores `fine_power_u64` for every frame, so readers form the v6 frame
+powers from it and ignore the stored row-domain powers. Re-deriving the
+threshold-rule decisions of record that way changes no word, outcome or reason
+(`r_hi` moves by at most `1.6e-5` relative on channels 14-36 and `6.1e-5` on
+the channel 37 control). Across the 770,474 archive frames the sign of the
+excess, and so `reject_mask`, changes on 50 frames (18 of the 40,606 channel 37
+frames), every one within `7e-6` of the boundary.
+
+The earlier sections of this file describe the kernel as it was built at each
+date, including the marginal identity "internal to the launch" of core 2.2.0;
+they are kept as the record of those decisions.
+
 ## Deferred work
 
 The following items are outside the minimum detector result and remain

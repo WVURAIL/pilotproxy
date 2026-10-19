@@ -2,13 +2,23 @@
 
 Two layers, read in this order:
 
-- :func:`open_product` validates a current (v5) product mapping against the
-  product and detector contracts and exposes its residual decision
-  coordinates as a :class:`ProductView`: the exact-integer coarse statistic
-  ``Q = F / mu_0``, the survey flag, the in-band residual estimate (the
-  estimated shelf level, dB) and the acquisition-unit coordinates. A product
-  that does not satisfy the contract raises :class:`ProductContractError`, and
-  so does a product that does not declare the v5 schema.
+- :func:`open_product` validates a per-pilot product mapping (schema v6, or a
+  v5 product of record) against the product and detector contracts and
+  exposes its residual decision coordinates as a :class:`ProductView`: the
+  exact-integer coarse statistic ``Q = F / mu_0``, the survey flag, the
+  in-band residual estimate (the estimated shelf level, dB) and the
+  acquisition-unit coordinates. A product that does not satisfy the contract
+  raises :class:`ProductContractError`, and so does a product that declares
+  neither schema.
+
+Frame powers (kernel core 3.0.0): ``P_r = sum_f fine_power_u64[:, r, f]``.
+Every coarse coordinate here is formed from those sums
+(:func:`pilot_proxy.product_contract.coarse_columns_from_fine`). A v6 product
+stores exactly those columns and the reader verifies that it does. A v5
+product of record stored the row-domain sums of ``|z|^2`` instead; its view
+replaces them by the fine sums, which every v5 product retains for every
+frame, and records that in ``ProductView.frame_power_definition``. The v5
+files are never edited.
 - :class:`Product` keeps one ``.npz`` product open lazily (a product is up to
   1.5 GB and ``numpy.load`` decodes a member only when indexed). It exposes the
   small per-frame and per-unit fields as cached arrays, the view above, the
@@ -40,10 +50,47 @@ from typing import Iterator, Mapping
 import numpy as np
 
 from pilot_proxy.config.project import default_project
+from pilot_proxy.detector_contract import (
+    COARSE_POWER_DEFINITION,
+    DETECTOR_CONTRACT_SCHEMA_TOKEN,
+    DETECTOR_CONTRACT_V1_SCHEMA_TOKEN,
+    DETECTOR_POWER_RATIO_DEFINITION,
+    DETECTOR_POWER_RATIO_DEFINITION_V1,
+)
+from pilot_proxy.product_contract import (
+    CurrentProductContractError,
+    coarse_columns_from_fine,
+    fine_derived_column_mismatches,
+)
 
 PRODUCT_SCHEMA_NAME = "pilotproxy_per_pilot_product"
-PRODUCT_SCHEMA_REVISION = 5
-PRODUCT_SCHEMA_TOKEN = "pilotproxy_per_pilot_product_v5"
+PRODUCT_SCHEMA_REVISION = 6
+PRODUCT_SCHEMA_TOKEN = "pilotproxy_per_pilot_product_v6"
+V5_SCHEMA_REVISION = 5
+V5_SCHEMA_TOKEN = "pilotproxy_per_pilot_product_v5"
+# The schemas this reader opens, by revision. v5 is the archive of record
+# (kernel core 2.3.0, detector contract v1); v6 is current (core 3.0.0,
+# detector contract v2).
+READABLE_SCHEMA_TOKENS = {
+    V5_SCHEMA_REVISION: V5_SCHEMA_TOKEN,
+    PRODUCT_SCHEMA_REVISION: PRODUCT_SCHEMA_TOKEN,
+}
+_DETECTOR_CONTRACT_BY_REVISION = {
+    V5_SCHEMA_REVISION: (
+        DETECTOR_CONTRACT_V1_SCHEMA_TOKEN,
+        DETECTOR_POWER_RATIO_DEFINITION_V1,
+    ),
+    PRODUCT_SCHEMA_REVISION: (
+        DETECTOR_CONTRACT_SCHEMA_TOKEN,
+        DETECTOR_POWER_RATIO_DEFINITION,
+    ),
+}
+FRAME_POWER_DEFINITION_V5 = (
+    "recomputed_from_fine_power_u64 (v5 stored row-domain powers ignored)"
+)
+FRAME_POWER_DEFINITION_V6 = (
+    "stored_sum_of_fine_power_u64 (verified against fine_power_u64 on read)"
+)
 SOURCE_EVENT_KEY_SCHEMA = "pilotproxy_namespaced_source_event_key_v1"
 
 MASK_RULE = (
@@ -51,7 +98,7 @@ MASK_RULE = (
 )
 VALID_RULE = "p_ref_sum != 0"
 FINE_MEASUREMENT_METHOD = "exact_fine_power_terms"
-SCHEMA_TOKEN = "pilotproxy_per_pilot_product_v5"
+SCHEMA_TOKEN = PRODUCT_SCHEMA_TOKEN
 HEALTH_GATE_SCHEMA = "pilotproxy_archive_frame_health_gate_v1"
 
 _PROJECT = default_project()
@@ -138,22 +185,14 @@ def _json_scalar(product: Mapping, name: str) -> dict:
     return value
 
 
-def _same_float_array(name: str, stored: np.ndarray,
-                      derived: np.ndarray) -> None:
-    if not np.allclose(stored, derived, rtol=4e-13, atol=1e-12,
-                       equal_nan=True):
-        finite = np.isfinite(stored) & np.isfinite(derived)
-        maximum = (float(np.max(np.abs(stored[finite] - derived[finite])))
-                   if finite.any() else float("nan"))
-        raise ProductContractError(
-            f"{name!r} disagrees with the exact power terms "
-            f"(maximum absolute difference {maximum:g})"
-        )
-
-
 @dataclass(frozen=True)
 class ProductView:
-    """The residual coordinates of one current (v5) product."""
+    """The residual coordinates of one per-pilot product (v6 or v5 of record).
+
+    Every coarse coordinate is formed from the frame powers
+    ``P_r = sum_f fine_power_u64[:, r, f]``; ``frame_power_definition`` says
+    whether they were stored (v6, verified) or recomputed (v5).
+    """
 
     schema: str
     physical_channel: int
@@ -168,14 +207,28 @@ class ProductView:
     frame_unit_index: np.ndarray
     unit_time0_ctime: np.ndarray
     normalized_excess: np.ndarray
+    frame_power_definition: str = FRAME_POWER_DEFINITION_V6
     _p_target: np.ndarray | None = field(default=None, repr=False)
     _p_ref_sum: np.ndarray | None = field(default=None, repr=False)
     _target_norm_sq: int | None = field(default=None, repr=False)
     _reference_norm_sum_sq: int | None = field(default=None, repr=False)
+    _columns: Mapping | None = field(default=None, repr=False)
 
     @property
     def is_current(self) -> bool:
         return self.schema == PRODUCT_SCHEMA_TOKEN
+
+    @property
+    def columns(self) -> Mapping:
+        """The per-frame columns from the fine-power sums, each ``(N, 1)``.
+
+        The keys of ``product_contract.FINE_DERIVED_FRAME_COLUMNS``: for a
+        v6 product equal to the stored columns, for a v5 product the
+        replacement of its stored row-domain columns.
+        """
+        if self._columns is None:
+            raise ProductContractError("view carries no frame-power columns")
+        return self._columns
 
     def rejected_at_multiplier(self, eta: Real) -> np.ndarray:
         """Return the coarse decision at a positive threshold multiplier."""
@@ -184,10 +237,11 @@ class ProductView:
         value = float(eta)
         if not math.isfinite(value) or value <= 0.0:
             raise ValueError("eta must be positive and finite")
-        if not self.is_current:
+        if self.schema not in READABLE_SCHEMA_TOKENS.values():
             raise ProductContractError(
                 f"view of schema {self.schema!r} cannot be rethresholded; "
-                f"only a {PRODUCT_SCHEMA_TOKEN!r} product can"
+                f"only a {PRODUCT_SCHEMA_TOKEN!r} or {V5_SCHEMA_TOKEN!r} "
+                "product can"
             )
 
         eta_num, eta_den = value.as_integer_ratio()
@@ -212,8 +266,8 @@ def _current_view(product: Mapping) -> ProductView:
     name = _string_scalar(product, "schema_name")
     revision = _integer_scalar(product, "schema_revision")
     token = _string_scalar(product, "schema_version")
-    if (name != PRODUCT_SCHEMA_NAME or revision != PRODUCT_SCHEMA_REVISION
-            or token != PRODUCT_SCHEMA_TOKEN):
+    if (name != PRODUCT_SCHEMA_NAME or revision not in READABLE_SCHEMA_TOKENS
+            or token != READABLE_SCHEMA_TOKENS[revision]):
         raise ProductContractError(
             f"unsupported product schema {name!r} revision {revision} "
             f"token {token!r}"
@@ -241,7 +295,9 @@ def _current_view(product: Mapping) -> ProductView:
         raise ProductContractError("fine measurement contract is incompatible")
 
     detector = _json_scalar(product, "detector_contract_json")
-    if (detector.get("schema_version") != "pilotproxy_detector_contract_v1"
+    contract_token, ratio_definition = _DETECTOR_CONTRACT_BY_REVISION[revision]
+    if (detector.get("schema_version") != contract_token
+            or detector.get("coarse_power_ratio_definition") != ratio_definition
             or detector.get("num_weight_terms") != 3
             or detector.get("power_accumulator") != "uint64"
             or detector.get("power_accumulator_bits") != 64
@@ -253,6 +309,15 @@ def _current_view(product: Mapping) -> ProductView:
             != ("R_coarse > R_null; R_null = "
                 "2*target_norm_sq/reference_norm_sum_sq")):
         raise ProductContractError("detector contract is incompatible")
+    if revision == PRODUCT_SCHEMA_REVISION:
+        reduction = detector.get("fine_reduction")
+        if (not isinstance(reduction, dict)
+                or reduction.get("coarse_power_definition")
+                != COARSE_POWER_DEFINITION):
+            raise ProductContractError(
+                "detector contract does not define the frame powers as the "
+                "fine-power sums"
+            )
     if _string_scalar(product, "mask_rule") != MASK_RULE:
         raise ProductContractError("product mask rule is incompatible")
 
@@ -264,50 +329,62 @@ def _current_view(product: Mapping) -> ProductView:
             frame_index, np.arange(frame_count, dtype=np.int64)):
         raise ProductContractError("'frame_index' must be contiguous and zero-based")
 
-    valid_u8 = _array(product, "valid", np.uint8, (frame_count, 1))
-    rejected_u8 = _array(product, "reject_mask", np.uint8, (frame_count, 1))
-    if np.any(valid_u8 > 1) or np.any(rejected_u8 > 1):
-        raise ProductContractError("valid and reject flags must be zero or one")
-    valid = valid_u8[:, 0].astype(bool)
-    rejected = rejected_u8[:, 0].astype(bool)
-
-    p_target = _array(product, "p_target_u64", np.uint64,
-                      (frame_count, 1))[:, 0]
-    p_ref_sum = _array(product, "p_ref_sum_u64", np.uint64,
-                       (frame_count, 1))[:, 0]
-    p_ref_lower = _array(product, "p_ref_lower_u64", np.uint64,
-                         (frame_count, 1))[:, 0]
-    p_ref_upper = _array(product, "p_ref_upper_u64", np.uint64,
-                         (frame_count, 1))[:, 0]
-    for row, (lower, upper, total) in enumerate(
-            zip(p_ref_lower, p_ref_upper, p_ref_sum)):
-        if int(lower) + int(upper) != int(total):
-            raise ProductContractError(
-                f"coarse reference terms disagree at frame {row}"
-            )
-    if not np.array_equal(valid, p_ref_sum != 0):
-        raise ProductContractError("valid flags disagree with p_ref_sum != 0")
-
+    if _string_scalar(product, "fine_status") != "enabled":
+        raise ProductContractError(
+            "product retains no fine powers (fine_status is not 'enabled'), so "
+            "its frame powers cannot be formed"
+        )
+    fine_terms = np.asarray(product["fine_power_u64"]) if "fine_power_u64" in product else None
+    if (fine_terms is None or fine_terms.dtype != np.dtype(np.uint64)
+            or fine_terms.ndim != 3 or fine_terms.shape[:2] != (frame_count, 3)
+            or fine_terms.shape[2] == 0):
+        raise ProductContractError(
+            f"'fine_power_u64' must be uint64 of shape ({frame_count}, 3, B)"
+        )
     target_norm = int(_array(
         product, "target_norm_sq", np.int64, (1,))[0])
     reference_norm = int(_array(
         product, "reference_norm_sum_sq", np.int64, (1,))[0])
     if target_norm <= 0 or reference_norm <= 0:
         raise ProductContractError("weight norms must be positive")
-    exact_rejected = np.fromiter(
-        (
-            bool(is_valid)
-            and int(num) * reference_norm > target_norm * int(den)
-            for num, den, is_valid in zip(p_target, p_ref_sum, valid)
-        ),
-        dtype=bool,
-        count=frame_count,
-    )
-    if not np.array_equal(rejected, exact_rejected):
-        row = int(np.flatnonzero(rejected != exact_rejected)[0])
-        raise ProductContractError(
-            f"reject_mask disagrees with the exact decision at frame {row}"
-        )
+    for name in ("pilot_below_data_db", "bin_enbw_hz", "dtv_bandwidth_hz",
+                 "pilot_capture_efficiency"):
+        _float_scalar(product, name)
+    # The frame powers and every coordinate derived from them, from the fine
+    # powers. A mapping that is not a dict (an open NpzFile) decodes a member
+    # on every access, so the fine member is read once and passed along.
+    source = {
+        "fine_power_u64": fine_terms,
+        "target_norm_sq": product["target_norm_sq"],
+        "reference_norm_sum_sq": product["reference_norm_sum_sq"],
+        "pilot_below_data_db": product["pilot_below_data_db"],
+        "bin_enbw_hz": product["bin_enbw_hz"],
+        "dtv_bandwidth_hz": product["dtv_bandwidth_hz"],
+        "pilot_capture_efficiency": product["pilot_capture_efficiency"],
+    }
+    try:
+        columns = coarse_columns_from_fine(source)
+    except CurrentProductContractError as exc:
+        raise ProductContractError(str(exc)) from exc
+    if revision == PRODUCT_SCHEMA_REVISION:
+        stored = {
+            name: _array(product, name, values.dtype, (frame_count, 1))
+            for name, values in columns.items()
+        }
+        mismatches = fine_derived_column_mismatches(stored, columns)
+        if mismatches:
+            raise ProductContractError(
+                f"{mismatches[0]!r} disagrees with the fine-power sums "
+                "(the v6 frame-power invariant)"
+            )
+        frame_power_definition = FRAME_POWER_DEFINITION_V6
+    else:
+        frame_power_definition = FRAME_POWER_DEFINITION_V5
+
+    valid = columns["valid"][:, 0].astype(bool)
+    rejected = columns["reject_mask"][:, 0].astype(bool)
+    p_target = columns["p_target_u64"][:, 0]
+    p_ref_sum = columns["p_ref_sum_u64"][:, 0]
 
     ratio = np.full(frame_count, np.nan, dtype=np.float64)
     np.divide(
@@ -316,15 +393,7 @@ def _current_view(product: Mapping) -> ProductView:
         out=ratio,
         where=p_ref_sum > 0,
     )
-    excess = ratio - 1.0
-    coarse = np.full(frame_count, np.nan, dtype=np.float64)
-    np.divide(2.0 * p_target.astype(np.float64),
-              p_ref_sum.astype(np.float64), out=coarse,
-              where=p_ref_sum > 0)
-    ratio_db = np.full(frame_count, np.nan, dtype=np.float64)
-    ratio_db[ratio > 0.0] = 10.0 * np.log10(ratio[ratio > 0.0])
-    excess_db = np.full(frame_count, np.nan, dtype=np.float64)
-    excess_db[excess > 0.0] = 10.0 * np.log10(excess[excess > 0.0])
+    excess = columns["normalized_pilot_excess"][:, 0]
 
     pilot_below = _float_scalar(product, "pilot_below_data_db")
     bin_enbw = _float_scalar(product, "bin_enbw_hz", positive=True)
@@ -335,17 +404,7 @@ def _current_view(product: Mapping) -> ProductView:
         raise ProductContractError("shelf calibration values are out of range")
     offset = (pilot_below - 10.0 * np.log10(dtv_bandwidth / bin_enbw)
               - 10.0 * np.log10(efficiency))
-    shelf = excess_db + offset
-
-    for field_name, derived in (
-            ("coarse_power_ratio", coarse),
-            ("normalized_coarse_power_ratio_db", ratio_db),
-            ("normalized_pilot_excess", excess),
-            ("pilot_excess_db", excess_db),
-            ("estimated_data_shelf_snr_db", shelf)):
-        stored = _array(product, field_name, np.float64,
-                        (frame_count, 1))[:, 0]
-        _same_float_array(field_name, stored, derived)
+    shelf = columns["estimated_data_shelf_snr_db"][:, 0]
 
     if int(_array(product, "pilot_in_band", np.uint8, (1,))[0]) != 1:
         raise ProductContractError("pilot is not in the measured band")
@@ -369,7 +428,7 @@ def _current_view(product: Mapping) -> ProductView:
         raise ProductContractError("chime frequency must be positive and finite")
 
     return ProductView(
-        schema=PRODUCT_SCHEMA_TOKEN,
+        schema=token,
         physical_channel=physical_channel,
         freq_id=freq_id,
         chime_frequency_hz=chime_frequency,
@@ -382,17 +441,20 @@ def _current_view(product: Mapping) -> ProductView:
         frame_unit_index=frame_unit,
         unit_time0_ctime=unit_time0,
         normalized_excess=excess,
+        frame_power_definition=frame_power_definition,
         _p_target=p_target,
         _p_ref_sum=p_ref_sum,
         _target_norm_sq=target_norm,
         _reference_norm_sum_sq=reference_norm,
+        _columns=columns,
     )
 
 
 def open_product(product: Mapping) -> ProductView:
     """Validate a product and expose its residual decision coordinates.
 
-    A product that does not declare the current v5 schema is refused.
+    A product that declares neither schema v6 nor the v5 schema of record is
+    refused. A v5 product is read through its fine-power sums.
     """
     token = None
     revision = None
@@ -404,16 +466,16 @@ def open_product(product: Mapping) -> ProductView:
         values = np.asarray(product["schema_revision"])
         if values.shape == () and np.issubdtype(values.dtype, np.integer):
             revision = int(values.item())
-    if token == PRODUCT_SCHEMA_TOKEN or revision == PRODUCT_SCHEMA_REVISION:
+    if token in READABLE_SCHEMA_TOKENS.values() or revision in READABLE_SCHEMA_TOKENS:
         return _current_view(product)
     raise ProductContractError(
-        f"product does not declare the current schema {PRODUCT_SCHEMA_TOKEN!r} "
+        f"product declares neither {PRODUCT_SCHEMA_TOKEN!r} nor {V5_SCHEMA_TOKEN!r} "
         f"(schema_version {token!r}, schema_revision {revision!r}); pre-v5 products are not read"
     )
 
 
 def is_current_product(product: Mapping) -> bool:
-    """Return whether a product declares the current v5 schema."""
+    """Return whether a product declares the current (v6) schema."""
     if "schema_version" not in product:
         return False
     values = np.asarray(product["schema_version"])
@@ -424,15 +486,21 @@ def is_current_product(product: Mapping) -> bool:
 def coarse_reject_mask(product: Mapping, eta: Real = 1.0) -> np.ndarray:
     """Return a rethresholded coarse mask in the product's own coordinates."""
     revision = np.asarray(product.get("schema_revision"))
-    declares_revision_five = bool(
+    declares_readable_revision = bool(
         revision.shape == ()
         and np.issubdtype(revision.dtype, np.integer)
-        and int(revision.item()) == PRODUCT_SCHEMA_REVISION
+        and int(revision.item()) in READABLE_SCHEMA_TOKENS
     )
-    if is_current_product(product) or declares_revision_five:
+    token = np.asarray(product.get("schema_version"))
+    declares_readable_token = bool(
+        token.shape == () and token.dtype.kind in {"U", "S"}
+        and str(token.item()) in READABLE_SCHEMA_TOKENS.values()
+    )
+    if declares_readable_token or declares_readable_revision:
         return _current_view(product).rejected_at_multiplier(eta)
     raise ProductContractError(
-        f"product does not declare the current schema {PRODUCT_SCHEMA_TOKEN!r}; pre-v5 products are not read"
+        f"product declares neither {PRODUCT_SCHEMA_TOKEN!r} nor {V5_SCHEMA_TOKEN!r}; "
+        "pre-v5 products are not read"
     )
 
 
@@ -529,15 +597,25 @@ class Geometry:
 
 
 class Product:
-    """One open v5 product; nothing large is read until asked for."""
+    """One open per-pilot product (v6, or v5 of record); nothing large is read
+    until asked for.
+
+    The coarse per-frame columns (``frame_column`` of a name in
+    ``product_contract.FINE_DERIVED_FRAME_COLUMNS``) are the view's columns
+    from the fine-power sums, never a v5 product's stored row-domain values.
+    """
 
     def __init__(self, path: Path | str, *, require_health: bool = False):
         self.path = Path(path)
         self.require_health = require_health
         self._z = np.load(self.path, allow_pickle=False)
         token = str(np.asarray(self._z["schema_version"]).item()) if "schema_version" in self._z.files else ""
-        if token != SCHEMA_TOKEN:
-            raise ValueError(f"{self.path.name}: schema {token!r}, expected {SCHEMA_TOKEN!r}")
+        if token not in READABLE_SCHEMA_TOKENS.values():
+            raise ValueError(
+                f"{self.path.name}: schema {token!r}, expected "
+                f"{PRODUCT_SCHEMA_TOKEN!r} or {V5_SCHEMA_TOKEN!r}"
+            )
+        self.schema_token = token
 
     # ------------------------------------------------------------ raw access
     @property
@@ -548,7 +626,9 @@ class Product:
         return np.asarray(self._z[name]).reshape(-1)[0] if np.asarray(self._z[name]).ndim else np.asarray(self._z[name]).item()
 
     def frame_column(self, name: str) -> np.ndarray:
-        """A per-frame field, shaped (N,)."""
+        """A per-frame field, shaped (N,); coarse columns come from the fine sums."""
+        if name in self.view.columns:
+            return np.asarray(self.view.columns[name])[:, 0]
         arr = np.asarray(self._z[name])
         return arr[:, 0] if arr.ndim == 2 and arr.shape[1] == 1 else arr.reshape(arr.shape[0], -1)[:, 0] if arr.ndim == 2 else arr
 
@@ -753,10 +833,12 @@ def health_gate(product: Product) -> HealthGate:
 __all__ = [
     "COARSE_BIN_HZ", "DETECTOR_WINDOW", "FINE_BINS", "FINE_BIN_HZ", "FINE_MEASUREMENT_METHOD",
     "FINE_REF_LOWER", "FINE_REF_UPPER", "FINE_TARGET", "FRAME_SECONDS", "Geometry",
+    "FRAME_POWER_DEFINITION_V5", "FRAME_POWER_DEFINITION_V6",
     "HEALTH_GATE_SCHEMA", "HealthGate", "MASK_RULE", "NFFT", "PRODUCT_SCHEMA_NAME",
     "PRODUCT_SCHEMA_REVISION", "PRODUCT_SCHEMA_TOKEN", "PSD_BIN_HZ", "PSD_DB_INVALID", "Product",
-    "ProductContractError", "ProductView", "SAMPLE_RATE_HZ", "SCHEMA_TOKEN",
-    "SOURCE_EVENT_KEY_SCHEMA", "VALID_RULE", "coarse_reject_mask", "fine_bin_of_hz",
+    "ProductContractError", "ProductView", "READABLE_SCHEMA_TOKENS", "SAMPLE_RATE_HZ",
+    "SCHEMA_TOKEN", "SOURCE_EVENT_KEY_SCHEMA", "V5_SCHEMA_REVISION", "V5_SCHEMA_TOKEN",
+    "VALID_RULE", "coarse_reject_mask", "fine_bin_of_hz",
     "fine_hz_of_bin", "fine_offset_to_rf_hz", "fine_power_ratio", "grid_residual_hz",
     "health_gate", "is_current_product", "open_product", "sha256_of",
 ]

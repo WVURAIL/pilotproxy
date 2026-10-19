@@ -25,6 +25,8 @@ from pilot_proxy.integration.sdr_upgrade_adapter import (
     DigitalAdapterConfig,
     K,
     L,
+    frame_power_sums,
+    frame_ratio,
     projector_weights,
     resampler_coefficients,
 )
@@ -185,9 +187,8 @@ class StreamingDigitalAdapter:
         y = self._pending_frame.reshape(L, K).copy()
         packed = quantize_complex_numpy(y, 4, self.config.sample_scale)
         projections = matched_filter_row_projections_cpu_reference_packed(packed, self._weights, 4)
-        powers = (projections.astype(np.float64) ** 2).sum(axis=(1, 2))
-        denominator = powers[1] + powers[2]
-        ratio = 2 * powers[0] / denominator if denominator > 0 else (np.inf if powers[0] > 0 else np.nan)
+        powers = frame_power_sums(projections)
+        ratio, ratio_status = frame_ratio(powers)
         j = FIRST_OUTPUT_INDEX + self._frame_count * FRAME_SAMPLES
         time_numerator = self._origin * UP + j * DOWN - HALF_FILTER
         relative_start = (FIRST_OUTPUT_INDEX * DOWN - HALF_FILTER) / (INPUT_RATE_HZ * UP)
@@ -208,8 +209,8 @@ class StreamingDigitalAdapter:
             "frame_size_samples": FRAME_SAMPLES, "K": K, "L": L,
             "resampled_frame": y, "packed_frame": packed,
             "projections_i32": projections, "term_power_sums": powers,
-            "coarse_ratio": float(ratio),
-            "ratio_status": "finite" if denominator > 0 else ("infinite" if powers[0] > 0 else "undefined_both_zero"),
+            "coarse_ratio": ratio,
+            "ratio_status": ratio_status,
             "saturated_component_count": int(np.count_nonzero(abs(rounded_r) > 7) + np.count_nonzero(abs(rounded_i) > 7)),
             "minimum_unclipped_quantizer_half_step_distance": half_step_distance,
         }

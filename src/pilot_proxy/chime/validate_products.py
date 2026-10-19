@@ -16,7 +16,7 @@ from pilot_proxy.detector_contract import (
     CHIME_RUN_CONFIG_SCHEMA_TOKEN,
     CHIME_STATS_SCHEMA_TOKEN,
     NORMALIZED_POSITIVE_EXCESS_MASK_SOURCE,
-    validate_detector_contract,
+    validate_record_or_current_detector_contract,
 )
 from pilot_proxy.json_utils import write_json_strict
 from pilot_proxy.provenance import file_sha256
@@ -586,12 +586,25 @@ def _is_normalized_positive_excess_run(
     )
 
 
+# A run written before kernel core 3.0.0 carries detector contract revision 1:
+# its frame powers are row-domain sums of |z|^2 and its outputs hold no fine
+# powers, so they cannot be re-expressed. Such a run is validated as the
+# record it is and reported with this note; analyses refuse it.
+CONTRACT_V1_RECORD_NOTE = (
+    "detector contract revision 1 (kernel core < 3.0.0): the frame powers are "
+    "row-domain sums of |z|^2, not the fine-power sums of core 3.0.0; the "
+    "outputs carry no fine powers, so they are a record that cannot be "
+    "re-expressed. Re-run the detector with this release to analyse the data."
+)
+
+
 def _validate_detector_contract(
     *,
     run_config: dict[str, Any],
     stats: dict[str, Any],
     errors: list[dict[str, str]],
-) -> None:
+) -> int | None:
+    """Validate both contract copies; return their revision when both pass."""
     run_contract = run_config.get("detector_contract")
     stats_contract = stats.get("detector_contract")
     if not isinstance(run_contract, dict):
@@ -600,7 +613,7 @@ def _validate_detector_contract(
             "run_config.detector_contract",
             "detector_contract is missing or not an object",
         )
-        return
+        return None
     run_contract_typed: dict[str, Any] = dict(run_contract)
     if not isinstance(stats_contract, dict):
         _add_error(
@@ -608,7 +621,7 @@ def _validate_detector_contract(
             "stats.detector_contract",
             "detector_contract is missing or not an object",
         )
-        return
+        return None
     stats_contract_typed: dict[str, Any] = dict(stats_contract)
     if run_contract_typed != stats_contract_typed:
         _add_error(
@@ -617,12 +630,13 @@ def _validate_detector_contract(
             "run_config and stats detector_contract objects differ",
         )
 
+    revisions: set[int] = set()
     for label, contract in (
         ("run_config", run_contract_typed),
         ("stats", stats_contract_typed),
     ):
         try:
-            validate_detector_contract(contract)
+            revisions.add(validate_record_or_current_detector_contract(contract))
         except (TypeError, ValueError) as exc:
             _add_error(
                 errors,
@@ -670,6 +684,7 @@ def _validate_detector_contract(
                     "detector_window_samples does not match detector_contract: "
                     f"{payload_window!r} != {expected_window}",
                 )
+    return revisions.pop() if len(revisions) == 1 else None
 
 
 def _validate_detector(
@@ -1145,8 +1160,9 @@ def validate_products(
             expected=CHIME_STATS_SCHEMA_TOKEN,
             errors=errors,
         )
+    contract_revision: int | None = None
     if run_config and stats:
-        _validate_detector_contract(
+        contract_revision = _validate_detector_contract(
             run_config=run_config,
             stats=stats,
             errors=errors,
@@ -1265,7 +1281,10 @@ def validate_products(
         "valid": len(errors) == 0,
         "num_errors": int(len(errors)),
         "errors": errors,
+        "detector_contract_revision": contract_revision,
     }
+    if contract_revision == 1:
+        report["record_note"] = CONTRACT_V1_RECORD_NOTE
     if output_json is not None:
         Path(output_json).parent.mkdir(parents=True, exist_ok=True)
         write_json_strict(Path(output_json), report, indent=2, sort_keys=True)

@@ -6,11 +6,12 @@ noise-plus-tone frame: GPU row projections -> GPU fine powers -> frame
 powers (the all-bin sums, kernel core 3.0.0), and checks every integer
 against the CPU chain ``matched_filter_row_projections_cpu_reference_packed``
 -> ``fine_power_fx`` -> sum, plus the fused entry's device-reduced
-``d_power_out``. Exact uint64 equality, no tolerance. The float reference
-``coarse_power_ratio_cpu_reference_packed`` (the sum of |z|^2 over rows) is
-compared on the same frame only to document the Parseval-level proximity of
-the fixed-point definition; it is bounded by the frozen transform's drift
-gate, not asserted equal.
+``d_power_out``. Exact uint64 equality, no tolerance. The packed CPU reference
+``coarse_power_ratio_cpu_reference_packed`` is that same exact chain. The
+float prototype ``coarse_power_ratio_cpu_reference`` (the sum of |z|^2 over
+rows of the unpacked frame) is compared on the same frame only to document
+the Parseval-level proximity of the fixed-point definition; it is bounded by
+the frozen transform's drift gate, not asserted equal.
 """
 from __future__ import annotations
 
@@ -18,9 +19,11 @@ import numpy as np
 import pytest
 
 from pilot_proxy.detector_reference import (
+    coarse_power_ratio_cpu_reference,
     coarse_power_ratio_cpu_reference_packed,
     matched_filter_row_projections_cpu_reference_packed,
     quantize_complex_numpy,
+    unpack_packed_complex,
 )
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.fxfft import fine_power_fx
@@ -163,9 +166,16 @@ def test_kernel_cpu_gpu_smoke_matches_prebuilt_dtv_weights() -> None:
     assert (cpu_powers > 0).all()
     assert _power_ratio(gpu_powers) == _power_ratio(cpu_powers)
 
-    # Parseval proximity to the float |z|^2 sum: documented, not an identity.
-    _, float_sums = coarse_power_ratio_cpu_reference_packed(
+    # The packed CPU reference is the same exact chain.
+    _, packed_powers = coarse_power_ratio_cpu_reference_packed(
         packed, weights, kernel.specs.bits
+    )
+    np.testing.assert_array_equal(packed_powers, cpu_powers)
+
+    # Parseval proximity to the float |z|^2 sum: documented, not an identity.
+    _, float_sums = coarse_power_ratio_cpu_reference(
+        unpack_packed_complex(packed, kernel.specs.bits),
+        unpack_packed_complex(weights, kernel.specs.bits),
     )
     parseval = FINE_BINS * np.asarray(float_sums, dtype=np.float64)
     drift = np.abs(gpu_powers.astype(np.float64) - parseval) / parseval

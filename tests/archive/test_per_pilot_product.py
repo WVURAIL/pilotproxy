@@ -78,22 +78,28 @@ def _detector_fn_factory(reject):
         if pk.ndim == 2:
             pk = pk[None, ...]
         results = []
+        fine = np.zeros((int(pk.shape[0]), 3, 256), dtype=np.uint64)
         for b in range(int(pk.shape[0])):
             should_reject = bool(reject(state["i"]))
+            target = 1_000_000 if should_reject else 0
             results.append({
                 "block_index": b,
                 "mask": int(should_reject),
                 # Canonical reject bits are derived from powers + exact norms,
                 # so make this stand-in unambiguously high or low.
-                "p_target_u64": 1_000_000 if should_reject else 0,
+                "p_target_u64": target,
                 "p_ref_sum_u64": 100,
                 "p_ref_lower_u64": 50,
                 "p_ref_upper_u64": 50,
             })
+            # Fine spectra whose all-bin sums are those frame powers (the
+            # per-pilot v6 invariant P_r = sum_f S_r[f]).
+            fine[b, :, 0] = (target, 50, 50)
             state["i"] += 1
         return {"batch": int(pk.shape[0]),
                 "detector_rows_per_block": int(pk.shape[1]),
-                "rational_overflow_count": 0, "results": results}
+                "rational_overflow_count": 0, "results": results,
+                "fine_powers_u64": fine}
     return _fn
 
 

@@ -43,7 +43,7 @@ N_FEEDS = 4
 def _fine_stub_detector_fn(
     *, packed, weights, kernel, emit_row_projections=False
 ):
-    from pilot_proxy.fine_reduction import exact_coarse_power_by_term
+    from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 
     pk = np.asarray(packed)
     if pk.ndim == 2:
@@ -53,7 +53,9 @@ def _fine_stub_detector_fn(
     projections[0, :, 0] = 2
     projections[1, :, 1] = 2
     projections[2, :, 0] = 3
-    powers = exact_coarse_power_by_term(projections, num_weight_terms=3)
+    # The frame powers are the all-bin sums of these rows' fixed-point fine
+    # spectra (per-pilot v6); the analyzer forms the spectra from the rows.
+    powers = frame_powers_from_fine_u64(projections, num_streams=rows // 128)
     result = {
         "block_index": 0,
         "mask": 0,
@@ -77,7 +79,7 @@ def _fine_detector_options():
     options = _cpu_detector_options()
     options["detector_fn"] = _fine_stub_detector_fn
     options["kernel"].supports_row_projections = lambda: True
-    options["fine_products"] = "auto"
+    options["fine_products"] = "on"
     return options
 # freq_id -> coarse-channel center (MHz)
 CHAN_MHZ = {844: 470.3125, 829: 476.171875, 752: 506.171875}
@@ -354,7 +356,7 @@ def test_cross_pilot_resume_rejects_changed_local_input(
     assert scope_path.read_text() == original_scope
 
 
-def test_cross_pilot_resume_rejects_changed_fine_retention(tmp_path, monkeypatch):
+def test_cross_pilot_resume_refuses_fine_products_auto(tmp_path, monkeypatch):
     monkeypatch.chdir(REPO_ROOT)
     data = tmp_path / "data"
     data.mkdir()
@@ -410,12 +412,14 @@ def test_cross_pilot_resume_rejects_changed_fine_retention(tmp_path, monkeypatch
         raise AssertionError("pipeline work started before the scope check")
 
     monkeypatch.setattr(pipeline_mod, "run", _reject_work)
-    with pytest.raises(SystemExit, match="fine-product retention differs"):
+    # fine_products=auto was the coarse-only degradation; since product
+    # schema v6 it is refused before any work, and the scope is untouched.
+    with pytest.raises(SystemExit, match="fine products are mandatory"):
         run_chime_scan(**{**kwargs, "analyzer_options": unsupported})
     assert scope_path.read_text() == original_scope
 
 
-def test_in_pilot_resume_rejects_changed_fine_retention(tmp_path, monkeypatch):
+def test_in_pilot_resume_refuses_fine_products_auto(tmp_path, monkeypatch):
     monkeypatch.chdir(REPO_ROOT)
     data = tmp_path / "data"
     data.mkdir()
@@ -449,7 +453,7 @@ def test_in_pilot_resume_rejects_changed_fine_retention(tmp_path, monkeypatch):
 
     unsupported = _cpu_detector_options()
     unsupported["fine_products"] = "auto"
-    with pytest.raises(SystemExit, match="fine-product retention differs"):
+    with pytest.raises(SystemExit, match="fine products are mandatory"):
         run_chime_scan(
             **{
                 **kwargs,

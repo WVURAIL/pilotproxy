@@ -3,6 +3,81 @@
 All notable changes to PilotProxy are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Kernel core 3.0.0, per-pilot product schema v6 --- frame powers are fine-power sums
+
+The three frame powers are now defined as the all-bin sums of the exact fine
+powers, `P_r = sum_f S_r[f]`, with `S_r` the uint64 output of the frozen
+`fxfft256_v1` summed over streams. The coarse ratio
+`F = 2 P_0 / (P_1 + P_2)` keeps its form (the transform length cancels), and
+the coarse ratio and the fine statistic now come from one spectrum.
+
+Kernel (core 3.0.0, ABI break): the row-domain branch is removed.
+`FStat_Compute_Powers_U64`, `FStat_Compute_Powers`,
+`FStat_Compute_DiagnosticFloat` and the coarse rational-half mask entries are
+gone, `FStat_Create` and `FStat_Create_Batch` no longer take a float output
+buffer, and the fused entries' `d_power_out` carries the fine-power sums. The
+Python wrappers follow (`create_raw(rows, d_in)`; `compute_powers*`,
+`compute_diagnostic_float` and `compute_numden_mask_*` are removed). The staged
+path sums `FStat_Compute_FinePowers_U64` on the host; both equal
+`fxfft.fine_power_fx(rows).sum(axis=-1)` exactly.
+
+Products: schema v6 (`pilotproxy_per_pilot_product_v6`) keeps every field
+name; `p_target_u64`, `p_ref_lower_u64` and `p_ref_upper_u64` are the fine
+sums and every derived column follows from them. The writer,
+`validate_current_product_identity`, `products/reader.py` and
+`tools/audit_per_pilot.py` enforce `p_r[:, 0] == fine_power_u64[:, r, :].sum(axis=1)`
+exactly. Fine products are mandatory for every in-band pilot:
+`fine_products` accepts only `on`, and the only status without fine terms is
+`not_applicable_pilot_out_of_band`. Detector contract revision 2
+(`pilotproxy_detector_contract_v2`) states the new definition and replaces
+`v1_marginal_identity` with `coarse_power_definition =
+sum_of_fxfft256_fine_powers`.
+
+The v5 products of record are not edited or migrated. Readers open v5
+(contract v1) and v6 (contract v2); a v5 view replaces the stored row-domain
+columns by `coarse_columns_from_fine` and says so in
+`frame_power_definition`. New in `product_contract`: `frame_powers_from_fine`,
+`pilot_excess_from_fine_powers`, `coarse_columns_from_fine`. The threshold
+rule and the archive-health gate read the excess and the ratios through them.
+Re-deriving the decisions of record this way changes no word, outcome or
+reason.
+
+Removed: `fine_reduction.exact_coarse_power_by_term`,
+`check_coarse_power_marginal_identity` and the
+`coarse_power_ratio_from_marginal` field, and the per-frame marginal tripwire.
+The float `fine_reduce` keeps its float Parseval identity as a property of the
+float prototype only. `detector_reference.coarse_power_ratio_cpu_reference_packed`
+now runs rows -> fxfft256 -> exact sums, so the CPU-only sweep keeps the
+kernel's semantics. Tools and integrations that formed `sum |z|^2`
+(`capture_reference`, the SDR upgrade adapter and streaming adapter,
+`testbench/fine_validation_gpu`, `evaluate_snr`, `fused_real_receipt`,
+`measure_fine_gain`, `mask_residual_frontier`, `characterize_capture_transfer`)
+now use the fine-power sums; their receipt and shard schemas were bumped where
+the stored values changed.
+
+`FStatKernel` refuses a library whose core major is not 3 before binding any
+entry (a 2.x `FStat_Create` takes an output buffer the 3.0.0 binding lacks).
+Schema tokens whose meaning changed are bumped: the result schema to
+`pilotproxy_result_schema_v2`, the detector-core profile to
+`pilotproxy_detector_core_profile_v3` (its v2 token is a retired name; the
+profile drops `mag_squared_accumulator_bits_target`, the int32 `|z|^2`
+register that went with the row-domain branch) and the `evaluate-snr` report to
+`pilotproxy_snr_validation_report_v2`; `load_evaluation` and the clean-term
+conditioning in `plot_results` refuse the earlier revisions.
+
+CHIME run outputs written before core 3.0.0 (detector contract revision 1,
+among them the 2026 matched-capture reductions) carry row-domain powers and no
+fine powers, so they cannot be re-expressed. `validate-products` validates
+them as records and reports `detector_contract_revision` 1 with a
+`record_note`; the CHIME plots and `injection_recovery` refuse them, and
+runtime weight bundles must carry contract revision 2. The frame-power helpers
+refuse a v5 product whose `fine_status` marks an all-zero fine placeholder.
+The archive-health spectrum correction checks the stored integrated spectra
+with the stored `valid` and `reject_mask` they were accumulated with (on a v5
+product the row-domain decision) and reports the frames on which that mask
+differs from the current one.
+
+
 ## Era boundaries by the pilot line's identity
 
 `characterize era-boundaries --line-identity` also cuts an era where the pilot

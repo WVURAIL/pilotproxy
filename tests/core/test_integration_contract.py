@@ -204,7 +204,7 @@ def test_detector_core_profile_json_roundtrip() -> None:
     assert profile.num_weight_terms == WEIGHT_TERMS
     assert profile.skipped_guard_bins == 1
     assert profile.reference_offset_bins == 2
-    assert profile.schema_version == "pilotproxy_detector_core_profile_v1"
+    assert profile.schema_version == "pilotproxy_detector_core_profile_v3"
     assert profile.host_masking_policy == "normalized_positive_excess_from_uint64_powers"
     assert profile.per_frequency_threshold is False
     assert reparsed.to_dict() == profile.to_dict()

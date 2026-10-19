@@ -7,10 +7,17 @@ listed in [`FINE_REDUCTION_PRODUCTS.md`](FINE_REDUCTION_PRODUCTS.md).
 
 ```text
 schema_name = "pilotproxy_per_pilot_product"
-schema_revision = 5
-schema_version = "pilotproxy_per_pilot_product_v5"
+schema_revision = 6
+schema_version = "pilotproxy_per_pilot_product_v6"
 source_event_key_schema_version = "pilotproxy_namespaced_source_event_key_v1"
 ```
+
+Schema v6 keeps every v5 field name. What changed is the value of the frame
+powers: `p_target_u64`, `p_ref_lower_u64` and `p_ref_upper_u64` are the exact
+all-bin sums of `fine_power_u64` (kernel core 3.0.0), and the derived columns
+follow from them. The v5 products of record store the retired row-domain
+powers in the same fields; readers recompute those columns from the stored
+fine powers (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
 
 The `pilot-proxy-detector` analyzer writes one product for one selected receiver
 coarse channel. `reject_mask = 1` means reject. Event-keyed frame identity,
@@ -52,11 +59,11 @@ integrated spectrum receives the frame.
 | Array | Shape | Dtype | Meaning |
 |---|---:|---|---|
 | `frame_index` | `(N,)` | `int64` | Zero-based positional frame counter |
-| `p_target_u64` | `(N, 1)` | `uint64` | Target-bin power from the fixed-point detector |
-| `p_ref_sum_u64` | `(N, 1)` | `uint64` | Lower plus upper reference power |
-| `p_ref_lower_u64` | `(N, 1)` | `uint64` | Lower reference power, kept unsummed |
-| `p_ref_upper_u64` | `(N, 1)` | `uint64` | Upper reference power, kept unsummed |
-| `fine_power_u64` | `(N, 3, 256)` when enabled; `(N, 0, 0)` otherwise | `uint64` | **Exact** fine-power terms from the frozen `fxfft256`; never a zero placeholder |
+| `p_target_u64` | `(N, 1)` | `uint64` | Target frame power `sum_f fine_power_u64[:, 0, f]` |
+| `p_ref_sum_u64` | `(N, 1)` | `uint64` | Lower plus upper reference frame power |
+| `p_ref_lower_u64` | `(N, 1)` | `uint64` | Lower reference frame power `sum_f fine_power_u64[:, 1, f]`, kept unsummed |
+| `p_ref_upper_u64` | `(N, 1)` | `uint64` | Upper reference frame power `sum_f fine_power_u64[:, 2, f]`, kept unsummed |
+| `fine_power_u64` | `(N, 3, 256)` when enabled; `(N, 0, 0)` for a pilot out of band | `uint64` | **Exact** fine-power terms from the frozen `fxfft256`; never a zero placeholder |
 | `psd_frame_db_i16` | `(N, 16384)` | `int16` | Per-frame PSD, feeds summed, in dB about `psd_db_reference` |
 | `coarse_power_ratio` | `(N, 1)` | `float64` | `2*p_target/p_ref_sum` |
 | `normalized_coarse_power_ratio_db` | `(N, 1)` | `float64` | `10*log10(F)` |
@@ -101,7 +108,7 @@ post-processing can decide and replay exactly.
 
 | Array | Shape | Dtype | Meaning |
 |---|---:|---|---|
-| `fine_status` | `()` | `str` | `enabled` when terms exist; `pending` only for an empty checkpoint; otherwise an explicit no-measurement reason |
+| `fine_status` | `()` | `str` | `enabled` for an in-band pilot; `pending` only for an empty checkpoint; `not_applicable_pilot_out_of_band` otherwise |
 | `fine_num_bins` | `()` | `int64` | Fine transform length actually used (`256` when enabled, otherwise `0`) |
 | `fine_pad_factor` | `()` | `int64` | Zero-padding factor of the fine transform (`2`) |
 | `fine_guard_fine_bins` | `()` | `int64` | Guard bins excluded either side of the designated window (`1`) |
@@ -110,10 +117,11 @@ post-processing can decide and replay exactly.
 | `fine_census_excluded_bins` | `(E,)` | `int64` | Bins excluded from the census; empty when none |
 | `decision_contract_json` | `()` | `str` | The whole contract as JSON, for exact replay |
 
-An older v5 no-measurement checkpoint can contain an all-zero
-`(N, 3, B)` placeholder. Resume accepts that one form and rewrites it as the
-canonical `(N, 0, 0)` array with zero bins. Current products never create the
-placeholder, and any nonzero value is invalid.
+A v5 product whose fine stage did not run stores an all-zero `(N, 3, B)`
+placeholder. Its sums are not frame powers, so v6 has no such form: resume
+refuses a checkpoint that carries it, the frame-power helpers refuse such a
+v5 product, and an out-of-band pilot stores exactly `(N, 0, 0)` with zero
+bins.
 
 ### Per-unit receiver state (length equal to `unit_order`)
 
@@ -153,7 +161,9 @@ when those values are present.
 `weight_coefficients_sha256` `()` `str` is listed under Provenance below.
 
 The product stores `p_target_u64` and `p_ref_sum_u64` without converting them to
-a thresholded statistic. We can therefore recompute an alternative F threshold
+a thresholded statistic. In a v6 product they are the all-bin sums of the
+stored `fine_power_u64`, so a reader can also re-form them from the fine
+terms; `products/reader.py` does exactly that and refuses any disagreement. We can therefore recompute an alternative F threshold
 or dB calibration from the same detector pass, provided the required calibration
 constants are also used. This does not require rerunning the CUDA detector.
 
@@ -213,16 +223,24 @@ offline. Nothing recovers it afterwards, and a rescan costs weeks.
 
 Cost is about 4.4 kB per frame after npz deflate (6,144 B raw), roughly 3.3 GB
 across a 750k-frame archive. Observed values need 46 bits at the 2048-stream
-geometry, so `uint64` is both necessary and sufficient.
+geometry, so `uint64` is both necessary and sufficient. Their all-bin sums,
+the frame powers, are bounded by `256 * 2 * R^2 * 128 * streams * 1.001`
+(`R` the row-sum component bound, `cuda/config.h`): about `2^55` at 2048
+streams, inside `uint64` with 9 bits to spare.
+
+Since schema v6 the fine terms are also the source of the frame powers, so
+they are mandatory for every in-band pilot; `fine_products` accepts only `on`.
 
 `p_ref_lower_u64` and `p_ref_upper_u64` are kept for the same reason at the
 coarse level: the sum alone cannot show that only one reference window was
 contaminated.
 
 All four coarse power fields are exact `uint64 (N, 1)` arrays. The product
-contract checks each split in Python integer arithmetic and rejects overflow or
-any row where lower plus upper does not equal `p_ref_sum_u64`. A backend that
-omits one of these terms fails instead of writing a placeholder.
+contract checks each split in Python integer arithmetic and rejects overflow,
+any row where lower plus upper does not equal `p_ref_sum_u64`, and (v6, fine
+status `enabled`) any row where a frame power differs from the exact all-bin
+sum of that term's `fine_power_u64`. A backend that omits one of these terms
+fails instead of writing a placeholder.
 
 ### Mask convention
 

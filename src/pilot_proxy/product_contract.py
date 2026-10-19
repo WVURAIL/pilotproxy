@@ -24,10 +24,18 @@ from pilot_proxy.atsc_channels import (
     ATSC_UHF_MIN_PHYSICAL_CHANNEL,
 )
 from pilot_proxy.detector_contract import (
+    COARSE_POWER_DEFINITION,
     NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
     normalized_positive_excess,
 )
 from pilot_proxy.detector_reference import REFERENCE_WEIGHT_TERMS
+from pilot_proxy.dtv_units import (
+    normalized_coarse_power_ratio_to_db,
+    normalized_pilot_excess_to_db,
+    pilot_excess_db_to_data_shelf_snr_db,
+    power_terms_to_coarse_power_ratio,
+    power_terms_to_normalized_coarse_power_ratio,
+)
 from pilot_proxy.fine_reduction import (
     WEIGHT_TERM_REF_LOWER,
     WEIGHT_TERM_REF_UPPER,
@@ -47,9 +55,21 @@ PER_PILOT_PRODUCT_SCHEMA_NAME = "pilotproxy_per_pilot_product"
 # railed count (fill_sample_count), so incomplete baseband is no longer
 # recorded as clipping. No v4 cohort was ever produced; v4 snapshots are
 # rejected like every other development snapshot.
-PER_PILOT_PRODUCT_SCHEMA_REVISION = 5
+# v6 (kernel core 3.0.0) keeps every field name and redefines the frame
+# powers: p_target_u64, p_ref_lower_u64 and p_ref_upper_u64 are the exact
+# all-bin sums of fine_power_u64 (P_r = sum_f S_r[f]), and every derived
+# column (the ratio floats, reject_mask, valid) is formed from those sums as
+# before. Fine powers are mandatory for every in-band pilot. The v5 products of
+# record stored the row-domain sums of |z|^2 instead; they stay on disk
+# unedited, and readers recompute their frame powers from their stored
+# fine_power_u64 (coarse_columns_from_fine), never from the stored v5 powers.
+PER_PILOT_PRODUCT_SCHEMA_REVISION = 6
 PER_PILOT_PRODUCT_SCHEMA_TOKEN = (
     f"{PER_PILOT_PRODUCT_SCHEMA_NAME}_v{PER_PILOT_PRODUCT_SCHEMA_REVISION}"
+)
+PER_PILOT_PRODUCT_V5_SCHEMA_REVISION = 5
+PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN = (
+    f"{PER_PILOT_PRODUCT_SCHEMA_NAME}_v{PER_PILOT_PRODUCT_V5_SCHEMA_REVISION}"
 )
 
 # Every per-frame array the analyzer writes (length n_frames along axis 0),
@@ -102,14 +122,52 @@ FINE_CANDIDATE_CALIBRATION_STATUS = "pending_campaign"
 
 FINE_STATUS_ENABLED = "enabled"
 FINE_STATUS_PENDING = "pending"
-FINE_STATUS_WITHOUT_TERMS = frozenset(
+FINE_STATUS_OUT_OF_BAND = "not_applicable_pilot_out_of_band"
+# The frame powers are defined from the fine powers, so an in-band pilot
+# without them has no frame powers at all: the only status without terms is
+# a pilot outside the measured band (zero powers, NaN ratios, valid = 0).
+FINE_STATUS_WITHOUT_TERMS = frozenset({FINE_STATUS_OUT_OF_BAND})
+# The statuses whose fine_power_u64 are the measured terms (or, out of band,
+# the empty terms whose sums are the zero frame powers). A v5 product with any
+# other status (disabled_by_option, *_lacks_matched_filter_row_projections)
+# stores an all-zero placeholder, so frame powers formed from it would be
+# zeros rather than measurements.
+_FINE_STATUSES_WITH_FRAME_POWERS = frozenset(
+    {FINE_STATUS_ENABLED, FINE_STATUS_PENDING, FINE_STATUS_OUT_OF_BAND}
+)
+
+# The per-frame columns coarse_columns_from_fine derives from fine_power_u64,
+# in the order the writer stores them. In a v6 product each equals the stored
+# column (integers and flags exactly, floats to the reader's tolerance).
+FINE_DERIVED_FRAME_COLUMNS = (
+    "p_target_u64",
+    "p_ref_lower_u64",
+    "p_ref_upper_u64",
+    "p_ref_sum_u64",
+    "coarse_power_ratio",
+    "normalized_coarse_power_ratio_db",
+    "normalized_pilot_excess",
+    "pilot_excess_db",
+    "estimated_data_shelf_snr_db",
+    "reject_mask",
+    "valid",
+)
+FINE_DERIVED_INTEGER_COLUMNS = frozenset(
     {
-        "disabled_by_option",
-        "detector_fn_lacks_matched_filter_row_projections",
-        "kernel_library_lacks_matched_filter_row_projections",
-        "not_applicable_pilot_out_of_band",
+        "p_target_u64",
+        "p_ref_lower_u64",
+        "p_ref_upper_u64",
+        "p_ref_sum_u64",
+        "reject_mask",
+        "valid",
     }
 )
+# Stored and recomputed float columns agree to this tolerance; the products
+# are formed by the same float64 operations, and the tolerance only absorbs
+# platform differences in log10.
+FINE_DERIVED_FLOAT_RTOL = 4e-13
+FINE_DERIVED_FLOAT_ATOL = 1e-12
+_UINT64_LIMIT = float(1 << 64)
 
 
 def current_decision_contract() -> dict[str, Any]:
@@ -127,10 +185,11 @@ def current_decision_contract() -> dict[str, Any]:
             "terms_field": "fine_power_u64",
             "terms_note": (
                 "exact uint64 [3, num_bins] from the frozen fxfft256: the "
-                "deployed fine statistic's numerators and denominators. The "
-                "scan stores these and nothing derived from them, so the "
-                "ratio, the CFAR baseline, the designated-set decision, and "
-                "any threshold are recomputed in post-processing at whatever "
+                "deployed fine statistic's numerators and denominators. "
+                "Besides their exact all-bin sums (the frame powers), the "
+                "scan stores nothing derived from them, so the ratio, the "
+                "CFAR baseline, the designated-set decision, and any "
+                "threshold are recomputed in post-processing at whatever "
                 "operating point is calibrated."
             ),
             "no_scan_time_decision": (
@@ -144,7 +203,43 @@ def current_decision_contract() -> dict[str, Any]:
             "calibration_status": FINE_CANDIDATE_CALIBRATION_STATUS,
             "active": False,
         },
+        "frame_powers": {
+            "definition": COARSE_POWER_DEFINITION,
+            "fields": ["p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64"],
+            "terms_field": "fine_power_u64",
+            "invariant": (
+                "for fine_status enabled, p_r[:, 0] == "
+                "fine_power_u64[:, r, :].sum(axis=1) exactly (r = target, "
+                "lower, upper); p_ref_sum = lower + upper"
+            ),
+        },
     }
+
+
+# The fine-terms note the v5 products of record carry (their decision
+# contract predates the frame_powers block).
+_V5_FINE_TERMS_NOTE = (
+    "exact uint64 [3, num_bins] from the frozen fxfft256: the "
+    "deployed fine statistic's numerators and denominators. The "
+    "scan stores these and nothing derived from them, so the "
+    "ratio, the CFAR baseline, the designated-set decision, and "
+    "any threshold are recomputed in post-processing at whatever "
+    "operating point is calibrated."
+)
+
+
+def v5_decision_contract() -> dict[str, Any]:
+    """The decision contract exactly as the v5 products of record store it.
+
+    It is :func:`current_decision_contract` without the ``frame_powers``
+    block (v6 added it with the kernel core 3.0.0 frame-power definition) and
+    with that release's fine-terms note. Audits compare v5 products with it
+    exactly; nothing writes it.
+    """
+    contract = current_decision_contract()
+    del contract["frame_powers"]
+    contract["fine_measurement"]["terms_note"] = _V5_FINE_TERMS_NOTE
+    return contract
 
 
 class CurrentProductContractError(ValueError):
@@ -220,6 +315,253 @@ def fine_power_ratio_of(product: Mapping[str, Any]) -> np.ndarray:
     raise CurrentProductContractError(
         "product carries neither fine_power_u64 nor a stored fine power ratio"
     )
+
+
+def _selected_fine_terms(product: Mapping[str, Any], rows: Any) -> np.ndarray:
+    """``fine_power_u64`` (optionally a frame selection) as exact uint64 (n, 3, B).
+
+    An ``(N, 0, 0)`` member (a pilot outside the band) is returned as is; its
+    frame powers are the empty sums, zero.
+    """
+    if "fine_power_u64" not in product:
+        raise CurrentProductContractError(
+            "product carries no fine_power_u64, so its frame powers cannot be "
+            "formed"
+        )
+    if "fine_status" in product:
+        status = str(np.asarray(product["fine_status"]).reshape(()).item())
+        if status not in _FINE_STATUSES_WITH_FRAME_POWERS:
+            raise CurrentProductContractError(
+                f"fine_status {status!r}: the product's fine_power_u64 is a "
+                "placeholder, not measured fine powers, so its frame powers "
+                "cannot be formed from them"
+            )
+    terms = np.asarray(product["fine_power_u64"])
+    if terms.dtype != np.dtype(np.uint64) or terms.ndim != 3:
+        raise CurrentProductContractError(
+            "fine_power_u64 must be uint64 of shape (N, 3, B); got "
+            f"{terms.dtype} {terms.shape}"
+        )
+    if terms.shape[1:] != (0, 0) and terms.shape[1] != REFERENCE_WEIGHT_TERMS:
+        raise CurrentProductContractError(
+            "fine_power_u64 must have shape (N, 3, B) or (N, 0, 0); got "
+            f"{terms.shape}"
+        )
+    if any(stride == 0 and size > 1 for stride, size in zip(terms.strides, terms.shape)):
+        # A broadcast view carries a shape but not the measured values.
+        raise CurrentProductContractError(
+            "fine_power_u64 is a metadata-only (broadcast) view; the frame "
+            "powers need its values"
+        )
+    if rows is not None:
+        terms = terms[np.asarray(rows) if not isinstance(rows, slice) else rows]
+        if terms.ndim != 3:
+            raise CurrentProductContractError(
+                "rows must select frames along axis 0 (an index vector, a "
+                "boolean mask or a slice)"
+            )
+    return terms
+
+
+def frame_powers_from_fine(
+    product: Mapping[str, Any], rows: Any = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The frame powers ``(p_target, p_ref_lower, p_ref_upper)`` from fine powers.
+
+    ``P_r = sum_f fine_power_u64[:, r, f]``, the kernel core 3.0.0 definition,
+    as exact ``uint64`` vectors of shape ``(n,)`` (``n`` frames, or the
+    ``rows`` selection). This is what a v6 product stores in
+    ``p_*_u64[:, 0]``; on a v5 product of record it is the frame power the
+    stored row-domain ``p_*_u64`` are replaced by. The deployed bound keeps
+    every sum far below ``2**64`` (about ``2**56`` at 2048 inputs); numpy
+    would wrap silently, so a float64 shadow sum refuses any sum that could
+    have reached ``2**64`` instead of returning a wrapped value.
+    """
+    terms = _selected_fine_terms(product, rows)
+    count = int(terms.shape[0])
+    if terms.shape[1] == 0:
+        zeros = np.zeros(count, dtype=np.uint64)
+        return zeros, zeros.copy(), zeros.copy()
+    sums = terms.sum(axis=2, dtype=np.uint64)
+    shadow = terms.sum(axis=2, dtype=np.float64)
+    if shadow.size and float(shadow.max()) >= _UINT64_LIMIT * (1.0 - 1e-9):
+        raise CurrentProductContractError(
+            "a frame power sum of fine_power_u64 reaches 2**64; the fine "
+            "powers are outside the detector's bound"
+        )
+    return (
+        np.ascontiguousarray(sums[:, WEIGHT_TERM_TARGET]),
+        np.ascontiguousarray(sums[:, WEIGHT_TERM_REF_LOWER]),
+        np.ascontiguousarray(sums[:, WEIGHT_TERM_REF_UPPER]),
+    )
+
+
+def _exact_norms_of(product: Mapping[str, Any]) -> tuple[int, int]:
+    target = int(np.asarray(product["target_norm_sq"]).reshape(-1)[0])
+    name = (
+        "reference_norm_sum_sq"
+        if "reference_norm_sum_sq" in product
+        else ARCHIVED_REFERENCE_NORM_SUM_SQ
+    )
+    reference = int(np.asarray(product[name]).reshape(-1)[0])
+    if target <= 0 or reference <= 0:
+        raise CurrentProductContractError(
+            "target_norm_sq and reference_norm_sum_sq must be positive to form "
+            "the weight-norm correction"
+        )
+    return target, reference
+
+
+def _reference_sum(lower: np.ndarray, upper: np.ndarray) -> np.ndarray:
+    total = lower + upper
+    if np.any(total < lower):
+        raise CurrentProductContractError(
+            "the reference frame power p_ref_lower + p_ref_upper exceeds uint64"
+        )
+    return total
+
+
+def pilot_excess_from_fine_powers(
+    product: Mapping[str, Any], rows: Any = None
+) -> np.ndarray:
+    """The normalized pilot excess ``e = 2 P_0 / (P_1 + P_2) / mu_0 - 1``.
+
+    ``P_r`` are :func:`frame_powers_from_fine` and ``mu_0`` is
+    :func:`null_power_ratio_of` (``2 target_norm_sq / reference_norm_sum_sq``),
+    so ``e = P_0 reference_norm_sum_sq / ((P_1 + P_2) target_norm_sq) - 1``,
+    evaluated in float64 in that order, exactly as the v6 writer stores
+    ``normalized_pilot_excess``. NaN where ``P_1 + P_2 == 0``. Returns float64
+    of shape ``(n,)``. This is the excess every analysis reads, for v5 and v6
+    products alike.
+    """
+    null_power_ratio_of(product)  # validates the norms
+    target_norm, reference_norm = _exact_norms_of(product)
+    p_target, p_lower, p_upper = frame_powers_from_fine(product, rows)
+    p_reference = _reference_sum(p_lower, p_upper)
+    ratio = np.asarray(
+        power_terms_to_normalized_coarse_power_ratio(
+            p_target,
+            p_reference,
+            target_norm_sq=target_norm,
+            reference_norm_sum_sq=reference_norm,
+        ),
+        dtype=np.float64,
+    )
+    return ratio - 1.0
+
+
+def coarse_columns_from_fine(
+    product: Mapping[str, Any], rows: Any = None
+) -> dict[str, np.ndarray]:
+    """Every per-frame column a v6 product derives from ``fine_power_u64``.
+
+    Returns the columns of :data:`FINE_DERIVED_FRAME_COLUMNS`, each of shape
+    ``(n, 1)`` as the product stores them, computed exactly as the v6 writer
+    computes them: the frame powers ``P_r = sum_f S_r[f]`` (uint64),
+    ``p_ref_sum_u64 = lower + upper``, ``coarse_power_ratio = 2 P_0 / p_ref_sum``,
+    ``normalized_coarse_power_ratio_db = 10 log10(Q)``,
+    ``normalized_pilot_excess = Q - 1`` (:func:`pilot_excess_from_fine_powers`),
+    ``pilot_excess_db``, ``estimated_data_shelf_snr_db`` from the product's
+    calibration scalars, ``reject_mask`` (the exact integer normalized
+    positive-excess decision) and ``valid = p_ref_sum != 0``. Every float is
+    NaN where the reference power is zero. For a v5 product of record these
+    replace the stored row-domain columns; for a v6 product they equal the
+    stored ones.
+    """
+    target_norm, reference_norm = _exact_norms_of(product)
+    p_target, p_lower, p_upper = frame_powers_from_fine(product, rows)
+    p_reference = _reference_sum(p_lower, p_upper)
+    coarse = np.asarray(
+        power_terms_to_coarse_power_ratio(p_target, p_reference), dtype=np.float64
+    )
+    ratio = np.asarray(
+        power_terms_to_normalized_coarse_power_ratio(
+            p_target,
+            p_reference,
+            target_norm_sq=target_norm,
+            reference_norm_sum_sq=reference_norm,
+        ),
+        dtype=np.float64,
+    )
+    ratio_db = np.asarray(normalized_coarse_power_ratio_to_db(ratio), dtype=np.float64)
+    excess = ratio - 1.0
+    excess_db = np.asarray(normalized_pilot_excess_to_db(excess), dtype=np.float64)
+
+    def _scalar(name: str) -> float:
+        return float(np.asarray(product[name]).reshape(-1)[0])
+
+    shelf = np.asarray(
+        pilot_excess_db_to_data_shelf_snr_db(
+            excess_db,
+            pilot_below_data_db=_scalar("pilot_below_data_db"),
+            bin_enbw_hz=_scalar("bin_enbw_hz"),
+            dtv_bandwidth_hz=_scalar("dtv_bandwidth_hz"),
+            pilot_capture_efficiency=_scalar("pilot_capture_efficiency"),
+        ),
+        dtype=np.float64,
+    )
+    reject = np.fromiter(
+        (
+            normalized_positive_excess(
+                int(num),
+                int(den),
+                target_norm_sq=target_norm,
+                reference_norm_sum_sq=reference_norm,
+            )
+            for num, den in zip(p_target.tolist(), p_reference.tolist())
+        ),
+        dtype=np.uint8,
+        count=int(p_target.size),
+    )
+    valid = (p_reference != 0).astype(np.uint8)
+    columns = {
+        "p_target_u64": p_target,
+        "p_ref_lower_u64": p_lower,
+        "p_ref_upper_u64": p_upper,
+        "p_ref_sum_u64": p_reference,
+        "coarse_power_ratio": coarse,
+        "normalized_coarse_power_ratio_db": ratio_db,
+        "normalized_pilot_excess": excess,
+        "pilot_excess_db": excess_db,
+        "estimated_data_shelf_snr_db": shelf,
+        "reject_mask": reject,
+        "valid": valid,
+    }
+    return {name: columns[name].reshape(-1, 1) for name in FINE_DERIVED_FRAME_COLUMNS}
+
+
+def fine_derived_column_mismatches(
+    product: Mapping[str, Any], derived: Mapping[str, np.ndarray] | None = None
+) -> list[str]:
+    """Names of stored columns that disagree with :func:`coarse_columns_from_fine`.
+
+    Integer columns and flags must match exactly; floats to
+    ``FINE_DERIVED_FLOAT_RTOL``/``ATOL`` with NaN in the same places. An empty
+    list means the product satisfies the v6 frame-power invariant.
+    """
+    if derived is None:
+        derived = coarse_columns_from_fine(product)
+    mismatches: list[str] = []
+    for name in FINE_DERIVED_FRAME_COLUMNS:
+        stored = np.asarray(product[name])
+        expected = derived[name]
+        if stored.shape != expected.shape:
+            mismatches.append(name)
+            continue
+        if name in FINE_DERIVED_INTEGER_COLUMNS:
+            if stored.dtype.kind not in {"u", "i"} or not np.array_equal(
+                stored.astype(expected.dtype, copy=False), expected
+            ) or np.any(stored < 0):
+                mismatches.append(name)
+        elif not np.allclose(
+            np.asarray(stored, dtype=np.float64),
+            expected,
+            rtol=FINE_DERIVED_FLOAT_RTOL,
+            atol=FINE_DERIVED_FLOAT_ATOL,
+            equal_nan=True,
+        ) or not np.array_equal(np.isnan(stored), np.isnan(expected)):
+            mismatches.append(name)
+    return mismatches
 
 
 def exact_integer_array(
@@ -353,10 +695,18 @@ def _exact_string_vector(
 def validate_current_product_identity(
     product: Mapping[str, Any], *, allow_empty_checkpoint: bool = False
 ) -> None:
-    """Require the only supported schema and decision semantics.
+    """Require the only supported schema and decision semantics (v6).
 
     Development snapshots must be deleted and regenerated. This function
-    intentionally contains no aliases, migration, or best-effort fallback.
+    intentionally contains no aliases, migration, or best-effort fallback;
+    the v5 products of record are read through
+    ``pilot_proxy.products.reader`` (which recomputes their frame powers
+    from their fine powers), never validated here.
+
+    Beyond the field contract it enforces the v6 frame-power invariant: every
+    frame power is the exact all-bin sum of ``fine_power_u64``
+    (``p_r[:, 0] == fine_power_u64[:, r, :].sum(axis=1)``, r = target, lower,
+    upper) and every derived column equals :func:`coarse_columns_from_fine`.
     """
     schema_name = _exact_string_scalar(product, "schema_name")
     schema_revision = exact_integer_scalar(
@@ -912,20 +1262,10 @@ def validate_current_product_identity(
                 "current per-pilot pending fine measurement must not carry terms"
             )
     elif fine_status in FINE_STATUS_WITHOUT_TERMS:
-        canonical_empty = (
-            fine_num_bins == 0
-            and fine_terms.shape == (frame_count, 0, 0)
-        )
-        legacy_empty = (
-            fine_num_bins > 0
-            and fine_terms.shape
-            == (frame_count, REFERENCE_WEIGHT_TERMS, fine_num_bins)
-            and not np.any(fine_terms)
-        )
-        if not canonical_empty and not legacy_empty:
+        if fine_num_bins != 0 or fine_terms.shape != (frame_count, 0, 0):
             raise CurrentProductContractError(
                 "current per-pilot fine status without measurements must use "
-                f"shape ({frame_count}, 0, 0) or an all-zero v5 placeholder"
+                f"shape ({frame_count}, 0, 0) and fine_num_bins 0"
             )
     else:
         allowed = sorted(
@@ -933,6 +1273,22 @@ def validate_current_product_identity(
         )
         raise CurrentProductContractError(
             f"current per-pilot fine_status must be one of {allowed}"
+        )
+
+    # The frame powers are the fine powers' sums, so an in-band pilot without
+    # fine powers has no frame powers: fine products are mandatory in band.
+    if int(pilot_in_band[0]) == 1 and fine_status not in {
+        FINE_STATUS_ENABLED,
+        FINE_STATUS_PENDING,
+    }:
+        raise CurrentProductContractError(
+            "current per-pilot product of an in-band pilot must retain fine "
+            f"powers (fine_status 'enabled'); got {fine_status!r}"
+        )
+    if int(pilot_in_band[0]) == 0 and fine_status != FINE_STATUS_OUT_OF_BAND:
+        raise CurrentProductContractError(
+            "current per-pilot product of an out-of-band pilot must declare "
+            f"fine_status {FINE_STATUS_OUT_OF_BAND!r}"
         )
 
     exact_integer_scalar(
@@ -996,6 +1352,28 @@ def validate_current_product_identity(
         raise CurrentProductContractError(
             "current per-pilot reject_mask disagrees with the exact normalized "
             "positive-excess decision over stored powers and norms"
+        )
+    # The v6 frame-power invariant, in exact integers: each stored frame power
+    # is the all-bin sum of that term's stored fine powers (zero for a pilot
+    # outside the band, whose fine member is (N, 0, 0)).
+    for field, from_fine in zip(
+        ("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64"),
+        frame_powers_from_fine(product),
+    ):
+        stored = exact_powers[field].reshape(-1)
+        if not np.array_equal(stored, from_fine):
+            frame = int(np.flatnonzero(stored != from_fine)[0])
+            raise CurrentProductContractError(
+                f"current per-pilot {field} is not the all-bin sum of "
+                f"fine_power_u64 at frame {frame} (stored {int(stored[frame])}, "
+                f"sum {int(from_fine[frame])}); the v6 frame powers are "
+                "P_r = sum_f fine_power_u64[:, r, f]"
+            )
+    mismatches = fine_derived_column_mismatches(product)
+    if mismatches:
+        raise CurrentProductContractError(
+            "current per-pilot columns disagree with their values from the "
+            f"fine-power sums: {', '.join(mismatches)}"
         )
     spectrum_before = _exact_float_array(
         product,

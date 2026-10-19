@@ -97,10 +97,10 @@ def test_compare_frame_passes_on_identical_outputs(tmp_path):
     assert differences == []
     assert mask == 1
     assert counted == {"mask": 1, "rank_valid": 1, "n_bulk": 1,
-                       "fine_powers": 768, "coarse_powers": 3}
+                       "fine_powers": 768, "frame_powers": 3}
 
 
-@pytest.mark.parametrize("field", ["mask", "n_bulk", "fine_powers", "coarse_powers"])
+@pytest.mark.parametrize("field", ["mask", "n_bulk", "fine_powers", "frame_powers"])
 def test_compare_frame_reports_each_kind_of_difference(tmp_path, field):
     geometry = receipt.load_geometry(_thresholds(tmp_path / "t.json.gz"))[FREQ_ID]
     fine = _fine()
@@ -153,7 +153,11 @@ def test_product_index_maps_event_and_frame_to_row(tmp_path):
     index = receipt.ProductIndex(path)
     assert (index.freq_id, index.row(11, 1), index.row(12, 0), index.row(12, 1)) == (
         FREQ_ID, 1, 2, None)
-    assert index.powers.shape == (3, 3)
+    # Frame powers are the sums of the stored fine powers, not the stored p_*.
+    assert index.powers.shape == (3, 3) and index.powers.dtype == np.uint64
+    for row in range(3):
+        for term in range(3):
+            assert int(index.powers[row, term]) == sum(int(v) for v in fine[row, term])
 
 
 def _part(path: Path, files, *, frames: int, library: str = "lib") -> Path:
@@ -223,3 +227,6 @@ def test_receipt_end_to_end_on_a_tiny_synthetic_file(tmp_path):
     assert record["totals"]["frames"] == 2
     assert [Path(entry["path"]).name for entry in record["skipped"]] == ["short.h5"]
     assert record["channels"][str(CHANNEL)]["frames"] == 2
+    words = record["totals"]["words_compared"]
+    assert words["fused_with_support.frame_powers"] == 2 * 3
+    assert not any("coarse" in key for key in words)

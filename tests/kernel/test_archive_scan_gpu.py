@@ -182,3 +182,14 @@ def test_archive_gpu_scan_interrupt_resume_and_cpu_reference(tmp_path):
     np.testing.assert_array_equal(
         actual["p_ref_sum_u64"], actual["p_ref_lower_u64"] + actual["p_ref_upper_u64"]
     )
+    # The written product is per-pilot v6: the contract validator accepts it,
+    # including the exact frame-power invariant, and every stored derived
+    # column equals its value from the fine-power sums.
+    from pilot_proxy.product_contract import (
+        fine_derived_column_mismatches,
+        validate_current_product_identity,
+    )
+
+    validate_current_product_identity(actual)
+    assert str(actual["schema_version"]) == "pilotproxy_per_pilot_product_v6"
+    assert fine_derived_column_mismatches(actual) == []

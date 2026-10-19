@@ -13,6 +13,7 @@ That qualification and the archive products of record used detector core
 2.3.0. A build from the current sources reports core 2.5.0, which adds an
 entry point without changing the mask or power outputs; a run made with it
 is still a new cohort (checklist item 7).
+Note (2026-10-18): kernel core 3.0.0 superseded this frame-power definition (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
 
 The approved run is historical estimation and sufficient-statistic
 reprocessing. The coarse positive-excess flag is retained as a bootstrap

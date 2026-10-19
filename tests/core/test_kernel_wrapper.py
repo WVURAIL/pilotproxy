@@ -52,8 +52,16 @@ _CORE_3_NAMES = {
 }
 
 
-def _setup_core_3_wrapper(monkeypatch) -> SimpleNamespace:
+def _report_version(major: int, minor: int = 0, patch: int = 0):
+    def report(c_major, c_minor, c_patch):
+        c_major._obj.value, c_minor._obj.value, c_patch._obj.value = major, minor, patch
+
+    return report
+
+
+def _setup_core_3_wrapper(monkeypatch, *, major: int = 3) -> SimpleNamespace:
     lib = SimpleNamespace(**{name: _Function() for name in _CORE_3_NAMES})
+    lib.FStat_GetVersion = _Function(_report_version(major, 5 if major == 2 else 0))
     wrapper = object.__new__(FStatKernel)
     wrapper._lib = lib
     monkeypatch.setattr(
@@ -63,6 +71,16 @@ def _setup_core_3_wrapper(monkeypatch) -> SimpleNamespace:
     )
     wrapper._setup_signatures()
     return lib
+
+
+@pytest.mark.parametrize("major", [2, 4])
+def test_setup_signatures_refuses_a_library_of_another_core_major(
+    monkeypatch, major: int
+) -> None:
+    # A 2.x library's FStat_Create takes (in, out, rows); binding the core 3
+    # two-argument signature to it would corrupt the first call.
+    with pytest.raises(RuntimeError, match=f"reports core {major}\\."):
+        _setup_core_3_wrapper(monkeypatch, major=major)
 
 
 def test_setup_signatures_marks_void_functions_as_void(monkeypatch) -> None:

@@ -4,16 +4,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import pilot_proxy.fine_reduction as fine_reduction_module
 from pilot_proxy.fine_reduction import (
     CFAR_MODE_MEDIAN_LEFT,
     CFAR_MODE_QUANTILE_FALLBACK,
     FINE_PAD_FACTOR,
     calibrate_cfar,
-    check_coarse_power_marginal_identity,
-    exact_coarse_power_by_term,
     fine_bin_count,
     fine_bin_frequencies_hz,
     fine_reduce,
+    frame_powers_from_fine_u64,
     independent_bin_mask,
     p_fa_to_threshold_k,
     coarse_power_ratio_from_powers,
@@ -33,29 +33,30 @@ def _random_matched_filter_row_projections(rng: np.random.Generator) -> np.ndarr
     )
 
 
-def test_exact_marginal_matches_brute_force_and_kernel_convention() -> None:
+def test_frame_powers_are_the_exact_all_bin_sums_of_the_fixed_point_fine_powers() -> None:
+    # Kernel core 3.0.0: P[n] = sum_b S[n, b] over the frozen fxfft256 powers,
+    # in exact integers. fxfft256 is frozen at 128 windows per stream.
+    from pilot_proxy.fxfft import fine_power_fx
+
     rng = np.random.default_rng(RNG_SEED)
-    matched_filter_row_projections = _random_matched_filter_row_projections(rng)
+    rows = rng.integers(-MAX_COMPONENT, MAX_COMPONENT + 1, size=(TERMS, 4 * 128, 2), dtype=np.int32)
+    powers = frame_powers_from_fine_u64(rows, num_streams=4)
+    fine = fine_power_fx(rows, num_streams=4)
+    assert powers.dtype == np.dtype(np.uint64) and powers.shape == (TERMS,)
+    assert [int(p) for p in powers] == [sum(int(v) for v in fine[n]) for n in range(TERMS)]
 
-    marginal = exact_coarse_power_by_term(matched_filter_row_projections, num_weight_terms=TERMS)
-
-    brute = np.zeros(TERMS, dtype=np.int64)
-    for n in range(TERMS):
-        for m in range(ROWS):
-            zr = int(matched_filter_row_projections[n, m, 0])
-            zi = int(matched_filter_row_projections[n, m, 1])
-            brute[n] += zr * zr + zi * zi
-    np.testing.assert_array_equal(marginal, brute)
-
-    check_coarse_power_marginal_identity(marginal, brute)
-    with pytest.raises(AssertionError, match="coarse marginal identity"):
-        check_coarse_power_marginal_identity(marginal, brute + 1)
+    # The fixed-point transform does not conserve energy exactly, so the
+    # frame power is not 256 times the row-domain energy; it is close.
+    energy = (rows.astype(np.int64) ** 2).sum(axis=(1, 2))
+    ratio = powers.astype(np.float64) / (256.0 * energy.astype(np.float64))
+    assert np.all(np.abs(ratio - 1.0) < 1e-4)
 
 
-def test_exact_marginal_rejects_complex_input() -> None:
-    z = np.zeros((TERMS, ROWS), dtype=np.complex128)
-    with pytest.raises(TypeError, match="integer row sums"):
-        exact_coarse_power_by_term(z, num_weight_terms=TERMS)
+def test_the_row_domain_marginal_identity_is_retired() -> None:
+    for name in ("exact_coarse_" + "power_by_term", "check_coarse_power_" + "marginal_identity"):
+        assert not hasattr(fine_reduction_module, name)
+    fields = fine_reduction_module.FineReductionResult.__dataclass_fields__
+    assert ("coarse_power_ratio_from_" + "marginal") not in fields
 
 
 def test_fine_reduce_parseval_and_identity() -> None:
@@ -69,13 +70,16 @@ def test_fine_reduce_parseval_and_identity() -> None:
     assert result.fine_power.shape == (TERMS, p2)
     assert result.fine_power_ratio.shape == (p2,)
 
-    # Parseval with zero padding: sum_b S[n, b] == p2 * P[n]
+    # A property of the float prototype only: its exact-arithmetic FFT
+    # conserves energy, sum_b S[n, b] == p2 * sum_m |z[n, m]|^2, and
+    # coarse_power_by_term is that row energy, computed exactly.
     sums = result.fine_power.astype(np.float64).sum(axis=-1)
     expected = float(p2) * result.coarse_power_by_term.astype(np.float64)
     np.testing.assert_allclose(sums, expected, rtol=1e-6)
-
-    assert result.coarse_power_ratio_from_marginal == pytest.approx(
-        coarse_power_ratio_from_powers(result.coarse_power_by_term)
+    energy = (matched_filter_row_projections.astype(np.int64) ** 2).sum(axis=(1, 2))
+    np.testing.assert_array_equal(result.coarse_power_by_term, energy)
+    assert coarse_power_ratio_from_powers(result.coarse_power_by_term) == pytest.approx(
+        2.0 * energy[0] / (energy[1] + energy[2])
     )
 
 
@@ -161,14 +165,3 @@ def test_threshold_k_matches_gaussian_tail() -> None:
     assert p_fa_to_threshold_k(1.0e-3) == pytest.approx(3.0902, abs=1e-3)
     with pytest.raises(ValueError):
         p_fa_to_threshold_k(0.9)
-
-
-def test_kernel_powers_identity_is_enforced() -> None:
-    rng = np.random.default_rng(RNG_SEED + 4)
-    matched_filter_row_projections = _random_matched_filter_row_projections(rng)
-    powers = exact_coarse_power_by_term(matched_filter_row_projections, num_weight_terms=TERMS)
-    result = fine_reduce(matched_filter_row_projections, num_streams=STREAMS, windows_per_stream=WINDOWS)
-    check_coarse_power_marginal_identity(result.coarse_power_by_term, powers)
-    assert result.coarse_power_ratio_from_marginal == pytest.approx(coarse_power_ratio_from_powers(powers))
-    with pytest.raises(AssertionError):
-        check_coarse_power_marginal_identity(result.coarse_power_by_term, powers + 1)

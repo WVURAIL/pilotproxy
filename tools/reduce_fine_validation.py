@@ -5,6 +5,13 @@ These four stages never inspect null-validation or evaluation powers. Sources
 are snapshotted before reduction, every declared raw shard is authenticated,
 and a missing/invalid curve refuses calibration rather than losing trials.
 All outputs are exclusive and preserve their input/source identities.
+
+Frame powers are the all-bin sums of the fine powers (kernel core 3.0.0):
+``fixed_fine.sum(axis=-1)`` for the fixed stage and ``float_fine.sum(-1)`` for
+each floating stage. The raw shards' ``float_coarse`` and ``fixed_coarse``
+members (row-domain sums in shards written before core 3.0.0, such as the
+2026-09-09 campaign) keep their layout authenticated, but their values are
+never read.
 """
 from __future__ import annotations
 
@@ -268,8 +275,38 @@ def read_json_string(value):
     return json.loads(str(value.item()))
 
 
-def reduce_powers(float_fine, fixed_fine, float_coarse, fixed_coarse, anchors, mu0):
-    """Frame-flat array reducer; six floating ablations plus exact Q16."""
+FIXED_FRAME_POWER_CAPACITY = 1 << 63
+
+
+def frame_powers(float_fine, fixed_fine):
+    """Frame powers as the all-bin sums of the fine powers (kernel core 3.0.0).
+
+    ``float_fine[..., stage, term, bin]`` gives ``[..., stage, term]`` float64
+    sums, one per floating stage, and ``fixed_fine[..., term, bin]`` gives the
+    exact ``[..., term]`` uint64 sums of the fixed stage. A fixed sum at or
+    above the frozen signed accumulation capacity ``2**63`` is refused, so a
+    wrapped uint64 total can never be returned.
+    """
+    float_fine = np.asarray(float_fine)
+    fixed_fine = np.asarray(fixed_fine)
+    if fixed_fine.dtype != np.dtype(np.uint64):
+        raise TypeError("fixed fine powers must have exact uint64 dtype")
+    fixed = fixed_fine.sum(axis=-1, dtype=np.uint64)
+    # The float64 shadow is within a relative 1e-13 of the true sum; only the
+    # sums it places near the capacity are re-added as Python integers.
+    near = np.argwhere(fixed_fine.sum(axis=-1, dtype=np.float64) >= float(1 << 62))
+    for index in map(tuple, near):
+        if sum(int(value) for value in fixed_fine[index]) >= FIXED_FRAME_POWER_CAPACITY:
+            raise ValueError("Raw fixed frame power exceeds the frozen signed accumulation capacity")
+    return float_fine.sum(axis=-1, dtype=np.float64), fixed
+
+
+def reduce_powers(float_fine, fixed_fine, anchors, mu0):
+    """Frame-flat array reducer; six floating ablations plus exact Q16.
+
+    The frame-level (coarse) ratios use :func:`frame_powers`, the all-bin
+    sums of the same fine powers the fine scores read.
+    """
     n = len(fixed_fine)
     fine = np.empty((n, len(anchors), 6, 4))
     valid = np.empty(fine.shape, dtype=bool)
@@ -295,11 +332,12 @@ def reduce_powers(float_fine, fixed_fine, float_coarse, fixed_coarse, anchors, m
         fixed_valid[:, slot] = fixed["valid"]
         bulk_count[:, slot] = fixed["n_bulk"]
     coarse, coarse_valid = np.empty((n, 6)), np.empty((n, 6), dtype=bool)
+    float_frame, fixed_frame = frame_powers(float_fine, fixed_fine)
     geometry = construct_geometry(anchors[0])
     for stage in range(6):
         # Input-only quantization with ideal unit-modulus weights retains mu0=1.
         normalization = 1.0 if stage in (0, 1, 2) else mu0
-        power = float_coarse[:, stage] if stage < 5 else fixed_coarse
+        power = float_frame[:, stage] if stage < 5 else fixed_frame
         # Only the small coarse array is required; tiny placeholder fine avoids
         # inventing another normalization implementation.
         result = float_scores(np.zeros((n, 3, 256)), geometry,
@@ -337,7 +375,7 @@ def score_stage(out, phase):
             for column, channel in enumerate(plan["channels"]):
                 g = geometries[channel]
                 pieces[channel].append(reduce_powers(raw["float_fine"][:, column], raw["fixed_fine"][:, column],
-                    raw["float_coarse"][:, column], raw["fixed_coarse"][:, column], g["anchors"], g["mu0"]))
+                    g["anchors"], g["mu0"]))
         cells = [(c, None, pieces[c]) for c in plan["channels"]]
     else:
         cells = []
@@ -352,7 +390,6 @@ def score_stage(out, phase):
                     shape = raw["fixed_fine"].shape[:2]
                     flat = lambda a: a.reshape((-1, *a.shape[2:]))
                     reduced = reduce_powers(flat(raw["float_fine"]), flat(raw["fixed_fine"]),
-                        flat(raw["float_coarse"]), flat(raw["fixed_coarse"]),
                         [g["anchors"][case], g["anchors"][7]], g["mu0"])
                     pieces.append({k: v.reshape((*shape, *v.shape[1:])) for k, v in reduced.items()})
                 cells.append((channel, case, pieces))
@@ -369,7 +406,7 @@ def score_stage(out, phase):
                     "snr_db": None if case is None else plan["discovery_snr_db"],
                     "scope": plan["scope"], "mu0_packed_weights": geometries[channel]["mu0"],
                     "coordinate_system": plan["coordinate_system"],
-                    "coarse_scope": "Floating normalized coarse responses; fixed raw powers retained separately, not an exact coarse decision replay."}
+                    "coarse_scope": "Floating normalized frame-power ratios; frame powers are the all-bin sums of the fine powers (kernel core 3.0.0); the raw shards' coarse members are not read; not an exact coarse decision replay."}
         path = target / (f"ch{channel}.npz" if case is None else f"ch{channel}_case{case}.npz")
         outputs.update({str(Path(p).relative_to(out)): d for p, d in save_scores(path, merged, metadata).items()})
     rehash(out, bindings)

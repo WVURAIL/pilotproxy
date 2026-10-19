@@ -67,8 +67,11 @@ def _stub_kernel(k):
 def _assert_npz_equal(ref_path, got_path):
     a = np.load(ref_path)
     b = np.load(got_path)
-    assert set(a.files) == set(b.files), set(a.files) ^ set(b.files)
-    for key in a.files:
+    # chime-run stores the fine powers of its frame powers; a combine leaves
+    # them in the per-pilot products (checked against the runner below).
+    only_runner = {"fine_power_u64"} if ref_path.name == "chime_detector_outputs.npz" else set()
+    assert set(a.files) - only_runner == set(b.files), set(a.files) ^ set(b.files)
+    for key in b.files:
         x, y = np.asarray(a[key]), np.asarray(b[key])
         assert x.shape == y.shape, f"{key}: {x.shape} != {y.shape}"
         if x.dtype.kind in "fc":

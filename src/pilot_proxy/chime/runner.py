@@ -27,6 +27,7 @@ from pilot_proxy.detector_contract import (
     weight_term_norms_sq,
 )
 from pilot_proxy.detector_geometry import spectral_sense_requires_time_reversal
+from pilot_proxy.detector_reference import REFERENCE_WEIGHT_TERMS
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.dtv_units import (
     DETECTOR_WINDOW_SAMPLES,
@@ -40,6 +41,7 @@ from pilot_proxy.dtv_units import (
     power_terms_to_normalized_coarse_power_ratio_db,
     power_terms_to_normalized_pilot_excess,
 )
+from pilot_proxy.fine_decision import FINE_BINS
 from pilot_proxy.integration import (
     DEFAULT_CHIME_DTV_RECEIVER_PROFILE,
     DEFAULT_CHIME_STREAM_MAP,
@@ -53,6 +55,7 @@ from pilot_proxy.integration.packing import estimate_complex_scale
 from pilot_proxy.integration.stream_layout import validate_integration_compatibility
 from pilot_proxy.kernel import FStatKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH, DEFAULT_WEIGHTS_PATH
+from pilot_proxy.product_contract import frame_powers_from_fine
 from pilot_proxy.provenance import file_sha256, sidecar_manifest_path
 
 from .frame_adapter import pack_chime_block_for_detector
@@ -585,13 +588,57 @@ def _reference_placement_summary(
     }
 
 
+def _detection_fine_powers(
+    detection: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The block's fine powers and their exact all-bin sums ``(S, P0, P1, P2)``.
+
+    The frame powers are the all-bin sums of the fine powers (kernel core
+    3.0.0), so a detector result whose fine powers are missing, malformed or
+    do not sum to its reported powers is refused rather than published.
+    """
+    fine = detection.get("fine_powers_u64")
+    if fine is None:
+        raise ValueError(
+            "detector result carries no fine_powers_u64; the frame powers "
+            "are their all-bin sums and the run stores them"
+        )
+    fine = np.asarray(fine)
+    expected = (len(rows), REFERENCE_WEIGHT_TERMS, FINE_BINS)
+    if fine.dtype != np.dtype(np.uint64) or fine.shape != expected:
+        raise ValueError(
+            f"detector fine_powers_u64 must be uint64 of shape {expected}; "
+            f"got {fine.dtype} {fine.shape}"
+        )
+    p_target, p_lower, p_upper = frame_powers_from_fine({"fine_power_u64": fine})
+    for local_index, row in enumerate(rows):
+        reported = tuple(
+            _exact_detection_u64(row.get(field, 0), field=field)
+            for field in ("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")
+        )
+        sums = (
+            int(p_target[local_index]),
+            int(p_lower[local_index]),
+            int(p_upper[local_index]),
+        )
+        if reported != sums:
+            raise ValueError(
+                f"detector frame powers {reported} of block {local_index} are "
+                f"not the all-bin sums {sums} of its fine powers"
+            )
+    return fine, p_target, p_lower, p_upper
+
+
 def _append_detection_rows(
     *,
     detection: dict[str, Any],
     output_frame_start: int,
     pilot_index: int,
     p_target_u64: np.ndarray,
+    p_ref_lower_u64: np.ndarray,
+    p_ref_upper_u64: np.ndarray,
     p_ref_sum_u64: np.ndarray,
+    fine_power_u64: np.ndarray,
     coarse_power_ratio: np.ndarray,
     normalized_coarse_power_ratio_db: np.ndarray,
     pilot_excess_db: np.ndarray,
@@ -607,15 +654,25 @@ def _append_detection_rows(
     pilot_capture_efficiency: float,
 ) -> None:
     rows = list(detection["results"])
+    fine, _, p_lower, p_upper = _detection_fine_powers(detection, rows)
+    start = int(output_frame_start)
+    fine_power_u64[start : start + len(rows), pilot_index] = fine
     for local_index, row in enumerate(rows):
-        frame = int(output_frame_start) + local_index
+        frame = start + local_index
         num = _exact_detection_u64(
             row.get("p_target_u64", 0), field="p_target_u64"
         )
         den = _exact_detection_u64(
             row.get("p_ref_sum_u64", 0), field="p_ref_sum_u64"
         )
+        if den != int(p_lower[local_index]) + int(p_upper[local_index]):
+            raise ValueError(
+                f"detector p_ref_sum_u64 of block {local_index} is not "
+                "p_ref_lower_u64 + p_ref_upper_u64"
+            )
         p_target_u64[frame, pilot_index] = np.uint64(num)
+        p_ref_lower_u64[frame, pilot_index] = p_lower[local_index]
+        p_ref_upper_u64[frame, pilot_index] = p_upper[local_index]
         p_ref_sum_u64[frame, pilot_index] = np.uint64(den)
         coarse_power_ratio[frame, pilot_index] = float(
             power_terms_to_coarse_power_ratio(num, den)
@@ -797,7 +854,13 @@ def run_chime_analysis(
     frame_index = np.arange(num_frames, dtype=np.int64)
     shape = (int(num_frames), int(len(selected)))
     p_target_u64 = np.zeros(shape, dtype=np.uint64)
+    p_ref_lower_u64 = np.zeros(shape, dtype=np.uint64)
+    p_ref_upper_u64 = np.zeros(shape, dtype=np.uint64)
     p_ref_sum_u64 = np.zeros(shape, dtype=np.uint64)
+    # The fine powers whose all-bin sums are the frame powers (core 3.0.0).
+    fine_power_u64 = np.zeros(
+        (*shape, REFERENCE_WEIGHT_TERMS, FINE_BINS), dtype=np.uint64
+    )
     coarse_power_ratio = np.full(shape, np.nan, dtype=np.float64)
     normalized_coarse_power_ratio_db = np.full(shape, np.nan, dtype=np.float64)
     pilot_excess_db = np.full(shape, np.nan, dtype=np.float64)
@@ -902,7 +965,10 @@ def run_chime_analysis(
                 output_frame_start=int(chunk.start_frame),
                 pilot_index=int(pilot_index),
                 p_target_u64=p_target_u64,
+                p_ref_lower_u64=p_ref_lower_u64,
+                p_ref_upper_u64=p_ref_upper_u64,
                 p_ref_sum_u64=p_ref_sum_u64,
+                fine_power_u64=fine_power_u64,
                 coarse_power_ratio=coarse_power_ratio,
                 normalized_coarse_power_ratio_db=normalized_coarse_power_ratio_db,
                 pilot_excess_db=pilot_excess_db,
@@ -1051,7 +1117,10 @@ def run_chime_analysis(
         chime_frequency_hz=chime_frequency_hz,
         frame_index=frame_index,
         p_target_u64=p_target_u64,
+        p_ref_lower_u64=p_ref_lower_u64,
+        p_ref_upper_u64=p_ref_upper_u64,
         p_ref_sum_u64=p_ref_sum_u64,
+        fine_power_u64=fine_power_u64,
         coarse_power_ratio=coarse_power_ratio,
         normalized_coarse_power_ratio_db=normalized_coarse_power_ratio_db,
         pilot_excess_db=pilot_excess_db,

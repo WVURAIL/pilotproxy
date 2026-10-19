@@ -38,6 +38,7 @@ from .products import (
     CHIME_INPUT_MANIFEST_SCHEMA_TOKEN,
     CHIME_SPECTROGRAM_CACHE_FILENAME,
     SCAN_INPUT_MANIFEST_SCHEMA_TOKEN,
+    check_detector_frame_powers,
 )
 from .reductions import CHIME_REDUCTIONS_10S_FILENAME
 
@@ -687,12 +688,56 @@ def _validate_detector_contract(
     return revisions.pop() if len(revisions) == 1 else None
 
 
+def _validate_detector_frame_powers(
+    detector: NpzLike,
+    *,
+    fine_powers_required: bool,
+    errors: list[dict[str, str]],
+) -> None:
+    """Detector contract revision 2: the reference split and the fine powers.
+
+    A revision-2 output carries ``p_ref_lower_u64`` and ``p_ref_upper_u64``;
+    a ``chime-run`` output also carries ``fine_power_u64``, whose all-bin
+    sums must be the stored frame powers exactly. (A ``chime-scan`` combine
+    leaves the fine powers in its per-pilot products; when present they are
+    checked the same way.)
+    """
+    required = ["p_ref_lower_u64", "p_ref_upper_u64"]
+    if fine_powers_required:
+        required.append("fine_power_u64")
+    missing = [name for name in required if name not in detector.files]
+    if missing:
+        _add_error(
+            errors,
+            "detector.frame_powers.missing",
+            "a detector contract revision 2 output must carry "
+            + ", ".join(missing)
+            + " (its frame powers are the all-bin sums of the fine powers)",
+        )
+        return
+    problems = check_detector_frame_powers(
+        p_target_u64=np.asarray(detector["p_target_u64"]),
+        p_ref_lower_u64=np.asarray(detector["p_ref_lower_u64"]),
+        p_ref_upper_u64=np.asarray(detector["p_ref_upper_u64"]),
+        p_ref_sum_u64=np.asarray(detector["p_ref_sum_u64"]),
+        fine_power_u64=(
+            np.asarray(detector["fine_power_u64"])
+            if "fine_power_u64" in detector.files
+            else None
+        ),
+    )
+    for problem in problems:
+        _add_error(errors, "detector.frame_powers.fine_sums", problem)
+
+
 def _validate_detector(
     detector: NpzLike,
     *,
     run_config: dict[str, Any],
     stats: dict[str, Any],
     errors: list[dict[str, str]],
+    contract_revision: int | None = None,
+    chime_run: bool = False,
 ) -> tuple[int, int] | None:
     required = [
         "physical_channel",
@@ -761,6 +806,10 @@ def _validate_detector(
             errors,
             "detector.valid.denominator",
             "valid array does not match p_ref_sum_u64 > 0",
+        )
+    if contract_revision == 2:
+        _validate_detector_frame_powers(
+            detector, fine_powers_required=chime_run, errors=errors
         )
     if _is_normalized_positive_excess_run(
         run_config=run_config,
@@ -1179,6 +1228,10 @@ def validate_products(
                 run_config=run_config,
                 stats=stats,
                 errors=errors,
+                contract_revision=contract_revision,
+                chime_run=bool(input_manifest)
+                and input_manifest.get("schema_version")
+                == CHIME_INPUT_MANIFEST_SCHEMA_TOKEN,
             )
             if shape is not None and manifest_identity is not None:
                 detector_channels = [

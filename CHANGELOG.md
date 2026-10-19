@@ -65,6 +65,25 @@ register that went with the row-domain branch) and the `evaluate-snr` report to
 `pilotproxy_snr_validation_report_v2`; `load_evaluation` and the clean-term
 conditioning in `plot_results` refuse the earlier revisions.
 
+`chime-run` now stores the fine powers of its frame powers in
+`chime_detector_outputs.npz`: `fine_power_u64` of shape
+`(num_frames, num_pilots, 3, 256)` and the reference split `p_ref_lower_u64`,
+`p_ref_upper_u64`. The runner refuses a detector result whose powers are not
+the all-bin sums of its fine powers; the writer and `validate-products` check
+that identity exactly for every contract-revision-2 output (a `chime-scan`
+combine carries the split and leaves the fine powers in its per-pilot
+products).
+
+The fine-validation tools (`reduce_fine_validation.py`,
+`report_fine_null_validation.py`, `report_fine_sensitivity.py`) form the
+frame-level ratios from `fixed_fine.sum(-1)` and `float_fine.sum(-1)`; the raw
+shards' coarse members are authenticated but no longer read.
+`mask_residual_frontier.py --stage rederive` re-expresses a stored frontier
+study (such as `docs/evidence/mask_residual_frontier_2026-09-07`) under the
+fine-sum frame power after reproducing its stored excess bit for bit from its
+own stored powers, and the report stage accepts a stored study re-reported on
+another machine (same identity apart from the software block and input paths).
+
 CHIME run outputs written before core 3.0.0 (detector contract revision 1,
 among them the 2026 matched-capture reductions) carry row-domain powers and no
 fine powers, so they cannot be re-expressed. `validate-products` validates

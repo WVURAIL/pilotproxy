@@ -17,6 +17,8 @@ def test_missing_coarse_frequency_is_not_replaced_by_pilot_frequency(tmp_path) -
         pilot_frequency_hz=pilot,
         frame_index=np.asarray([0]),
         p_target_u64=np.asarray([[1]], dtype=np.uint64),
+        p_ref_lower_u64=np.asarray([[1]], dtype=np.uint64),
+        p_ref_upper_u64=np.asarray([[1]], dtype=np.uint64),
         p_ref_sum_u64=np.asarray([[2]], dtype=np.uint64),
         coarse_power_ratio=np.asarray([[1.0]]),
         normalized_coarse_power_ratio_db=np.asarray([[0.0]]),
@@ -38,6 +40,59 @@ def test_missing_coarse_frequency_is_not_replaced_by_pilot_frequency(tmp_path) -
             "null_power_ratio",
             "normalized_pilot_excess",
         }.issubset(product.files)
+
+
+def _detector_arrays(fine):
+    fine = np.asarray(fine, dtype=np.uint64)
+    sums = fine.sum(axis=-1, dtype=np.uint64)
+    return {
+        "physical_channel": np.asarray([14]),
+        "pilot_frequency_hz": np.asarray([470_309_440.559]),
+        "frame_index": np.asarray([0]),
+        "p_target_u64": sums[..., 0],
+        "p_ref_lower_u64": sums[..., 1],
+        "p_ref_upper_u64": sums[..., 2],
+        "p_ref_sum_u64": sums[..., 1] + sums[..., 2],
+        "fine_power_u64": fine,
+        "coarse_power_ratio": np.asarray([[1.0]]),
+        "normalized_coarse_power_ratio_db": np.asarray([[0.0]]),
+        "pilot_excess_db": np.asarray([[np.nan]]),
+        "estimated_data_shelf_snr_db": np.asarray([[np.nan]]),
+        "mask": np.asarray([[0]], dtype=np.uint8),
+        "valid": np.asarray([[1]], dtype=np.uint8),
+        "target_norm_sq": np.asarray([1], dtype=np.int64),
+        "reference_norm_sum_sq": np.asarray([2], dtype=np.int64),
+        "null_power_ratio": np.asarray([1.0]),
+        "normalized_pilot_excess": np.asarray([[0.0]]),
+    }
+
+
+def test_detector_outputs_store_the_fine_powers_and_the_reference_split(tmp_path) -> None:
+    fine = np.arange(768, dtype=np.uint64).reshape(1, 1, 3, 256)
+    outputs = write_detector_outputs(tmp_path, **_detector_arrays(fine))
+    with np.load(outputs) as product:
+        np.testing.assert_array_equal(product["fine_power_u64"], fine)
+        assert product["p_target_u64"].tolist() == [[sum(range(256))]]
+        assert product["p_ref_lower_u64"].tolist() == [[sum(range(256, 512))]]
+        assert product["p_ref_upper_u64"].tolist() == [[sum(range(512, 768))]]
+
+
+def test_detector_outputs_refuse_frame_powers_that_are_not_fine_sums(tmp_path) -> None:
+    import pytest
+
+    arrays = _detector_arrays(np.ones((1, 1, 3, 256)))
+    arrays["p_target_u64"] = arrays["p_target_u64"] + np.uint64(1)
+    with pytest.raises(ValueError, match="all-bin sum"):
+        write_detector_outputs(tmp_path, **arrays)
+    arrays = _detector_arrays(np.ones((1, 1, 3, 256)))
+    arrays["p_ref_sum_u64"] = arrays["p_ref_sum_u64"] + np.uint64(1)
+    with pytest.raises(ValueError, match="p_ref_lower_u64 \\+ p_ref_upper_u64"):
+        write_detector_outputs(tmp_path, **arrays)
+    arrays = _detector_arrays(np.zeros((1, 1, 3, 256)))
+    arrays["fine_power_u64"][0, 0, 0, :2] = 1 << 63  # the sum wraps uint64
+    with pytest.raises(ValueError, match="2\\*\\*64"):
+        write_detector_outputs(tmp_path, **arrays)
+    assert not (tmp_path / "chime_detector_outputs.npz").exists()
 
 
 def test_spectrogram_preserves_supplied_coarse_frequency(tmp_path) -> None:

@@ -158,6 +158,117 @@ def _fake_kernel(detector_window_samples: int):
     return SimpleNamespace(specs=specs, version=version)
 
 
+def _fake_detector(**kwargs):
+    """Powers 30 + block against 12 + 8, spread over the 256 fine bins."""
+    packed = kwargs["packed"]
+    batch = int(packed.shape[0])
+    fine = np.zeros((batch, 3, 256), dtype=np.uint64)
+    for index in range(batch):
+        fine[index, 0, :30 + index] = 1
+        fine[index, 1, 7] = 12
+        fine[index, 2, 200:208] = 1
+    return {
+        "batch": batch,
+        "detector_rows_per_block": int(packed.shape[1]),
+        "rational_overflow_count": 0,
+        "fine_powers_u64": fine,
+        "results": [
+            {
+                "block_index": index,
+                # Deliberately inconsistent: the runner must publish the
+                # exact decision derived from powers/norms, not this bit.
+                "mask": 0,
+                "p_target_u64": 30 + index,
+                "p_ref_lower_u64": 12,
+                "p_ref_upper_u64": 8,
+                "p_ref_sum_u64": 20,
+            }
+            for index in range(batch)
+        ],
+    }
+
+
+def _small_input(tmp_path) -> tuple[Path, Path]:
+    input_dir = tmp_path / "input"
+    ch_dir = input_dir / "ch0844"
+    ch_dir.mkdir(parents=True)
+    data = np.zeros(
+        (SMALL_RUN_FRAME_SIZE_SAMPLES * SMALL_RUN_NUM_FRAMES, SMALL_RUN_NUM_INPUT_STREAMS),
+        dtype=np.uint8,
+    )
+    with h5py.File(ch_dir / "001.h5", "w") as h5:
+        h5.attrs["freq"] = 470.3125
+        h5.attrs["freq_id"] = 844
+        ds = h5.create_dataset("baseband", data=data)
+        ds.attrs["axis"] = np.asarray(["time", "input"], dtype=object)
+    profile = default_reference_receiver_profile(
+        frame_size_samples=SMALL_RUN_FRAME_SIZE_SAMPLES,
+        num_input_streams=SMALL_RUN_NUM_INPUT_STREAMS,
+    )
+    profile_data = profile.to_dict()
+    profile_data["input_streams"]["stream_map_required"] = False
+    profile_path = tmp_path / "receiver_profile.json"
+    profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
+    return input_dir, profile_path
+
+
+def _run_small(input_dir, output_dir, profile_path, detector_fn) -> None:
+    run_chime_analysis(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        receiver_profile_path=profile_path,
+        stream_map_path=None,
+        physical_channels=[14],
+        frame_size_samples=SMALL_RUN_FRAME_SIZE_SAMPLES,
+        detector_window_samples=SMALL_RUN_DETECTOR_WINDOW_SAMPLES,
+        frames_per_chunk=1,
+        max_frames=SMALL_RUN_NUM_FRAMES,
+        kernel=_fake_kernel(SMALL_RUN_DETECTOR_WINDOW_SAMPLES),
+        detector_fn=detector_fn,
+        weights_by_channel={
+            14: np.ones(
+                (3, SMALL_RUN_DETECTOR_WINDOW_SAMPLES),
+                dtype=np.int8,
+            )
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "corruption, message",
+    [
+        ("drop_fine", "no fine_powers_u64"),
+        ("target_not_sum", "not the all-bin sums"),
+        ("lower_not_sum", "not the all-bin sums"),
+        ("sum_not_split", "p_ref_lower_u64 \\+ p_ref_upper_u64"),
+        ("fine_shape", "must be uint64 of shape"),
+    ],
+)
+def test_chime_runner_refuses_frame_powers_that_are_not_fine_sums(
+    tmp_path, corruption, message
+) -> None:
+    def corrupted(**kwargs):
+        result = _fake_detector(**kwargs)
+        row = result["results"][0]
+        if corruption == "drop_fine":
+            del result["fine_powers_u64"]
+        elif corruption == "target_not_sum":
+            row["p_target_u64"] += 1
+        elif corruption == "lower_not_sum":
+            row["p_ref_lower_u64"] += 1
+            row["p_ref_upper_u64"] -= 1
+        elif corruption == "sum_not_split":
+            row["p_ref_sum_u64"] += 1
+        else:
+            result["fine_powers_u64"] = result["fine_powers_u64"][..., :128]
+        return result
+
+    input_dir, profile_path = _small_input(tmp_path)
+    with pytest.raises(ValueError, match=message):
+        _run_small(input_dir, tmp_path / "run", profile_path, corrupted)
+    assert not (tmp_path / "run" / "chime_detector_outputs.npz").exists()
+
+
 def test_chime_runner_small_writes_expected_shapes(tmp_path) -> None:
     input_dir = tmp_path / "input"
     ch_dir = input_dir / "ch0844"
@@ -200,46 +311,8 @@ def test_chime_runner_small_writes_expected_shapes(tmp_path) -> None:
     profile_path = tmp_path / "receiver_profile.json"
     profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
 
-    def fake_detector(**kwargs):
-        packed = kwargs["packed"]
-        batch = int(packed.shape[0])
-        return {
-            "batch": batch,
-            "detector_rows_per_block": int(packed.shape[1]),
-            "rational_overflow_count": 0,
-            "results": [
-                {
-                    "block_index": index,
-                    # Deliberately inconsistent: the runner must publish the
-                    # exact decision derived from powers/norms, not this bit.
-                    "mask": 0,
-                    "p_target_u64": 30 + index,
-                    "p_ref_sum_u64": 20,
-                }
-                for index in range(batch)
-            ],
-        }
-
     output_dir = tmp_path / "run"
-    run_chime_analysis(
-        input_dir=input_dir,
-        output_dir=output_dir,
-        receiver_profile_path=profile_path,
-        stream_map_path=None,
-        physical_channels=[14],
-        frame_size_samples=SMALL_RUN_FRAME_SIZE_SAMPLES,
-        detector_window_samples=SMALL_RUN_DETECTOR_WINDOW_SAMPLES,
-        frames_per_chunk=1,
-        max_frames=SMALL_RUN_NUM_FRAMES,
-        kernel=_fake_kernel(SMALL_RUN_DETECTOR_WINDOW_SAMPLES),
-        detector_fn=fake_detector,
-        weights_by_channel={
-            14: np.ones(
-                (3, SMALL_RUN_DETECTOR_WINDOW_SAMPLES),
-                dtype=np.int8,
-            )
-        },
-    )
+    _run_small(input_dir, output_dir, profile_path, _fake_detector)
 
     detector = np.load(output_dir / "chime_detector_outputs.npz")
     cache = np.load(output_dir / "chime_spectrogram_cache.npz")
@@ -249,6 +322,18 @@ def test_chime_runner_small_writes_expected_shapes(tmp_path) -> None:
     expected_output_shape = (SMALL_RUN_NUM_FRAMES, 1)
     assert detector["p_target_u64"].shape == expected_output_shape
     assert detector["p_ref_sum_u64"].shape == expected_output_shape
+    # Kernel core 3.0.0: the run stores the fine powers whose all-bin sums
+    # are the frame powers, and the reference split.
+    fine = detector["fine_power_u64"]
+    assert fine.dtype == np.uint64
+    assert fine.shape == (*expected_output_shape, 3, 256)
+    assert detector["p_target_u64"].reshape(-1).tolist() == [30, 30]  # one frame per chunk
+    assert detector["p_ref_lower_u64"].reshape(-1).tolist() == [12, 12]
+    assert detector["p_ref_upper_u64"].reshape(-1).tolist() == [8, 8]
+    np.testing.assert_array_equal(fine[..., 0, :].sum(axis=-1), detector["p_target_u64"])
+    np.testing.assert_array_equal(fine[..., 1, :].sum(axis=-1), detector["p_ref_lower_u64"])
+    np.testing.assert_array_equal(fine[..., 2, :].sum(axis=-1), detector["p_ref_upper_u64"])
+    assert detector["p_ref_sum_u64"].reshape(-1).tolist() == [20, 20]
     assert detector["mask"].shape == expected_output_shape
     assert np.asarray(detector["mask"]).reshape(-1).tolist() == (
         [1] * SMALL_RUN_NUM_FRAMES

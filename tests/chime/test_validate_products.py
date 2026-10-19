@@ -38,6 +38,7 @@ def _write_products(
     corrupt_normalized_positive_excess_mask: bool = False,
     corrupt_detector_window_metadata: bool = False,
     omit_norms: bool = False,
+    omit_fine_powers: bool = False,
 ) -> None:
     run_dir.mkdir()
     physical_channel = np.asarray([14, 15], dtype=np.int32)
@@ -51,8 +52,15 @@ def _write_products(
         2.0 * target_norm_sq.astype(np.float64)
         / reference_norm_sum_sq.astype(np.float64)
     )
-    p_ref = valid.astype(np.uint64) * np.uint64(20)
+    p_ref_lower = valid.astype(np.uint64) * np.uint64(12)
+    p_ref_upper = valid.astype(np.uint64) * np.uint64(8)
+    p_ref = p_ref_lower + p_ref_upper
     p_target = np.asarray([[11, 10], [40, 0], [9, 50]], dtype=np.uint64)
+    # Frame powers are the all-bin sums of the fine powers (core 3.0.0).
+    fine = np.zeros((3, 2, 3, 256), dtype=np.uint64)
+    fine[..., 0, 0] = p_target
+    fine[..., 1, 5] = p_ref_lower
+    fine[..., 2, 250] = p_ref_upper
     coarse_power_ratio = np.asarray(
         [[1.1, 1.0], [4.0, np.nan], [0.9, 5.0]],
         dtype=np.float64,
@@ -76,7 +84,10 @@ def _write_products(
         "chime_frequency_hz": chime_frequency_hz,
         "frame_index": frame_index,
         "p_target_u64": p_target,
+        "p_ref_lower_u64": p_ref_lower,
+        "p_ref_upper_u64": p_ref_upper,
         "p_ref_sum_u64": p_ref,
+        "fine_power_u64": fine,
         "coarse_power_ratio": coarse_power_ratio,
         "normalized_coarse_power_ratio_db": 10.0 * np.log10(normalized_ratio),
         "pilot_excess_db": pilot_excess_db,
@@ -84,6 +95,9 @@ def _write_products(
         "mask": mask,
         "valid": valid,
     }
+    if omit_fine_powers:
+        for name in ("p_ref_lower_u64", "p_ref_upper_u64", "fine_power_u64"):
+            detector_payload.pop(name)
     if not omit_norms:
         detector_payload["target_norm_sq"] = target_norm_sq
         detector_payload["reference_norm_sum_sq"] = reference_norm_sum_sq
@@ -254,6 +268,70 @@ def test_validate_products_accepts_a_contract_v1_run_as_a_record(tmp_path) -> No
     assert report["valid"] is True, report["errors"]
     assert report["detector_contract_revision"] == 1
     assert "row-domain" in report["record_note"]
+
+
+def test_a_contract_v1_record_needs_no_fine_powers(tmp_path) -> None:
+    run_dir = tmp_path / "run"
+    _write_products(run_dir, omit_fine_powers=True)
+    report = validate_products(run_dir=run_dir)
+    assert report["valid"] is False
+    assert any(
+        error["check"] == "detector.frame_powers.missing" for error in report["errors"]
+    )
+    _mutate_detector_contract(run_dir, _as_revision_1_record)
+    report = validate_products(run_dir=run_dir)
+    assert report["valid"] is True, report["errors"]
+
+
+@pytest.mark.parametrize(
+    "name, change",
+    [
+        ("fine_power_u64", lambda a: a.__setitem__((0, 0, 0, 9), 1)),
+        ("p_ref_lower_u64", lambda a: a.__setitem__((0, 0), a[0, 0] + 1)),
+        ("p_ref_sum_u64", lambda a: a.__setitem__((0, 0), a[0, 0] + 1)),
+    ],
+)
+def test_validate_products_checks_the_frame_powers_are_fine_sums(
+    tmp_path, name, change
+) -> None:
+    run_dir = tmp_path / "run"
+    _write_products(run_dir)
+    path = run_dir / "chime_detector_outputs.npz"
+    with np.load(path) as product:
+        values = np.array(product[name])
+    change(values)
+    _replace_npz_array(path, name, values)
+    report = validate_products(run_dir=run_dir)
+    assert report["valid"] is False
+    assert any(
+        error["check"] == "detector.frame_powers.fine_sums" for error in report["errors"]
+    ), report["errors"]
+
+
+def test_a_scan_combine_keeps_its_fine_powers_in_the_per_pilot_products(
+    tmp_path,
+) -> None:
+    run_dir = tmp_path / "scan"
+    _write_products(run_dir)
+    path = run_dir / "chime_detector_outputs.npz"
+    with np.load(path) as product:
+        arrays = {k: product[k] for k in product.files if k != "fine_power_u64"}
+    np.savez_compressed(path, **arrays)
+    report = validate_products(run_dir=run_dir)
+    assert report["valid"] is False  # a chime-run output must carry them
+    (run_dir / "input_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": SCAN_INPUT_MANIFEST_SCHEMA_TOKEN,
+                "source": "chime-scan",
+                "physical_channels": [14, 15],
+                "input_files": ["cadc:one", "cadc:two"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = validate_products(run_dir=run_dir)
+    assert report["valid"] is True, report["errors"]
 
 
 def test_validate_products_refuses_a_v1_token_with_current_definitions(tmp_path) -> None:

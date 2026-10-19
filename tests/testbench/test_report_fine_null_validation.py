@@ -58,7 +58,7 @@ def study(tmp_path):
     return out, plan
 
 
-def validation(out, plan, *, special=False, no_exceedances=False):
+def validation(out, plan, *, special=False, no_exceedances=False, coarse_members=None):
     fine = np.full((2, 1, 3, 256), 100, dtype=np.uint64)
     coarse = np.full((2, 1, 3), 100, dtype=np.uint64)
     if not no_exceedances:
@@ -69,6 +69,8 @@ def validation(out, plan, *, special=False, no_exceedances=False):
         fine[0, :, 0, 202] = 100  # positive designated / zero bulk = sentinel
         fine[1, :, 1:, :] = 0    # undefined rank, retained in denominator
         coarse[1, :, 1:] = 0
+    if coarse_members is not None:
+        coarse = np.full_like(coarse, coarse_members)
     arrays = {"fixed_fine": fine, "fixed_coarse": coarse,
         "float_fine": np.repeat(fine[:, :, None], 5, axis=2).astype(np.float64),
         "float_coarse": np.repeat(coarse[:, :, None], 5, axis=2).astype(np.float64),
@@ -111,6 +113,22 @@ def test_two_trial_engineering_report_has_full_denominators_and_failing_gates(tm
         REDUCER.rehash(out, result[key])
     with pytest.raises(ValueError, match="overwrite"):
         REPORT.run(out)
+
+
+def test_frame_level_rows_use_the_fine_sums_not_the_raw_coarse_members(tmp_path):
+    out, plan = study(tmp_path)
+    validation(out, plan, coarse_members=0)  # zero row-domain powers would be invalid
+    result = REPORT.run(out)
+    coarse_rows = [row for row in result["rows"] if row["kind"] == "coarse"]
+    assert len(coarse_rows) == 6 * 3
+    for row in coarse_rows:
+        assert row["invalid_trials"] == 0
+        assert row["exceedances"] == 1
+    assert "all-bin sums of the fine powers" in result["coarse_scope"]
+    data = np.load(out / "reports/null_validation/ch14.npz")
+    p0, p_ref = 255 * 100 + 150, 2 * 256 * 100
+    np.testing.assert_allclose(data["coarse_float"][0, :3], 2 * p0 / p_ref, rtol=1e-15)
+    np.testing.assert_allclose(data["coarse_float"][1, :3], 1.0, rtol=1e-15)
 
 
 def test_sentinel_and_invalid_observations_are_reported_without_science_exception(tmp_path):

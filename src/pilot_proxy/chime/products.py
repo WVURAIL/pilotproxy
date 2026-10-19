@@ -22,6 +22,7 @@ from pilot_proxy.detector_contract import (
     NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
 )
 from pilot_proxy.json_utils import write_json_strict
+from pilot_proxy.product_contract import frame_powers_from_fine
 from pilot_proxy.schema_identity import schema_token
 
 from .hdf5_input import ChimePilotDataset, dataset_manifest
@@ -70,8 +71,8 @@ SAMPLE_RATE_HZ = default_project().instrument.sample_rate_hz
 def require_current_detector_contract(run_dir: Path) -> None:
     """Refuse to analyse a run whose detector outputs use another power definition.
 
-    ``chime_detector_outputs.npz`` carries no schema token and no fine powers;
-    the run's ``run_config.json`` names its detector contract. Revision 2
+    ``chime_detector_outputs.npz`` carries no schema token; the run's
+    ``run_config.json`` names its detector contract. Revision 2
     (kernel core 3.0.0) defines the frame powers as the all-bin sums of the
     fine powers. A revision-1 run (written before core 3.0.0) stores row-domain
     powers that cannot be re-expressed, so it is a record: ``validate-products``
@@ -243,6 +244,67 @@ def relative_time_seconds(
     ))
 
 
+def check_detector_frame_powers(
+    *,
+    p_target_u64: np.ndarray,
+    p_ref_lower_u64: np.ndarray,
+    p_ref_upper_u64: np.ndarray,
+    p_ref_sum_u64: np.ndarray,
+    fine_power_u64: np.ndarray | None = None,
+) -> list[str]:
+    """Problems with the frame powers (and fine powers) of a detector output.
+
+    ``p_ref_sum_u64`` must be ``p_ref_lower_u64 + p_ref_upper_u64`` exactly.
+    When ``fine_power_u64`` is given, kernel core 3.0.0 defines each frame
+    power as the all-bin sum of its fine powers, so ``p_target_u64``,
+    ``p_ref_lower_u64`` and ``p_ref_upper_u64`` must equal
+    ``fine_power_u64[frame, pilot, r, :].sum()`` exactly (uint64, no wrap).
+    Returns an empty list when the arrays agree.
+    """
+    powers = {
+        "p_target_u64": np.asarray(p_target_u64),
+        "p_ref_lower_u64": np.asarray(p_ref_lower_u64),
+        "p_ref_upper_u64": np.asarray(p_ref_upper_u64),
+        "p_ref_sum_u64": np.asarray(p_ref_sum_u64),
+    }
+    shape = powers["p_target_u64"].shape
+    problems = [
+        f"{name} must be uint64 of shape {shape}; got {value.dtype} {value.shape}"
+        for name, value in powers.items()
+        if value.dtype != np.dtype(np.uint64) or value.shape != shape
+    ]
+    if problems:
+        return problems
+    lower = powers["p_ref_lower_u64"].astype(object)
+    upper = powers["p_ref_upper_u64"].astype(object)
+    if not np.array_equal(powers["p_ref_sum_u64"].astype(object), lower + upper):
+        problems.append("p_ref_sum_u64 is not p_ref_lower_u64 + p_ref_upper_u64")
+    if fine_power_u64 is None:
+        return problems
+    fine = np.asarray(fine_power_u64)
+    if (
+        fine.dtype != np.dtype(np.uint64)
+        or fine.ndim != 4
+        or fine.shape[:2] != shape
+        or fine.shape[2] != 3
+    ):
+        return problems + [
+            "fine_power_u64 must be uint64 of shape (num_frames, num_pilots, 3, "
+            f"num_bins) with (num_frames, num_pilots) = {shape}; got "
+            f"{fine.dtype} {fine.shape}"
+        ]
+    try:
+        sums = frame_powers_from_fine(
+            {"fine_power_u64": fine.reshape(-1, *fine.shape[2:])}
+        )
+    except ValueError as exc:
+        return problems + [str(exc)]
+    for name, total in zip(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64"), sums):
+        if not np.array_equal(powers[name].reshape(-1), total):
+            problems.append(f"{name} is not the all-bin sum of fine_power_u64")
+    return problems
+
+
 def write_detector_outputs(
     run_dir: Path,
     *,
@@ -251,7 +313,10 @@ def write_detector_outputs(
     chime_frequency_hz: np.ndarray | None = None,
     frame_index: np.ndarray,
     p_target_u64: np.ndarray,
+    p_ref_lower_u64: np.ndarray,
+    p_ref_upper_u64: np.ndarray,
     p_ref_sum_u64: np.ndarray,
+    fine_power_u64: np.ndarray | None = None,
     coarse_power_ratio: np.ndarray,
     normalized_coarse_power_ratio_db: np.ndarray,
     pilot_excess_db: np.ndarray,
@@ -263,6 +328,25 @@ def write_detector_outputs(
     null_power_ratio: np.ndarray,
     normalized_pilot_excess: np.ndarray,
 ) -> Path:
+    """Write ``chime_detector_outputs.npz``.
+
+    Besides the frame-level columns it stores the reference split
+    ``p_ref_lower_u64`` / ``p_ref_upper_u64`` and, when given (``chime-run``
+    always gives them), the fine powers ``fine_power_u64`` (num_frames,
+    num_pilots, 3, 256) whose all-bin sums are the frame powers. The writer
+    refuses arrays that disagree (:func:`check_detector_frame_powers`).
+    """
+    problems = check_detector_frame_powers(
+        p_target_u64=np.asarray(p_target_u64, dtype=np.uint64),
+        p_ref_lower_u64=np.asarray(p_ref_lower_u64, dtype=np.uint64),
+        p_ref_upper_u64=np.asarray(p_ref_upper_u64, dtype=np.uint64),
+        p_ref_sum_u64=np.asarray(p_ref_sum_u64, dtype=np.uint64),
+        fine_power_u64=fine_power_u64,
+    )
+    if problems:
+        raise ValueError(
+            f"{CHIME_DETECTOR_OUTPUTS_FILENAME}: " + "; ".join(problems)
+        )
     path = Path(run_dir) / CHIME_DETECTOR_OUTPUTS_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)
     arrays: dict[str, np.ndarray] = dict(
@@ -274,6 +358,8 @@ def write_detector_outputs(
         ),
         frame_index=np.asarray(frame_index, dtype=np.int64),
         p_target_u64=np.asarray(p_target_u64, dtype=np.uint64),
+        p_ref_lower_u64=np.asarray(p_ref_lower_u64, dtype=np.uint64),
+        p_ref_upper_u64=np.asarray(p_ref_upper_u64, dtype=np.uint64),
         p_ref_sum_u64=np.asarray(p_ref_sum_u64, dtype=np.uint64),
         coarse_power_ratio=np.asarray(coarse_power_ratio, dtype=np.float64),
         normalized_coarse_power_ratio_db=np.asarray(normalized_coarse_power_ratio_db, dtype=np.float64),
@@ -288,6 +374,8 @@ def write_detector_outputs(
             normalized_pilot_excess, dtype=np.float64
         ),
     )
+    if fine_power_u64 is not None:
+        arrays["fine_power_u64"] = np.asarray(fine_power_u64)
     return atomic_savez_compressed(path, **arrays)
 
 
@@ -554,6 +642,7 @@ __all__ = [
     "relative_time_seconds",
     "spectrum_before_after",
     "valid_mask_counts",
+    "check_detector_frame_powers",
     "write_detector_outputs",
     "write_input_manifest",
     "write_mask_summary",

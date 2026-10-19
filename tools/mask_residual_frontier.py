@@ -50,6 +50,26 @@ Stages::
     # the device generator against the host reference, on real frames
     python3 tools/mask_residual_frontier.py --stage audit --gpu ...
 
+    # frames generated before kernel core 3.0.0, re-derived on the CPU
+    python3 tools/mask_residual_frontier.py --stage rederive \
+        --source-dir docs/evidence/mask_residual_frontier_2026-09-07 \
+        --output-dir <new dir>
+
+``--stage rederive`` re-expresses stored frames under the core 3.0.0 frame
+power, ``P_r = sum_f fine_power_u64[:, r, f]``: it writes ``frame_powers_u64``
+and recomputes ``normalized_excess`` and ``shelf_estimate_db`` from those sums
+with the same per-frame functions the generator uses, copying every other
+member and ``signal_cache/`` unchanged. ``study_config.json`` is carried over
+with the current schema version and a ``rederived_from`` record of the stored
+identity, and every shard's ``config_sha256`` names the new identity. Before it writes
+anything it recomputes each shard's stored excess and shelf from the shard's
+own stored frame powers (``coarse_marginals_u64``, the earlier core's row-domain
+sums, or ``frame_powers_u64``) and refuses unless both reproduce bit for bit.
+The source is only read; the output directory must not already hold frames.
+The ``report`` and ``figure`` stages then run on the output directory; the
+report accepts a stored study whose identity differs from the recomputed one
+only in the ``software`` block or in input paths with unchanged digests.
+
 ``--num-streams`` below 2048 requires ``--allow-reduced-geometry`` and stamps
 every product as reduced; a reduced run is code validation, not evidence.
 """
@@ -64,6 +84,7 @@ import json
 import math
 from pathlib import Path
 import platform
+import shutil
 import sys
 import time
 from typing import Any, Mapping, Sequence
@@ -97,6 +118,7 @@ from pilot_proxy.dtv_units import (
     spreading_loss_db_from_bin_enbw_hz,
 )
 from pilot_proxy.json_utils import write_json_strict
+from pilot_proxy.product_contract import frame_powers_from_fine
 from pilot_proxy.provenance import file_sha256
 from pilot_proxy.testbench.mask_frontier import (
     ALWAYS_MASKED_Q16,
@@ -469,6 +491,249 @@ def _load_shard(path: Path) -> dict[str, Any]:
         }
 
 
+REDERIVE_SCHEMA = "pilotproxy_mask_residual_frontier_rederive_v1"
+FRAME_POWER_DEFINITION = (
+    "P_r = sum_f fine_power_u64[:, r, f], exact uint64 (kernel core 3.0.0)"
+)
+_CARRIED_MEMBERS = (
+    "required_multiplier_q16",
+    "fine_power_u64",
+    "clip_fraction",
+    "frame_seed",
+)
+_STORED_FRAME_POWERS = {
+    "coarse_marginals_u64": "row-domain sums of |z|^2 (kernel core < 3.0.0)",
+    "frame_powers_u64": "all-bin sums of the fine powers (kernel core 3.0.0)",
+}
+
+
+def _excess_and_shelf(
+    powers: np.ndarray, meta: Mapping[str, Any]
+) -> tuple[np.ndarray, np.ndarray]:
+    """The generator's per-frame excess and shelf for stored frame powers."""
+    count = int(powers.shape[0])
+    excess = np.zeros(count, dtype=np.float64)
+    shelf = np.zeros(count, dtype=np.float64)
+    for index in range(count):
+        value = coarse_normalized_excess(
+            int(powers[index, 0]),
+            int(powers[index, 1]),
+            int(powers[index, 2]),
+            target_norm_sq=int(meta["target_norm_sq"]),
+            reference_norm_sum_sq=int(meta["reference_norm_sum_sq"]),
+        )
+        excess[index] = value
+        shelf[index] = shelf_db_from_excess(
+            value, offset_db=float(meta["shelf_offset_db"])
+        )
+    return excess, shelf
+
+
+_REDERIVABLE_SCHEMAS = ("pilotproxy_mask_residual_frontier_v1", MASK_FRONTIER_SCHEMA)
+
+
+def _config_digest(payload: Mapping[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def rederived_study_config(
+    config: Mapping[str, Any], *, source_file_sha256: str
+) -> dict[str, Any]:
+    """The stored study's configuration under the current frame-power schema."""
+    payload = {key: value for key, value in config.items() if key != "config_sha256"}
+    payload["schema_version"] = MASK_FRONTIER_SCHEMA
+    payload["rederived_from"] = {
+        "schema_version": config.get("schema_version"),
+        "config_sha256": config.get("config_sha256"),
+        "study_config_sha256": source_file_sha256,
+        "frame_power_definition": FRAME_POWER_DEFINITION,
+    }
+    payload["config_sha256"] = _config_digest(payload)
+    return payload
+
+
+def rederive_shard(
+    source: Path, *, config_sha256: str
+) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    """Re-express one stored shard under the fine-sum frame power.
+
+    Returns the re-derived members (the generator's field set) and a summary
+    row; nothing is written. Refuses (``SystemExit``) unless the shard's
+    stored excess and shelf are reproduced bit for bit from its own stored
+    frame powers, so the re-derivation uses exactly the arithmetic that
+    produced the record.
+    """
+    with np.load(source, allow_pickle=False) as archive:
+        members = {name: np.asarray(archive[name]) for name in archive.files}
+    stored = [name for name in _STORED_FRAME_POWERS if name in members]
+    missing = [
+        name
+        for name in (*_CARRIED_MEMBERS, "normalized_excess", "shelf_estimate_db", "meta_json")
+        if name not in members
+    ]
+    if missing or len(stored) != 1:
+        raise SystemExit(
+            f"{source}: not a frontier frame shard (missing {missing}, stored "
+            f"frame powers {stored})"
+        )
+    meta = json.loads(str(members["meta_json"].item()))
+    fine = members["fine_power_u64"]
+    count = int(fine.shape[0])
+    old_powers = members[stored[0]]
+    if old_powers.dtype != np.dtype(np.uint64) or old_powers.shape != (count, 3):
+        raise SystemExit(f"{source}: {stored[0]} must be uint64 of shape ({count}, 3)")
+    old_excess, old_shelf = _excess_and_shelf(old_powers, meta)
+    for name, value in (
+        ("normalized_excess", old_excess),
+        ("shelf_estimate_db", old_shelf),
+    ):
+        if not np.array_equal(value, members[name], equal_nan=True):
+            raise SystemExit(
+                f"{source}: the stored {name} is not reproduced from the stored "
+                f"{stored[0]}; refusing to re-derive"
+            )
+    try:
+        p_target, p_lower, p_upper = frame_powers_from_fine(
+            {"fine_power_u64": fine}
+        )
+    except ValueError as exc:
+        raise SystemExit(f"{source}: {exc}") from None
+    powers = np.stack([p_target, p_lower, p_upper], axis=1)
+    if stored[0] == "frame_powers_u64" and not np.array_equal(powers, old_powers):
+        raise SystemExit(
+            f"{source}: stored frame_powers_u64 are not the fine-power sums"
+        )
+    excess, shelf = _excess_and_shelf(powers, meta)
+    new_meta = dict(meta)
+    new_meta["schema_version"] = MASK_FRONTIER_SCHEMA
+    new_meta["config_sha256"] = str(config_sha256)
+    new_meta["frame_power_definition"] = FRAME_POWER_DEFINITION
+    new_meta["rederived"] = {
+        "schema": REDERIVE_SCHEMA,
+        "source_shard": str(source),
+        "source_sha256": file_sha256(source),
+        "source_schema_version": meta.get("schema_version"),
+        "source_config_sha256": meta.get("config_sha256"),
+        "source_frame_powers": stored[0],
+        "source_frame_power_definition": _STORED_FRAME_POWERS[stored[0]],
+    }
+    arrays = {
+        "required_multiplier_q16": members["required_multiplier_q16"],
+        "fine_power_u64": fine,
+        "frame_powers_u64": powers,
+        "normalized_excess": excess,
+        "shelf_estimate_db": shelf,
+        "clip_fraction": members["clip_fraction"],
+        "frame_seed": members["frame_seed"],
+        "meta_json": np.asarray(json.dumps(new_meta, sort_keys=True)),
+    }
+    finite = np.isfinite(excess) & np.isfinite(old_excess)
+    change = np.abs(excess[finite] - old_excess[finite])
+    relative = change / np.maximum(np.abs(old_excess[finite]), np.finfo(float).tiny)
+    return arrays, {
+        "population": str(meta.get("population", source.stem)),
+        "frames": count,
+        "source": str(source),
+        "source_sha256": new_meta["rederived"]["source_sha256"],
+        "source_frame_powers": stored[0],
+        "stored_excess_and_shelf_reproduced_from_stored_frame_powers": True,
+        "normalized_excess_max_abs_change": float(change.max()) if change.size else 0.0,
+        "normalized_excess_max_relative_change": (
+            float(relative.max()) if relative.size else 0.0
+        ),
+        "excess_sign_changes": int(
+            np.count_nonzero(finite & ((excess > 0.0) != (old_excess > 0.0)))
+        ),
+        "finite_shelf_frames_before": int(np.count_nonzero(np.isfinite(old_shelf))),
+        "finite_shelf_frames_after": int(np.count_nonzero(np.isfinite(shelf))),
+    }
+
+
+def _run_rederive(args: argparse.Namespace) -> int:
+    """Re-express a stored frontier study under the fine-sum frame power."""
+    if args.source_dir is None:
+        raise SystemExit("--stage rederive requires --source-dir")
+    source_dir = Path(args.source_dir)
+    output_dir = Path(args.output_dir)
+    if source_dir.resolve() == output_dir.resolve():
+        raise SystemExit("--output-dir must differ from --source-dir")
+    shards = sorted((source_dir / "frames").glob("*.npz"))
+    config_path = source_dir / "study_config.json"
+    if not shards or not config_path.is_file():
+        raise SystemExit(f"{source_dir} holds no frames/*.npz and study_config.json")
+    for name in ("frames", "study_config.json", "signal_cache", "rederive.json"):
+        if (output_dir / name).exists():
+            raise SystemExit(f"{output_dir / name} exists; refusing to overwrite")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if config.get("schema_version") not in _REDERIVABLE_SCHEMAS:
+        raise SystemExit(
+            f"{config_path}: schema {config.get('schema_version')!r} is not one "
+            f"of {list(_REDERIVABLE_SCHEMAS)}"
+        )
+    stored_payload = {k: v for k, v in config.items() if k != "config_sha256"}
+    if _config_digest(stored_payload) != config.get("config_sha256"):
+        raise SystemExit(f"{config_path}: config_sha256 does not match its content")
+    for path in shards:
+        with np.load(path, allow_pickle=False) as archive:
+            meta = json.loads(str(archive["meta_json"].item()))
+        if meta.get("config_sha256") != config.get("config_sha256"):
+            raise SystemExit(f"{path} does not belong to {config_path}")
+    new_config = rederived_study_config(
+        config, source_file_sha256=file_sha256(config_path)
+    )
+    # Every shard is checked and re-derived before anything is written.
+    derived = [
+        rederive_shard(path, config_sha256=new_config["config_sha256"])
+        for path in shards
+    ]
+    (output_dir / "frames").mkdir(parents=True, exist_ok=True)
+    rows = []
+    for path, (arrays, row) in zip(shards, derived):
+        destination = output_dir / "frames" / path.name
+        with destination.open("xb") as handle:
+            np.savez_compressed(handle, **arrays)
+        rows.append(
+            {**row, "output": str(destination), "output_sha256": file_sha256(destination)}
+        )
+    write_json_strict(output_dir / "study_config.json", new_config)
+    copied = {}
+    if (source_dir / "signal_cache").is_dir():
+        shutil.copytree(source_dir / "signal_cache", output_dir / "signal_cache")
+        for path in sorted((output_dir / "signal_cache").rglob("*")):
+            if path.is_file():
+                copied[str(path.relative_to(output_dir))] = file_sha256(path)
+    write_json_strict(
+        output_dir / "rederive.json",
+        {
+            "schema_version": REDERIVE_SCHEMA,
+            "created_utc": _utc_now(),
+            "source_dir": str(source_dir.resolve()),
+            "output_dir": str(output_dir.resolve()),
+            "source_config_sha256": config.get("config_sha256"),
+            "config_sha256": new_config["config_sha256"],
+            "study_config_sha256": file_sha256(output_dir / "study_config.json"),
+            "frame_power_definition": FRAME_POWER_DEFINITION,
+            "excess_definition": (
+                "coarse_normalized_excess(P_0, P_1, P_2) and "
+                "shelf_db_from_excess, the generator's per-frame functions"
+            ),
+            "tool_sha256": file_sha256(Path(__file__)),
+            "copied_sha256": copied,
+            "shards": rows,
+        },
+    )
+    for row in rows:
+        print(
+            f"{row['population']}: {row['frames']} frames, max |d excess| "
+            f"{row['normalized_excess_max_abs_change']:.3g}, sign changes "
+            f"{row['excess_sign_changes']} -> {row['output']}",
+            flush=True,
+        )
+    return 0
+
+
 def _required_column(required: np.ndarray, rho: int) -> list[int]:
     """One-based rank ``rho`` with the stored zero sentinel expanded."""
     column = required[:, int(rho) - 1]
@@ -485,9 +750,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--stage",
         required=True,
-        choices=("generate", "audit", "report", "figure"),
+        choices=("generate", "audit", "report", "figure", "rederive"),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=None,
+        help="--stage rederive: the stored study whose frames are re-derived "
+             "(read only)",
+    )
     parser.add_argument("--input-iq", type=Path)
     parser.add_argument("--waveform-audit", type=Path)
     parser.add_argument("--weights-path", type=Path, default=cgs.DEFAULT_WEIGHTS_PATH)
@@ -564,8 +836,40 @@ def _prepare(args: argparse.Namespace):
     return profile
 
 
-def _study_config(args: argparse.Namespace, profile) -> dict[str, Any]:
-    """The immutable identity of one frontier study."""
+_INPUT_IDENTITY_FIELDS = (
+    "input_iq_sha256",
+    "waveform_audit_sha256",
+    "weights_sha256",
+    "iq_sample_rate_hz",
+)
+
+
+def _study_identity(config: Mapping[str, Any]) -> dict[str, Any]:
+    """What makes two configurations the same study: everything but provenance.
+
+    The ``software`` block and the input paths record where a study was
+    generated; the inputs are identified by their digests.
+    """
+    inputs = dict(config.get("inputs") or {})
+    return {
+        **{
+            key: config.get(key)
+            for key in ("schema_version", "geometry", "calibration", "campaign", "policy")
+        },
+        "inputs": {key: inputs.get(key) for key in _INPUT_IDENTITY_FIELDS},
+    }
+
+
+def _study_config(
+    args: argparse.Namespace, profile, *, accept_stored_study: bool = False
+) -> dict[str, Any]:
+    """The immutable identity of one frontier study.
+
+    With ``accept_stored_study`` (the report stage), a stored configuration
+    whose digest differs is still accepted when :func:`_study_identity` is
+    unchanged, so a stored study can be re-reported on another machine; the
+    stored configuration, and its ``config_sha256``, are returned.
+    """
     if args.input_iq is None or not Path(args.input_iq).is_file():
         raise SystemExit("--input-iq must name an existing waveform")
     audit = (
@@ -638,17 +942,22 @@ def _study_config(args: argparse.Namespace, profile) -> dict[str, Any]:
             "platform": platform.platform(),
         },
     }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    digest = _config_digest(payload)
     payload["config_sha256"] = digest
     args.output_dir.mkdir(parents=True, exist_ok=True)
     path = args.output_dir / "study_config.json"
     if path.exists():
         existing = json.loads(path.read_text(encoding="utf-8"))
         if existing.get("config_sha256") != digest:
+            stored, current = _study_identity(existing), _study_identity(payload)
+            if accept_stored_study and stored == current:
+                return existing
+            differing = sorted(
+                key for key in current if stored.get(key) != current.get(key)
+            )
             raise SystemExit(
                 f"study configuration has changed since {path} was written"
+                + (f" (differs in {differing})" if differing else "")
             )
         return existing
     write_json_strict(path, payload)
@@ -879,7 +1188,7 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
 
 
 def _run_report(args, profile) -> int:
-    config = _study_config(args, profile)
+    config = _study_config(args, profile, accept_stored_study=True)
     bulk_size = int(config["geometry"]["bulk_size"])
     off = _load_shard(_shard_path(args.output_dir, OFF_LABEL))
     floor_bank = _load_shard(_shard_path(args.output_dir, FLOOR_LABEL))
@@ -1436,6 +1745,8 @@ def _run_figure(args: argparse.Namespace) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.stage == "rederive":
+        return _run_rederive(args)
     profile = _prepare(args)
     if args.stage == "report":
         return _run_report(args, profile)

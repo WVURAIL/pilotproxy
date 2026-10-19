@@ -99,7 +99,7 @@ def test_raw_grid_discretization_is_outer_difference_not_point_difference():
     assert 0 < bound["point_loss_db"] < 6
 
 
-def engineering_cohort(tmp_path):
+def engineering_cohort(tmp_path, *, coarse_members=None):
     spec = importlib.util.spec_from_file_location("sensitivity_fixture_builder", ROOT / "tests/testbench/test_reduce_fine_validation.py")
     helper = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = helper
@@ -140,6 +140,8 @@ def engineering_cohort(tmp_path):
         for j, snr in enumerate(snrs):
             fine[:, j, 0, 202] = 100 if snr < -49.5 else 150
             coarse[:, j, 0] = 100 if snr < -49.5 else 150
+        if coarse_members is not None:
+            coarse = np.full_like(coarse, coarse_members)
         metadata = {"plan_sha256": R.sha(out / "plan.json"), "phase": "evaluation", "channel": 14,
             "case_index": case, "streams": 2048, "start": 0, "stop": 2, "snr_db": snrs,
             "float_stages": plan["float_stages"], "raw_seeds": [300, 301], "payloads": [v[-1] for v in extra],
@@ -171,6 +173,23 @@ def test_complete_small_native_cohort_end_to_end(tmp_path):
         assert all(not item["equivalence_demonstrated"] for item in saved["paired_contrasts"])
     assert len(seeds) == 1
     R.rehash(out, report["outputs_sha256"])
+
+
+def test_frame_level_curves_use_the_fine_sums_not_the_raw_coarse_members(tmp_path):
+    (tmp_path / "consistent").mkdir()
+    (tmp_path / "altered").mkdir()
+    consistent = engineering_cohort(tmp_path / "consistent")
+    altered = engineering_cohort(tmp_path / "altered", coarse_members=0)
+    reports = [R.run(out, "evaluation") for out in (consistent, altered)]
+    for a, b in zip(reports[0]["cells"], reports[1]["cells"]):
+        curves_a = R.read_json(consistent / a["report"])["coarse_curves"]
+        curves_b = R.read_json(altered / b["report"])["coarse_curves"]
+        assert len(curves_a) == len(curves_b) == 18
+        for x, y in zip(curves_a, curves_b):
+            assert (x["stage"], x["pfa"]) == (y["stage"], y["pfa"])
+            assert x["counts"] == y["counts"]
+            assert x["invalid_trials"] == y["invalid_trials"]
+            assert not any(y["invalid_trials"])
 
 
 def test_missing_heldout_cell_refused_before_report_creation(tmp_path):

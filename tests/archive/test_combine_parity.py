@@ -64,8 +64,11 @@ def _stub_kernel(k):
 def _assert_npz_equal(ref_path, got_path):
     a = np.load(ref_path)
     b = np.load(got_path)
-    assert set(a.files) == set(b.files), (set(a.files) ^ set(b.files))
-    for key in a.files:
+    # chime-run stores the fine powers of its frame powers; a combine leaves
+    # them in the per-pilot products (checked against the runner below).
+    only_runner = {"fine_power_u64"} if ref_path.name == "chime_detector_outputs.npz" else set()
+    assert set(a.files) - only_runner == set(b.files), (set(a.files) ^ set(b.files))
+    for key in b.files:
         x = np.asarray(a[key])
         y = np.asarray(b[key])
         assert x.shape == y.shape, f"{key}: {x.shape} != {y.shape}"
@@ -137,6 +140,12 @@ def test_combine_matches_multipilot_runner(tmp_path):
     for name in ("chime_detector_outputs.npz", "chime_spectrogram_cache.npz",
                  "chime_reductions_10s.npz"):
         _assert_npz_equal(ref_dir / name, out_dir / name)
+    # The runner's fine powers are the per-pilot products' fine powers.
+    runner_fine = np.load(ref_dir / "chime_detector_outputs.npz")["fine_power_u64"]
+    per_pilot_fine = np.stack(
+        [np.load(p)["fine_power_u64"] for p in per_pilot], axis=1
+    )
+    np.testing.assert_array_equal(runner_fine, per_pilot_fine)
 
     # F4: the new integrated_spectra stack matches each per-pilot product's spectra,
     # in the combined product's (sorted) channel order, with the freq axis metadata.

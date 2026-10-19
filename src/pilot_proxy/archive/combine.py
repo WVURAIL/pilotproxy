@@ -1106,6 +1106,8 @@ def _combine_detector_products(
     freq_id = _scalars(products, "freq_id", np.int64)
 
     p_target_u64 = _stack_cols(products, "p_target_u64", np.uint64)
+    p_ref_lower_u64 = _stack_cols(products, "p_ref_lower_u64", np.uint64)
+    p_ref_upper_u64 = _stack_cols(products, "p_ref_upper_u64", np.uint64)
     p_ref_sum_u64 = _stack_cols(products, "p_ref_sum_u64", np.uint64)
     coarse_power_ratio = _stack_cols(products, "coarse_power_ratio", np.float64)
     normalized_coarse_power_ratio_db = _stack_cols(products, "normalized_coarse_power_ratio_db", np.float64)
@@ -1153,7 +1155,11 @@ def _combine_detector_products(
         chime_frequency_hz=chime_frequency_hz,
         frame_index=frame_index,
         p_target_u64=p_target_u64,
+        p_ref_lower_u64=p_ref_lower_u64,
+        p_ref_upper_u64=p_ref_upper_u64,
         p_ref_sum_u64=p_ref_sum_u64,
+        # The fine powers stay in the per-pilot products (a combined archive
+        # copy would be num_frames x num_pilots x 768 words).
         coarse_power_ratio=coarse_power_ratio,
         normalized_coarse_power_ratio_db=normalized_coarse_power_ratio_db,
         pilot_excess_db=pilot_excess_db,

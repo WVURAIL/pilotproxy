@@ -247,12 +247,13 @@ def run(out):
     pieces = {c: [] for c in plan['channels']}
     for path, metadata in inventory:
         raw = read_raw(path, metadata, len(plan['channels']))
-        if any(np.any(raw[name] >= np.uint64(1 << 63)) for name in ('fixed_fine', 'fixed_coarse')):
+        # The frame powers are the fine sums; reduce_powers refuses a sum at
+        # or above the same capacity.
+        if np.any(raw['fixed_fine'] >= np.uint64(1 << 63)):
             raise ValueError('Raw fixed power exceeds the frozen signed accumulation capacity')
         for column, channel in enumerate(plan['channels']):
             g = geometry[channel]
             reduced = reduce_powers(raw['float_fine'][:, column], raw['fixed_fine'][:, column],
-                                    raw['float_coarse'][:, column], raw['fixed_coarse'][:, column],
                                     g['anchors'], g['mu0'])
             reduced['clip_count'] = raw['clip_count'][:, column]
             pieces[channel].append(reduced)
@@ -329,7 +330,7 @@ def run(out):
               'null_fixture_labels': 'The frozen identity table retains its randomized payload2/3 labels; H0 generation ignores those labels and injects amplitude zero. Labels do not imply an injected waveform.',
               'coordinate_system': plan['coordinate_system'],
               'engineering_gate_interpretation': 'Two-trial engineering mode is incapable of meeting the declared precision/cap gates.' if plan['scope'] == 'engineering_only' else None,
-              'coarse_scope': 'Floating normalized coarse ratio from exact fixed coarse powers; not an integer coarse-decision replay.',
+              'coarse_scope': 'Floating normalized frame-power ratio; frame powers are the all-bin sums of the fine powers (kernel core 3.0.0: fixed_fine.sum(-1), float_fine.sum(-1)); the raw shards\' coarse members are not read; not an integer coarse-decision replay.',
               'rows': rows, 'inputs_sha256': bindings, 'outputs_sha256': artifacts,
               'source_sha256': sources, 'snapshots_sha256': snapshots,
               'physical_certification': False,

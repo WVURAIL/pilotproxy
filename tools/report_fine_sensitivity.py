@@ -392,8 +392,10 @@ def run(out, phase):
                 raw = read_raw(path, metadata, len(snrs))
                 shape = raw["fixed_fine"].shape[:2]
                 flat = lambda a: a.reshape((-1, *a.shape[2:]))
+                # Frame powers are the fine sums (kernel core 3.0.0); the raw
+                # shards' coarse members are authenticated but not read.
                 result = reduce_powers(flat(raw["float_fine"]), flat(raw["fixed_fine"]),
-                    flat(raw["float_coarse"]), flat(raw["fixed_coarse"]), anchors, geometry[channel]["mu0"])
+                    anchors, geometry[channel]["mu0"])
                 result = {k: v.reshape((*shape, *v.shape[1:])) for k, v in result.items()}
                 result["clip_count"] = raw["clip_count"]
                 pieces.append(result)

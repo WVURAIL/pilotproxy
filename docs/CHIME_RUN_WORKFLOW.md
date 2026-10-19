@@ -215,6 +215,13 @@ The frame arrays have shape `(num_frames, num_pilots)`. Before/after baseband
 summaries exclude invalid frames, and the after-mask value averages only frames
 with `mask = 0`; rejected frames are not replaced with zeros.
 
+`chime_detector_outputs.npz` also stores the reference split
+(`p_ref_lower_u64`, `p_ref_upper_u64`) and the fine powers `fine_power_u64`,
+shape `(num_frames, num_pilots, 3, 256)`, whose all-bin sums are the frame
+powers; the runner refuses a detector result whose powers are not those sums,
+and `validate-products` checks the identity exactly (`DATA_PRODUCTS.md`). The
+fine powers take 6 KiB per frame and pilot before compression.
+
 After `--plot`, the staged-data run contains:
 
 ```text

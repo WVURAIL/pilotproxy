@@ -42,3 +42,15 @@ def test_native_offset_repack_all_bytes_including_negative_eight():
     ).packed[0]
     expected = np.bitwise_xor(offset.reshape(128, 128)[:, ::-1], 0x88).view(np.int8)
     np.testing.assert_array_equal(packed, expected)
+
+
+def test_frame_powers_are_the_all_bin_sums_of_the_fine_powers():
+    # Kernel core 3.0.0: P_r = sum_f S_r[f]; for the zero-padded 256-point
+    # transform of 128 windows that is 256 times the row-domain sum.
+    rng = np.random.default_rng(11)
+    sample = np.arange(128)
+    weights = np.exp(-2j * np.pi * np.array([0.11731, -0.31917, 0.27641])[:, None] * sample)
+    rows = rng.standard_normal((2 * 128, 128)) + 1j * rng.standard_normal((2 * 128, 128))
+    z, fine, frame = AUDIT.projection_powers(rows, weights, 2)
+    np.testing.assert_allclose(frame, fine.sum(axis=-1), rtol=1e-14)
+    np.testing.assert_allclose(frame, 256 * np.sum(abs(z) ** 2, axis=(1, 2)), rtol=1e-12)

@@ -181,13 +181,76 @@ def test_malformed_score_manifest_cannot_omit_a_declared_cell(tmp_path):
 def test_actual_fixed_float_and_q16_score_shapes_and_coarse_norms():
     fine = np.ones((3, 3, 256), dtype=np.uint64)
     floating = np.repeat(fine[:, None], 5, axis=1).astype(float)
-    coarse = np.ones((3, 3), dtype=np.uint64)
-    float_coarse = np.repeat(coarse[:, None], 5, axis=1).astype(float)
-    values = REDUCER.reduce_powers(floating, fine, float_coarse, coarse, [202, 203], 2.)
+    values = REDUCER.reduce_powers(floating, fine, [202, 203], 2.)
     assert values["fine_float"].shape == (3, 2, 6, 4)
     assert values["required_q16"].dtype == np.uint64
     np.testing.assert_array_equal(values["coarse_float"], [[1, 1, 1, .5, .5, .5]] * 3)
     assert np.all(values["fine_float"] == 1)
+
+
+def test_frame_level_ratios_are_the_fine_bin_sums_of_every_stage():
+    rng = np.random.default_rng(3)
+    fixed = rng.integers(1, 1 << 40, size=(4, 3, 256), dtype=np.uint64)
+    floating = rng.uniform(1.0, 1000.0, size=(4, 5, 3, 256))
+    mu0 = 1.25
+    values = REDUCER.reduce_powers(floating, fixed, [202, 203], mu0)
+    assert values["coarse_valid"].all()
+    for stage in range(5):
+        p = floating[:, stage].sum(axis=-1)
+        norm = 1.0 if stage in (0, 1, 2) else mu0
+        np.testing.assert_allclose(values["coarse_float"][:, stage],
+                                   2 * p[:, 0] / (p[:, 1] + p[:, 2]) / norm, rtol=1e-12)
+    exact = [[sum(int(v) for v in fixed[n, t]) for t in range(3)] for n in range(4)]
+    np.testing.assert_allclose(values["coarse_float"][:, 5],
+                               [2 * t / (lo + up) / mu0 for t, lo, up in exact], rtol=1e-12)
+    float_frame, fixed_frame = REDUCER.frame_powers(floating, fixed)
+    assert float_frame.shape == (4, 5, 3) and fixed_frame.dtype == np.uint64
+    assert fixed_frame.tolist() == exact
+
+
+def test_fixed_frame_power_at_the_signed_capacity_is_refused_not_wrapped():
+    floating = np.zeros((1, 5, 3, 256))
+    fixed = np.zeros((1, 3, 256), dtype=np.uint64)
+    fixed[0, 0, :2] = 1 << 62  # every bin is legal; their sum reaches 2**63
+    with pytest.raises(ValueError, match="capacity"):
+        REDUCER.frame_powers(floating, fixed)
+    fixed[0, 0, 1] -= 1
+    _, sums = REDUCER.frame_powers(floating, fixed)
+    assert int(sums[0, 0]) == (1 << 63) - 1
+    with pytest.raises(TypeError, match="uint64"):
+        REDUCER.frame_powers(floating, fixed.astype(np.int64))
+
+
+def rewrite_coarse_members(out, value):
+    """Overwrite every raw shard's coarse members and rebind its receipt."""
+    for path in sorted((out / "raw").rglob("*.npz")):
+        with np.load(path, allow_pickle=False) as data:
+            arrays = {name: data[name] for name in data.files}
+        arrays["fixed_coarse"] = np.full_like(arrays["fixed_coarse"], value)
+        arrays["float_coarse"] = np.full_like(arrays["float_coarse"], value)
+        np.savez(path, **arrays)
+        receipt = REDUCER.read_json(path.with_suffix(".json"))
+        receipt["sha256"] = REDUCER.sha(path)
+        write(path.with_suffix(".json"), receipt)
+
+
+def test_raw_coarse_members_are_never_read(tmp_path):
+    (tmp_path / "consistent").mkdir()
+    (tmp_path / "altered").mkdir()
+    consistent = fixture(tmp_path / "consistent")
+    altered = fixture(tmp_path / "altered")
+    rewrite_coarse_members(altered, 0)  # would make every row-domain ratio invalid
+    for out in (consistent, altered):
+        REDUCER.score_stage(out, "null_calibration")
+    a, _ = REDUCER.load_scores(consistent / "scores/null_calibration/ch14.npz")
+    b, _ = REDUCER.load_scores(altered / "scores/null_calibration/ch14.npz")
+    assert set(a) == set(b)
+    for name in a:
+        np.testing.assert_array_equal(a[name], b[name])
+    assert b["coarse_valid"].all()
+    # Frame 1 carries 120 in the designated target bin over a flat 100.
+    p0, p_ref = 255 * 100 + 120, 2 * 256 * 100
+    np.testing.assert_allclose(b["coarse_float"][1, :3], 2 * p0 / p_ref, rtol=1e-15)
 
 
 def test_normalized_primary_coordinate_refused_before_score_reads(tmp_path):

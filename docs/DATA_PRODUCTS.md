@@ -18,9 +18,10 @@ terms per fine bin from the frozen `fxfft256`, plus the fine scalars
 `fine_p_fa`, `fine_designated_bins`, and `fine_census_excluded_bins`) live
 only in the authoritative per-pilot `<freq_id>.npz` files. The null-bulk
 calibration and the detection list are not stored; they are recomputed
-offline from `fine_power_u64`. The combined
-outputs below carry no fine arrays; analyses of fine detections read the
-per-pilot products directly.
+offline from `fine_power_u64`. A `chime-run` output also stores the fine
+powers of its frame powers in `chime_detector_outputs.npz` (below); a
+`chime-scan` combine does not copy them, and analyses of fine detections read
+the per-pilot products directly.
 
 ## JSON Files
 
@@ -124,7 +125,10 @@ This is the canonical frame-by-pilot detector product.
 | `chime_frequency_hz` | `(num_pilots,)` | `float64` | Hz | CHIME coarse-channel center |
 | `frame_index` | `(num_frames,)` | `int64` | frame | Contiguous positional frame index |
 | `p_target_u64` | `(num_frames, num_pilots)` | `uint64` | power | Target frame power: the all-bin sum of the target term's exact fine powers |
-| `p_ref_sum_u64` | `(num_frames, num_pilots)` | `uint64` | power | Lower plus upper reference frame power, each an all-bin fine-power sum |
+| `p_ref_lower_u64` | `(num_frames, num_pilots)` | `uint64` | power | Lower reference frame power: the all-bin sum of the lower term's exact fine powers |
+| `p_ref_upper_u64` | `(num_frames, num_pilots)` | `uint64` | power | Upper reference frame power: the all-bin sum of the upper term's exact fine powers |
+| `p_ref_sum_u64` | `(num_frames, num_pilots)` | `uint64` | power | `p_ref_lower_u64 + p_ref_upper_u64` |
+| `fine_power_u64` | `(num_frames, num_pilots, 3, 256)` | `uint64` | power | `chime-run` only: the exact `fxfft256` fine powers (target, lower, upper) summed over input streams, whose all-bin sums are the three frame powers |
 | `coarse_power_ratio` | `(num_frames, num_pilots)` | `float64` | unitless | `2*p_target/p_ref_sum` |
 | `normalized_coarse_power_ratio_db` | `(num_frames, num_pilots)` | `float64` | dB | `10*log10(F/null_power_ratio)` |
 | `pilot_excess_db` | `(num_frames, num_pilots)` | `float64` | dB | One-bin pilot-excess PNR |
@@ -144,11 +148,18 @@ valid && (p_target * reference_norm_sum_sq > target_norm_sq * p_ref_sum)
 
 This is the integer form of `F > null_power_ratio`. The frame powers are the
 kernel core 3.0.0 definition, `P_r = sum_f S_r[f]` over the exact `fxfft256`
-fine powers (`METHOD_SPEC.md`); outputs written before core 3.0.0 carry the
-retired row-domain powers `sum_m |z|^2` in the same fields; `chime-run`
-outputs identify them by `kernel_version` and `coarse_power_ratio_definition`
-in `stats.json`, and `chime-scan` combines by the per-pilot product schema
-(v5 or v6). Because
+fine powers (`METHOD_SPEC.md`). A `chime-run` output stores those fine powers
+in `fine_power_u64`, so every frame power can be re-formed from them: the
+writer and `validate-products` require `p_target_u64`, `p_ref_lower_u64` and
+`p_ref_upper_u64` to equal `fine_power_u64[..., r, :].sum()` exactly and
+`p_ref_sum_u64` to equal their reference sum. A `chime-scan` combine stores
+the reference split but leaves the fine powers in its per-pilot products (a
+combined copy would hold `num_frames x num_pilots x 768` words). Outputs
+written before core 3.0.0 (detector contract revision 1) carry the retired
+row-domain powers `sum_m |z|^2` in the frame-power fields and neither the
+split nor the fine powers; `chime-run` outputs identify them by
+`kernel_version` and `coarse_power_ratio_definition` in `stats.json`, and
+`chime-scan` combines by the per-pilot product schema (v5 or v6). Because
 `normalized_coarse_power_ratio_db` is referenced to `null_power_ratio`, the
 null and the positive-excess boundary both sit at exactly 0 dB. The current
 product contract requires the exact powers, all norm-related arrays, schema

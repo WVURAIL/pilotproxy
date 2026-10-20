@@ -301,6 +301,7 @@ def test_the_last_year_needs_frame_times():
         t.last_year(synthetic())
 
 
+@needs_measurements
 def test_a_finite_budget_tightens_and_one_changes_nothing():
     f = synthetic()
     s = t.sweep(f)

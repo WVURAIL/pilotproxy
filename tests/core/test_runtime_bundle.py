@@ -757,3 +757,95 @@ def test_calibrated_fine_block_requires_a_list_of_hex_strings(
         == "pilot_profiles.fine_calibration[0].bulk_mask_words_hex"
         for error in report["errors"]
     )
+
+
+def _export_bundle_with_control(tmp_path):
+    output_dir = tmp_path / "bundle"
+    outputs = export_runtime_weight_bundle(
+        receiver_profile_path=(
+            CONFIGS_DIR / "receiver_profiles" / "reference_800mhz_pfb.json"
+        ),
+        detector_core_profile_path=(
+            CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
+        ),
+        physical_channels=[14, 37],
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        output_dir=output_dir,
+    )
+    return output_dir, outputs
+
+
+def _fine_errors(report) -> list[dict]:
+    return [e for e in report["errors"] if "fine_calibration" in e["check"]]
+
+
+@pytest.mark.parametrize(
+    "statuses,valid",
+    [
+        (("calibrated", "control"), True),
+        (("calibrated", "pending_campaign"), True),
+        (("control", "control"), False),       # a DTV channel cannot be the control
+        (("calibrated", "calibrated"), False),  # channel 37 is never calibrated
+    ],
+)
+def test_only_channel_37_is_the_control(tmp_path, statuses, valid) -> None:
+    output_dir, outputs = _export_bundle_with_control(tmp_path)
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    assert [row["physical_channel"] for row in profiles["profiles"]] == [14, 37]
+    for row, status in zip(profiles["profiles"], statuses):
+        if status != "pending_campaign":
+            block, _bulk = _calibrated_fine_block()
+            block["status"] = status
+            row["fine_calibration"] = block
+    _rewrite_profiles(outputs, profiles)
+    _refresh_sha256sum(outputs, "pilot_profiles")
+    report = validate_runtime_weight_bundle(bundle_dir=output_dir)
+    assert report["valid"] is valid, report["errors"]
+    if not valid:
+        assert any("only channel 37 is the control" in e["message"] for e in _fine_errors(report))
+
+
+def test_control_block_is_validated_like_a_calibrated_one(tmp_path) -> None:
+    output_dir, outputs = _export_bundle_with_control(tmp_path)
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    block, _bulk = _calibrated_fine_block()
+    block.update(status="control", cfar_rank=255)
+    del block["provenance"]["null_quantile"]
+    profiles["profiles"][1]["fine_calibration"] = block
+    _rewrite_profiles(outputs, profiles)
+    _refresh_sha256sum(outputs, "pilot_profiles")
+    checks = {e["check"] for e in _fine_errors(validate_runtime_weight_bundle(bundle_dir=output_dir))}
+    assert "pilot_profiles.fine_calibration[1].cfar_rank" in checks
+    assert "pilot_profiles.fine_calibration[1].provenance.required_fields" in checks
+
+
+@pytest.mark.parametrize("guard", [0, 3, 5])
+@pytest.mark.parametrize("offset", [3, 4, 5, 6, 7])
+def test_marker_guard_bins_keep_the_guard_band_out_of_the_bulk(tmp_path, guard, offset) -> None:
+    output_dir, outputs = _export_reference_bundle(tmp_path)
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    block, _bulk = _calibrated_fine_block(62)
+    block["marker_guard_bins"] = guard
+    line = 62 + offset
+    words = [int(word, 16) for word in block["bulk_mask_words_hex"]]
+    words[line >> 6] |= 1 << (line & 63)
+    block["bulk_mask_words_hex"] = [f"0x{word:016x}" for word in words]
+    profiles["profiles"][0]["fine_calibration"] = block
+    _rewrite_profiles(outputs, profiles)
+    _refresh_sha256sum(outputs, "pilot_profiles")
+    report = validate_runtime_weight_bundle(bundle_dir=output_dir)
+    inside = offset <= 2 + guard
+    assert report["valid"] is not inside, report["errors"]
+
+
+@pytest.mark.parametrize("guard", [-1, 126, 1.5, True])
+def test_marker_guard_bins_must_be_an_integer_in_range(tmp_path, guard) -> None:
+    output_dir, outputs = _export_reference_bundle(tmp_path)
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    block, _bulk = _calibrated_fine_block(62)
+    block["marker_guard_bins"] = guard
+    profiles["profiles"][0]["fine_calibration"] = block
+    _rewrite_profiles(outputs, profiles)
+    _refresh_sha256sum(outputs, "pilot_profiles")
+    checks = {e["check"] for e in _fine_errors(validate_runtime_weight_bundle(bundle_dir=output_dir))}
+    assert "pilot_profiles.fine_calibration[0].marker_guard_bins" in checks

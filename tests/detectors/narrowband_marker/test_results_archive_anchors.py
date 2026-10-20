@@ -336,3 +336,44 @@ def test_rf_offset_shares_one_wrap_with_the_bin_offset(tmp_path):
     rf = anchors.rf_offset_of_bin(bins, g)
     assert np.allclose(np.diff(rf), [-FINE_BIN_HZ, -127 * FINE_BIN_HZ, -127 * FINE_BIN_HZ])
     assert rf[0] == pytest.approx(-(offsets[0] * FINE_BIN_HZ) + (g.grid_residual_hz - NOMINAL * FINE_BIN_HZ))
+
+
+@pytest.mark.parametrize("anchor", [64, 65])
+def test_marker_guard_band_keeps_a_line_outside_the_markers_out_of_the_bulk(anchor):
+    """A line 3 to 5 bins outside the markers (as on channels 22 and 28) enters the
+    default bulk; a 5-bin guard band keeps it out, so the rank ignores it."""
+    from pilot_proxy.detectors.narrowband_marker.scores import required_eta_q16_by_rank
+
+    width = anchors.DESIGNATED_HALF_WIDTH
+    line = [anchor + width + k for k in (3, 4, 5)]
+    default = anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1)
+    guarded = anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1, marker_guard_bins=5)
+    assert default[line].any() and not guarded[line].any()
+    # the guard band removes only the bins within h + g of the anchor
+    removed = np.flatnonzero(default & ~guarded)
+    assert all(width < abs(int(anchors.unwrap_bins(b, anchor))) <= width + 5 for b in removed)
+    assert anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1, marker_guard_bins=0).tolist() == default.tolist()
+
+    rng = np.random.default_rng(anchor)
+    quiet = rng.integers(900, 1100, size=(3, 256)).astype(np.uint64)
+    loud = quiet.copy()
+    loud[0, line] = 40 * quiet[0, line]            # target-term line, references unchanged
+    rank = {}
+    for name, bulk in (("default", default), ("guarded", guarded)):
+        rho = (int(bulk.sum()) + 1) // 2
+        rank[name] = [required_eta_q16_by_rank(powers, anchor_bin=anchor, designated_half_width=width,
+                                               bulk_mask=bulk)[rho - 1] for powers in (quiet, loud)]
+    assert rank["guarded"][0] == rank["guarded"][1]   # the line cannot move the guarded reference
+    assert rank["default"][0] != rank["default"][1]   # it moves the default one
+
+
+def test_marker_guard_band_reaches_the_anchor_result(tmp_path):
+    path = _product(tmp_path, on_lines=[(65, 5.0)])
+    with Product(path) as product:
+        default = anchors.anchor(product, product.selected, replicates=0)
+        guarded = anchors.anchor(product, product.selected, replicates=0, marker_guard_bins=4)
+    assert guarded.anchor_bin == default.anchor_bin == 65
+    assert (default.bulk_size, guarded.bulk_size) == (126, 122)
+    assert not guarded.bulk[[60, 62, 68, 70]].any() and default.bulk[[60, 62, 68, 70]].all()
+    with pytest.raises(ValueError, match="marker_guard_bins"):
+        anchors.bulk_mask(64, pad_factor=2, guard_fine_bins=1, marker_guard_bins=-1)

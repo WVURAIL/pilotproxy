@@ -231,3 +231,81 @@ def test_unequal_frame_weights_within_one_event_are_refused(case):
     refresh(case)
     with pytest.raises(ValueError, match="equal original frame weights"):
         build_archive_candidate(case["plan_path"], case["output"])
+
+
+def add_control(case, tmp_path, *, word=70000):
+    """Re-export the input bundle with a channel 37 profile and give the control its scores."""
+    bundle = tmp_path / "input_bundle37"
+    core = ROOT / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json"
+    export_runtime_weight_bundle(receiver_profile_path=case["receiver"], detector_core_profile_path=core,
+        weight_coordinate_system="post_spectral_sense_normalization", physical_channels=[14, 29, 37],
+        output_dir=bundle)
+    profiles = {p["physical_channel"]: p for p in json.loads((bundle / "pilot_profiles.json").read_text())["profiles"]}
+    weights = (bundle / "weights.bin").read_bytes()
+    for channel in (29, 37):
+        profile = profiles[channel]
+        packed = weights[profile["weight_bank_offset_bytes"]:profile["weight_bank_offset_bytes"]
+                         + profile["weight_bank_nbytes"]]
+        fields = {**case["product_fields"], "physical_channel": np.asarray(channel),
+                  "freq_id": np.asarray(profile["receiver_channel_id"]),
+                  "weights_hash": np.asarray(hashlib.sha256(packed).hexdigest()),
+                  "target_norm_sq": np.asarray([profile["target_norm_sq"]]),
+                  "reference_norm_sum_sq": np.asarray([profile["reference_norm_sum_sq"]])}
+        product = tmp_path / f"product{channel}.npz"
+        np.savez(product, **fields)
+        meta = json.loads(json.dumps(case["meta"]))
+        meta["channel"] = channel
+        meta["original_product_identity"] = {**ref(product), "bytes": product.stat().st_size}
+        if channel == 37:
+            score = tmp_path / "ch37.npz"
+            np.savez(score, required_q16=np.asarray([word], dtype=np.uint64), supported=np.asarray([True]),
+                     frame_event_index=np.asarray([0]), probability_weight=np.asarray([1.0]))
+            meta["npz_sha256"] = rc.sha256(score)
+        case["plan"]["score_metadata"][str(channel)] = write(tmp_path / f"ch{channel}.json", meta)
+    path = Path(case["plan"]["decisions"]["path"])
+    decisions = json.loads(path.read_text())
+    decisions["channels"][2].update(deployed_word=word, kept_frames=1, kept_events=1, kappa=1.0)
+    case["plan"]["decisions"] = write(path, decisions)
+    case["plan"]["bundle_files"] = {name: ref(bundle / name) for name in REQUIRED_RUNTIME_BUNDLE_FILES}
+    write(case["plan_path"], case["plan"])
+
+
+def test_a_channel_37_profile_is_bound_as_the_control(case, tmp_path):
+    add_control(case, tmp_path)
+    report = build_archive_candidate(case["plan_path"], case["output"])
+    assert report["control_channel_37_bound"] and report["permanent_mask_channels"] == [14]
+    profiles = {p["physical_channel"]: p for p in
+                json.loads((case["output"] / "bundle/pilot_profiles.json").read_text())["profiles"]}
+    assert profiles[29]["fine_calibration"]["status"] == "calibrated"
+    control = profiles[37]["fine_calibration"]
+    assert control["status"] == "control" and control["cfar_multiplier_q16"] == 70000
+    assert control["provenance"]["threshold_selection"]["decision_channel"] == 37
+    assert validate_runtime_weight_bundle(bundle_dir=case["output"] / "bundle")["valid"]
+
+
+def test_a_channel_37_profile_without_a_control_word_is_refused(case, tmp_path):
+    add_control(case, tmp_path)
+    path = Path(case["plan"]["decisions"]["path"])
+    decisions = json.loads(path.read_text())
+    decisions["channels"][2] = {"channel": 37, "outcome": "not useful", "reason": "synthetic"}
+    case["plan"]["decisions"] = write(path, decisions)
+    write(case["plan_path"], case["plan"])
+    with pytest.raises(ValueError, match="give the control no word"):
+        build_archive_candidate(case["plan_path"], case["output"])
+
+
+@pytest.mark.parametrize("line_in_bulk", [False, True])
+def test_score_geometry_guard_band_is_carried_and_enforced(case, line_in_bulk):
+    geometry = case["meta"]["score_geometry"]
+    bins = [b for b in geometry["bulk_bins"] if not 62 - 5 <= b <= 62 + 5]
+    if line_in_bulk:
+        bins.append(66)                            # 4 bins from the anchor, inside h + g = 5
+    geometry.update(marker_guard_bins=3, bulk_bins=sorted(bins), intended_bulk_size=len(bins))
+    refresh(case)
+    if line_in_bulk:
+        with pytest.raises(ValueError, match="rank or guard"):
+            build_archive_candidate(case["plan_path"], case["output"])
+        return
+    build_archive_candidate(case["plan_path"], case["output"])
+    p = json.loads((case["output"] / "bundle/pilot_profiles.json").read_text())
+    assert p["profiles"][1]["fine_calibration"]["marker_guard_bins"] == 3

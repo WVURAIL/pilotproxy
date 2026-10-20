@@ -265,3 +265,58 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
     assert {int(b["receiver_channel_id"]): int(b["eta_q16"]) for b in report["required_threshold_bindings"]} == deployed
     assert not set(report["permanent_mask_freq_ids"]) & set(report["require_fine_freq_ids"])
     assert not set(report["unmasked_freq_ids"]) & (set(permanent) | set(deployed))
+
+
+def with_control(case, *, word=72850, capability=True):
+    """Re-export the example bundle with a channel 37 profile at the control status."""
+    path, plan, directory = case
+    bundle = directory / "bundle37"
+    export_runtime_weight_bundle(
+        receiver_profile_path=directory / "receiver_profile.json",
+        detector_core_profile_path=directory / "detector_core_profile.json",
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        physical_channels=[14, 29, 37], output_dir=bundle,
+    )
+    profiles = read(bundle / "pilot_profiles.json")
+    rows = {row["physical_channel"]: row for row in profiles["profiles"]}
+    source = plan["decisions"]["sha256"]
+    rows[29]["fine_calibration"] = calibrated(65536, source)
+    rows[37]["fine_calibration"] = {**calibrated(word, source), "status": "control"}
+    write(bundle / "pilot_profiles.json", profiles)
+    plan["bundle_files"] = refresh_bundle(bundle)
+    if capability:
+        plan["consumer"]["capabilities"] = sorted(op.REQUIRED_CAPABILITIES | {op.CONTROL_CAPABILITY})
+
+
+def test_the_channel_37_control_compiles_to_control_freq_ids(case):
+    with_control(case)
+    path, _, tmp = case
+    write(path, case[1])
+    report = op.write_policy(path, tmp / "review", require_complete=True)
+    assert report["not_in_policy"] == []
+    assert report["control_freq_ids"] == [491]
+    assert report["kotekan_parameters"] == {"permanent_mask_freq_ids": [844], "require_fine_freq_ids": [614],
+                                            "control_freq_ids": [491]}
+    (control,) = [row for row in report["channels"] if row["physical_channel"] == 37]
+    assert control["threshold"] == {"kind": "control", "eta_q16": "72850"}
+    assert report["control_bindings"][0]["eta_q16"] == "72850"
+    assert 491 not in report["require_fine_freq_ids"] + report["permanent_mask_freq_ids"]
+    assert op.validate_policy(tmp / "review") == report
+
+
+@pytest.mark.parametrize("change, match", [
+    (dict(word=72851), "differs from the decided word"),
+    (dict(capability=False), "dtv_control_freq_ids_v1"),
+])
+def test_the_control_is_refused_off_its_word_or_without_the_consumer_capability(case, change, match):
+    with_control(case, **change)
+    with pytest.raises(ValueError, match=match):
+        analyze(case)
+
+
+def test_a_control_profile_needs_the_control_decision_word(case):
+    with_control(case)
+    change_decisions(case, lambda rows: rows[37].update(outcome="not useful", reason="no control word",
+                                                         deployed_word=None))
+    with pytest.raises(ValueError, match="control profile but the decision has no word"):
+        analyze(case)

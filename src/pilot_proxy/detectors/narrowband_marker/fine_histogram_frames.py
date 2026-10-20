@@ -6,6 +6,13 @@ Z63 is max(T in the designated set) / the 63rd smallest usable bulk T,
 where T = 2*S0/(S1+S2). It is a median-normalized score, not a per-bin F
 statistic. The saved current-era anchor is reused across all archive frames;
 the control uses its nominal marker. No anchor or era is fitted here.
+
+Geometry options (detector v2 calibration): ``--designated-half-width`` h and
+``--marker-guard-bins`` g (:func:`anchors.bulk_mask`). With either changed the
+rank is the median of the resulting bulk (``scores.candidate_rho_values``, the
+rule that gives 63 for the 125- and 126-bin bulks), the score is Z<rho> and the
+fields carry that rank in their names. The defaults (h = 2, g = 0) are the
+export of record.
 """
 from __future__ import annotations
 
@@ -30,11 +37,13 @@ SCHEMA = "fine-histogram-frame-export-v1"
 MANIFEST_SCHEMA = "fine-histogram-frames-manifest-v1"
 
 
-def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask):
+def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask, designated_half_width=WIDTH, rho=None):
     """Return full-frame score arrays; excluded frames remain uncomputed.
 
     Exact keep boundaries use the production scorer. The unquantized ratio
     uses exact rational ordering before its final conversion to float64.
+    With ``rho`` None the geometry of record is required (h = 2 and a 125- or
+    126-bin bulk, rank 63); otherwise ``rho`` is the one-based rank.
     """
     powers = np.asarray(powers)
     selected = np.asarray(selected)
@@ -45,9 +54,14 @@ def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask):
         raise ValueError("selected must be a boolean frame vector")
     if bulk.dtype != np.dtype(bool) or bulk.shape != (FINE_BINS,):
         raise ValueError("bulk_mask must be a boolean vector of length 256")
-    if int(bulk.sum()) not in (125, 126) or scores.candidate_rho_values(int(bulk.sum())) != (RHO,):
-        raise ValueError("Z63 requires the intended 125- or 126-bin bulk")
-    designated = scores._declared_bins(anchor_bin, WIDTH)
+    if rho is None:
+        if (designated_half_width != WIDTH or int(bulk.sum()) not in (125, 126)
+                or scores.candidate_rho_values(int(bulk.sum())) != (RHO,)):
+            raise ValueError("Z63 requires the intended 125- or 126-bin bulk")
+        rho = RHO
+    elif type(rho) is not int or not 1 <= rho <= int(bulk.sum()):
+        raise ValueError("rho must be a one-based rank within the bulk")
+    designated = scores._declared_bins(anchor_bin, designated_half_width)
     if bulk[designated].any():
         raise ValueError("bulk must exclude the designated bins")
     count = selected.size
@@ -65,17 +79,17 @@ def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask):
         usable_designated = [int(b) for b in designated if denominator[b] > 0]
         bulk_count[row] = len(usable_bulk)
         designated_count[row] = len(usable_designated)
-        if len(usable_bulk) < RHO:
+        if len(usable_bulk) < rho:
             always[row] = True
             continue
         rank_valid[row] = True
         boundary = scores.required_eta_q16_by_rank(
-            frame, anchor_bin=anchor_bin, designated_half_width=WIDTH, bulk_mask=bulk)[RHO - 1]
+            frame, anchor_bin=anchor_bin, designated_half_width=designated_half_width, bulk_mask=bulk)[rho - 1]
         always[row] = boundary == scores.ALWAYS_MASKED_Q16
         if not always[row]:
             required[row] = boundary
         ranked = sorted(Fraction(2 * int(frame[0, b]), denominator[b]) for b in usable_bulk)
-        background = ranked[RHO - 1]
+        background = ranked[rho - 1]
         rank_zero[row] = background == 0
         numerator = max((Fraction(2 * int(frame[0, b]), denominator[b]) for b in usable_designated), default=Fraction(0))
         if background:
@@ -87,7 +101,7 @@ def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask):
             z[row] = 0.0
     return {
         "fine_source_row_index": np.arange(count, dtype=np.int64),
-        "fine_score_z63": z,
+        f"fine_score_z{rho}": z,
         "fine_score_computed": selected.copy(),
         "fine_score_finite": np.isfinite(z),
         "fine_score_infinite": np.isposinf(z),
@@ -120,7 +134,13 @@ def _member(root, name):
     return root / name
 
 
-def _geometry(product, metadata):
+def _ordinal(n):
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def _geometry(product, metadata, designated_half_width=WIDTH, marker_guard_bins=0):
+    """The export geometry; returns the anchor, the bulk, the geometry record and the rank
+    (None for the geometry of record, which final_score_arrays checks itself)."""
     sources = metadata["source_records"]
     records = {name: json.loads(Path(record["path"]).read_text())
                for name, record in sources.items() if name == "ledger"}
@@ -141,22 +161,34 @@ def _geometry(product, metadata):
             raise ValueError("saved selector anchor must be an integer")
         anchor_source = null["anchor_source"]
         scope = "Saved current-era selector geometry applied unchanged to every era; no historical-era anchor refit."
-    bulk = anchors.bulk_mask(anchor, pad_factor=product.fine_pad_factor,
-                             guard_fine_bins=product.fine_guard_bins,
-                             census_excluded_bins=product.fine_census_excluded_bins)
-    if metadata.get("role") != "control" and int(null["bulk_size"]) != int(bulk.sum()):
+    def bulk_for(width, guard):
+        return anchors.bulk_mask(anchor, pad_factor=product.fine_pad_factor,
+                                 guard_fine_bins=product.fine_guard_bins,
+                                 census_excluded_bins=product.fine_census_excluded_bins,
+                                 designated_half_width=width, marker_guard_bins=guard)
+
+    record = designated_half_width == WIDTH and marker_guard_bins == 0
+    # the saved selector's bulk size is that of the geometry of record
+    if metadata.get("role") != "control" and int(null["bulk_size"]) != int(bulk_for(WIDTH, 0).sum()):
         raise ValueError("saved bulk size differs from product geometry")
-    return anchor, bulk, {
+    bulk = bulk_for(designated_half_width, marker_guard_bins)
+    rho = None if record else scores.candidate_rho_values(int(bulk.sum()))[0]
+    rank = RHO if record else rho
+    geometry = {
         "anchor_bin": anchor, "anchor_source": anchor_source, "scope": scope,
-        "rho_one_based": RHO, "cfar_rank_zero_based": RHO - 1,
-        "designated_half_width": WIDTH, "designated_bins": list(anchors.designated_set(anchor, WIDTH)),
+        "rho_one_based": rank, "cfar_rank_zero_based": rank - 1,
+        "designated_half_width": designated_half_width,
+        "designated_bins": list(anchors.designated_set(anchor, designated_half_width)),
         "bulk_bins": np.flatnonzero(bulk).tolist(), "intended_bulk_size": int(bulk.sum()),
         "pad_factor": product.fine_pad_factor, "guard_fine_bins": product.fine_guard_bins,
         "census_excluded_bins": product.fine_census_excluded_bins.tolist(),
     }
+    if marker_guard_bins:
+        geometry["marker_guard_bins"] = marker_guard_bins
+    return anchor, bulk, geometry, rho
 
 
-def process_channel(frames, item, output):
+def process_channel(frames, item, output, *, designated_half_width=WIDTH, marker_guard_bins=0):
     """Add final fine scores without changing any original coarse array."""
     metadata_path = _member(frames, item["metadata"])
     coarse_path = _member(frames, item["npz"])
@@ -199,9 +231,11 @@ def process_channel(frames, item, output):
             _same(name, arrays[name], expected)
         _same("finite_time", arrays["finite_time"], np.isfinite(product.frame_time))
         _same("is_current", arrays["is_current"], arrays["era_id"] == metadata["current_era"])
-        anchor, bulk, geometry = _geometry(product, metadata)
+        anchor, bulk, geometry, rho = _geometry(product, metadata, designated_half_width, marker_guard_bins)
+        rank = geometry["rho_one_based"]
         fine = final_score_arrays(raw_archive["fine_power_u64"], product.selected,
-                                  anchor_bin=anchor, bulk_mask=bulk)
+                                  anchor_bin=anchor, bulk_mask=bulk,
+                                  designated_half_width=designated_half_width, rho=rho)
     fine["fine_histogram_eligible"] = arrays["selected"] & arrays["finite_time"] & fine["fine_score_finite"]
     fine["current_fine_histogram_eligible"] = fine["fine_histogram_eligible"] & arrays["is_current"]
     arrays.update(fine)
@@ -209,7 +243,7 @@ def process_channel(frames, item, output):
     counts.update(total=int(arrays["selected"].size),
                   insufficient_bulk=int((arrays["selected"] & ~fine["fine_rank_valid"]).sum()),
                   no_designated_reference=int((arrays["selected"] & (fine["fine_usable_designated_count"] == 0)).sum()),
-                  undefined_score=int((arrays["selected"] & np.isnan(fine["fine_score_z63"])).sum()))
+                  undefined_score=int((arrays["selected"] & np.isnan(fine[f"fine_score_z{rank}"])).sum()))
     final_stat = product_path.stat()
     if (stat.st_size, stat.st_mtime_ns) != (final_stat.st_size, final_stat.st_mtime_ns):
         raise ValueError("source product changed during extraction")
@@ -227,16 +261,17 @@ def process_channel(frames, item, output):
         "source_records": metadata["source_records"], "geometry": geometry,
         "current_era": metadata["current_era"], "era_definitions": metadata["era_definitions"],
         "coarse_counts": metadata["counts"], "counts": counts,
-        "statistic": "Z63 = max designated T / 63rd smallest usable bulk T; T = 2*S0/(S1+S2)",
+        "statistic": f"Z{rank} = max designated T / {_ordinal(rank)} smallest usable bulk T; T = 2*S0/(S1+S2)",
         "statistic_scope": "Final median-normalized fine score, not a per-bin F statistic or a false-alarm certificate.",
-        "ratio_rule": "Positive reference denominators only; exact rational ranking and division, then float64 conversion. Zero scores are retained. A valid zero rank with no positive usable designated power has score zero by the detector's non-firing convention; otherwise positive/zero is +inf. No usable designated reference also gives score zero and is counted explicitly. Fewer than 63 usable bulk bins is NaN.",
+        "ratio_rule": "Positive reference denominators only; exact rational ranking and division, then float64 conversion. Zero scores are retained. A valid zero rank with no positive usable designated power has score zero by the detector's non-firing convention; otherwise positive/zero is +inf. No usable designated reference also gives score zero and is counted explicitly. "
+                      f"Fewer than {rank} usable bulk bins is NaN.",
         "histogram_rule": "fine_histogram_eligible = selected & finite_time & fine_score_finite; no positive-score cut or statistical trimming. Undefined and infinite selected scores are counted separately.",
         "exact_boundary": {
             "field": "fine_required_multiplier_q16", "scale": scores.Q16_SCALE,
             "logical_always_masked_sentinel": str(scores.ALWAYS_MASKED_Q16),
             "encoding": "uint64 boundary plus fine_always_masked; word is zero for always-masked or uncomputed frames. Interpret only where fine_score_computed is true.",
             "keep_rule": "On computed frames: not fine_always_masked and multiplier_q16 >= fine_required_multiplier_q16. The minimum deployable word is 1. Insufficient bulk is always-masked in the characterization scorer.",
-            "float_warning": "Use the exact boundary for masking; do not reconstruct it from float64 Z63.",
+            "float_warning": f"Use the exact boundary for masking; do not reconstruct it from float64 Z{rank}.",
         },
         "source_row_rule": "All arrays retain the original product row order; original coarse arrays, including frame and acquisition identifiers, are copied without alteration.",
         "per_bin_f_values_saved": False, "psd_payloads_decoded": False,
@@ -246,7 +281,7 @@ def process_channel(frames, item, output):
     return result
 
 
-def run(frames, output):
+def run(frames, output, *, designated_half_width=WIDTH, marker_guard_bins=0):
     frames, output = Path(frames).resolve(), Path(output).resolve()
     manifest_path = frames / "manifest.json"
     source_manifest = json.loads(manifest_path.read_text())
@@ -276,10 +311,14 @@ def run(frames, output):
         "python": sys.version, "numpy_version": np.__version__,
         "scope": "Read-only final-score export with saved geometry and unchanged coarse populations; no refit, null calibration, operating-point selection, or per-bin export.",
     }
+    if designated_half_width != WIDTH or marker_guard_bins:
+        plan["geometry_options"] = {"designated_half_width": designated_half_width,
+                                    "marker_guard_bins": marker_guard_bins}
     coarse.write_json(output / "extraction-plan.json", plan)
     records = []
     for item in items:
-        record = process_channel(frames, item, output)
+        record = process_channel(frames, item, output, designated_half_width=designated_half_width,
+                                 marker_guard_bins=marker_guard_bins)
         records.append(record)
         print(json.dumps({"channel": record["channel"], "counts": record["counts"]}), flush=True)
     for path, digest in {**input_files, **sources}.items():
@@ -302,6 +341,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="pilot-proxy characterize fine-histogram-frames", description=__doc__)
     parser.add_argument("--frames", type=Path, required=True, help="authenticated coarse histogram-frames directory")
     parser.add_argument("--output", type=Path, required=True, help="new, empty output directory")
+    parser.add_argument("--designated-half-width", type=int, default=WIDTH,
+                        help=f"marker half-width h in padded fine bins (default {WIDTH}, the export of record)")
+    parser.add_argument("--marker-guard-bins", type=int, default=0,
+                        help="bins next to the markers left out of the bulk (default 0, the export of record)")
     args = parser.parse_args(argv)
-    run(args.frames, args.output)
+    run(args.frames, args.output, designated_half_width=args.designated_half_width,
+        marker_guard_bins=args.marker_guard_bins)
     return 0

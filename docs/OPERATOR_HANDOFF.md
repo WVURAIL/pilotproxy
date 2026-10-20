@@ -21,13 +21,13 @@ configuration. The policy compiler does not activate a telescope configuration.
 
 Use the accepted Kotekan revision recorded in the release manifest. Build with `USE_CUDA=ON` and `WITH_TESTS=ON` on a supported CUDA device. Follow the checkout's `docs/sphinx/compiling/general.rst`, `README.md`, and `docs/sphinx/dev/dev_pilotproxy_testing.rst`. Record the complete build options, compiler/CUDA versions, binary hash, and `external/pilotproxy/VENDOR.json`.
 
-From that checkout, in its dedicated Python test environment, run the existing CI entry point with the absolute build-directory path:
+From that checkout, with Python virtual-environment support installed, run the CI entry point with the absolute build-directory path:
 
 ```sh
-bash config/ci-tests/run_pilotproxy_tests.sh "$KOTEKAN_BUILD"
+bash tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh "$KOTEKAN_BUILD"
 ```
 
-Set `KOTEKAN_BUILD` to the release manifest's test build directory first. This script installs the PilotProxy revision pinned by `VENDOR.json`, exports a **development** bundle under that build directory, validates it, and runs the pipeline and integration tests. It does not calibrate the telescope. Preserve its log and any skipped tests. The sustained-workload command and required environment variables are in the validation instructions above; run the Pathfinder geometry on the intended hardware before acceptance.
+Set `KOTEKAN_BUILD` to the release manifest's test build directory first. This script creates a temporary virtual environment with pinned dependencies, installs the PilotProxy revision pinned by `VENDOR.json`, and exports and validates **development** bundles for CHORD and CHIME. It runs the pipeline and integration tests with timeouts and an ephemeral loopback REST port, then removes the environment and generated files. It does not calibrate the telescope. Preserve its log and any skipped tests. The sustained-workload command and required environment variables are in the validation instructions above; run the Pathfinder geometry on the intended hardware before acceptance.
 
 ## 2. Freeze the telescope and threshold
 
@@ -81,11 +81,9 @@ dtv_apply_mask: false
 dtv_runtime_bundle_dir: <absolute release bundle directory>
 ```
 
-The detector command must retain:
+For CHORD, the detector command uses `detector_window_samples: 64` and the pipeline uses `num_times: 8192`. For CHIME, these are 128 and 16384. The stage derives the detector block size from the selected core; each GPU frame must contain exactly one block.
 
-```yaml
-samples_per_detector_frame: 8192
-```
+Keep the detector on CUDA stream 3 and its output synchronization and all three `cudaOutputData` commands on stream 4, with `num_cuda_streams: 5`. The copies of `dtv_mask`, `dtv_powers` and `dtv_fine_support` must follow `cudaSyncOutput` on that stream so they wait for the detector. An output copy left on the default copy stream can read the initial fill before the detector writes its result.
 
 A bound channel needs a calibrated profile (section 2). Inspect the startup binding records: each expected pilot must be bound with the correct receiver ID. Zero masks on a node with no bound pilots mean “detector disabled,” not measured clean data.
 
@@ -93,7 +91,7 @@ These keys are verified in Kotekan `config/fengine/chord.j2` and `config/fengine
 
 ## 4. Accept shadow operation, then applied operation
 
-Before acquisition, the site owners must freeze the acceptance limits and responsible reviewer in the release manifest. Begin with recorded masks and `dtv_apply_mask: false`. Keep the binary, bundle, input population, and configuration fixed during the segment. Record frame/timestamp coverage, packet loss, GPU cadence and headroom, binding state, mask fractions, and synchronized sampled voltage/mask/power products. Recompute sampled decisions from the saved voltages with the exact bundle and require exact mask and coarse-power agreement. Confirm pilot location, reference occupancy, and the held-out operating bound under the stated conditions.
+Before acquisition, the site owners must freeze the acceptance limits and responsible reviewer in the release manifest. Begin with recorded masks and `dtv_apply_mask: false`. This mode gives n2k no dependency on the detector outputs, but the detector still holds voltage-ring frames while processing. A slow detector can back-pressure the voltage producer and delay n2k; record-only operation does not guarantee independent progress. Keep the binary, bundle, input population, and configuration fixed during the segment. Record frame/timestamp coverage, packet loss, GPU cadence and headroom, binding state, mask fractions, and synchronized sampled voltage/mask/power products. Recompute sampled decisions from the saved voltages with the exact bundle and require exact mask and coarse-power agreement. Confirm pilot location, reference occupancy, and the held-out operating bound under the stated conditions.
 
 The pull request exports `dtv_mask` (int8, frequency), `dtv_powers` (uint64, frequency × 3 frame powers; since kernel core 3.0.0 the all-bin sums of the stage's fine powers, so a stage vendoring an older core must be re-vendored before its powers match a current replay) and, when `dtv_fine_support_name` is set, `dtv_fine_support` (int32, frequency × 2), recording `(rank_valid, n_bulk)` for every evaluated frame: `(-1, -1)` means unevaluated, `(0, n_bulk)` invalid rank support, and `(1, n_bulk)` valid rank support. It does **not** export full-rate fine scores; sampled-voltage replay can recover them only for sampled frames. An invalid bulk produces mask zero, so a zero mask alone is not proof that the frame passed a valid fine test; read it with the support rows. Logs and packet-loss monitoring are necessary but do not replace that validity check.
 
@@ -101,7 +99,7 @@ The pull request exports `dtv_mask` (int8, frequency), `dtv_powers` (uint64, fre
 
 **Applied release requires a validated way to mark or exclude every invalid detector decision.** This can be a dedicated validity path or an existing input-health gate whose coverage of the exact fine-decision invalid conditions has been demonstrated and recorded. Sampling and logs do not establish that coverage. An unresolved invalid-support path blocks applied release, even when sampled replay passes; shadow commissioning can still measure the gap.
 
-Use `pilot-proxy replay-fine-capture --plan capture_plan.json --output-dir new_replay` and `pilot-proxy validate-fine-capture-replay --replay-dir new_replay` for the capture-specific fine path. The [capture replay guide](CAPTURE_FINE_REPLAY.md) supplies the pinned native format, contracts, failure interpretation, calibration export, and a reproducible synthetic example. It preserves invalid decisions and checks masks and coarse powers exactly. Kotekan's `tools/verify_pilotproxy_pipeline.py` checks the stage's fine masks and exact coarse powers on a small synthetic fixture. Actual telescope replay with verified receiver state is still a release requirement; synthetic examples establish only the command's plumbing.
+Use `pilot-proxy replay-fine-capture --plan capture_plan.json --output-dir new_replay` and `pilot-proxy validate-fine-capture-replay --replay-dir new_replay` for the capture-specific fine path. The [capture replay guide](CAPTURE_FINE_REPLAY.md) supplies the pinned native format, contracts, failure interpretation, calibration export, and a reproducible synthetic example. It preserves invalid decisions and checks masks and coarse powers exactly. Kotekan's `tests/verify_pilotproxy_pipeline.py` checks the stage's fine masks and exact coarse powers on a small synthetic fixture. Actual telescope replay with verified receiver state is still a release requirement; synthetic examples establish only the command's plumbing.
 
 Apply masking only after the shadow acceptance is signed and the site-approved configuration demonstrates that **both correlation and valid-sample counts consume the same combined mask**. The F-engine template selects this path with `dtv_apply_mask: true`; the Pathfinder overlay must demonstrate its equivalent. Validate block alignment and the resulting masked/unmasked 10-second visibility and count products. Save this acceptance independently of the detector's DSP calibration. It does not change a channel's BAO ruling.
 

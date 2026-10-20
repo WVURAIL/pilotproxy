@@ -203,7 +203,7 @@ Create the archive diagnostic from the existing score products:
 ```bash
 "$proxy_python" tools/report_proxy_confidence_band.py \
   --scores /home/djg/rail/output/threshold-scores-refit-2026-10-14/scores \
-  --published-decisions /home/djg/rail/dtv-paper2-bao-bound/data/decisions.json \
+  --published-decisions /home/djg/rail/dtv-mnras/data/decisions.json \
   --output "$proxy_replay/archive" \
   --replicates 1999 --seed 2026101601 --modes event day week
 ```
@@ -231,7 +231,7 @@ before loading them:
 ```bash
 "$proxy_python" tools/report_proxy_confidence_band.py \
   --frozen-inputs "$proxy_replay/archive/inputs" \
-  --published-decisions /home/djg/rail/dtv-paper2-bao-bound/data/decisions.json \
+  --published-decisions /home/djg/rail/dtv-mnras/data/decisions.json \
   --output "$proxy_replay/archive-offline" \
   --replicates 1999 --seed 2026101601 --modes event day week
 ```

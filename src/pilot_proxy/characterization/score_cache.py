@@ -316,8 +316,9 @@ def build(working_delivery, exports, previous, output, *, working_delivery_sha25
             require(np.array_equal(rows[accepted_keep], replay['kept_source_row_index']), 'Accepted kept rows are not an exact ordered subset')
             knee_word = int(previous['proposal']['knee_word_q16'])
         require(not np.any(rank & ~always & ~computed), 'Unsupported computation marked as a supported score')
+        # the recorded proposals were made with rule v1, so they are authenticated against it
         recomputed = knee.propose(words, [str(int(event)) for event in inverse], valid=list(rank & computed),
-                                  always_masked=list(always))
+                                  always_masked=list(always), rule=knee.RULE_ID_V1)
         require(int(recomputed['knee_word_q16']) == knee_word, 'The knee does not reproduce the recorded knee')
         reference, candidates, arrays, encoding = candidate_cache(words, rank, always, inverse, current_word, knee_word)
         arrays.update(identities)

@@ -170,7 +170,7 @@ def main(argv=None):
               + (f"; tolerance below the knee at eta {b['eta']:.4g}, {b['time_years']:.4g} yr" if b else "")
               + (f"; deployed at eta {d['deployed']['eta']:.4g}" if d["deployed"] else ""))
     summary(decisions, args.out)
-    inputs = dict(scores=str(args.scores), table_provenance=table["provenance"], shelf=t.SHELF, excluded=excluded,
+    inputs = dict(scores=str(args.scores), knee_rule=t.knee_rule.RULE_ID, table_provenance=table["provenance"], shelf=t.SHELF, excluded=excluded,
                   max_calendar_years=t.MAX_CALENDAR_YEARS,
                   coherent_fraction=t.COHERENT_FRACTION, coherent_fraction_scale=t.COHERENT_FRACTION_SCALE,
                   coherent_fraction_by_band=t.COHERENT_FRACTION_BY_BAND, on_sky_duty=t.ON_SKY_DUTY,

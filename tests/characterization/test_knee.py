@@ -7,8 +7,8 @@ import pytest
 
 from pilot_proxy.characterization import knee as wt
 
-# The 24 knees of record: exact Q16 word and current era span (the knee_threshold of the
-# threshold-calibration-bridge score cache, the input of the threshold rule).
+# The 24 knees of record under rule v1: exact Q16 word and current era span (the knee_threshold of the
+# threshold-calibration-bridge score cache). The threshold rule reads the cache's frames and applies rule v2.
 KNEES = {
     14: (188812, "2019-10", "2026-08"),
     15: (229615, "2021-07", "2026-08"),
@@ -72,11 +72,40 @@ def test_every_event_carries_equal_weight():
     # low event's frames, which are most of the frames but one event in four.
     words = [1000] * 99 + [5000, 6000, 7000]
     events = ["burst"] * 99 + ["a", "b", "c"]
-    result = wt.propose(words, events)
+    result = wt.propose(words, events, rule=wt.RULE_ID_V1)
     assert result["current_events"] == 4
     assert result["knee_word_q16"] == "1000"
     assert result["frame_retention"] == pytest.approx(99 / 102)
     assert result["equal_event_retention"] == pytest.approx(0.25)
+
+
+def _two_populations(low, high):
+    # ``low`` single-frame events near word 1000 and ``high`` near word 100000, log-spread
+    rng = np.random.default_rng(3)
+    words = np.r_[np.exp(rng.normal(np.log(1000), 0.15, low)), np.exp(rng.normal(np.log(100000), 0.15, high))]
+    return [int(w) for w in words], [f"e{i}" for i in range(low + high)]
+
+
+def test_mostly_low_scores_bend_above_the_line():
+    # most frames are noise: the curve bends above the line where the low population ends, as under rule v1
+    words, events = _two_populations(900, 100)
+    v2, v1 = wt.propose(words, events), wt.propose(words, events, rule=wt.RULE_ID_V1)
+    assert v2["knee_bend"] == "above" and v2["knee_word_q16"] == v1["knee_word_q16"]
+    assert 0.85 < v2["equal_event_retention"] < 0.95
+
+
+def test_mostly_high_scores_bend_below_the_line():
+    # nearly every frame carries the signal: the stronger bend is below the line, where the high population
+    # begins, and keeps the few low frames; rule v1 would keep nearly everything
+    words, events = _two_populations(50, 950)
+    v2, v1 = wt.propose(words, events), wt.propose(words, events, rule=wt.RULE_ID_V1)
+    assert v2["knee_bend"] == "below" and v2["knee_objective"] < 0
+    assert v2["equal_event_retention"] < 0.1 < 0.9 < v1["equal_event_retention"]
+
+
+def test_unknown_rule_is_refused():
+    with pytest.raises(ValueError):
+        wt.propose([1, 2], ["a", "b"], rule="v0")
 
 
 def test_sentinel_and_invalid_frames_are_not_scores():
@@ -122,12 +151,12 @@ def _channel_result(root, channel, first, last):
             events = z["event_keys"][z["frame_event_inverse"]]
             return wt.propose(z["new_required_q16"], list(map(str, events)),
                               valid=list(z["new_rank_supported"]),
-                              always_masked=list(z["new_always_masked"]))
+                              always_masked=list(z["new_always_masked"]), rule=wt.RULE_ID_V1)
     directory = ("fine-dsp-characterization-2026-10-01/threshold-link/control-anchor45-export"
                  if channel == 37 else "fine-histogram-export-2026-10-01/export/archive")
     with np.load(root / directory / f"ch{channel}.npz", allow_pickle=False) as z:
         data = {key: z[key] for key in z.files}
-    return wt.propose_from_export(data, _months(first, last))
+    return wt.propose_from_export(data, _months(first, last), rule=wt.RULE_ID_V1)
 
 
 @pytest.mark.skipif(not INPUTS, reason="set PILOT_PROXY_WORKING_THRESHOLD_INPUTS to the recorded score exports")
@@ -144,6 +173,6 @@ def test_recorded_knees_reproduce_from_the_score_cache(channel):
     with np.load(Path(SCORES) / f"ch{channel}.npz", allow_pickle=False) as z:
         result = wt.propose(z["required_q16"], [str(int(e)) for e in z["frame_event_index"]],
                             valid=list(z["rank_supported"] & z["score_computed"]),
-                            always_masked=list(z["always_masked"]))
+                            always_masked=list(z["always_masked"]), rule=wt.RULE_ID_V1)
     assert int(result["knee_word_q16"]) == int(meta["knee_threshold"]["eta_q16"]) == KNEES[channel][0]
     assert meta["current_months"][0] == KNEES[channel][1] and meta["current_months"][-1] == KNEES[channel][2]

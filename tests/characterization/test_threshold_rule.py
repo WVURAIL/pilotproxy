@@ -5,6 +5,7 @@ import json
 import numpy as np
 import pytest
 
+from pilot_proxy.characterization import knee
 from pilot_proxy.characterization import threshold_rule as t
 
 needs_measurements = pytest.mark.skipif(t._COHERENT is None or t._GAIN is None, reason="withheld from the code-only cut (CHIME_DERIVED.md)")
@@ -155,6 +156,16 @@ def fine_for_excess(excess):
     return fine
 
 
+def _knee(f, rule):
+    return int(knee.propose([int(w) for w in f.required], [str(int(e)) for e in f.event],
+                            valid=[bool(v) for v in f.supported], rule=rule)["knee_word_q16"])
+
+
+def v1_knee(f):
+    """The knee a cache records (rule v1); the rule reads the frames again with rule v2."""
+    return _knee(f, knee.RULE_ID_V1)
+
+
 def write_cache(tmp_path, f, current_keep, product_rows=None):
     n = len(f.required)
     rows = np.arange(n) if product_rows is None else product_rows
@@ -166,7 +177,7 @@ def write_cache(tmp_path, f, current_keep, product_rows=None):
              target_norm_sq=np.asarray([1], dtype=np.int64),
              reference_norm_sum_sq=np.asarray([2], dtype=np.int64))
     meta = {"original_product_identity": {"path": str(product), "bytes": product.stat().st_size},
-            "knee_threshold": {"eta_q16": str(f.knee_word)}, "current_threshold": {"eta_q16": str(f.current_word)}}
+            "knee_threshold": {"eta_q16": str(v1_knee(f))}, "current_threshold": {"eta_q16": str(f.current_word)}}
     (tmp_path / "ch99.json").write_text(json.dumps(meta))
     np.savez(tmp_path / "ch99.npz", source_row_index=rows, required_q16=f.required, probability_weight=f.weight,
              supported=f.supported, frame_event_index=f.event, current_keep=current_keep)
@@ -178,7 +189,7 @@ def test_loading_a_score_cache(tmp_path):
     g = t.load_frames(99, tmp_path)
     fine = fine_for_excess(f.excess)
     from_fine = np.where(fine[:, 1, 1] > 0, fine[:, 0, 0].astype(np.float64) / REFERENCE_HALF - 1.0, np.nan)
-    assert np.array_equal(g.excess, from_fine, equal_nan=True) and g.knee_word == f.knee_word
+    assert np.array_equal(g.excess, from_fine, equal_nan=True) and g.knee_word == _knee(f, knee.RULE_ID)
     np.testing.assert_allclose(g.excess, np.maximum(f.excess, -1.0), rtol=0, atol=1e-12)
     assert t.sweep(g)["kappa"][-1] == pytest.approx(f.weight[f.supported].sum() / f.weight.sum())
 

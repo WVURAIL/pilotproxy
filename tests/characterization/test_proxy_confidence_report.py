@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from pilot_proxy.characterization import knee
 from pilot_proxy.characterization.threshold_rule import ChannelFrames
 
 
@@ -38,6 +39,9 @@ def score_fixture(tmp_path):
     scores.mkdir()
     product = tmp_path / "original-product.npz"
     frames = sample_frames()
+    # the loaded frames carry the knee of the current rule; the cache records rule v1's
+    frames.knee_word = int(knee.propose([int(w) for w in frames.required], [str(int(e)) for e in frames.event],
+                                        valid=[bool(v) for v in frames.supported])["knee_word_q16"])
     rows = np.array([3, 0, 2, 1])
     # The excess is formed from the frame powers, the fine powers' all-bin
     # sums (kernel core 3.0.0): with norms 1 : 2 (mu_0 = 1), P_1 = P_2 = 2**40
@@ -50,7 +54,9 @@ def score_fixture(tmp_path):
              reference_norm_sum_sq=np.asarray([2], dtype=np.int64))
     meta = {
         "original_product_identity": {"path": str(product), "bytes": product.stat().st_size},
-        "knee_threshold": {"eta_q16": str(frames.knee_word)},
+        "knee_threshold": {"eta_q16": knee.propose([int(w) for w in frames.required], [str(int(e)) for e in frames.event],
+                                                   valid=[bool(v) for v in frames.supported],
+                                                   rule=knee.RULE_ID_V1)["knee_word_q16"]},
         "current_threshold": {"eta_q16": str(frames.current_word)},
     }
     (scores / "ch99.json").write_text(json.dumps(meta))

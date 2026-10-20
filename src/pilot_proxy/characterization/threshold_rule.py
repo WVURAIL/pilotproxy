@@ -61,6 +61,8 @@ import numpy as np
 from pilot_proxy.config.project import default_project
 from pilot_proxy.product_contract import pilot_excess_from_fine_powers
 
+from . import knee as knee_rule
+
 Q16 = 65536
 _TEMPLATE = default_project().interference
 FINE_BIN_HZ = 390625 / 128                 # 3051.76 Hz, the bin the marker excess is read in
@@ -163,6 +165,15 @@ def load_frames(channel: int, scores_dir) -> ChannelFrames:
         frames.excess = pilot_excess_from_fine_powers(p, rows)
     if not np.array_equal(keep(frames, frames.current_word), frames.current_keep):
         raise ValueError(f"channel {channel}: the keep rule does not reproduce the accepted mask")
+    # The cache records the knee of rule v1; the decision uses the knee of the current rule (v2, the stronger
+    # bend), read from the same frames after rule v1 is checked to reproduce the recorded word.
+    events = [str(int(e)) for e in frames.event]
+    words = [int(w) for w in frames.required]
+    valid = [bool(v) for v in frames.supported]
+    v1 = knee_rule.propose(words, events, valid=valid, rule=knee_rule.RULE_ID_V1)
+    if int(v1["knee_word_q16"]) != frames.knee_word:
+        raise ValueError(f"channel {channel}: knee rule v1 does not reproduce the cache's knee")
+    frames.knee_word = int(knee_rule.propose(words, events, valid=valid)["knee_word_q16"])
     return frames
 
 

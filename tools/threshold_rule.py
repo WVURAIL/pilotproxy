@@ -135,7 +135,13 @@ def main(argv=None):
     ap.add_argument("--channels", help="comma-separated channel numbers (default: all in the table)")
     ap.add_argument("--exclude", action="append", default=[], metavar="CH=REASON",
                     help="do not deploy channel CH, for the stated reason (repeatable)")
+    ap.add_argument("--finite-budget", type=Path,
+                    help="JSON {channel: fraction}: the finite-amplitude check's largest tested strength, as a "
+                         "fraction of the tolerated strength, at which the true bias stays within the tolerance; "
+                         "a channel listed carries at most that first-order bias ratio")
     args = ap.parse_args(argv)
+    finite = ({int(c): float(v) for c, v in json.loads(args.finite_budget.read_text())["budget"].items()}
+              if args.finite_budget else {})
     table = t.load_table(args.table)
     rows = {r["channel"]: r for r in table["channels"]}
     pick = sorted(rows) if not args.channels else [int(c) for c in args.channels.split(",")]
@@ -150,7 +156,8 @@ def main(argv=None):
         y = t.last_year(f)
         R = t.response(table, ch)
         G = t.coherent_gain(ch)
-        d = t.decide_guarded(s, f.knee_word, t.sweep(y), R, gain=G, exclude=excluded.get(ch))
+        budget = min(1.0, finite.get(ch, 1.0))
+        d = t.decide_guarded(s, f.knee_word, t.sweep(y), R, gain=G, exclude=excluded.get(ch), budget=budget)
         np.savez_compressed(args.out / "sweeps" / f"ch{ch}.npz", **s)
         plate(ch, rows[ch], s, d, R, G, args.out / "plates")
         k, b = d["knee"], d["below_knee"]
@@ -165,7 +172,8 @@ def main(argv=None):
                               knee_r_hi=k["r_hi"],
                               below_knee_eta=b and b["eta"], below_knee_kappa=b and b["kappa"],
                               below_knee_years=b and b["time_years"], below_knee_r_hi=b and b["r_hi"],
-                              response=R, gain=G, swept_words=len(s["word"])))
+                              response=R, gain=G, swept_words=len(s["word"]),
+                              **({"tolerance_budget": budget} if args.finite_budget else {})))
         print(f"ch{ch}: {d['reason'] or d['deployed_at']:>15} knee eta {k['eta']:.4g} kappa {k['kappa']:.4g} time {k['time_years']:.4g} yr"
               + (f"; tolerance below the knee at eta {b['eta']:.4g}, {b['time_years']:.4g} yr" if b else "")
               + (f"; deployed at eta {d['deployed']['eta']:.4g}" if d["deployed"] else ""))
@@ -182,6 +190,8 @@ def main(argv=None):
                                             "(same G and R); else the loosest word at or below it with r_hi <= 1 on both curves "
                                             "and full-era years within the limit, else not deployed ('" + t.GUARD_FAILED + "'); "
                                             "kappa, x, r and years are read on the full era; no knee is computed on the last year"))
+    if args.finite_budget:
+        inputs["finite_budget"] = dict(source=str(args.finite_budget), budget={str(c): v for c, v in sorted(finite.items())})
     (args.out / "decisions.json").write_text(json.dumps(dict(inputs=inputs, channels=decisions), indent=1) + "\n")
     with (args.out / "decisions.csv").open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=COLUMNS, extrasaction="ignore", lineterminator="\n")

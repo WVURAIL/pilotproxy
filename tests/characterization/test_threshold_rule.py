@@ -299,3 +299,15 @@ def test_the_last_year_is_its_frames_with_the_era_s_knee():
 def test_the_last_year_needs_frame_times():
     with pytest.raises(ValueError, match="frame_time"):
         t.last_year(synthetic())
+
+
+def test_a_finite_budget_tightens_and_one_changes_nothing():
+    f = synthetic()
+    s = t.sweep(f)
+    R = 1.0 / float(np.nanmax(t.bias_over_sigma(s, 1.0, 1.0)[1]))     # the largest r_hi of the sweep is 1
+    full = t.decide_guarded(s, f.knee_word, s, R, gain=1.0)
+    same = t.decide_guarded(s, f.knee_word, s, R, gain=1.0, budget=1.0)
+    assert full == same
+    tight = t.decide_guarded(s, f.knee_word, s, R, gain=1.0, budget=0.5)
+    if tight["deployed"] is not None:
+        assert tight["deployed"]["r_hi"] <= 0.5 and tight["deployed_word"] <= (full["deployed_word"] or 2**63)

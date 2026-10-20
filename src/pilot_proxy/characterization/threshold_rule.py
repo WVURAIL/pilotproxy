@@ -310,20 +310,22 @@ def _point(s: dict, word: int, R: float, gain: float) -> dict:
 
 
 def decide(s: dict, knee_word: int, R: float, *, gain: float, max_years: float = MAX_CALENDAR_YEARS,
-           exclude: str | None = None) -> dict:
+           exclude: str | None = None, budget: float = 1.0) -> dict:
     """Where the band is deployed (its knee, or the loosest usable threshold below it), or why it is not.
-    ``gain`` is G, the band's coherence in frames (``coherent_gain``)."""
+    ``gain`` is G, the band's coherence in frames (``coherent_gain``). ``budget`` is the largest first-order
+    bias ratio r_hi the band may carry: 1 (the tolerance) unless the finite-amplitude check found the true bias
+    reaching the tolerance at a smaller strength, in which case it is that fraction of the tolerated strength."""
     r, r_hi = bias_over_sigma(s, R, gain)
 
     def usable(p):
-        return p is not None and p["r_hi"] is not None and p["r_hi"] <= 1 and p["time_years"] <= max_years
+        return p is not None and p["r_hi"] is not None and p["r_hi"] <= budget and p["time_years"] <= max_years
 
     knee = _point(s, knee_word, R, gain)
     below = None
     if usable(knee):
         deployed, at = knee, "knee"
     else:
-        idx = np.flatnonzero((s["word"] <= np.uint64(knee_word)) & (r_hi <= 1) & (s["kappa"] > 0))
+        idx = np.flatnonzero((s["word"] <= np.uint64(knee_word)) & (r_hi <= budget) & (s["kappa"] > 0))
         if len(idx):
             below = _point(s, int(s["word"][int(idx[-1])]), R, gain)
         deployed, at = (below, "below the knee") if usable(below) else (None, None)
@@ -338,7 +340,7 @@ GUARD_FAILED = "fails the tolerance on its last year"
 
 
 def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: float,
-                   max_years: float = MAX_CALENDAR_YEARS, exclude: str | None = None) -> dict:
+                   max_years: float = MAX_CALENDAR_YEARS, exclude: str | None = None, budget: float = 1.0) -> dict:
     """``decide`` on the full era with the last-year guard (sweep ``last``).
 
     Adds ``full_era_word``, ``last_year_r_hi`` and ``guard_acted``.
@@ -349,20 +351,20 @@ def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: fl
     ``FRAME_SECONDS * gain / max(r_hi_full, r_hi_last)``, with both ratios
     evaluated at that final word; it is not stored in ``coherence_limit_s``.
     """
-    d = decide(full, knee_word, R, gain=gain, max_years=max_years, exclude=exclude)
+    d = decide(full, knee_word, R, gain=gain, max_years=max_years, exclude=exclude, budget=budget)
     out = dict(d, full_era_word=d["deployed_word"], last_year_r_hi=None, guard_acted=False)
     if d["deployed"] is None:
         return out
     word = d["deployed_word"]
     out["last_year_r_hi"] = _point(last, word, R, gain)["r_hi"]
-    if out["last_year_r_hi"] is not None and out["last_year_r_hi"] <= 1:
+    if out["last_year_r_hi"] is not None and out["last_year_r_hi"] <= budget:
         return out
     # Both curves are constant between the full era's swept words (the last year's words are among them).
     _, r_hi = bias_over_sigma(full, R, gain)
     _, r_hi_last = bias_over_sigma(last, R, gain)
     at_last = np.searchsorted(last["word"], full["word"], side="right") - 1
-    last_ok = (at_last >= 0) & (np.where(at_last >= 0, r_hi_last[np.maximum(at_last, 0)], np.inf) <= 1)
-    idx = np.flatnonzero((full["word"] <= np.uint64(word)) & (r_hi <= 1) & last_ok & (full["kappa"] > 0))
+    last_ok = (at_last >= 0) & (np.where(at_last >= 0, r_hi_last[np.maximum(at_last, 0)], np.inf) <= budget)
+    idx = np.flatnonzero((full["word"] <= np.uint64(word)) & (r_hi <= budget) & last_ok & (full["kappa"] > 0))
     moved = _point(full, int(full["word"][idx[-1]]), R, gain) if len(idx) else None
     out["guard_acted"] = True
     if moved is None or moved["time_years"] > max_years:

@@ -180,3 +180,41 @@ def test_saved_selector_anchor_is_used_without_refitting(tmp_path, monkeypatch):
     ledger_path.write_text("{}")
     with pytest.raises(ValueError, match="source hash differs"):
         export.run(frames, tmp_path / "stale-anchor")
+
+
+def test_guarded_geometry_uses_the_median_of_its_own_bulk():
+    """h and g are parameters; the rank is the median of the bulk they leave, and a line
+    3 to 5 bins outside the markers leaves the guarded scores unchanged."""
+    anchor, width, guard = 64, 2, 5
+    default = anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1)
+    guarded = anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1, designated_half_width=width,
+                                marker_guard_bins=guard)
+    rho = scores.candidate_rho_values(int(guarded.sum()))[0]
+    assert (int(default.sum()), int(guarded.sum()), rho) == (125, 121, 61)
+    rng = np.random.default_rng(7)
+    quiet = rng.integers(900, 1100, size=(6, 3, 256)).astype(np.uint64)
+    loud = quiet.copy()
+    loud[:, 0, [anchor + width + k for k in (3, 4, 5)]] *= np.uint64(40)
+    selected = np.ones(6, dtype=bool)
+    record = export.final_score_arrays(quiet, selected, anchor_bin=anchor, bulk_mask=default)
+    # The geometry of record, named explicitly, is the same computation.
+    explicit = export.final_score_arrays(quiet, selected, anchor_bin=anchor, bulk_mask=default,
+                                         designated_half_width=2, rho=63)
+    assert record.keys() == explicit.keys()
+    for key in record:
+        np.testing.assert_array_equal(record[key], explicit[key])
+    results = [export.final_score_arrays(p, selected, anchor_bin=anchor, bulk_mask=guarded,
+                                         designated_half_width=width, rho=rho) for p in (quiet, loud)]
+    assert f"fine_score_z{rho}" in results[0] and "fine_score_z63" not in results[0]
+    np.testing.assert_array_equal(results[0]["fine_required_multiplier_q16"],
+                                  results[1]["fine_required_multiplier_q16"])
+    loud_default = export.final_score_arrays(loud, selected, anchor_bin=anchor, bulk_mask=default)
+    assert not np.array_equal(record["fine_required_multiplier_q16"], loud_default["fine_required_multiplier_q16"])
+    for row in range(6):
+        reference = fine_required_multiplier_q16(quiet[row], anchor_bin=anchor, designated_half_width=width,
+                                                 bulk_mask=guarded, cfar_rank=rho - 1)
+        assert int(results[0]["fine_required_multiplier_q16"][row]) == reference.multiplier_q16
+    with pytest.raises(ValueError, match="Z63 requires"):
+        export.final_score_arrays(quiet, selected, anchor_bin=anchor, bulk_mask=guarded)
+    with pytest.raises(ValueError, match="one-based rank"):
+        export.final_score_arrays(quiet, selected, anchor_bin=anchor, bulk_mask=guarded, rho=200)

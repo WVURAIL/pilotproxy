@@ -82,6 +82,15 @@ census-excluded bins), with D removed as well so the bundle's contract holds
 for any guard. With the campaign's pad 2 and guard 1 the guard removes exactly
 D, giving 125 bulk bins for an even anchor and 126 for an odd one.
 
+Marker guard band and wider markers (detector v2 calibration options).
+``marker_guard_bins = g`` also removes the ``g`` padded bins on each side of D
+from the bulk, ``{(f_a + k) mod L_F : h < |k| <= h + g}`` for half-width ``h``,
+so a line just outside the markers (Paper I finds them on channels 22 and 28)
+cannot enter the reference rank. ``designated_half_width`` widens the markers
+themselves. The defaults (``g = 0``, ``h = 2``) are the calibration of record;
+the bundle records a nonzero guard as ``fine_calibration.marker_guard_bins``.
+The anchor table's ``bulk_size`` reflects the guard band.
+
 Columns of the anchor table (``ANCHOR_COLUMNS``, one row per channel per mask
 label): ``channel, freq_id, label, status, frames_masked, frames_on,
 frames_quiet, min_cohort_frames, method, fallback_cohort, nominal_fine_bin,
@@ -186,11 +195,16 @@ def independent_bin_mask(num_bins: int, *, pad_factor: int, designated_bins: Seq
 
 
 def bulk_mask(anchor_bin: int, *, pad_factor: int, guard_fine_bins: int, census_excluded_bins: Sequence[int] = (),
-              designated_half_width: int = DESIGNATED_HALF_WIDTH, fine_bins: int = FINE_BINS) -> np.ndarray:
-    """The static bulk ``B`` for a measured anchor (module docstring, "Bulk")."""
+              designated_half_width: int = DESIGNATED_HALF_WIDTH, marker_guard_bins: int = 0,
+              fine_bins: int = FINE_BINS) -> np.ndarray:
+    """The static bulk ``B`` for a measured anchor (module docstring, "Bulk" and
+    "Marker guard band")."""
+    guard = int(marker_guard_bins)
+    if guard != marker_guard_bins or guard < 0 or int(designated_half_width) + guard >= fine_bins // 2:
+        raise ValueError("marker_guard_bins must be a nonnegative integer with half width + guard below L_F / 2")
     mask = independent_bin_mask(fine_bins, pad_factor=pad_factor, designated_bins=(int(anchor_bin),),
                                 guard_fine_bins=guard_fine_bins, census_excluded_bins=census_excluded_bins)
-    mask[list(designated_set(anchor_bin, designated_half_width, fine_bins))] = False
+    mask[list(designated_set(anchor_bin, int(designated_half_width) + guard, fine_bins))] = False
     return mask
 
 
@@ -416,7 +430,7 @@ def anchor_from_ratio(ratio: np.ndarray, *, mask, valid, rejected, unit_index, g
                       channel: int, freq_id: int, label: str, pad_factor: int, guard_fine_bins: int,
                       census_excluded_bins: Sequence[int] = (),
                       min_cohort_frames: int = MIN_COHORT_FRAMES, window_half_width: int = WINDOW_HALF_WIDTH,
-                      designated_half_width: int = DESIGNATED_HALF_WIDTH,
+                      designated_half_width: int = DESIGNATED_HALF_WIDTH, marker_guard_bins: int = 0,
                       replicates: int = BOOTSTRAP_REPLICATES, seed: int = BOOTSTRAP_SEED,
                       min_blocks: int = MIN_BOOTSTRAP_BLOCKS, quiet_usable: bool = True) -> AnchorResult:
     """The anchor from a precomputed per-frame ratio ``(N, 256)`` and the frame flags.
@@ -460,7 +474,8 @@ def anchor_from_ratio(ratio: np.ndarray, *, mask, valid, rejected, unit_index, g
     window = np.sort(window_bins(geometry.nominal_fine_bin, params["window_half_width"]))   # ties: lowest bin
     window_anchor = int(window[np.argmax(contrast[window])])
     bulk = bulk_mask(anchor_bin, pad_factor=params["pad_factor"], guard_fine_bins=params["guard_fine_bins"],
-                     census_excluded_bins=census, designated_half_width=params["designated_half_width"])
+                     census_excluded_bins=census, designated_half_width=params["designated_half_width"],
+                     marker_guard_bins=marker_guard_bins)
 
     # acquisition block bootstrap of the argmax
     nan = float("nan")

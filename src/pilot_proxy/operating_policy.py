@@ -17,9 +17,13 @@ becomes one assignment at its receiver frequency ID:
   and listed under ``unmasked_freq_ids``.
 
 A decision outside channels 14 to 36 (the channel 37 control band) is not a
-DTV channel and is reported, not assigned. On ``chime_freq_id`` the frequency
-ID of each channel is the project's (``Project.target_freq_id``), and the
-bundle must agree with it.
+DTV channel and is reported, not assigned; except that when the bundle's
+channel 37 profile has status ``control`` at the decided word, channel 37 is
+compiled as the noise control: listed in ``control_freq_ids``, which the
+detector evaluates and records and the consumer never applies. A control needs
+the consumer capability ``dtv_control_freq_ids_v1``. On ``chime_freq_id`` the
+frequency ID of each channel is the project's (``Project.target_freq_id``), and
+the bundle must agree with it.
 
 The reject-all limit is encoded explicitly, not as a zero Q16 multiplier.
 Compilation authenticates declared inputs; it never activates a configuration,
@@ -42,6 +46,8 @@ from pilot_proxy.integration.receiver_profile import (
 )
 from pilot_proxy.runtime_bundle import (
     CHANNEL_ID_NAMESPACE_FIELD_ALIASES,
+    CONTROL_PHYSICAL_CHANNEL,
+    FINE_CALIBRATION_STATUS_CONTROL,
     REQUIRED_RUNTIME_BUNDLE_FILES,
     validate_runtime_weight_bundle,
 )
@@ -53,6 +59,7 @@ CONSUMER_NAME = "Kotekan DtvRfiMask"
 REQUIRED_CAPABILITIES = frozenset({
     "dtv_fine_support_v1", "dtv_permanent_mask_freq_ids_v1", "dtv_require_fine_freq_ids_v1",
 })
+CONTROL_CAPABILITY = "dtv_control_freq_ids_v1"   # required only when a control is compiled
 CONSUMER_FREQUENCY_ID_LIMIT = 12288
 NAMESPACES = tuple(sorted(CHANNEL_ID_NAMESPACE_FIELD_ALIASES))
 FIRST_CHANNEL, LAST_CHANNEL = 14, 36        # the ATSC UHF television channels a DTV policy covers
@@ -143,17 +150,49 @@ def _bundle(plan, base, bindings, receiver):
     return data, files
 
 
-def _binding(channel, freq, eta, bound):
+def _binding(channel, freq, eta, bound, status="calibrated"):
     """The deployed word as the bundle carries it, or None while the bundle's profile is pending."""
     fine = bound["fine_calibration"]
-    if fine["status"] != "calibrated":
+    if fine["status"] != status:
         return None
     _require(fine["cfar_multiplier_q16"] == eta, f"channel {channel}: the bundle's word differs from the decided word")
     return {
         "physical_channel": channel, "receiver_channel_id": freq, "eta_q16": str(eta),
         "decision_version": FINE_DECISION_VERSION, "cfar_rank": fine["cfar_rank"], "anchor_bin": fine["anchor_bin"],
         "designated_half_width": fine["designated_half_width"], "bulk_mask_words_hex": fine["bulk_mask_words_hex"],
+        **({"marker_guard_bins": fine["marker_guard_bins"]} if "marker_guard_bins" in fine else {}),
     }
+
+
+def _frequency_mapping(channel, bound, project, offset, receiver):
+    """The bundle profile's receiver frequency ID, checked against the exact receiver grid."""
+    freq = bound["receiver_channel_id"]
+    calibration._integer(freq, f"channel {channel} receiver_channel_id")
+    if project is not None:
+        _require(freq == project.target_freq_id(str(channel)),
+                 f"channel {channel}: bundle freq_id {freq} differs from the project's {project.target_freq_id(str(channel))}")
+    _require(freq < CONSUMER_FREQUENCY_ID_LIMIT, "Receiver frequency ID exceeds the consumer limit")
+    index = freq - offset
+    _require(0 <= index < receiver.num_coarse_channels, "Receiver frequency ID is outside its grid")
+    _require(bound["coarse_channel_index"] == index, "Bundle frequency mapping differs from the exact receiver grid")
+    center = receiver.coarse_channel_center_hz(index)
+    low = physical_channel_to_lower_edge_hz(channel)
+    _require(low <= center < low + CHANNEL_WIDTH_HZ,
+             "Receiver frequency center lies outside the assigned physical channel")
+    return freq, {"receiver_channel_id": freq, "coarse_channel_index": index, "rf_center_hz": center}
+
+
+def _control(channel, decision, bound, mapping):
+    """The channel 37 noise control at its decided word: evaluated and recorded, never applied."""
+    freq = mapping["receiver_channel_id"]
+    _require(decision["outcome"] == "useful",
+             f"channel {channel}: the bundle carries a control profile but the decision has no word")
+    eta = _q16(decision["deployed_word"])
+    binding = _binding(channel, freq, eta, bound, status=FINE_CALIBRATION_STATUS_CONTROL)
+    row = {"physical_channel": channel, "frequency_ids": [freq], "outcome": decision["outcome"],
+           "frequency_mapping": [mapping], "threshold": {"kind": "control", "eta_q16": str(eta)},
+           "reason": "noise control: decided and recorded, never applied to the mask"}
+    return row, binding
 
 
 def analyze_policy(plan_path):
@@ -196,30 +235,35 @@ def analyze_policy(plan_path):
         profiles.setdefault(profile["physical_channel"], []).append(profile)
     project = default_project() if namespace == "chime_freq_id" else None
     permanent, unmasked, pending, thresholds, rows, outside = [], [], [], [], [], []
-    review_candidates = []
+    review_candidates, controls = [], []
     for channel, decision in sorted(decisions.items()):
         if not FIRST_CHANNEL <= channel <= LAST_CHANNEL:
+            bound = profiles.get(channel, [])
+            if (channel == CONTROL_PHYSICAL_CHANNEL and len(bound) == 1
+                    and bound[0]["fine_calibration"]["status"] == FINE_CALIBRATION_STATUS_CONTROL):
+                _require(CONTROL_CAPABILITY in caps,
+                         f"Consumer lacks {CONTROL_CAPABILITY}, needed for the channel {channel} control")
+                freq, mapping = _frequency_mapping(channel, bound[0], project, offset, receiver)
+                row, binding = _control(channel, decision, bound[0], mapping)
+                _require(binding is not None, f"channel {channel}: the control profile differs from the decided word")
+                # the detector refuses archive-review thresholds, the control's included
+                if bound[0]["fine_calibration"]["provenance"].get("threshold_selection") is not None:
+                    row["bundle_status"] = "archive review candidate at the decided word"
+                    review_candidates.append(freq)
+                else:
+                    row["bundle_status"] = "control at the decided word"
+                controls.append(binding)
+                rows.append(row)
+                continue
             outside.append({"physical_channel": channel, "outcome": decision["outcome"],
                             "reason": "not an ATSC television channel 14-36; not part of the DTV policy"})
             continue
         bound = profiles.get(channel, [])
         _require(len(bound) == 1, f"channel {channel}: the bundle needs exactly one profile")
         bound = bound[0]
-        freq = bound["receiver_channel_id"]
-        calibration._integer(freq, f"channel {channel} receiver_channel_id")
-        if project is not None:
-            _require(freq == project.target_freq_id(str(channel)),
-                     f"channel {channel}: bundle freq_id {freq} differs from the project's {project.target_freq_id(str(channel))}")
-        _require(freq < CONSUMER_FREQUENCY_ID_LIMIT, "Receiver frequency ID exceeds the consumer limit")
-        index = freq - offset
-        _require(0 <= index < receiver.num_coarse_channels, "Receiver frequency ID is outside its grid")
-        _require(bound["coarse_channel_index"] == index, "Bundle frequency mapping differs from the exact receiver grid")
-        center = receiver.coarse_channel_center_hz(index)
-        low = physical_channel_to_lower_edge_hz(channel)
-        _require(low <= center < low + CHANNEL_WIDTH_HZ,
-                 "Receiver frequency center lies outside the assigned physical channel")
+        freq, mapping = _frequency_mapping(channel, bound, project, offset, receiver)
         row = {"physical_channel": channel, "frequency_ids": [freq], "outcome": decision["outcome"],
-               "frequency_mapping": [{"receiver_channel_id": freq, "coarse_channel_index": index, "rf_center_hz": center}]}
+               "frequency_mapping": [mapping]}
         if OUTCOMES[decision["outcome"]] == "reject_all" and decision["reason"] in UNMASKED_REASONS:
             row.update(threshold={"kind": "pass_all"}, reason=decision["reason"])
             unmasked.append(freq)
@@ -243,13 +287,17 @@ def analyze_policy(plan_path):
                     row["bundle_status"] = "calibrated at the decided word"
                 thresholds.append(binding)
         rows.append(row)
-    _require(rows, "The decisions name no ATSC channel 14-36")
+    _require(len(rows) > len(controls), "The decisions name no ATSC channel 14-36")
     permanent.sort()
     unmasked.sort()
     pending.sort()
     thresholds.sort(key=lambda r: r["receiver_channel_id"])
     required = [r["receiver_channel_id"] for r in thresholds]
+    control_ids = sorted(r["receiver_channel_id"] for r in controls)
     complete = not pending and not review_candidates
+    parameters = {"permanent_mask_freq_ids": permanent, "require_fine_freq_ids": required}
+    if control_ids:
+        parameters["control_freq_ids"] = control_ids
     report = {
         "schema_version": POLICY_SCHEMA, "status": "review_only",
         "deployment_configuration_complete": complete,
@@ -264,7 +312,7 @@ def analyze_policy(plan_path):
         "channels": rows, "not_in_policy": outside,
         "permanent_mask_freq_ids": permanent, "unmasked_freq_ids": unmasked, "require_fine_freq_ids": required,
         "pending_freq_ids": pending, "required_threshold_bindings": thresholds,
-        "kotekan_parameters": {"permanent_mask_freq_ids": permanent, "require_fine_freq_ids": required} if complete else None,
+        "kotekan_parameters": parameters if complete else None,
         "input_files_sha256": bindings,
         "interpretation": "reject_all is the permanent-mask limit of the threshold family, explicitly encoded rather than eta=0: the threshold rule's not-deployed channels. A deployed channel's word is the threshold rule's; it is pending until the bundle carries it. A pass_all channel is not deployed and not masked: the rule's reason leaves the detector nothing to act on, so it is absent from both consumer lists. No word certifies physical recovery or minimum observing time.",
         "remaining_runtime_acceptance": [
@@ -275,6 +323,9 @@ def analyze_policy(plan_path):
             "A release owner must approve activation after startup and runtime acceptance; no configuration was activated by this compiler.",
         ],
     }
+    if controls:
+        report["control_freq_ids"] = control_ids
+        report["control_bindings"] = controls
     if review_candidates:
         report["candidate_configuration_complete"] = not pending
         report["review_only_candidate_freq_ids"] = sorted(review_candidates)

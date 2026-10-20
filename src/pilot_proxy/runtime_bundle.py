@@ -664,6 +664,11 @@ def _validate_manifest_profile_bindings(
 
 FINE_CALIBRATION_STATUS_PENDING = "pending_campaign"
 FINE_CALIBRATION_STATUS_CALIBRATED = "calibrated"
+# The noise control: a complete calibration that consumers decide and record but
+# never apply to a mask. Only channel 37 (608-614 MHz, reserved for radio
+# astronomy, no DTV) may carry it, and that channel is never "calibrated".
+FINE_CALIBRATION_STATUS_CONTROL = "control"
+CONTROL_PHYSICAL_CHANNEL = 37
 FINE_CALIBRATION_DEFAULT_HALF_WIDTH = 2  # survey window convention
 FINE_CALIBRATION_NUM_BINS = 256
 FINE_CALIBRATION_GUARD_PADDED_BINS = (
@@ -893,9 +898,11 @@ def _validate_fine_calibration(
     """Validate required per-profile ``fine_calibration`` blocks.
 
     A block must declare the frozen decision version and a known status; a
-    ``calibrated`` block must carry complete, range-checked values whose
-    bulk mask excludes the designated set and the anchor's guard and is deep
-    enough for the rank.
+    ``calibrated`` or ``control`` block must carry complete, range-checked
+    values whose bulk mask excludes the designated set, its optional
+    ``marker_guard_bins`` guard band and the anchor's guard, and is deep enough
+    for the rank. ``control`` is admitted only on channel 37, which is never
+    ``calibrated``.
     """
     for index, row in enumerate(profiles):
         if not isinstance(row, dict):
@@ -940,9 +947,22 @@ def _validate_fine_calibration(
         if status not in (
             FINE_CALIBRATION_STATUS_PENDING,
             FINE_CALIBRATION_STATUS_CALIBRATED,
+            FINE_CALIBRATION_STATUS_CONTROL,
         ):
             _add_error(
                 errors, f"{field}.status", f"unknown status {status!r}"
+            )
+            continue
+        is_control_channel = row.get("physical_channel") == CONTROL_PHYSICAL_CHANNEL
+        if status != FINE_CALIBRATION_STATUS_PENDING and (
+            (status == FINE_CALIBRATION_STATUS_CONTROL) != is_control_channel
+        ):
+            _add_error(
+                errors,
+                f"{field}.status",
+                f"status {status!r} on physical channel {row.get('physical_channel')!r}: "
+                f"only channel {CONTROL_PHYSICAL_CHANNEL} is the control, and it is "
+                "never calibrated",
             )
             continue
         _validate_fine_calibration_provenance(
@@ -984,7 +1004,22 @@ def _validate_fine_calibration(
             field=f"{field}.bulk_mask_words_hex",
             errors=errors,
         )
-        if None in (anchor, half_width, rank, mult) or words is None:
+        guard_band = 0
+        if "marker_guard_bins" in block:
+            guard_band = _fine_calibration_int(
+                block=block,
+                key="marker_guard_bins",
+                field=field,
+                errors=errors,
+            )
+        if None in (anchor, half_width, rank, mult, guard_band) or words is None:
+            continue
+        if not 0 <= guard_band < FINE_CALIBRATION_NUM_BINS // 2 - max(half_width, 0):
+            _add_error(
+                errors,
+                f"{field}.marker_guard_bins",
+                f"out of range: {guard_band}",
+            )
             continue
         if not 0 <= anchor < FINE_CALIBRATION_NUM_BINS:
             _add_error(errors, f"{field}.anchor_bin", f"out of range: {anchor}")
@@ -1011,7 +1046,7 @@ def _validate_fine_calibration(
                 )
             if 0 <= half_width < FINE_CALIBRATION_NUM_BINS // 2:
                 exclusion_half_width = max(
-                    half_width, FINE_CALIBRATION_GUARD_PADDED_BINS
+                    half_width + guard_band, FINE_CALIBRATION_GUARD_PADDED_BINS
                 )
                 for k in range(-exclusion_half_width, exclusion_half_width + 1):
                     b = (anchor + k) % FINE_CALIBRATION_NUM_BINS

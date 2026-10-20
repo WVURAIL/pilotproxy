@@ -2,6 +2,10 @@
 
 This builder does not select thresholds, calibrate physical power, qualify a
 consumer's masking granularity, or authorize activation.
+
+When the input bundle has a channel 37 profile, the channel 37 decision's word
+is bound to it as the noise control (status ``control``), the same way, and the
+plan must name its score metadata. Without one the candidate is unchanged.
 """
 from __future__ import annotations
 
@@ -17,6 +21,8 @@ import numpy as np
 from pilot_proxy import operating_policy, runtime_calibration
 from pilot_proxy.fine_decision import FINE_DECISION_VERSION, pack_bulk_mask
 from pilot_proxy.runtime_bundle import (
+    CONTROL_PHYSICAL_CHANNEL,
+    FINE_CALIBRATION_STATUS_CONTROL,
     REQUIRED_RUNTIME_BUNDLE_FILES,
     validate_runtime_weight_bundle,
 )
@@ -64,13 +70,19 @@ def _metadata_geometry(meta, channel):
              and all(type(b) is int for b in designated)
              and sorted(designated) == sorted((anchor + i) % 256 for i in range(-width, width + 1)),
              "Designated bins are not the runtime's contiguous anchor-centered set")
+    # optional bulk guard band beyond the designated set (anchors.bulk_mask marker_guard_bins)
+    guard = runtime_calibration._integer(g.get("marker_guard_bins", 0), "marker_guard_bins", 0, 127 - width)
+    exclusion = max(width + guard, 2)
     _REQUIRE(rank < len(bins) and not any((anchor + i) % 256 in bins
-             for i in range(-max(width, 2), max(width, 2) + 1)), "Frozen rank or guard is not runtime compatible")
+             for i in range(-exclusion, exclusion + 1)), "Frozen rank or guard is not runtime compatible")
     mask = np.zeros(256, dtype=bool)
     mask[bins] = True
-    return {"status": "calibrated", "decision_version": FINE_DECISION_VERSION,
-            "anchor_bin": anchor, "designated_half_width": width, "cfar_rank": rank,
-            "bulk_mask_words_hex": [f"0x{int(w):016x}" for w in pack_bulk_mask(mask)]}
+    result = {"status": "calibrated", "decision_version": FINE_DECISION_VERSION,
+              "anchor_bin": anchor, "designated_half_width": width, "cfar_rank": rank,
+              "bulk_mask_words_hex": [f"0x{int(w):016x}" for w in pack_bulk_mask(mask)]}
+    if "marker_guard_bins" in g:
+        result["marker_guard_bins"] = guard
+    return result
 
 
 def _decision_population_replay(score_path, meta, decision):
@@ -173,11 +185,11 @@ def build_archive_candidate(plan_path, output_dir):
     _REQUIRE(isinstance(decision_inputs, dict), "Missing decision input provenance")
     score_directory = (decisions_path.parent / runtime_calibration._text(
         decision_inputs.get("scores"), "decision score directory")).resolve()
+    control_decision = decisions.get(CONTROL_PHYSICAL_CHANNEL)
     decisions = {ch: d for ch, d in decisions.items() if 14 <= ch <= 36}
     _REQUIRE(decisions, "No television-channel decisions")
     finite = {ch: d for ch, d in decisions.items() if d["outcome"] == "useful"}
     _REQUIRE(finite, "No candidate operating words")
-    _fields(plan["score_metadata"], {str(ch) for ch in finite}, "score metadata channels")
     _fields(plan["bundle_files"], REQUIRED_RUNTIME_BUNDLE_FILES, "bundle files")
     files = {name: _bound(ref, plan_path.parent, bindings) for name, ref in plan["bundle_files"].items()}
     _REQUIRE(len({p.parent for p in files.values()}) == 1
@@ -186,8 +198,15 @@ def build_archive_candidate(plan_path, output_dir):
     _REQUIRE(validation["valid"], f"Input runtime bundle invalid: {validation['errors']}")
     profiles = runtime_calibration._read(files["pilot_profiles.json"])
     by_channel = {p["physical_channel"]: p for p in profiles["profiles"]}
-    _REQUIRE(len(by_channel) == len(profiles["profiles"]) and set(by_channel) == set(decisions),
+    control = CONTROL_PHYSICAL_CHANNEL in by_channel
+    _REQUIRE(len(by_channel) == len(profiles["profiles"])
+             and set(by_channel) - {CONTROL_PHYSICAL_CHANNEL} == set(decisions),
              "Bundle must contain exactly one profile for every declared television channel")
+    if control:
+        _REQUIRE(control_decision is not None and control_decision["outcome"] == "useful",
+                 "The bundle has a channel 37 profile but the decisions give the control no word")
+        finite[CONTROL_PHYSICAL_CHANNEL] = control_decision
+    _fields(plan["score_metadata"], {str(ch) for ch in finite}, "score metadata channels")
     _REQUIRE(all(p["fine_calibration"]["status"] == "pending_campaign" for p in by_channel.values()),
              "Start with an unpopulated exported bundle; do not replace existing calibration")
     contract = runtime_calibration._read(files["detector_contract.json"])
@@ -214,6 +233,8 @@ def build_archive_candidate(plan_path, output_dir):
                      "score_population_sha256": bindings[str(score_path)],
                      "selection_granularity": "detector_frame", "qualification": "archive_review_only"}
         geometry["cfar_multiplier_q16"] = word
+        if channel == CONTROL_PHYSICAL_CHANNEL:
+            geometry["status"] = FINE_CALIBRATION_STATUS_CONTROL
         geometry["provenance"] = {
             "epochs": meta["current_months"], "null_quantile": None,
             "source_product_sha256": list(dict.fromkeys([selection["decision_record_sha256"],
@@ -246,7 +267,7 @@ def build_archive_candidate(plan_path, output_dir):
         "consumer_capability_implementation_verified": False, "kotekan_parameters": None,
         "selection_granularity": "detector_frame", "null_quantile_threshold_claim": False,
         "profiles": proofs, "permanent_mask_channels": sorted(set(decisions) - set(finite)),
-        "control_channel_37_bound": False, "runtime_bundle_validation": validation,
+        "control_channel_37_bound": control, "runtime_bundle_validation": validation,
         "input_files_sha256": bindings,
         "source_plan": str(plan_path), "builder_source_sha256": runtime_calibration.sha256(__file__),
         "dependency_sources_sha256": {**operating_policy._identity(),

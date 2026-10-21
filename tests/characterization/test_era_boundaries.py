@@ -17,6 +17,17 @@ STARTS = {14: "2018-12", 15: "2018-12", 16: "2018-12", 17: "2018-12", 18: "2018-
           35: "2021-11", 36: "2018-12", 37: "2018-12"}
 
 
+def same(a, b):
+    """Equal up to the last few bits of a float: numpy's sums differ by CPU (AVX-512 runners vs AVX2)."""
+    if isinstance(a, float) and isinstance(b, float):
+        return a == pytest.approx(b, rel=1e-12, abs=1e-12)
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
 @pytest.fixture(scope="module")
 def levels():
     if not (RECORD / "monthly_levels.json").is_file():
@@ -92,10 +103,10 @@ def test_the_starts_of_record(result):
 def test_the_record_reproduces(levels, result):
     blocks = json.loads((RECORD / "blocks.json").read_text())
     eras = json.loads((RECORD / "eras.json").read_text())
-    assert blocks["channels"] == json.loads(json.dumps(result["channels"]))
+    assert same(json.loads(json.dumps(result["channels"])), blocks["channels"])
     assert blocks["split"] == result["split"]
     again = e.era_list(result, eras["provenance"], json.loads((RECORD.parent / "power_eras_2026-10-04.json").read_text()))
-    assert again == eras
+    assert same(again, eras)
     assert {r["channel"]: r["current_months"][0] for r in eras["channels"]} == STARTS
 
 
@@ -113,7 +124,7 @@ def test_the_tool_writes_the_era_list(tmp_path, capsys):
     assert e.main(["--levels", str(RECORD / "monthly_levels.json"), "--output", str(tmp_path / "out"),
                    "--previous", str(RECORD.parent / "power_eras_2026-10-04.json")]) == 0
     for name in ("monthly_levels.json", "blocks.json", "eras.json"):
-        assert (tmp_path / "out" / name).read_bytes() == (RECORD / name).read_bytes()
+        assert same(json.loads((tmp_path / "out" / name).read_text()), json.loads((RECORD / name).read_text()))
     assert "ch37: 2018-12 .. 2026-08  boundaries -" in capsys.readouterr().out
 
 

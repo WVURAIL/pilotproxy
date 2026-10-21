@@ -1,6 +1,7 @@
 """Era boundaries at on/off transitions: Bayesian Blocks, the computed split, the excursion merge and the era list of record."""
 from __future__ import annotations
 
+import hashlib
 import json
 
 import numpy as np
@@ -123,8 +124,13 @@ def test_monthly_levels_skip_empty_months_and_pool_small_ones():
 def test_the_tool_writes_the_era_list(tmp_path, capsys):
     assert e.main(["--levels", str(RECORD / "monthly_levels.json"), "--output", str(tmp_path / "out"),
                    "--previous", str(RECORD.parent / "power_eras_2026-10-04.json")]) == 0
-    for name in ("monthly_levels.json", "blocks.json", "eras.json"):
-        assert same(json.loads((tmp_path / "out" / name).read_text()), json.loads((RECORD / name).read_text()))
+    out = {name: json.loads((tmp_path / "out" / name).read_text()) for name in ("monthly_levels.json", "blocks.json", "eras.json")}
+    rec = {name: json.loads((RECORD / name).read_text()) for name in out}
+    # eras.json cites the blocks.json written beside it, whose last float bits follow the CPU
+    assert out["eras.json"]["provenance"].pop("sha256") == hashlib.sha256((tmp_path / "out" / "blocks.json").read_bytes()).hexdigest()
+    rec["eras.json"]["provenance"].pop("sha256")
+    for name in out:
+        assert same(out[name], rec[name]), name
     assert "ch37: 2018-12 .. 2026-08  boundaries -" in capsys.readouterr().out
 
 

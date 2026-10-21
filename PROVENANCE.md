@@ -7,13 +7,18 @@ This repository, WVURAIL/pilotproxy, starts from one snapshot commit. Its first
 |---|---|
 | first commit (`git rev-list --max-parents=0 HEAD`) | `WVURAIL/pilot-proxy@76b5ecf4937bb89a340ac8dc31a2ebb71ff41c26` (main, 2026-10-14; private) |
 
-The private repository keeps the full development history and is the record of
-provenance. The commits cited in the papers, in the dissertation, in kotekan's vendored
-copy (`external/pilotproxy/VENDOR.json`), in the provenance stamps of products made
-before this snapshot, and in this tree as `<path>@<commit>` (for example in
+The private repository kept the full development history and is the record of
+provenance. It was retired from GitHub on 2026-10-20; its full history, pull request
+refs included, is kept as a git bundle in the WVU RAIL lab archive. The commits cited
+in the papers, in the dissertation, in the provenance stamps of products made before
+this snapshot, and in this tree as `<path>@<commit>` (for example in
 `tests/data/removed_paths.txt`, `weights/README.md` and the frozen records) are
 commits of that repository. They do not exist here. Readers who need them, such as
 the dissertation committee, can be given access on request.
+
+The code-only cut WVURAIL/pilotproxy-code was retired on the same day. Each of its
+commits was a cut of a commit here, named in its message, and kotekan now vendors the
+detector core from this repository.
 
 ## What differs from the snapshot
 

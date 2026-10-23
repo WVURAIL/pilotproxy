@@ -5,6 +5,11 @@ CHIME real-data workflow. We state the operations in the order they are
 applied so that a result can be reproduced from the recorded powers and
 weight norms.
 
+The production decision is the rank-based fine-bin comparison described below.
+The frame ratio and positive-excess flag are measurements and diagnostics, not
+the selected fine threshold. Weight norms set a ratio-of-expected-powers
+normalization, not the exact expectation of a noisy ratio.
+
 ## Detector geometry
 
 The baseline detector uses:
@@ -42,7 +47,7 @@ P_ref_sum   = P_ref_lower + P_ref_upper
 
 as exact `uint64` sums over the 256 fine bins. Every power is summed over
 streams, windows and bins before a ratio is formed. This order matters.
-Averaging per-row or per-bin F-statistics is not equivalent to the specified
+Averaging per-row or per-bin power ratios is not equivalent to the specified
 detector.
 
 Before kernel core 3.0.0 the frame powers were a second sum, of
@@ -56,7 +61,7 @@ rounding: at deployed amplitudes the archive frames differ by a median
 relative `2.75e-6` (p99 `1.65e-5`), and near-empty (small-amplitude) frames
 by up to about 2 per cent.
 
-## F-statistic
+## Frame power ratio
 
 The detector compares the target frame power with the mean of the two
 reference frame powers:
@@ -83,9 +88,9 @@ When `P_ref_sum = 0`, the ratio is undefined. Current products store
 decision separately forces `reject_mask = 0`. Numerical zero is not used as
 a stand-in for an invalid measurement.
 
-## Norm-corrected positive-excess mask
+## Diagnostic positive-excess mask
 
-The CHIME real-data path places its fixed mask threshold at the detector's own
+The archive diagnostic positive-excess path places its fixed mask threshold at the detector's own
 null-hypothesis (`H0`) zero point. Under `H0`, the local spectrum contains no
 pilot excess and is treated as flat across the three detector terms. Because
 the steering vectors are quantized to int4, their squared norms are not
@@ -93,7 +98,7 @@ exactly equal. Therefore,
 
 ```text
 E[P_term] = sigma^2 * ||w_term||^2
-E[F]      = null_power_ratio = 2 * target_norm_sq / reference_norm_sum_sq
+2 E[P_target] / E[P_ref_sum] = null_power_ratio = 2 * target_norm_sq / reference_norm_sum_sq
 ```
 
 Here `target_norm_sq = ||w_target||^2` and
@@ -160,7 +165,7 @@ streams and frames. The frame powers of the previous sections are the all-bin
 sums of the same `S` (kernel core 3.0.0), so the coarse ratio and the fine
 statistic come from one spectrum and no second power path exists. The library
 reduces `P[n]` on the device for the fused entry points and the host sums the
-staged `FStat_Compute_FinePowers_U64` output; both equal
+staged `PilotProxy_Compute_FinePowers_U64` output; both equal
 `fxfft.fine_power_fx(z).sum(axis=-1)` exactly, and that equality is the gate
 (`tests/kernel`, the per-frame product invariant in `PRODUCT_SCHEMA.md`).
 
@@ -170,7 +175,7 @@ The float prototype `fine_reduction.fine_reduce` uses `numpy.fft` or
 float prototype only, gated at ULP tolerance in its own tests. The row-domain
 marginal identity that detector contract revision 1 enforced per frame
 (the integer `sum_m |z[n, m]|^2` against the removed
-`FStat_Compute_Powers_U64`) is retired with that branch.
+`PilotProxy_Compute_Powers_U64`) is retired with that branch.
 
 Detection over fine bins uses a pre-registered null-bulk CFAR: the null is
 calibrated on the independent non-designated bins (every `pad`-th bin,

@@ -38,7 +38,7 @@ from pilot_proxy.dtv_units import (
     normalized_pilot_excess_to_db,
     pilot_excess_db_to_data_shelf_snr_db,
 )
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.integration.packing import estimate_complex_scale
 from pilot_proxy.paths import DEFAULT_LIB_PATH, DEFAULT_WEIGHTS_PATH
 from pilot_proxy.reference_channelizer import (
@@ -832,7 +832,7 @@ class GpuCaptureDetector:
 
         self.cp = cp
         self.args = args
-        self.kernel = FStatKernel(Path(args.lib_path))
+        self.kernel = PilotProxyKernel(Path(args.lib_path))
         pilot_hz = physical_channel_to_pilot_hz(int(args.physical_channel))
         self.spec = ReferenceChannelizerSpec(
             adc_sample_rate_hz=REFERENCE_ADC_SAMPLE_RATE_HZ,
@@ -1853,7 +1853,7 @@ def load_generated_waveform(input_path: Path, *, sample_rate_hz: float) -> np.nd
     if not metadata_path.is_file():
         raise SystemExit(f"Generated-waveform metadata is missing: {metadata_path}")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if metadata.get("schema_version") != "fstat_atsc_clean_iq_v1":
+    if metadata.get("schema_version") != "pilotproxy_atsc_clean_iq_v1":
         raise SystemExit(f"Unexpected generated-waveform metadata: {metadata_path}")
     recorded_rate = float(metadata.get("sample_rate_hz", 0.0))
     if not math.isclose(recorded_rate, float(sample_rate_hz), rel_tol=0.0, abs_tol=1.0e-6):

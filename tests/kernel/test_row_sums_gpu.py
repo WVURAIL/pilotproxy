@@ -17,7 +17,7 @@ import pytest
 from pilot_proxy.fine_reduction import fine_reduce
 from pilot_proxy.fxfft import fine_power_fx
 from gpu import cuda_available
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
 TERMS = 3
@@ -42,14 +42,14 @@ def _import_cupy_or_skip():
     return cp
 
 
-def _kernel_or_skip() -> FStatKernel:
+def _kernel_or_skip() -> PilotProxyKernel:
     try:
-        kernel = FStatKernel(DEFAULT_LIB_PATH)
+        kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     except FileNotFoundError:  # pragma: no cover - library not built
-        pytest.skip("libfstatistic.so is not built")
+        pytest.skip("libpilotproxy.so is not built")
     if not kernel.supports_row_projections() or not kernel.supports_fused_fine():
         pytest.fail(
-            "libfstatistic.so predates kernel core 2.2.0: rebuild from the "
+            "libpilotproxy.so predates kernel core 2.2.0: rebuild from the "
             "current CUDA sources before relaunching any scan."
         )
     return kernel

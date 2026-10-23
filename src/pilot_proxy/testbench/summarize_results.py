@@ -27,13 +27,13 @@ HISTOGRAM_MODE_ALWAYS = "always"
 HISTOGRAM_MODE_NEVER = "never"
 HISTOGRAM_MODES = (HISTOGRAM_MODE_AUTO, HISTOGRAM_MODE_ALWAYS, HISTOGRAM_MODE_NEVER)
 
-FSTAT_COLUMN = "coarse_power_ratio"
+POWER_RATIO_COLUMN = "coarse_power_ratio"
 PNR_BIN_COLUMN = "pilot_excess_db"
 SNR_SHELF_COLUMN = "estimated_data_shelf_snr_db"
 REQUESTED_SNR_COLUMN = "requested_data_shelf_snr_db"
 SUMMARY_CSV_NAME = "summary.csv"
 SUMMARY_JSON_NAME = "summary.json"
-FSTAT_HISTOGRAM_NAME = "fstat_histogram.png"
+POWER_RATIO_HISTOGRAM_NAME = "power_ratio_histogram.png"
 SNR_SHELF_HISTOGRAM_NAME = "snr_shelf_histogram.png"
 
 
@@ -100,7 +100,7 @@ def _column_summary(rows: list[dict[str, Any]], column: str) -> dict[str, Any]:
 def summarize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return compact numeric summaries for core detector quantities."""
     return [
-        _column_summary(rows, FSTAT_COLUMN),
+        _column_summary(rows, POWER_RATIO_COLUMN),
         _column_summary(rows, PNR_BIN_COLUMN),
         _column_summary(rows, SNR_SHELF_COLUMN),
     ]
@@ -188,7 +188,7 @@ def summarize_result_json(
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_csv = output_dir / SUMMARY_CSV_NAME
     summary_json = output_dir / SUMMARY_JSON_NAME
-    fstat_histogram = output_dir / FSTAT_HISTOGRAM_NAME
+    power_ratio_histogram = output_dir / POWER_RATIO_HISTOGRAM_NAME
     snr_histogram = output_dir / SNR_SHELF_HISTOGRAM_NAME
 
     _write_summary_csv(summary_csv, summary_rows)
@@ -202,14 +202,14 @@ def summarize_result_json(
         should_write_histograms = False
         histogram_skip_reason = "histogram output disabled by --histograms never."
 
-    wrote_fstat = False
+    wrote_power_ratio = False
     wrote_snr = False
     if should_write_histograms:
-        wrote_fstat = _plot_histogram(
+        wrote_power_ratio = _plot_histogram(
             rows=rows,
-            column=FSTAT_COLUMN,
-            output_png=fstat_histogram,
-            title="Raw F-statistic histogram",
+            column=POWER_RATIO_COLUMN,
+            output_png=power_ratio_histogram,
+            title="Raw power-ratio histogram",
             xlabel="F",
             bins=int(bins),
         )
@@ -222,17 +222,17 @@ def summarize_result_json(
             bins=int(bins),
         )
     else:
-        _remove_discontinued_histogram(fstat_histogram)
+        _remove_discontinued_histogram(power_ratio_histogram)
         _remove_discontinued_histogram(snr_histogram)
 
     summary = {
-        "schema_version": "pilotproxy_result_summary_v1",
+        "schema_version": "pilotproxy_result_summary_v2",
         "input_json": str(input_json),
         "num_rows": int(len(rows)),
         "summary_csv": str(summary_csv),
         "histogram_mode": str(histograms),
         "histograms_skipped_reason": histogram_skip_reason,
-        "fstat_histogram_png": str(fstat_histogram) if wrote_fstat else None,
+        "power_ratio_histogram_png": str(power_ratio_histogram) if wrote_power_ratio else None,
         "snr_shelf_histogram_png": str(snr_histogram) if wrote_snr else None,
         "columns": summary_rows,
     }
@@ -275,8 +275,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wrote {summary['summary_json']}")
     if summary["histograms_skipped_reason"] is not None:
         print(f"Skipped histograms: {summary['histograms_skipped_reason']}")
-    if summary["fstat_histogram_png"] is not None:
-        print(f"Wrote {summary['fstat_histogram_png']}")
+    if summary["power_ratio_histogram_png"] is not None:
+        print(f"Wrote {summary['power_ratio_histogram_png']}")
     if summary["snr_shelf_histogram_png"] is not None:
         print(f"Wrote {summary['snr_shelf_histogram_png']}")
     return 0

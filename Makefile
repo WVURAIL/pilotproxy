@@ -3,8 +3,8 @@ NVCC ?= nvcc
 GNURADIO_PYTHON ?= /usr/bin/python3
 GNURADIO_ENV ?= PYTHONNOUSERSITE=1
 CUDA_CACHE_DIR ?= $(HOME)/.cache/pilot_proxy
-CUDA_LIB := cuda/libfstatistic.so
-CACHED_CUDA_LIB := $(CUDA_CACHE_DIR)/libfstatistic.so
+CUDA_LIB := cuda/libpilotproxy.so
+CACHED_CUDA_LIB := $(CUDA_CACHE_DIR)/libpilotproxy.so
 PYTHON_TEST_ENV := MPLBACKEND=Agg PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PILOT_PROXY_USE_TEX=0 PYTHONPATH=src
 
 .PHONY: build-kernel test-kernel test-python test-gpu test lint archive-integration-check generate-atsc audit-atsc quantize detect evaluate release-check commit-check code-only-cut release-clean freeze-check clean-cache clean docs docs-specs docs-specs-check
@@ -48,7 +48,7 @@ docs-specs-check:
 
 docs: docs-specs
 	@command -v latexmk >/dev/null || { \
-	    echo "latexmk not found -- see 'Build documentation' in README.md"; exit 1; }
+	    echo "latexmk not found -- see 'Build documentation' in docs/USAGE.md"; exit 1; }
 	cd docs && for t in *.tex; do \
 	    latexmk -pdf -interaction=nonstopmode -halt-on-error \
 	        -auxdir=auxil -outdir=out $$t || exit 1; \

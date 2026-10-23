@@ -302,9 +302,9 @@ def test_weak_pilot_in_noise_detects(chord_bundle, channel) -> None:
         * row["positive_excess_half_threshold_num"]
         / row["positive_excess_half_threshold_den"]
     )
-    fstat = 2.0 * powers[0] / (powers[1] + powers[2])
+    power_ratio = 2.0 * powers[0] / (powers[1] + powers[2])
     assert deployed_mask(powers, row) == 1
-    assert fstat >= 5.0 * threshold_f
+    assert power_ratio >= 5.0 * threshold_f
 
 
 @pytest.mark.parametrize("channel", [14, 21, 36])

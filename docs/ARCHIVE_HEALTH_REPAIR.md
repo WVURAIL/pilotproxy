@@ -11,7 +11,7 @@ pilot-proxy audit-archive-health \
   --products-dir /path/to/_per_pilot \
   --product-archive /path/to/_per_pilot.zip \
   --inventory-archive /path/to/chime-pilots.zip \
-  --kernel-library /path/to/libfstatistic-2.1.0-c85f50dd.so \
+  --kernel-library /path/to/libpilotproxy-2.1.0-c85f50dd.so \
   --source-repository /path/to/pilot-proxy \
   --source-commit 94b1de0e07bdbabb7e544aff22b62ef866e9cf0c \
   --output-dir /path/to/archive-health-v1 \

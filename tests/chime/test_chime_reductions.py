@@ -21,7 +21,7 @@ def test_aggregate_frame_products_writes_one_chunk_for_10s_local_shape() -> None
         dtype=np.float64,
     )
     mask = np.asarray([[0, 0], [1, 0], [0, 1], [0, 0]], dtype=np.uint8)
-    fstat_level = np.asarray(
+    power_ratio_level = np.asarray(
         [[0.0, 1.0], [1.0, 2.0], [2.0, 3.0], [3.0, 4.0]],
         dtype=np.float64,
     )
@@ -31,8 +31,8 @@ def test_aggregate_frame_products_writes_one_chunk_for_10s_local_shape() -> None
         sample_rate_hz=390_625.0,
         chunk_seconds=10.0,
         coarse_power_ratio=np.ones((4, 2)),
-        normalized_coarse_power_ratio_db=fstat_level,
-        estimated_data_shelf_snr_db=np.asarray(fstat_level - 30.0, dtype=np.float64),
+        normalized_coarse_power_ratio_db=power_ratio_level,
+        estimated_data_shelf_snr_db=np.asarray(power_ratio_level - 30.0, dtype=np.float64),
         baseband_power_linear=baseband,
         mask=mask,
         valid=np.ones((4, 2), dtype=np.uint8),

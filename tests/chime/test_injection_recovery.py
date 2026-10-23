@@ -40,14 +40,14 @@ def _write_point(point_dir, amplitude: float, *, seed: int,
     rng = np.random.default_rng(seed)
     rho = (FLOOR_TRUE + GAIN_TRUE * amplitude**2
            + RNG_NOISE * rng.standard_normal((N_FRAMES, 1)))
-    fstat = MU0 * (1.0 + rho)
+    power_ratio = MU0 * (1.0 + rho)
     valid = np.ones((N_FRAMES, 1), dtype=np.uint8)
     detector = {
         "physical_channel": np.asarray([14], dtype=np.int32),
-        "coarse_power_ratio": fstat,
+        "coarse_power_ratio": power_ratio,
         "normalized_pilot_excess": rho,
         "valid": valid,
-        "mask": (fstat > MU0).astype(np.uint8),
+        "mask": (power_ratio > MU0).astype(np.uint8),
         "p_target_u64": np.full((N_FRAMES, 1), 1, dtype=np.uint64),
         "p_ref_sum_u64": np.full((N_FRAMES, 1), 2, dtype=np.uint64),
         "target_norm_sq": np.asarray([5], dtype=np.int64),
@@ -56,7 +56,7 @@ def _write_point(point_dir, amplitude: float, *, seed: int,
     }
     np.savez_compressed(point_dir / CHIME_DETECTOR_OUTPUTS_FILENAME, **detector)
     # Radiometer statistic: weakly shifted by the tone (a one-bin tone barely
-    # moves total band power), so its Pd must trail the F-statistic's.
+    # moves total band power), so its Pd must trail the power-ratio's.
     power = 100.0 + radiometer_shift + 1.0 * rng.standard_normal((N_FRAMES, 1))
     np.savez_compressed(
         point_dir / CHIME_SPECTROGRAM_CACHE_FILENAME,
@@ -101,20 +101,20 @@ def test_recovery_fit_finds_gain_and_floor(tmp_path) -> None:
     assert all(row["rho_sem"] > 0 for row in report["points"])
 
 
-def test_fstat_beats_radiometer_at_matched_pfa(tmp_path) -> None:
+def test_pilotproxy_beats_radiometer_at_matched_pfa(tmp_path) -> None:
     report = analyze_injection_recovery(_ladder(tmp_path))
 
     strongest = report["points"][-1]
     weakest_signal = report["points"][1]
-    assert strongest["pd_fstat_pfa0.01"] > 0.99
-    assert strongest["pd_fstat_pfa0.01"] >= strongest["pd_radiometer_pfa0.01"]
-    # At the weak point the F-statistic already separates; the radiometer
+    assert strongest["pd_power_ratio_pfa0.01"] > 0.99
+    assert strongest["pd_power_ratio_pfa0.01"] >= strongest["pd_radiometer_pfa0.01"]
+    # At the weak point the power-ratio already separates; the radiometer
     # stays near its false-alarm rate.
-    assert weakest_signal["pd_fstat_pfa0.01"] > 0.5
+    assert weakest_signal["pd_power_ratio_pfa0.01"] > 0.5
     assert weakest_signal["pd_radiometer_pfa0.01"] < 0.2
     # Wilson bounds bracket every rate.
     for row in report["points"]:
-        for name in ("fstat", "radiometer"):
+        for name in ("power_ratio", "radiometer"):
             lo = row[f"pd_{name}_pfa0.01_wilson95_lo"]
             hi = row[f"pd_{name}_pfa0.01_wilson95_hi"]
             assert lo <= row[f"pd_{name}_pfa0.01"] <= hi

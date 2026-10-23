@@ -39,8 +39,8 @@ say "1. cuda tree identity vs preserved-kernel manifest"
 sha256sum --check --strict <<'SUMS' || { echo "CUDA TREE DRIFT vs sm89 manifest"; exit 1; }
 805b87cb7cedf518957bce127a17c3df4f0d22fbb008519979d7484bae00b13e  cuda/Makefile
 c675a4c517f6abe9d3ca4121e3507c741fa7030da20404c51025028ace30365d  cuda/config.h
-9cc1d39468e1eef3aff5e65384b9cb725abf659766214a6cfa73ede5e783389a  cuda/f_statistic.cu
-61182c7610ac99856d6aed746d64893ea1f2eb1e171512ea1ce331785ae060a8  cuda/f_statistic.h
+9cc1d39468e1eef3aff5e65384b9cb725abf659766214a6cfa73ede5e783389a  cuda/pilotproxy_detector.cu
+61182c7610ac99856d6aed746d64893ea1f2eb1e171512ea1ce331785ae060a8  cuda/pilotproxy_detector.h
 006516487af814f0dfd4458b87b341fbf90e76bbf4986e1066aa207eeec45b69  cuda/fxfft256_ref.c
 SUMS
 echo "cuda tree identical to the tree that built the sm89 production kernel"
@@ -48,8 +48,8 @@ echo "cuda tree identical to the tree that built the sm89 production kernel"
 say "2. kernel gate (corrected: pilot_proxy.kernel)"
 python - "$KLIB" <<'PYGATE'
 import sys
-from pilot_proxy.kernel import FStatKernel
-k = FStatKernel(sys.argv[1])
+from pilot_proxy.kernel import PilotProxyKernel
+k = PilotProxyKernel(sys.argv[1])
 v = k._get_version(); sp = k._get_specs(); ft = k._get_features()
 print("version :", v.as_string())
 print("specs   :", sp.as_descriptive_dict())

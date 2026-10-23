@@ -1,5 +1,5 @@
 # ==============================================================================
-# F-Statistic CUDA Kernel Makefile
+# PilotProxy CUDA Kernel Makefile
 # ==============================================================================
 #
 # Build targets:
@@ -44,12 +44,12 @@ WARN_FLAGS  := -Xcompiler -Wall
 
 # Configuration defines shared by the library and CUDA regression test.
 CONFIG_DEFS := \
-	-DFSTAT_USE_DP4A=$(DP4A) \
-	-DFSTAT_DETECTOR_WINDOW_SAMPLES=$(DETECTOR_WINDOW_SAMPLES) \
-	-DFSTAT_BLOCK_THREADS=$(BLOCK_THREADS) \
-	-DFSTAT_GRID_MAX_BLOCKS=$(GRID_MAX_BLOCKS) \
-	-DFSTAT_USE_CONSTANT_WEIGHT_LANES=$(CONSTANT_WEIGHT_LANES) \
-	-DFSTAT_USE_SHARED_WEIGHT_LANES=$(SHARED_WEIGHT_LANES)
+	-DPILOTPROXY_USE_DP4A=$(DP4A) \
+	-DPILOTPROXY_DETECTOR_WINDOW_SAMPLES=$(DETECTOR_WINDOW_SAMPLES) \
+	-DPILOTPROXY_BLOCK_THREADS=$(BLOCK_THREADS) \
+	-DPILOTPROXY_GRID_MAX_BLOCKS=$(GRID_MAX_BLOCKS) \
+	-DPILOTPROXY_USE_CONSTANT_WEIGHT_LANES=$(CONSTANT_WEIGHT_LANES) \
+	-DPILOTPROXY_USE_SHARED_WEIGHT_LANES=$(SHARED_WEIGHT_LANES)
 
 # Release flags (default)
 OPT_FLAGS   := -O3 -DNDEBUG -use_fast_math -lineinfo $(CONFIG_DEFS)
@@ -64,17 +64,17 @@ DEBUG_BUILD   := $(NVCC_BASE) $(ARCH_FLAGS) $(DEBUG_FLAGS) $(WARN_FLAGS)
 # ------------------------------------------------------------------------------
 # Files
 # ------------------------------------------------------------------------------
-override TARGET   := libfstatistic.so
-override DEBUG_TARGET := libfstatistic_debug.so
-SOURCES           := f_statistic.cu
-HEADERS           := f_statistic.h config.h
-REF_TEST          := test_fstat_reference
-REF_TEST_SOURCES  := f_statistic_reference.cpp tests/test_fstat_reference.cpp
-REF_TEST_HEADERS  := f_statistic_reference.h config.h fxfft256_ref.c
+override TARGET   := libpilotproxy.so
+override DEBUG_TARGET := libpilotproxy_debug.so
+SOURCES           := pilotproxy_detector.cu
+HEADERS           := pilotproxy_detector.h config.h
+REF_TEST          := test_pilotproxy_reference
+REF_TEST_SOURCES  := pilotproxy_reference.cpp tests/test_pilotproxy_reference.cpp
+REF_TEST_HEADERS  := pilotproxy_reference.h config.h fxfft256_ref.c
 C_HEADER_TEST_OBJ := test_c_header.o
-CUDA_TEST         := test_fstat_cuda
-CUDA_TEST_SOURCES := tests/test_fstat_cuda.cpp f_statistic_reference.cpp
-CUDA_TEST_HEADERS := f_statistic.h f_statistic_reference.h config.h fxfft256_ref.c
+CUDA_TEST         := test_pilotproxy_cuda
+CUDA_TEST_SOURCES := tests/test_pilotproxy_cuda.cpp pilotproxy_reference.cpp
+CUDA_TEST_HEADERS := pilotproxy_detector.h pilotproxy_reference.h config.h fxfft256_ref.c
 
 # ------------------------------------------------------------------------------
 # Build-configuration tracking
@@ -136,7 +136,7 @@ $(REF_TEST): $(REF_TEST_SOURCES) $(REF_TEST_HEADERS) $(RELEASE_CONFIG_STAMP)
 	$(CXX) -std=c++14 -O2 -Wall $(CONFIG_DEFS) -I. -o $@ $(REF_TEST_SOURCES)
 	@echo "Built $(REF_TEST)"
 
-$(C_HEADER_TEST_OBJ): tests/test_c_header.c f_statistic.h config.h $(RELEASE_CONFIG_STAMP)
+$(C_HEADER_TEST_OBJ): tests/test_c_header.c pilotproxy_detector.h config.h $(RELEASE_CONFIG_STAMP)
 	$(CC) -std=c11 -Wall $(CONFIG_DEFS) -I. -c tests/test_c_header.c -o $@
 	@echo "Compiled C header smoke test"
 
@@ -147,14 +147,14 @@ test_ref: $(REF_TEST)
 
 $(CUDA_TEST): $(TARGET) $(CUDA_TEST_SOURCES) $(CUDA_TEST_HEADERS) $(RELEASE_CONFIG_STAMP)
 	$(NVCC) -std=c++14 -O2 -I. $(ARCH_FLAGS) $(CONFIG_DEFS) $(CUDA_TEST_SOURCES) \
-	    -L. -lfstatistic -Xlinker -rpath -Xlinker . -o $@
+	    -L. -lpilotproxy -Xlinker -rpath -Xlinker . -o $@
 	@echo "Built $(CUDA_TEST)"
 
 test_cuda: $(CUDA_TEST)
 	./$(CUDA_TEST)
 
 # Runs the CUDA regression at a deliberately tiny launch capacity to exercise
-# the grid-stride paths. That build overwrites libfstatistic.so with a library
+# the grid-stride paths. That build overwrites libpilotproxy.so with a library
 # whose capacity is 4 blocks, which then fails any later test needing more
 # streams (the Python GPU suite uses 2048) with "num_streams exceeds the launch
 # capacity" -- a confusing failure far from its cause. Restore the default
@@ -173,7 +173,7 @@ clean:
 
 info:
 	@echo "========================================"
-	@echo "F-Statistic Kernel Build Configuration"
+	@echo "PilotProxy Kernel Build Configuration"
 	@echo "========================================"
 	@echo "Compiler:     $(NVCC)"
 	@echo "C compiler:   $(CC)"
@@ -200,7 +200,7 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  all     Build release library (default)"
-	@echo "  debug   Build libfstatistic_debug.so with debug symbols"
+	@echo "  debug   Build libpilotproxy_debug.so with debug symbols"
 	@echo "  test    Build and run C header, CPU reference, and CUDA regression tests"
 	@echo "  test_c_header"
 	@echo "          Compile public C header smoke test"

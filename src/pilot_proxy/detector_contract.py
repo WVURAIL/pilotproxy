@@ -57,7 +57,7 @@ COARSE_POWER_RATIO_VALID_RULE = "p_ref_sum != 0"
 # The corrected rule compares against the H0 zero-point of F implied by the
 # int4-quantized weight norms, instead of assuming that zero-point is exactly 1.
 # For white noise E[P_term] = sigma^2 * ||w_term||^2, so
-# E[F] = null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq, and quantization leaves the
+# The ratio of expected powers is null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq, and quantization leaves the
 # three norms unequal (null_power_ratio spans ~0.985..1.011 across the shipped ATSC 14-36
 # bank). "F > 1" therefore pins the H0 mask fraction toward 0 or 1 per channel;
 # "F > null_power_ratio" restores a channel-independent zero-point exactly, in integers.
@@ -416,7 +416,7 @@ def normalized_positive_excess_policy() -> dict[str, Any]:
             "target_norm_sq and reference_norm_sum_sq are the exact integer squared "
             "norms of the packed target and (lower+upper) reference weight "
             "vectors; they remove the per-channel H0 F zero-point that int4 "
-            "weight quantization introduces (E[F] = 2*target_norm_sq/"
+            "weight quantization introduces (ratio of expected powers = 2*target_norm_sq/"
             "reference_norm_sum_sq under a flat noise floor)."
         ),
     }
@@ -453,7 +453,7 @@ def weight_term_norms_sq(
 
 
 def null_power_ratio_from_weight_norms(target_norm_sq: int, reference_norm_sum_sq: int) -> float:
-    """Return null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq, the flat-floor E[F]."""
+    """Return null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq, the flat-floor ratio of expected powers, not E[F]."""
     target_norm = _exact_uint64(
         target_norm_sq,
         field="target_norm_sq",

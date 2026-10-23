@@ -495,7 +495,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         status=EXPERIMENTAL,  # a registry value, kept as it is; the local run of record supplied the real-data parity
         instruments=("chime", "kko", "gbo", "hco"),
         produces="<channel>.npz (chime_detector_outputs schema)",
-        requires=("h5py", "pilot-proxy", "GPU+libfstatistic.so (CUDA kernel)"),
+        requires=("h5py", "pilot-proxy", "GPU+libpilotproxy.so (CUDA kernel)"),
         accepts_stream_kinds=(STREAM_PACKED_COMPLEX_INT4_BASEBAND,),
         notes="Use with the 'chime-baseband-packed' reader. Wraps "
               "pack_chime_block_for_detector + detect_packed_detector_input; "
@@ -878,10 +878,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         if kernel is None:
             kernel = opts.get("kernel")
         if kernel is None:
-            from pilot_proxy.kernel import FStatKernel
+            from pilot_proxy.kernel import PilotProxyKernel
             from pilot_proxy.paths import DEFAULT_LIB_PATH
 
-            kernel = FStatKernel(opts.get("lib_path", DEFAULT_LIB_PATH))
+            kernel = PilotProxyKernel(opts.get("lib_path", DEFAULT_LIB_PATH))
 
         supports = [
             getattr(kernel, name, None)
@@ -1053,9 +1053,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
 
         self._kernel = opts.get("kernel")
         if self._kernel is None:
-            from pilot_proxy.kernel import FStatKernel
+            from pilot_proxy.kernel import PilotProxyKernel
             from pilot_proxy.paths import DEFAULT_LIB_PATH
-            self._kernel = FStatKernel(opts.get("lib_path", DEFAULT_LIB_PATH))
+            self._kernel = PilotProxyKernel(opts.get("lib_path", DEFAULT_LIB_PATH))
         fine_retention = self._fine_retention_resolution(
             opts,
             detector_fn=self._detector_fn,
@@ -1065,7 +1065,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             raise RuntimeError(
                 "detector analyzer: the configured kernel library cannot emit "
                 "the fine powers the frame powers are summed from "
-                f"({fine_retention['resolved']}); rebuild libfstatistic.so "
+                f"({fine_retention['resolved']}); rebuild libpilotproxy.so "
                 "with kernel core 3.0.0."
             )
         self._fine_status = (
@@ -1578,7 +1578,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 n += 1
                 chunk_in_unit += 1
                 continue
-            # reader yields native uint8 [nfft, n_feeds]; fstat wants (streams, 1, time)
+            # reader yields native uint8 [nfft, n_feeds]; the detector expects (streams, 1, time)
             native_block = np.ascontiguousarray(arr.T)[:, np.newaxis, :]
             packed = pack_chime_block_for_detector(
                 native_block,

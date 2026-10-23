@@ -134,7 +134,7 @@ pilot-proxy chime-scan --help
 ```
 
 The production analyzer also needs a working CUDA/CuPy runtime and a built or
-staged `libfstatistic.so`.
+staged `libpilotproxy.so`.
 
 ---
 
@@ -153,8 +153,8 @@ echo "session arch sm_${SM}"
 # S2.1 - on-node library built from the current sources and reporting core 2.5.0
 make -C cuda clean && make -C cuda SM="$SM"
 python - <<'PY'
-from pilot_proxy.kernel import FStatKernel
-v = FStatKernel().version.as_string()
+from pilot_proxy.kernel import PilotProxyKernel
+v = PilotProxyKernel().version.as_string()
 assert v == "2.5.0", f"stale kernel library: {v}"
 print("kernel core", v)
 PY
@@ -211,7 +211,7 @@ passed:
   `receiver_profile_hash` starts `da047cdf453764e4`; the legacy half-band
   bank (`weights/legacy_halfband/chime_dtv_weights_k128.bin@b52032c`) must
   never be deployed;
-- `cuda/libfstatistic.so`, or its staged cache copy;
+- `cuda/libpilotproxy.so`, or its staged cache copy;
 - a working CuPy/CUDA runtime.
 
 Check the receiver profile and layout before staging archive data:
@@ -458,12 +458,12 @@ production settings.
    never the rebuild:
 
    ```bash
-   kernel_sha=$(sha256sum cuda/libfstatistic.so | awk '{print $1}')
-   KERNEL_LIB="$PWD/cuda/libfstatistic-2.5.0-sm${SM}-${kernel_sha:0:16}.so"
-   cp --no-clobber --preserve=mode,timestamps cuda/libfstatistic.so "$KERNEL_LIB"
-   cmp -s cuda/libfstatistic.so "$KERNEL_LIB" || exit 1
+   kernel_sha=$(sha256sum cuda/libpilotproxy.so | awk '{print $1}')
+   KERNEL_LIB="$PWD/cuda/libpilotproxy-2.5.0-sm${SM}-${kernel_sha:0:16}.so"
+   cp --no-clobber --preserve=mode,timestamps cuda/libpilotproxy.so "$KERNEL_LIB"
+   cmp -s cuda/libpilotproxy.so "$KERNEL_LIB" || exit 1
    export KERNEL_LIB
-   sha256sum cuda/libfstatistic.so "$KERNEL_LIB"
+   sha256sum cuda/libpilotproxy.so "$KERNEL_LIB"
    ```
 
    Every initial launch and resume passes `--lib-path "$KERNEL_LIB"`.
@@ -501,7 +501,7 @@ production settings.
    directory.
 8. **`cupy` on the node, not just the `.so`.** The detector pre-flight
    fails closed with "cupy/CUDA is not importable" before any unit is
-   staged. A node can carry a freshly built `cuda/libfstatistic.so` and
+   staged. A node can carry a freshly built `cuda/libpilotproxy.so` and
    still be unusable. Check it at hour zero:
 
    ```bash

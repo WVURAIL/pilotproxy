@@ -1,5 +1,5 @@
-#include "f_statistic.h"
-#include "f_statistic_reference.h"
+#include "pilotproxy_detector.h"
+#include "pilotproxy_reference.h"
 
 #include <cuda_runtime.h>
 
@@ -12,11 +12,11 @@
 
 // CUDA-vs-CPU regression for kernel core 3.0.0. Every power the library
 // emits is exact, so every comparison here is bit equality:
-//   * row sums (FStat_Compute_RowSums_I32) == fstat_ref_row_sums_i32;
-//   * fused fine powers (FStat_Compute_FusedFine_U64) == the frozen
+//   * row sums (PilotProxy_Compute_RowSums_I32) == pilotproxy_ref_row_sums_i32;
+//   * fused fine powers (PilotProxy_Compute_FusedFine_U64) == the frozen
 //     fxfft256 v1 reference over the CPU row sums;
 //   * frame powers d_power_out == the host sum over bins of
-//     d_fine_power_out == fstat_ref_powers_from_fine_u64 (the kernel core
+//     d_fine_power_out == pilotproxy_ref_powers_from_fine_u64 (the kernel core
 //     3.0.0 definition), on every fused entry that can bind the tap.
 
 namespace {
@@ -42,13 +42,13 @@ constexpr unsigned int STREAM_WEIGHT_SEED = 5002u;
 constexpr unsigned int MASK_INPUT_SEED = 6001u;
 constexpr unsigned int MASK_WEIGHT_SEED = 6002u;
 
-constexpr int TERMS = FSTAT_NUM_WEIGHT_TERMS;
-constexpr int WINDOWS = FSTAT_FINE_WINDOWS_PER_STREAM;
-constexpr int BINS = FSTAT_FINE_NUM_BINS;
+constexpr int TERMS = PILOTPROXY_NUM_WEIGHT_TERMS;
+constexpr int WINDOWS = PILOTPROXY_FINE_WINDOWS_PER_STREAM;
+constexpr int BINS = PILOTPROXY_FINE_NUM_BINS;
 
-constexpr int ROW_COUNT_BELOW_BLOCK_THREADS = FSTAT_BLOCK_THREADS - 1;
-constexpr int ROW_COUNT_EQUAL_BLOCK_THREADS = FSTAT_BLOCK_THREADS;
-constexpr int ROW_COUNT_ABOVE_BLOCK_THREADS = FSTAT_BLOCK_THREADS + 1;
+constexpr int ROW_COUNT_BELOW_BLOCK_THREADS = PILOTPROXY_BLOCK_THREADS - 1;
+constexpr int ROW_COUNT_EQUAL_BLOCK_THREADS = PILOTPROXY_BLOCK_THREADS;
+constexpr int ROW_COUNT_ABOVE_BLOCK_THREADS = PILOTPROXY_BLOCK_THREADS + 1;
 constexpr int ROW_COUNT_GRID_STRIDE_STRESS = 4101;
 constexpr int ROW_COUNT_SMALL_GRID_STRESS = 257;
 constexpr int CACHE_REUSE_ROWS = WINDOWS;
@@ -100,7 +100,7 @@ void fill_random_packed(std::vector<InputType>& values, unsigned int seed)
 
 void check_last_error_clear()
 {
-    const char* err = FStat_LastError();
+    const char* err = PilotProxy_LastError();
     assert(err != 0);
     assert(err[0] == '\0');
 }
@@ -162,7 +162,7 @@ std::vector<int> cpu_row_sums(
     int rows)
 {
     std::vector<int> out(static_cast<std::size_t>(TERMS) * rows * 2, 0);
-    fstat_ref_row_sums_i32(x.data(), w.data(), rows, out.data());
+    pilotproxy_ref_row_sums_i32(x.data(), w.data(), rows, out.data());
     return out;
 }
 
@@ -196,8 +196,8 @@ FineAndPowers cpu_fine_and_powers(
     const std::vector<int> row_sums = cpu_row_sums(x, w, rows);
     unsigned long long fine[TERMS][BINS];
     unsigned long long powers[TERMS];
-    fstat_ref_fine_powers_u64(row_sums.data(), rows / WINDOWS, fine);
-    fstat_ref_powers_from_fine_u64(fine, powers);
+    pilotproxy_ref_fine_powers_u64(row_sums.data(), rows / WINDOWS, fine);
+    pilotproxy_ref_powers_from_fine_u64(fine, powers);
     FineAndPowers out;
     out.fine.assign(&fine[0][0], &fine[0][0] + TERMS * BINS);
     out.powers.assign(powers, powers + TERMS);
@@ -218,7 +218,7 @@ FineAndPowers gpu_fused(
     DeviceBuffer<int> d_tap(
         static_cast<std::size_t>(batch) * TERMS * rows * 2);
     d_powers.fill_bytes(0xAB);
-    FStat_Compute_FusedFine_U64(
+    PilotProxy_Compute_FusedFine_U64(
         handle, w.data(), d_fine.get(), d_powers.get(),
         tap_out != 0 ? d_tap.get() : 0);
     check_last_error_clear();
@@ -258,22 +258,22 @@ void test_fused_fine_exact()
     const int row_counts[] = {WINDOWS, 2 * WINDOWS, 8 * WINDOWS, 33 * WINDOWS};
     for (int rows : row_counts) {
         std::vector<InputType> x(
-            static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+            static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
         std::vector<InputType> w(
-            static_cast<std::size_t>(TERMS) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+            static_cast<std::size_t>(TERMS) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
         fill_random_packed(x, ROW_INPUT_SEED_BASE + static_cast<unsigned int>(rows));
         fill_random_packed(w, ROW_WEIGHT_SEED_BASE + static_cast<unsigned int>(rows));
 
         DeviceBuffer<InputType> d_x(x.size());
         d_x.copy_from_host(x);
-        void* handle = FStat_Create(d_x.get(), rows);
+        void* handle = PilotProxy_Create(d_x.get(), rows);
         assert(handle != 0);
         check_last_error_clear();
-        assert(FStat_Supports_FusedFine() == 1);
+        assert(PilotProxy_Supports_FusedFine() == 1);
 
         std::vector<int> tap;
         const FineAndPowers gpu = gpu_fused(handle, w, rows, 1, &tap);
-        FStat_Destroy(handle);
+        PilotProxy_Destroy(handle);
         check_last_error_clear();
 
         const FineAndPowers cpu = cpu_fine_and_powers(x, w, rows);
@@ -295,51 +295,51 @@ void test_fused_impulse_and_zero_reference_terms()
 {
     const int rows = WINDOWS;
     std::vector<InputType> x(
-        static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES, 0);
+        static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES, 0);
     std::vector<InputType> w(
-        static_cast<std::size_t>(TERMS) * FSTAT_DETECTOR_WINDOW_SAMPLES, 0);
+        static_cast<std::size_t>(TERMS) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES, 0);
     x[0] = pack_i4(1, 0);
     w[0] = pack_i4(1, 0);
 
     DeviceBuffer<InputType> d_x(x.size());
     d_x.copy_from_host(x);
-    void* handle = FStat_Create(d_x.get(), rows);
+    void* handle = PilotProxy_Create(d_x.get(), rows);
     assert(handle != 0);
     const FineAndPowers gpu = gpu_fused(handle, w, rows, 1, 0);
-    FStat_Destroy(handle);
+    PilotProxy_Destroy(handle);
     check_last_error_clear();
 
     for (int f = 0; f < BINS; ++f) {
-        assert(gpu.fine[FSTAT_TARGET_WEIGHT_INDEX * BINS + f] == 1ULL);
-        assert(gpu.fine[FSTAT_LOWER_REFERENCE_WEIGHT_INDEX * BINS + f] == 0ULL);
-        assert(gpu.fine[FSTAT_UPPER_REFERENCE_WEIGHT_INDEX * BINS + f] == 0ULL);
+        assert(gpu.fine[PILOTPROXY_TARGET_WEIGHT_INDEX * BINS + f] == 1ULL);
+        assert(gpu.fine[PILOTPROXY_LOWER_REFERENCE_WEIGHT_INDEX * BINS + f] == 0ULL);
+        assert(gpu.fine[PILOTPROXY_UPPER_REFERENCE_WEIGHT_INDEX * BINS + f] == 0ULL);
     }
-    assert(gpu.powers[FSTAT_TARGET_WEIGHT_INDEX] == static_cast<unsigned long long>(BINS));
-    assert(gpu.powers[FSTAT_LOWER_REFERENCE_WEIGHT_INDEX] == 0ULL);
-    assert(gpu.powers[FSTAT_UPPER_REFERENCE_WEIGHT_INDEX] == 0ULL);
+    assert(gpu.powers[PILOTPROXY_TARGET_WEIGHT_INDEX] == static_cast<unsigned long long>(BINS));
+    assert(gpu.powers[PILOTPROXY_LOWER_REFERENCE_WEIGHT_INDEX] == 0ULL);
+    assert(gpu.powers[PILOTPROXY_UPPER_REFERENCE_WEIGHT_INDEX] == 0ULL);
     assert_frame_power_identity(gpu);
 }
 
 // The fused entries require whole 128-window streams; anything else is an
-// API error recorded in FStat_LastError, not a launch.
+// API error recorded in PilotProxy_LastError, not a launch.
 void test_fused_rejects_partial_streams()
 {
     const int rows = WINDOWS + 1;
     std::vector<InputType> x(
-        static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES, 0);
+        static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES, 0);
     std::vector<InputType> w(
-        static_cast<std::size_t>(TERMS) * FSTAT_DETECTOR_WINDOW_SAMPLES, 0);
+        static_cast<std::size_t>(TERMS) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES, 0);
     DeviceBuffer<InputType> d_x(x.size());
     d_x.copy_from_host(x);
     DeviceBuffer<unsigned long long> d_fine(static_cast<std::size_t>(TERMS) * BINS);
     DeviceBuffer<unsigned long long> d_powers(TERMS);
-    void* handle = FStat_Create(d_x.get(), rows);
+    void* handle = PilotProxy_Create(d_x.get(), rows);
     assert(handle != 0);
-    FStat_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), d_powers.get(), 0);
-    assert(FStat_LastError()[0] != '\0');
-    FStat_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), 0, 0);
-    assert(FStat_LastError()[0] != '\0');
-    FStat_Destroy(handle);
+    PilotProxy_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), d_powers.get(), 0);
+    assert(PilotProxy_LastError()[0] != '\0');
+    PilotProxy_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), 0, 0);
+    assert(PilotProxy_LastError()[0] != '\0');
+    PilotProxy_Destroy(handle);
     check_last_error_clear();
 }
 
@@ -350,8 +350,8 @@ void test_set_stream_matches_default()
     // the weights on the new stream rather than reuse a cache ordered on the
     // old one.
     const int rows = CACHE_REUSE_ROWS;
-    std::vector<InputType> x(rows * FSTAT_DETECTOR_WINDOW_SAMPLES);
-    std::vector<InputType> w(TERMS * FSTAT_DETECTOR_WINDOW_SAMPLES);
+    std::vector<InputType> x(rows * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
+    std::vector<InputType> w(TERMS * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     fill_random_packed(x, STREAM_INPUT_SEED);
     fill_random_packed(w, STREAM_WEIGHT_SEED);
     const FineAndPowers want = cpu_fine_and_powers(x, w, rows);
@@ -363,11 +363,11 @@ void test_set_stream_matches_default()
     cudaStream_t stream = 0;
     CUDA_CHECK(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 
-    void* handle = FStat_Create(d_x.get(), rows);
+    void* handle = PilotProxy_Create(d_x.get(), rows);
     assert(handle != 0);
-    FStat_SetStream(handle, stream);
+    PilotProxy_SetStream(handle, stream);
     check_last_error_clear();
-    FStat_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), d_powers.get(), 0);
+    PilotProxy_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), d_powers.get(), 0);
     check_last_error_clear();
     // A non-blocking stream is not ordered before the synchronous copy below.
     CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -377,28 +377,28 @@ void test_set_stream_matches_default()
     assert(got.fine == want.fine);
     assert(got.powers == want.powers);
 
-    FStat_SetStream(handle, 0);
+    PilotProxy_SetStream(handle, 0);
     check_last_error_clear();
     d_powers.fill_bytes(0xAB);
-    FStat_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), d_powers.get(), 0);
+    PilotProxy_Compute_FusedFine_U64(handle, w.data(), d_fine.get(), d_powers.get(), 0);
     check_last_error_clear();
     d_fine.copy_to_host(got.fine);
     d_powers.copy_to_host(got.powers);
     assert(got.fine == want.fine);
     assert(got.powers == want.powers);
 
-    FStat_SetStream(0, stream);
-    assert(FStat_LastError()[0] != '\0');
+    PilotProxy_SetStream(0, stream);
+    assert(PilotProxy_LastError()[0] != '\0');
 
-    FStat_Destroy(handle);
+    PilotProxy_Destroy(handle);
     CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 void test_weight_cache_reuse_and_change()
 {
     const int rows = CACHE_REUSE_ROWS;
-    std::vector<InputType> x(rows * FSTAT_DETECTOR_WINDOW_SAMPLES);
-    std::vector<InputType> w1(TERMS * FSTAT_DETECTOR_WINDOW_SAMPLES);
+    std::vector<InputType> x(rows * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
+    std::vector<InputType> w1(TERMS * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     std::vector<InputType> w2(w1.size());
     fill_random_packed(x, CACHE_INPUT_SEED);
     fill_random_packed(w1, CACHE_WEIGHT1_SEED);
@@ -407,7 +407,7 @@ void test_weight_cache_reuse_and_change()
     DeviceBuffer<InputType> d_x(x.size());
     d_x.copy_from_host(x);
 
-    void* handle = FStat_Create(d_x.get(), rows);
+    void* handle = PilotProxy_Create(d_x.get(), rows);
     assert(handle != 0);
 
     const FineAndPowers want1 = cpu_fine_and_powers(x, w1, rows);
@@ -425,7 +425,7 @@ void test_weight_cache_reuse_and_change()
     got = gpu_fused(handle, w1, rows, 1, 0);
     assert(got.fine == want2.fine && got.powers == want2.powers);
 
-    FStat_Destroy(handle);
+    PilotProxy_Destroy(handle);
     check_last_error_clear();
 }
 
@@ -434,24 +434,24 @@ void test_batch_equivalence()
     const int rows = BATCH_EQUIVALENCE_ROWS;
     const int batch = BATCH_EQUIVALENCE_COUNT;
     std::vector<InputType> x(
-        static_cast<std::size_t>(batch) * rows * FSTAT_DETECTOR_WINDOW_SAMPLES);
-    std::vector<InputType> w(TERMS * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(batch) * rows * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
+    std::vector<InputType> w(TERMS * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     fill_random_packed(x, BATCH_INPUT_SEED);
     fill_random_packed(w, BATCH_WEIGHT_SEED);
 
     DeviceBuffer<InputType> d_x(x.size());
     d_x.copy_from_host(x);
 
-    void* handle = FStat_Create_Batch(d_x.get(), rows, batch);
+    void* handle = PilotProxy_Create_Batch(d_x.get(), rows, batch);
     assert(handle != 0);
     std::vector<int> tap;
     const FineAndPowers got = gpu_fused(handle, w, rows, batch, &tap);
-    FStat_Destroy(handle);
+    PilotProxy_Destroy(handle);
     check_last_error_clear();
 
     assert_frame_power_identity(got);
     const std::size_t block_in =
-        static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES;
+        static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES;
     const std::size_t block_tap = static_cast<std::size_t>(TERMS) * rows * 2;
     for (int b = 0; b < batch; ++b) {
         std::vector<InputType> xb(
@@ -466,7 +466,7 @@ void test_batch_equivalence()
 }
 
 // Both mask entries share the frame-power reduction: with the optional tap
-// bound they report the same P_r as FStat_Compute_FusedFine_U64 (the host
+// bound they report the same P_r as PilotProxy_Compute_FusedFine_U64 (the host
 // sum over bins of their own fine accumulator); with it unbound the buffer
 // is not touched at all.
 void test_mask_entries_share_the_frame_power_reduction()
@@ -474,14 +474,14 @@ void test_mask_entries_share_the_frame_power_reduction()
     const int rows = MASK_ROWS;
     const int batch = MASK_BATCH;
     std::vector<InputType> x(
-        static_cast<std::size_t>(batch) * rows * FSTAT_DETECTOR_WINDOW_SAMPLES);
-    std::vector<InputType> w(TERMS * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(batch) * rows * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
+    std::vector<InputType> w(TERMS * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     fill_random_packed(x, MASK_INPUT_SEED);
     fill_random_packed(w, MASK_WEIGHT_SEED);
 
     DeviceBuffer<InputType> d_x(x.size());
     d_x.copy_from_host(x);
-    void* handle = FStat_Create_Batch(d_x.get(), rows, batch);
+    void* handle = PilotProxy_Create_Batch(d_x.get(), rows, batch);
     assert(handle != 0);
 
     const FineAndPowers fused = gpu_fused(handle, w, rows, batch, 0);
@@ -503,12 +503,12 @@ void test_mask_entries_share_the_frame_power_reduction()
             d_powers.fill_bytes(0xAB);
             unsigned long long* tap = bind_tap ? d_powers.get() : 0;
             if (with_support) {
-                FStat_Compute_FusedFineMaskWithSupport_U64(
+                PilotProxy_Compute_FusedFineMaskWithSupport_U64(
                     handle, w.data(), 0, 0, bulk_words, 0, UNIT_MULTIPLIER_Q16,
                     d_fine.get(), d_mask.get(), d_rank_valid.get(), d_n_bulk.get(),
                     tap, 0);
             } else {
-                FStat_Compute_FusedFineMask_U64(
+                PilotProxy_Compute_FusedFineMask_U64(
                     handle, w.data(), 0, 0, bulk_words, 0, UNIT_MULTIPLIER_Q16,
                     d_fine.get(), d_mask.get(), tap, 0);
             }
@@ -531,7 +531,7 @@ void test_mask_entries_share_the_frame_power_reduction()
         }
     }
 
-    FStat_Destroy(handle);
+    PilotProxy_Destroy(handle);
     check_last_error_clear();
 }
 
@@ -547,15 +547,15 @@ static void test_row_sums_exact()
         ROW_COUNT_BELOW_BLOCK_THREADS,
         ROW_COUNT_EQUAL_BLOCK_THREADS,
         ROW_COUNT_ABOVE_BLOCK_THREADS,
-#if FSTAT_GRID_MAX_BLOCKS <= 4
+#if PILOTPROXY_GRID_MAX_BLOCKS <= 4
         ROW_COUNT_SMALL_GRID_STRESS,
 #endif
         ROW_COUNT_GRID_STRIDE_STRESS};
     for (int rows : row_counts) {
         std::vector<InputType> x(
-            static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+            static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
         std::vector<InputType> w(
-            static_cast<std::size_t>(TERMS) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+            static_cast<std::size_t>(TERMS) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
         fill_random_packed(x, ROW_INPUT_SEED_BASE + 7000u + static_cast<unsigned int>(rows));
         fill_random_packed(w, ROW_WEIGHT_SEED_BASE + 7000u + static_cast<unsigned int>(rows));
 
@@ -563,17 +563,17 @@ static void test_row_sums_exact()
         d_x.copy_from_host(x);
         DeviceBuffer<int> d_row_sums(static_cast<std::size_t>(TERMS) * rows * 2);
 
-        void* handle = FStat_Create(d_x.get(), rows);
+        void* handle = PilotProxy_Create(d_x.get(), rows);
         assert(handle != 0);
-        assert(FStat_Supports_RowSums() == 1);
-        FStat_Compute_RowSums_I32(handle, w.data(), d_row_sums.get());
+        assert(PilotProxy_Supports_RowSums() == 1);
+        PilotProxy_Compute_RowSums_I32(handle, w.data(), d_row_sums.get());
         check_last_error_clear();
 
         std::vector<int> got;
         d_row_sums.copy_to_host(got);
         assert(got == cpu_row_sums(x, w, rows));
 
-        FStat_Destroy(handle);
+        PilotProxy_Destroy(handle);
     }
 }
 
@@ -584,9 +584,9 @@ static void test_row_sums_batch_exact()
     const int rows = 96;
     const int batch = 5;
     std::vector<InputType> x(
-        static_cast<std::size_t>(batch) * rows * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(batch) * rows * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     std::vector<InputType> w(
-        static_cast<std::size_t>(TERMS) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(TERMS) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     fill_random_packed(x, ROW_INPUT_SEED_BASE + 9100u);
     fill_random_packed(w, ROW_WEIGHT_SEED_BASE + 9100u);
 
@@ -595,16 +595,16 @@ static void test_row_sums_batch_exact()
     DeviceBuffer<int> d_row_sums(
         static_cast<std::size_t>(batch) * TERMS * rows * 2);
 
-    void* handle = FStat_Create_Batch(d_x.get(), rows, batch);
+    void* handle = PilotProxy_Create_Batch(d_x.get(), rows, batch);
     assert(handle != 0);
-    FStat_Compute_RowSums_I32(handle, w.data(), d_row_sums.get());
+    PilotProxy_Compute_RowSums_I32(handle, w.data(), d_row_sums.get());
     check_last_error_clear();
 
     std::vector<int> got;
     d_row_sums.copy_to_host(got);
 
     const std::size_t block_in =
-        static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES;
+        static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES;
     const std::size_t block_out = static_cast<std::size_t>(TERMS) * rows * 2;
     for (int b = 0; b < batch; ++b) {
         std::vector<InputType> xb(
@@ -616,7 +616,7 @@ static void test_row_sums_batch_exact()
         }
     }
 
-    FStat_Destroy(handle);
+    PilotProxy_Destroy(handle);
 }
 
 int main()
@@ -624,17 +624,17 @@ int main()
     int major = 0;
     int minor = 0;
     int patch = 0;
-    FStat_GetVersion(&major, &minor, &patch);
+    PilotProxy_GetVersion(&major, &minor, &patch);
     // Guard library <-> source consistency, not a literal: a stale
-    // libfstatistic.so must fail here before any semantic test runs.
-    assert(major == FSTAT_CORE_VERSION_MAJOR);
-    assert(minor == FSTAT_CORE_VERSION_MINOR);
-    assert(patch == FSTAT_CORE_VERSION_PATCH);
+    // libpilotproxy.so must fail here before any semantic test runs.
+    assert(major == PILOTPROXY_CORE_VERSION_MAJOR);
+    assert(minor == PILOTPROXY_CORE_VERSION_MINOR);
+    assert(patch == PILOTPROXY_CORE_VERSION_PATCH);
 
     int windows = 0;
     int pad = 0;
     int bins = 0;
-    FStat_GetFineSpecs(&windows, &pad, &bins);
+    PilotProxy_GetFineSpecs(&windows, &pad, &bins);
     assert(windows == WINDOWS);
     assert(bins == BINS);
 
@@ -648,7 +648,7 @@ int main()
     test_batch_equivalence();
     test_mask_entries_share_the_frame_power_reduction();
 
-    std::printf("test_fstat_cuda: kernel core %d.%d.%d, all checks passed\n",
+    std::printf("test_pilotproxy_cuda: kernel core %d.%d.%d, all checks passed\n",
                 major, minor, patch);
     return 0;
 }

@@ -33,9 +33,10 @@ def direct(f, word):
 def test_constants():
     assert t.SHELF == pytest.approx(3051.7578125 / 6e6 * 10 ** 1.13, rel=1e-15)
     assert t.FRAME_SECONDS == pytest.approx(0.04194304)
-    assert t.COHERENT_FRACTION == pytest.approx(np.median(list(t.COHERENT_FRACTION_BY_BAND.values())))
-    assert t.COHERENT_FRACTION_SCALE == "calibrated" and 0.05 < t.COHERENT_FRACTION < 0.12
-    assert t.CALENDAR_YEARS_PER_RETAINED_YEAR == pytest.approx(6.574, abs=1e-3)
+    assert t.STACK_AMPLITUDE_RATIO == pytest.approx(np.median(list(t.STACK_AMPLITUDE_RATIO_BY_BAND.values())))
+    assert t.STACK_AMPLITUDE_RATIO_SCALE == "calibrated" and 0.05 < t.STACK_AMPLITUDE_RATIO < 0.12
+    assert t.CALENDAR_YEARS_PER_RETAINED_YEAR == 1.0
+    assert t.LEGACY_CALENDAR_FACTOR == pytest.approx(6.574, abs=1e-3)
 
 
 def test_the_packaged_table():
@@ -63,7 +64,7 @@ def test_the_sweep_matches_direct_computation_at_every_word():
 def sweep_of(r_meas, r_high, kappa):
     """A sweep whose measured and upper-end bias / sigma are given, with R = 1."""
     words = np.arange(1, len(kappa) + 1, dtype=np.uint64) * 1000
-    to_x = lambda r: np.sqrt(np.asarray(r, float) / t.FRAME_SAMPLES) / t.COHERENT_FRACTION  # noqa: E731
+    to_x = lambda r: np.sqrt(np.asarray(r, float) / t.FRAME_SAMPLES) / t.STACK_AMPLITUDE_RATIO  # noqa: E731
     x = to_x(r_meas)
     se = (to_x(r_high) - x) / t.GUARD_STANDARD_ERRORS
     n = len(kappa)
@@ -205,9 +206,9 @@ def test_a_cache_whose_mask_the_rule_does_not_reproduce_is_refused(tmp_path):
 
 
 def test_the_admissible_minimum_gain_matches_the_dump_lengths():
-    assert round(t.admissible_min_gain(4), 2) == 6.75
-    assert round(t.admissible_min_gain(11), 2) == 15.23
-    assert round(t.admissible_min_gain(33), 2) == 40.00
+    assert round(t.minimum_family_gain(4), 2) == 6.75
+    assert round(t.minimum_family_gain(11), 2) == 15.23
+    assert round(t.minimum_family_gain(33), 2) == 40.00
 
 
 def test_the_gain_is_the_sum_over_every_lag():
@@ -220,7 +221,7 @@ def test_the_gain_is_the_sum_over_every_lag():
 @needs_measurements
 def test_every_band_is_priced_by_the_dumps_that_measured_the_coherent_fraction():
     assert t.GAIN_FRAMES == 33
-    assert t.coherent_gain(18) == t.coherent_gain(20) == t.admissible_min_gain(33)
+    assert t.temporal_gain(18) == t.temporal_gain(20) == t.minimum_family_gain(33)
 
 
 @needs_measurements
@@ -266,7 +267,7 @@ def test_a_word_last_year_rejects_everywhere_is_not_deployed():
 
 @needs_measurements
 def test_the_guard_s_word_must_meet_the_time_limit_on_the_full_era():
-    full = sweep_of([0.1, 0.2, 0.5, 0.8], [0.2, 0.3, 0.7, 0.9], [0.01, 0.4, 0.8, 0.9])   # 1000 needs 657 years
+    full = sweep_of([0.1, 0.2, 0.5, 0.8], [0.2, 0.3, 0.7, 0.9], [0.01, 0.4, 0.8, 0.9])   # 1000 needs 100 ideal years
     last = sweep_of([0.1, 0.2, 0.5, 0.8], [0.2, 1.3, 1.5, 1.5], [0.2, 0.5, 0.8, 0.9])
     d = t.decide_guarded(full, 4000, last, R=1.0, gain=1.0)
     assert d["guard_acted"] and d["reason"] == t.GUARD_FAILED and d["deployed"] is None
@@ -312,3 +313,42 @@ def test_a_finite_budget_tightens_and_one_changes_nothing():
     tight = t.decide_guarded(s, f.knee_word, s, R, gain=1.0, budget=0.5)
     if tight["deployed"] is not None:
         assert tight["deployed"]["r_hi"] <= 0.5 and tight["deployed_word"] <= (full["deployed_word"] or 2**63)
+
+
+@needs_measurements
+def test_calendar_cost_and_historical_duty_are_explicit():
+    full = sweep_of([0.1, 0.2], [0.2, 0.3], [0.1, 0.5])
+    ideal = t.decide_guarded(full, 2000, full, 1.0, gain=1.0)
+    historical = t.decide_guarded(full, 2000, full, 1.0, gain=1.0,
+                                  calendar_factor=t.LEGACY_CALENDAR_FACTOR)
+    assert ideal["deployed"]["time_years"] == 2.0
+    assert historical["deployed_word"] == ideal["deployed_word"]
+    assert historical["deployed"]["time_years"] == pytest.approx(2 * t.LEGACY_CALENDAR_FACTOR)
+    # With only 10% retained, the old duty scenario exceeds the 20-year limit.
+    assert t.decide(full, 1000, 1.0, gain=1.0)["deployed_word"] == 1000
+    assert t.decide(full, 1000, 1.0, gain=1.0,
+                    calendar_factor=t.LEGACY_CALENDAR_FACTOR)["reason"] == "out of time"
+
+
+@needs_measurements
+def test_no_recent_supported_frames_refuses_the_candidate():
+    frames = synthetic()
+    frames.supported[:] = False
+    empty = t.sweep(frames)
+    assert empty["word"].dtype == np.uint64 and empty["word"].size == 0
+    result = t.decide_guarded(sweep_of(*PASS), 4000, empty, 1.0, gain=1.0)
+    assert result["reason"] == t.GUARD_FAILED and result["deployed_word"] is None
+    assert result["guard_acted"] and result["last_year_r_hi"] is None
+    assert t.decide(empty, 4000, 1.0, gain=1.0)["deployed_word"] is None
+
+
+@pytest.mark.parametrize("factor", [0, -1, np.nan, np.inf])
+def test_invalid_calendar_factor_is_refused(factor):
+    with pytest.raises(ValueError, match="calendar_factor"):
+        t.decide({}, 1, 1.0, gain=1.0, calendar_factor=factor)
+
+
+@pytest.mark.parametrize("budget", [0, -1, 1.1, np.nan, np.inf])
+def test_invalid_policy_budget_is_refused(budget):
+    with pytest.raises(ValueError, match="budget"):
+        t.decide({}, 1, 1.0, gain=1.0, budget=budget)

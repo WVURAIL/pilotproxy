@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from pilot_proxy import kernel as kernel_module
-from pilot_proxy.kernel import FStatKernel, KernelFeatures
+from pilot_proxy.kernel import PilotProxyKernel, KernelFeatures
 
 
 class _Function:
@@ -25,13 +25,13 @@ def test_void_kernel_call_surfaces_last_error() -> None:
 
     def fail(*_args):
         nonlocal error
-        error = b"FStat API error: handle is null."
+        error = b"PilotProxy API error: handle is null."
 
     lib = SimpleNamespace(
-        FStat_Compute_FusedFine_U64=_Function(fail),
-        FStat_LastError=_Function(lambda: error),
+        PilotProxy_Compute_FusedFine_U64=_Function(fail),
+        PilotProxy_LastError=_Function(lambda: error),
     )
-    wrapper = object.__new__(FStatKernel)
+    wrapper = object.__new__(PilotProxyKernel)
     wrapper._lib = lib
     wrapper._has_last_error = True
     wrapper._has_fused_fine_u64 = True
@@ -40,15 +40,15 @@ def test_void_kernel_call_surfaces_last_error() -> None:
         wrapper.compute_fused_fine_u64(None, 1, 2, 3)
 
 
-_CORE_3_NAMES = {
-    "FStat_GetSpecs",
-    "FStat_GetVersion",
-    "FStat_LastError",
-    "FStat_Create",
-    "FStat_Create_Batch",
-    "FStat_Destroy",
-    "FStat_Compute_RowSums_I32",
-    "FStat_Compute_FusedFine_U64",
+_CORE_NAMES = {
+    "PilotProxy_GetSpecs",
+    "PilotProxy_GetVersion",
+    "PilotProxy_LastError",
+    "PilotProxy_Create",
+    "PilotProxy_Create_Batch",
+    "PilotProxy_Destroy",
+    "PilotProxy_Compute_RowSums_I32",
+    "PilotProxy_Compute_FusedFine_U64",
 }
 
 
@@ -59,38 +59,45 @@ def _report_version(major: int, minor: int = 0, patch: int = 0):
     return report
 
 
-def _setup_core_3_wrapper(monkeypatch, *, major: int = 3) -> SimpleNamespace:
-    lib = SimpleNamespace(**{name: _Function() for name in _CORE_3_NAMES})
-    lib.FStat_GetVersion = _Function(_report_version(major, 5 if major == 2 else 0))
-    wrapper = object.__new__(FStatKernel)
+def _setup_current_wrapper(monkeypatch, *, major: int = 4) -> SimpleNamespace:
+    lib = SimpleNamespace(**{name: _Function() for name in _CORE_NAMES})
+    lib.PilotProxy_GetVersion = _Function(_report_version(major, 5 if major == 2 else 0))
+    wrapper = object.__new__(PilotProxyKernel)
     wrapper._lib = lib
     monkeypatch.setattr(
         kernel_module,
         "_has_symbol",
-        lambda _lib, name: name in _CORE_3_NAMES,
+        lambda _lib, name: name in _CORE_NAMES,
     )
     wrapper._setup_signatures()
     return lib
 
 
-@pytest.mark.parametrize("major", [2, 4])
+def test_setup_signatures_refuses_a_library_with_only_the_legacy_api(monkeypatch):
+    wrapper = object.__new__(PilotProxyKernel)
+    wrapper._lib = SimpleNamespace()
+    monkeypatch.setattr(kernel_module, "_has_symbol", lambda _lib, name: False)
+    with pytest.raises(RuntimeError, match="Rebuild libpilotproxy.so"):
+        wrapper._setup_signatures()
+
+
+@pytest.mark.parametrize("major", [2, 3, 5])
 def test_setup_signatures_refuses_a_library_of_another_core_major(
     monkeypatch, major: int
 ) -> None:
-    # A 2.x library's FStat_Create takes (in, out, rows); binding the core 3
-    # two-argument signature to it would corrupt the first call.
+    # Reject another ABI even if it exports the expected symbol names.
     with pytest.raises(RuntimeError, match=f"reports core {major}\\."):
-        _setup_core_3_wrapper(monkeypatch, major=major)
+        _setup_current_wrapper(monkeypatch, major=major)
 
 
 def test_setup_signatures_marks_void_functions_as_void(monkeypatch) -> None:
-    lib = _setup_core_3_wrapper(monkeypatch)
+    lib = _setup_current_wrapper(monkeypatch)
     for name in (
-        "FStat_GetSpecs",
-        "FStat_GetVersion",
-        "FStat_Destroy",
-        "FStat_Compute_RowSums_I32",
-        "FStat_Compute_FusedFine_U64",
+        "PilotProxy_GetSpecs",
+        "PilotProxy_GetVersion",
+        "PilotProxy_Destroy",
+        "PilotProxy_Compute_RowSums_I32",
+        "PilotProxy_Compute_FusedFine_U64",
     ):
         assert getattr(lib, name).restype is None
 
@@ -101,9 +108,9 @@ def test_setup_signatures_does_not_require_the_removed_coarse_entries(monkeypatc
     take the packed input and geometry only (no float output pointer)."""
     import ctypes
 
-    lib = _setup_core_3_wrapper(monkeypatch)
-    assert lib.FStat_Create.argtypes == [ctypes.c_void_p, ctypes.c_int]
-    assert lib.FStat_Create_Batch.argtypes == [
+    lib = _setup_current_wrapper(monkeypatch)
+    assert lib.PilotProxy_Create.argtypes == [ctypes.c_void_p, ctypes.c_int]
+    assert lib.PilotProxy_Create_Batch.argtypes == [
         ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
     ]
     for removed in (
@@ -113,23 +120,23 @@ def test_setup_signatures_does_not_require_the_removed_coarse_entries(monkeypatc
         "compute_numden_mask_rational_half",
         "compute_numden_mask_rational_half_checked",
     ):
-        assert not hasattr(FStatKernel, removed), removed
+        assert not hasattr(PilotProxyKernel, removed), removed
 
 
-def _fused_mask_wrapper(callback=lambda *args: None) -> FStatKernel:
-    wrapper = object.__new__(FStatKernel)
+def _fused_mask_wrapper(callback=lambda *args: None) -> PilotProxyKernel:
+    wrapper = object.__new__(PilotProxyKernel)
     wrapper._lib = SimpleNamespace(
-        FStat_Compute_FusedFineMask_U64=_Function(callback),
+        PilotProxy_Compute_FusedFineMask_U64=_Function(callback),
     )
     wrapper._has_fused_fine_mask_u64 = True
     wrapper._has_last_error = False
     return wrapper
 
 
-def _support_wrapper(callback=lambda *args: None) -> FStatKernel:
+def _support_wrapper(callback=lambda *args: None) -> PilotProxyKernel:
     wrapper = _fused_mask_wrapper()
     wrapper._has_fused_fine_mask_with_support_u64 = True
-    wrapper._lib.FStat_Compute_FusedFineMaskWithSupport_U64 = _Function(callback)
+    wrapper._lib.PilotProxy_Compute_FusedFineMaskWithSupport_U64 = _Function(callback)
     return wrapper
 
 
@@ -320,11 +327,11 @@ def test_fused_mask_wrapper_accepts_c_int_semantic_boundaries() -> None:
     assert calls[0][5] == 255
 
 
-def _create_wrapper(callback=lambda *_args: 123) -> FStatKernel:
-    wrapper = object.__new__(FStatKernel)
+def _create_wrapper(callback=lambda *_args: 123) -> PilotProxyKernel:
+    wrapper = object.__new__(PilotProxyKernel)
     wrapper._lib = SimpleNamespace(
-        FStat_Create=_Function(callback),
-        FStat_Create_Batch=_Function(callback),
+        PilotProxy_Create=_Function(callback),
+        PilotProxy_Create_Batch=_Function(callback),
     )
     wrapper._has_batch_create = True
     wrapper._has_last_error = False
@@ -403,7 +410,7 @@ def test_create_entry_points_preserve_c_int_boundaries() -> None:
 def test_context_manager_handles_pass_input_and_geometry_only() -> None:
     calls = []
     wrapper = _create_wrapper(lambda *args: calls.append(args) or 123)
-    wrapper._lib.FStat_Destroy = _Function()
+    wrapper._lib.PilotProxy_Destroy = _Function()
     with wrapper.create_handle(128, _DeviceBuffer()) as handle:
         assert handle == 123
     with wrapper.create_batch_handle(256, 2, _DeviceBuffer()) as handle:
@@ -411,10 +418,10 @@ def test_context_manager_handles_pass_input_and_geometry_only() -> None:
     assert calls == [(1, 128), (1, 256, 2)]
 
 
-def _fine_powers_wrapper(callback=lambda *args: None) -> FStatKernel:
-    wrapper = object.__new__(FStatKernel)
+def _fine_powers_wrapper(callback=lambda *args: None) -> PilotProxyKernel:
+    wrapper = object.__new__(PilotProxyKernel)
     wrapper._lib = SimpleNamespace(
-        FStat_Compute_FinePowers_U64=_Function(callback),
+        PilotProxy_Compute_FinePowers_U64=_Function(callback),
     )
     wrapper._has_fine_powers_u64 = True
     wrapper._has_last_error = False

@@ -14,7 +14,7 @@ two referee-facing results:
   ambient floor, anchored by the mandatory ``a = 0`` control point (which the
   injection harness guarantees is byte-identical to the source data).
 * **Radiometer baseline** --- on identical frames, detection rates for the
-  F-statistic (``coarse_power_ratio``) and the classical total-power detector
+  power-ratio (``coarse_power_ratio``) and the classical total-power detector
   (``baseband_power_linear``) at matched false-alarm rates, thresholds taken
   as empirical quantiles of the ``a = 0`` control, with Wilson 95% intervals
   from ``evaluate_snr.wilson_interval``. The horizontal gap between the two
@@ -55,7 +55,7 @@ DEFAULT_FALSE_ALARM_RATES = (1e-2,)
 # least this many expected false alarms (detector register entry
 # detection.minimum_frames_per_false_alarm).
 MIN_FRAMES_PER_FALSE_ALARM = injection.MIN_FRAMES_PER_FALSE_ALARM
-STATISTICS = {"fstat": "fstat", "radiometer": "power"}
+STATISTICS = {"power_ratio": "power_ratio", "radiometer": "power"}
 
 
 def _load_point(point_dir: Path) -> dict[str, Any]:
@@ -101,7 +101,7 @@ def _load_point(point_dir: Path) -> dict[str, Any]:
     if rho.size == 0:
         raise SystemExit(f"ladder point {point_dir} has no valid frames")
     power = cache["baseband_power_linear"].astype(np.float64)[valid]
-    fstat = detector["coarse_power_ratio"].astype(np.float64)[valid]
+    power_ratio = detector["coarse_power_ratio"].astype(np.float64)[valid]
     amplitude = amplitudes.pop()
     return {
         "point_dir": str(point_dir),
@@ -112,7 +112,7 @@ def _load_point(point_dir: Path) -> dict[str, Any]:
         "rho_hat": float(rho.mean()),
         "rho_sem": float(rho.std(ddof=1) / np.sqrt(rho.size)) if rho.size > 1
         else float("nan"),
-        "fstat": fstat,
+        "power_ratio": power_ratio,
         "power": power,
         "total_clip_count": int(
             sum(int(entry["clip_count"]) for entry in manifest["files"])
@@ -171,7 +171,7 @@ def analyze_injection_recovery(
     log_slope = signal_dominated_log_slope(x, y, fit)
 
     return {
-        "schema_version": "pilotproxy_injection_recovery_v1",
+        "schema_version": "pilotproxy_injection_recovery_v2",
         "points": [
             {k: v for k, v in row.items()} for row in rows
         ],
@@ -234,7 +234,7 @@ def _write_figures(report: dict[str, Any], output_dir: Path) -> list[Path]:
 
     pfa = f"{report['false_alarm_rates'][0]:g}"
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    for name, label in (("fstat", r"F-statistic"),
+    for name, label in (("power_ratio", r"power-ratio"),
                         ("radiometer", r"Radiometer (total power)")):
         pd = np.asarray([row[f"pd_{name}_pfa{pfa}"] for row in rows])
         lo = np.asarray([row[f"pd_{name}_pfa{pfa}_wilson95_lo"] for row in rows])
@@ -244,7 +244,7 @@ def _write_figures(report: dict[str, Any], output_dir: Path) -> list[Path]:
     ax.set_xlabel(r"Injected tone power $a^2$ [LSB$^2$]")
     ax.set_ylabel(rf"Detection rate at $P_\mathrm{{fa}} = {pfa}$")
     ax.set_ylim(-0.05, 1.05)
-    ax.set_title(r"Matched-$P_\mathrm{fa}$ detection: F-statistic vs.\ radiometer")
+    ax.set_title(r"Matched-$P_\mathrm{fa}$ detection: power-ratio vs.\ radiometer")
     ax.legend(fontsize="small")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -259,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Analyze an injection ladder's run products: recovery linearity "
             "(weighted fit of recovered pilot excess vs injected tone power) "
-            "and the F-statistic vs radiometer detection comparison at "
+            "and the power-ratio vs radiometer detection comparison at "
             "matched false-alarm rates from the a = 0 control."
         ),
     )

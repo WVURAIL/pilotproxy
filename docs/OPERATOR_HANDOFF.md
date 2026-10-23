@@ -2,7 +2,8 @@
 
 This procedure ends at the masked 10-second visibility product. It covers a receiver-specific commissioning threshold; it does not certify BAO safety or select the science-optimal threshold.
 
-The Kotekan implementation is pull request 1677, still open. Its commits
+The Kotekan implementation merged into `develop` in pull request 1677 on
+October 22, 2026 (merge `6b923e51`). Its commits
 `c81def5518` and `ab37937a` are earlier revisions of that one pull request, not
 separate submissions. The pull request exports `dtv_mask`,
 `dtv_powers` and the optional `dtv_fine_support` rank-validity rows, and its
@@ -61,7 +62,7 @@ pilot-proxy compile-operating-policy --plan policy_plan.json --output-dir policy
 pilot-proxy validate-operating-policy --policy-dir policy_review
 ```
 
-Not-deployed channels become `dtv_permanent_mask_freq_ids`. A deployed channel needs its bundle profile `calibrated` at the decided word; until then the review lists it as pending and is not complete. Neither command activates a bundle.
+Unassigned channels become `dtv_permanent_mask_freq_ids`. An assigned channel needs its bundle profile `calibrated` at the decided word; until then the review lists it as pending and is not complete. Neither command activates a bundle.
 
 ## 3. Validate the release bundle and configure the fine path
 

@@ -152,8 +152,8 @@ Status 2026-10-18: the 2026-09 run of record was pinned to the preserved core
 sha256 `d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0`)
 with that run's frozen source, which wrote schema v5 products. The current
 checkout is kernel core 3.0.0 (frame powers are the all-bin sums of the fine
-powers, schema v6, `FStat_Create` without the float output), and its
-`FStatKernel` refuses a library of any other core major. A run with this
+powers, schema v6, `PilotProxy_Create` without the float output), and its
+`PilotProxyKernel` refuses a library of any other core major. A run with this
 checkout first preserves a core 3.0.0 build with its manifest under
 `$HOME/rail/kernels` and sets the four variables below to it; the block stops
 if any is unset.
@@ -171,9 +171,9 @@ export KERNEL_LIB KERNEL_SHA256
 
 python - "$KERNEL_LIB" <<'PY'
 import sys
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 
-kernel = FStatKernel(sys.argv[1])
+kernel = PilotProxyKernel(sys.argv[1])
 assert kernel.version.as_string() == "3.0.0"
 assert kernel.supports_fine_powers()
 assert kernel.supports_fused_fine()

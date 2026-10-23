@@ -189,7 +189,7 @@ def matched_filter_row_projections_cpu_reference_packed(
 
     The result has shape ``[terms, rows, 2]`` and dtype ``int32``.  Its
     arithmetic and layout are the CPU specification for
-    ``FStat_Compute_RowSums_I32``: packed signed components are sign-extended,
+    ``PilotProxy_Compute_RowSums_I32``: packed signed components are sign-extended,
     each row is dotted with the conjugated weight vector, and the real and
     imaginary integer sums are retained separately.  This public reference is
     used by the synthetic sensitivity ablations as the boundary between

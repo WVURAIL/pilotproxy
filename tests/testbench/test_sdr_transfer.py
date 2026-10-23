@@ -140,7 +140,7 @@ def _write_input(tmp_path: Path) -> tuple[Path, Path]:
     input_path.with_suffix(".cfile.json").write_text(
         json.dumps(
             {
-                "schema_version": "fstat_atsc_clean_iq_v1",
+                "schema_version": "pilotproxy_atsc_clean_iq_v1",
                 "sample_rate_hz": SAMPLE_RATE_HZ,
                 "num_iq_samples": int(clean.size),
             }

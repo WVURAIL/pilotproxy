@@ -83,9 +83,9 @@ printf '%s  %s\n' \
 
 PYTHONPATH=src python - "$KERNEL_LIB" <<'PY'
 import sys
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 
-kernel = FStatKernel(sys.argv[1])
+kernel = PilotProxyKernel(sys.argv[1])
 assert kernel.version.as_string() == "2.3.0"
 assert kernel.supports_fine_powers()
 assert kernel.supports_fused_fine()
@@ -116,16 +116,16 @@ SM=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n1 | tr -d
 make -C cuda clean && make -C cuda SM="$SM"
 # nvcc is not byte-reproducible: this build IS the artifact. Preserve it
 # outside the checkout, gate that file, and record its digest in the ledger.
-KERNEL_SHA=$(sha256sum cuda/libfstatistic.so | cut -d' ' -f1)
-KERNEL_LIB="$HOME/pp_run/kernel/libfstatistic-2.3.0-sm${SM}-${KERNEL_SHA:0:12}.so"
-mkdir -p "$(dirname "$KERNEL_LIB")" && cp cuda/libfstatistic.so "$KERNEL_LIB"
+KERNEL_SHA=$(sha256sum cuda/libpilotproxy.so | cut -d' ' -f1)
+KERNEL_LIB="$HOME/pp_run/kernel/libpilotproxy-2.3.0-sm${SM}-${KERNEL_SHA:0:12}.so"
+mkdir -p "$(dirname "$KERNEL_LIB")" && cp cuda/libpilotproxy.so "$KERNEL_LIB"
 echo "record in the ledger: $KERNEL_LIB  $KERNEL_SHA"
 
 PYTHONPATH=src python - "$KERNEL_LIB" <<'PYEOF'
 import sys
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 
-kernel = FStatKernel(sys.argv[1])
+kernel = PilotProxyKernel(sys.argv[1])
 assert kernel.version.as_string() == "2.3.0"
 assert kernel.supports_fine_powers()
 assert kernel.supports_fused_fine()

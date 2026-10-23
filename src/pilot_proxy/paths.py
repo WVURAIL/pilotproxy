@@ -55,8 +55,8 @@ DEFAULT_CONFIG_H = CUDA_DIR / "config.h"
 
 
 def _default_lib_path() -> Path:
-    candidate = CUDA_DIR / "libfstatistic.so"
-    cached = Path.home() / ".cache" / "pilot_proxy" / "libfstatistic.so"
+    candidate = CUDA_DIR / "libpilotproxy.so"
+    cached = Path.home() / ".cache" / "pilot_proxy" / "libpilotproxy.so"
     # Prefer a locally rebuilt source-tree library except on WSL-mounted paths.
     # Wheel installs have no source-tree library and therefore use the staged cache.
     if candidate.exists() and not str(candidate).startswith("/mnt/"):

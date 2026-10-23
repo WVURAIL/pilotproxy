@@ -198,13 +198,13 @@ def test_merge_sums_disjoint_parts_and_refuses_overlap(tmp_path):
 def test_receipt_end_to_end_on_a_tiny_synthetic_file(tmp_path):
     h5py = pytest.importorskip("h5py")
     pytest.importorskip("cupy")
-    from pilot_proxy.kernel import FStatKernel
+    from pilot_proxy.kernel import PilotProxyKernel
     from pilot_proxy.paths import DEFAULT_LIB_PATH
 
     try:
-        kernel = FStatKernel(DEFAULT_LIB_PATH)
+        kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     except (FileNotFoundError, OSError):
-        pytest.skip("libfstatistic.so is not built")
+        pytest.skip("libpilotproxy.so is not built")
     if not kernel.supports_fused_fine_mask_with_support():
         pytest.skip("library predates the fused support outputs")
     rng = np.random.default_rng(20261007)

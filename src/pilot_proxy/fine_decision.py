@@ -3,7 +3,7 @@
 
 This module is the bit-exact Python reference for the fine-mask
 decision computed by the fused kernel epilogue (kernel core 2.3.0,
-``FStat_Compute_FusedFineMask_U64``). The CUDA implementation must
+``PilotProxy_Compute_FusedFineMask_U64``). The CUDA implementation must
 reproduce ``fine_mask_decision`` exactly --- same mask bit for the same
 exact fine powers and the same calibration constants --- so every value
 here is arithmetic over exact integers (Python's arbitrary-precision

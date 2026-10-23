@@ -1,89 +1,101 @@
-# Start here
+# From baseband to a conditional threshold
 
-Repository: [WVURAIL/pilotproxy](https://github.com/WVURAIL/pilotproxy)
-([PROVENANCE.md](../PROVENANCE.md), [CHIME_DERIVED.md](../CHIME_DERIVED.md)).
+This is the active workflow. Dated studies and their original commands live in
+`docs/evidence/` and the paper repositories; they are not new-run defaults.
+[PAPER_CODE_MAP.md](PAPER_CODE_MAP.md) maps each scientific step to its code and tests.
 
-The CHIME pipeline, from archive baseband to the mask kotekan applies. The
-decisions of record (2026-10-12) rebuild exactly from the 2026-10-04 inputs
-through steps 4 and 5.
+## 1. Reduce baseband
 
-**1. Archive.** The CUDA detector (`cuda/`, `archive/detector.py`) runs over
-CHIME baseband and writes one product per pilot freq_id under
-`<run>/_per_pilot/`. CHIME freq_id f sits at 800 MHz - f x 390625 Hz: channels
-14 to 36 are freq_ids 844 down to 506, the channel 37 control band is 491
-(`projects/chime_atsc/frequency_plan.yaml`). Since kernel core 3.0.0 a product
-is schema v6: its three frame powers are the all-bin sums of its exact fine
-powers `fine_power_u64`. The archive products of record are schema v5 and are
-read through those same sums, never through their stored row-domain powers
-([PRODUCT_SCHEMA.md](PRODUCT_SCHEMA.md)). Runbooks:
-[LOCAL_PROCESSING.md](LOCAL_PROCESSING.md), [CANFAR_RUNBOOK.md](CANFAR_RUNBOOK.md).
+The CUDA detector projects each input stream onto the target and two reference
+weights, transforms the 128 windows, and sums squared amplitudes across inputs.
+It writes one per-pilot product with exact fine powers. The current v6 frame
+powers are sums of those fine powers; v5 archives are read through the same sums.
+See [PRODUCT_SCHEMA.md](PRODUCT_SCHEMA.md).
 
-    pilot-proxy chime-survey --name chime-pilots --freq-ids <freq_ids>
-    pilot-proxy chime-inventory --inventory-name chime-pilots
-    pilot-proxy chime-scan --inventory-name chime-pilots --output-dir <run>
+Choose [local processing](LOCAL_PROCESSING.md) or [CANFAR](CANFAR_RUNBOOK.md).
+Receiver profiles supply packing, frequency sense, input order and block size.
+The [CHIME frequency plan](../projects/chime_atsc/frequency_plan.yaml) identifies
+the science channels and the channel-37 control.
 
-**2. Frame exports.** The release keys each frame to its eras and health gate;
-the fine export adds each frame's exact minimum keep word
-(`detectors/narrowband_marker/scores.py`, equal to the detector's
-`fine_decision`). The control band uses `histogram-frames --control-product`.
+## 2. Export frames and establish eras
 
-    pilot-proxy characterize archive --products <run>/_per_pilot --out <release>
-    pilot-proxy characterize histogram-frames --products <run>/_per_pilot --release <release>/characterization --output <frames>
-    pilot-proxy characterize fine-histogram-frames --frames <frames> --output <fine>
+`characterize histogram-frames` preserves frame coordinates, health selection
+and event membership. `characterize fine-histogram-frames` adds exact Q16 keep
+boundaries. Its defaults reproduce the baseline marker geometry; changing
+`--designated-half-width` or `--marker-guard-bins` requires regenerated scores
+and calibration. Do not reinterpret old cache fields with a new geometry.
 
-**3. Eras.** Each channel's monthly level from the era review (2026-10-03),
-cut where a transmitter switches on or off and where the pilot line's identity
-changes (`characterization/era_boundaries.py`): Bayesian Blocks change points
-whose step lies above the largest gap in the step sizes over all channels, an
-excursion that returns to its prior level merged away; and, with
-`--line-identity`, a block edge where a steady line jumps by more than the
-marker half-width in one month, or a steady line becomes unsteady, backed by a
-level step larger than any the same line makes. The era list of record is
-`projects/chime_atsc/eras/line_identity_2026-10-17/eras.json`, with its monthly
-levels, line offsets and blocks beside it; `on_off_2026-10-14/` is the list
-without the line test, and the earlier `power_eras_2026-10-04.json`
-(`characterization/power_eras.py`, `power_era_review.py`) is kept for the record.
+`characterize era-boundaries --line-identity` determines the valid current era.
+The paper uses the line-identity era list in
+[projects/chime_atsc/eras/line_identity_2026-10-17](../projects/chime_atsc/eras/line_identity_2026-10-17).
+Earlier era lists remain provenance. The rules and diagnostic records are
+explained in [POWER_ERAS.md](POWER_ERAS.md).
 
-    pilot-proxy characterize era-boundaries --review <era review> --line-identity --previous <earlier era list> --output <eras>
+## 3. Read the score cache and knee
 
-**4. Score cache and knee.** Per channel, the current-era frames with their
-words and equal-event weights (`characterization/score_cache.py`). The knee
-(`characterization/knee.py`: the word that maximizes the equal-event cumulative
-curve minus the log-word diagonal) is recomputed and must match the record. A
-cache for new eras needs a working-threshold delivery in the 2026-10-04 layout
-(each channel's months, score geometry and accepted replay).
+A cache contains each frame's exact keep word, support, event and weight.
+`characterization.threshold_rule.load_frames` authenticates the stored v1 knee
+and recomputes the current v2 knee. Rule v2 maximizes the **absolute** difference
+between the equal-event CDF and its log-word chord. It can choose either bend;
+it is not a false-alarm threshold or an observing-time optimum.
 
-    pilot-proxy characterize score-cache --working <delivery> --exports <export record> --previous <power-era thresholds> \
-        --era-list projects/chime_atsc/eras/power_eras_2026-10-04.json --output <scores>
+The retained power averages signed excesses before applying a nonnegative floor
+to the mean. It does not floor individual frames. Its uncertainty is clustered
+by source event. The unsupported frames remain in the retention denominator.
 
-**5. Threshold rule** (`characterization/threshold_rule.py`). Deploy at the
-knee when the upper end of the kept DTV power meets RFIsher's tolerance
-(`characterization/data/tolerance_table.json`; coherent fraction
-`characterization/data/coherent_fraction.json`, from
-`tools/derive_coherent_fraction.py`; coherence gain G at the admissible minimum,
-`characterization/data/coherent_gain.json`) and 6.574 / kappa calendar years stays
-within 20 (the facility-lifetime limit; 30 until 2026-10-18); else at the loosest word below the knee that does; else not deployed.
+## 4. Assign a conditional threshold
 
-    python tools/threshold_rule.py --scores <scores> --out <rule> \
-        --exclude "33=pilot off the detector's frequency"
+From the repository root, with the package installed:
 
-(Channel 19 was excluded as "DTV without a matching pilot" until 2026-10-17; its weak line at the nominal pilot
-frequency is now read as a distant transmitter's pilot, likely K19NN-D, and the channel is ruled like the others.)
+```sh
+python tools/threshold_rule.py --scores <score-cache> --out <new-output> \
+    --policy-budget <policy-budget.json> \
+    --exclude "33=pilot off the detector's frequency"
+```
 
-**6. Deployment compiler** (`operating_policy.py`,
-[CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)). The plan names the
-receiver profile, `chime_freq_id`, `decisions.json`, the bundle, the consumer and
-the era. Not deployed becomes `permanent_mask_freq_ids`; deployed becomes
-`require_fine_freq_ids`, complete once its bundle profile is `calibrated` at
-the decided Q16 word.
+The policy budget file has a `budget` mapping from channel to nominal-strength
+cap. The current paper combines finite-amplitude checks with channel 19's
+containment allowance; use its complete `data/policy_budget.json`, not the
+older finite-only file. A new input population needs its own justified budget.
+`--finite-budget` remains an alias for old commands.
 
-    pilot-proxy export-runtime-weight-bundle --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
-        --weight-coordinate-system post_spectral_sense_normalization --physical-channel-range 14:36 --output-dir <bundle>
-    pilot-proxy compile-operating-policy --plan policy_plan.json --output-dir <review> --require-complete
+The tool tests `a = (gamma x_hi)^2 N G` against RFIsher's combined-distance
+response, at the knee first and then below it. Both the full era and its recent
+year must pass. `gamma` is a stack-to-proxy amplitude ratio, not a coherent
+fraction. `G` is a model-family budget for an unmeasured temporal cross-moment.
+Neither the short captures nor channel 37 determine the cross-day DTV residual.
 
-**7. kotekan.** `DtvRfiMask` reads the bundle (`dtv_runtime_bundle_dir`) and
-the review's `kotekan_parameters`; start with `dtv_apply_mask: false`. The DTV
-include exists today only in the CHORD F-engine template
-(`config/fengine/chord.j2`); the CHIME upgrade's `config/chime_upgrade_n2.j2`
-uses the same 16,384-sample frame and needs an include with the same keys.
-Acceptance: [OPERATOR_HANDOFF.md](OPERATOR_HANDOFF.md).
+By default, calendar years are `1 / kappa`, with a 20-year ceiling and no added
+duty penalty. To reproduce the old duty-based decision file, explicitly pass:
+
+```sh
+--calendar-factor 6.574444324363269
+```
+
+This option scales both selection and plot coordinates. Old `deployed*`,
+`coherent_fraction`, and `finite_budget` JSON keys retain their spelling for
+existing consumers; their current meaning is in [TERMINOLOGY.md](TERMINOLOGY.md).
+
+## 5. Compile a runtime policy
+
+The [policy compiler](CHANNEL_OPERATING_POLICY.md) binds decisions to the
+receiver profile, frequency IDs, era and calibrated bundle. Unassigned channels
+become permanent masks; assigned channels need a valid profile at the exact
+word. Channel 37 is a control, not a DTV science channel.
+
+```sh
+pilot-proxy compile-operating-policy --plan policy_plan.json \
+    --output-dir <policy-review> --require-complete
+```
+
+Bundle compilation does not activate the detector or certify its science assumptions.
+
+## 6. Integrate and commission
+
+[kotekan PR 1677](https://github.com/kotekan/kotekan/pull/1677) merged into
+`develop` on October 22, 2026. The source supports runtime window selection
+(CHORD 64, CHIME 128); the CHIME include is detect-only. Follow the
+[operator handoff](OPERATOR_HANDOFF.md), inspect the actual consumer revision,
+and start with masking disabled. Archived commissioning branches and the
+paper's timed builds are distinct from the merged implementation. The live run
+remains a separate qualification step.

@@ -244,7 +244,7 @@ def test_combined_feed_cpu_reference_equals_manual_power_sum() -> None:
         COMBINED_TEST_WINDOW,
     )
 
-    combined_fstat, combined_powers = coarse_power_ratio_cpu_reference_packed(
+    combined_power_ratio, combined_powers = coarse_power_ratio_cpu_reference_packed(
         combined,
         weights,
         bits=INT4_COMPONENT_BITS,
@@ -257,14 +257,14 @@ def test_combined_feed_cpu_reference_equals_manual_power_sum() -> None:
             bits=INT4_COMPONENT_BITS,
         )
         manual_powers += feed_powers
-    manual_fstat = (
+    manual_power_ratio = (
         COARSE_POWER_RATIO_SCALE
         * manual_powers[0]
         / (manual_powers[1] + manual_powers[2])
     )
 
     np.testing.assert_array_equal(combined_powers, manual_powers)
-    assert combined_fstat == pytest.approx(float(manual_fstat))
+    assert combined_power_ratio == pytest.approx(float(manual_power_ratio))
 
 
 def test_apply_spectral_sense_reverses_detector_window_axis() -> None:

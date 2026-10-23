@@ -76,7 +76,7 @@ PUBLICATION_DATE = datetime(2026, 8, 25, tzinfo=timezone.utc)
 
 REQUESTED_SNR_COLUMN = "requested_data_shelf_snr_db"
 FREQUENCY_OFFSET_COLUMN = "frequency_offset_hz"
-FSTAT_LEVEL_TICKS_DB = np.asarray([0.001, 0.01, 0.1, 1.0, 3.0, 10.0, 20.0])
+POWER_RATIO_TICKS_DB = np.asarray([0.001, 0.01, 0.1, 1.0, 3.0, 10.0, 20.0])
 CONDITIONED_TRANSFER_LABEL = "Waveform-conditioned expected transfer"
 CONTROL_TRANSFER_LABEL = "Control-conditioned expected transfer"
 IDEAL_BENCHMARK_LABEL = "Ideal local-reference benchmark"

@@ -19,7 +19,7 @@ from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED  # noqa: E402
 from pilot_proxy.integration.receiver_profile import (  # noqa: E402
     default_reference_receiver_profile,
 )
-from pilot_proxy.kernel import FStatKernel  # noqa: E402
+from pilot_proxy.kernel import PilotProxyKernel  # noqa: E402
 from pilot_proxy.paths import DEFAULT_LIB_PATH  # noqa: E402
 
 pytestmark = pytest.mark.cuda
@@ -38,7 +38,7 @@ def test_gpu_chime_run_matches_the_cpu_chain_including_fine_powers(tmp_path):
         pytest.skip(reason)
     if not DEFAULT_LIB_PATH.is_file():
         pytest.skip("build the default K=128 CUDA library first")
-    kernel = FStatKernel(DEFAULT_LIB_PATH)
+    kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     rng = np.random.default_rng(29)
     weights = {ch: rng.integers(-120, 121, size=(3, K)).astype(np.int8) for ch in CHANNELS}
     source = tmp_path / "input"

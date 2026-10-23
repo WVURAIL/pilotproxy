@@ -96,11 +96,9 @@ class KernelFeatures:
         }
 
 
-# The core major this wrapper binds. Core 3.0.0 changed entry signatures
-# (FStat_Create takes the packed input and the row count only; a 2.x library's
-# takes an output buffer between them), so a library of any other major is
-# refused before a single entry is bound.
-REQUIRED_CORE_MAJOR = 3
+# Bind only the core major with the PilotProxy C API. Older libraries use a
+# different symbol namespace and must be rebuilt with their consumers.
+REQUIRED_CORE_MAJOR = 4
 
 
 @dataclass(frozen=True)
@@ -125,8 +123,7 @@ class KernelVersion:
 
 
 def _has_symbol(lib: ctypes.CDLL, name: str) -> bool:
-    # ctypes.CDLL never raises AttributeError for missing symbols — the only
-    # reliable check is inspecting the underlying function pointer address.
+    # Missing exports raise AttributeError; reject null function pointers too.
     try:
         fn = getattr(lib, name)
         return bool(ctypes.cast(fn, ctypes.c_void_p).value)
@@ -136,7 +133,7 @@ def _has_symbol(lib: ctypes.CDLL, name: str) -> bool:
 
 def _last_error_from_library(lib: Any) -> str:
     """Read the thread-local error exposed by a compatible kernel library."""
-    last_error_fn = getattr(lib, "FStat_LastError", None)
+    last_error_fn = getattr(lib, "PilotProxy_LastError", None)
     if last_error_fn is None:
         return ""
     raw = last_error_fn()
@@ -196,8 +193,8 @@ def _checked_c_int(
     return result
 
 
-class FStatKernel:
-    """Wrapper for the F-statistic CUDA kernel library."""
+class PilotProxyKernel:
+    """GPU interface for matched-filter powers and the rank-based pilot detector."""
 
     def __init__(self, lib_path: str | os.PathLike[str] = DEFAULT_LIB_PATH):
         """Load the kernel shared library and initialize metadata."""
@@ -213,32 +210,36 @@ class FStatKernel:
 
     def _setup_signatures(self):
         """Configure ctypes function signatures."""
-        if not _has_symbol(self._lib, "FStat_GetSpecs"):
-            raise RuntimeError("Kernel library does not expose FStat_GetSpecs.")
-        self._lib.FStat_GetSpecs.argtypes = [ctypes.POINTER(ctypes.c_int)] * 4
-        self._lib.FStat_GetSpecs.restype = None
-        self._has_features = _has_symbol(self._lib, "FStat_GetFeatures")
+        if not _has_symbol(self._lib, "PilotProxy_GetSpecs"):
+            raise RuntimeError(
+                "Kernel library does not expose PilotProxy_GetSpecs. "
+                "Rebuild libpilotproxy.so from this checkout; this wrapper "
+                "requires the core 4 PilotProxy API."
+            )
+        self._lib.PilotProxy_GetSpecs.argtypes = [ctypes.POINTER(ctypes.c_int)] * 4
+        self._lib.PilotProxy_GetSpecs.restype = None
+        self._has_features = _has_symbol(self._lib, "PilotProxy_GetFeatures")
         if self._has_features:
-            self._lib.FStat_GetFeatures.argtypes = [
+            self._lib.PilotProxy_GetFeatures.argtypes = [
                 ctypes.POINTER(ctypes.c_int)
             ] * 3
-            self._lib.FStat_GetFeatures.restype = None
+            self._lib.PilotProxy_GetFeatures.restype = None
         self._has_optimization_features = _has_symbol(
-            self._lib, "FStat_GetOptimizationFeatures"
+            self._lib, "PilotProxy_GetOptimizationFeatures"
         )
         if self._has_optimization_features:
-            self._lib.FStat_GetOptimizationFeatures.argtypes = [
+            self._lib.PilotProxy_GetOptimizationFeatures.argtypes = [
                 ctypes.POINTER(ctypes.c_int)
             ] * 3
-            self._lib.FStat_GetOptimizationFeatures.restype = None
-        if not _has_symbol(self._lib, "FStat_GetVersion"):
-            raise RuntimeError("Kernel library does not expose FStat_GetVersion.")
-        self._lib.FStat_GetVersion.argtypes = [ctypes.POINTER(ctypes.c_int)] * 3
-        self._lib.FStat_GetVersion.restype = None
-        self._has_last_error = _has_symbol(self._lib, "FStat_LastError")
+            self._lib.PilotProxy_GetOptimizationFeatures.restype = None
+        if not _has_symbol(self._lib, "PilotProxy_GetVersion"):
+            raise RuntimeError("Kernel library does not expose PilotProxy_GetVersion.")
+        self._lib.PilotProxy_GetVersion.argtypes = [ctypes.POINTER(ctypes.c_int)] * 3
+        self._lib.PilotProxy_GetVersion.restype = None
+        self._has_last_error = _has_symbol(self._lib, "PilotProxy_LastError")
         if self._has_last_error:
-            self._lib.FStat_LastError.argtypes = []
-            self._lib.FStat_LastError.restype = ctypes.c_char_p
+            self._lib.PilotProxy_LastError.argtypes = []
+            self._lib.PilotProxy_LastError.restype = ctypes.c_char_p
 
         version = self._get_version()
         if version.major != REQUIRED_CORE_MAJOR:
@@ -250,49 +251,49 @@ class FStatKernel:
                 "matches the library."
             )
 
-        if not _has_symbol(self._lib, "FStat_Create"):
-            raise RuntimeError("Kernel library does not expose FStat_Create.")
+        if not _has_symbol(self._lib, "PilotProxy_Create"):
+            raise RuntimeError("Kernel library does not expose PilotProxy_Create.")
         # Kernel core 3.0.0: the handle takes the packed input only; every
         # output buffer is passed to the compute entry that writes it.
-        self._lib.FStat_Create.argtypes = [
+        self._lib.PilotProxy_Create.argtypes = [
             ctypes.c_void_p,  # device packed input pointer
             ctypes.c_int,     # detector_rows_per_block
         ]
-        self._lib.FStat_Create.restype = ctypes.c_void_p
+        self._lib.PilotProxy_Create.restype = ctypes.c_void_p
 
-        self._has_batch_create = _has_symbol(self._lib, "FStat_Create_Batch")
+        self._has_batch_create = _has_symbol(self._lib, "PilotProxy_Create_Batch")
         if self._has_batch_create:
-            self._lib.FStat_Create_Batch.argtypes = [
+            self._lib.PilotProxy_Create_Batch.argtypes = [
                 ctypes.c_void_p,  # device packed input pointer
                 ctypes.c_int,     # detector_rows_per_block
                 ctypes.c_int,     # batch
             ]
-            self._lib.FStat_Create_Batch.restype = ctypes.c_void_p
+            self._lib.PilotProxy_Create_Batch.restype = ctypes.c_void_p
 
-        self._lib.FStat_Destroy.argtypes = [ctypes.c_void_p]
-        self._lib.FStat_Destroy.restype = None
+        self._lib.PilotProxy_Destroy.argtypes = [ctypes.c_void_p]
+        self._lib.PilotProxy_Destroy.restype = None
 
         self._has_matched_filter_row_projections_i32 = _has_symbol(
-            self._lib, "FStat_Compute_RowSums_I32"
+            self._lib, "PilotProxy_Compute_RowSums_I32"
         )
         if self._has_matched_filter_row_projections_i32:
-            self._lib.FStat_Compute_RowSums_I32.argtypes = [
+            self._lib.PilotProxy_Compute_RowSums_I32.argtypes = [
                 ctypes.c_void_p,
                 ctypes.c_void_p,
                 ctypes.c_void_p,
             ]
-            self._lib.FStat_Compute_RowSums_I32.restype = None
+            self._lib.PilotProxy_Compute_RowSums_I32.restype = None
         self._has_supports_row_projections = _has_symbol(
-            self._lib, "FStat_Supports_RowSums"
+            self._lib, "PilotProxy_Supports_RowSums"
         )
         if self._has_supports_row_projections:
-            self._lib.FStat_Supports_RowSums.argtypes = []
-            self._lib.FStat_Supports_RowSums.restype = ctypes.c_int
+            self._lib.PilotProxy_Supports_RowSums.argtypes = []
+            self._lib.PilotProxy_Supports_RowSums.restype = ctypes.c_int
         self._has_fine_powers_u64 = _has_symbol(
-            self._lib, "FStat_Compute_FinePowers_U64"
+            self._lib, "PilotProxy_Compute_FinePowers_U64"
         )
         if self._has_fine_powers_u64:
-            self._lib.FStat_Compute_FinePowers_U64.argtypes = [
+            self._lib.PilotProxy_Compute_FinePowers_U64.argtypes = [
                 ctypes.c_void_p,  # device row-sum input pointer
                 ctypes.c_int,     # num_weight_terms
                 ctypes.c_int,     # num_streams
@@ -300,36 +301,36 @@ class FStatKernel:
                 ctypes.c_int,     # batch
                 ctypes.c_void_p,  # device uint64 fine-power output pointer
             ]
-            self._lib.FStat_Compute_FinePowers_U64.restype = None
+            self._lib.PilotProxy_Compute_FinePowers_U64.restype = None
         self._has_supports_fine_powers = _has_symbol(
-            self._lib, "FStat_Supports_FinePowers"
+            self._lib, "PilotProxy_Supports_FinePowers"
         )
         if self._has_supports_fine_powers:
-            self._lib.FStat_Supports_FinePowers.argtypes = []
-            self._lib.FStat_Supports_FinePowers.restype = ctypes.c_int
+            self._lib.PilotProxy_Supports_FinePowers.argtypes = []
+            self._lib.PilotProxy_Supports_FinePowers.restype = ctypes.c_int
         self._has_fused_fine_u64 = _has_symbol(
-            self._lib, "FStat_Compute_FusedFine_U64"
+            self._lib, "PilotProxy_Compute_FusedFine_U64"
         )
         if self._has_fused_fine_u64:
-            self._lib.FStat_Compute_FusedFine_U64.argtypes = [
+            self._lib.PilotProxy_Compute_FusedFine_U64.argtypes = [
                 ctypes.c_void_p,  # handle
                 ctypes.c_void_p,  # weights pointer (host)
                 ctypes.c_void_p,  # device uint64 fine-power output pointer
                 ctypes.c_void_p,  # device uint64 frame powers (sum over fine bins)
                 ctypes.c_void_p,  # optional device int32 row-projection tap (or NULL)
             ]
-            self._lib.FStat_Compute_FusedFine_U64.restype = None
+            self._lib.PilotProxy_Compute_FusedFine_U64.restype = None
         self._has_supports_fused_fine = _has_symbol(
-            self._lib, "FStat_Supports_FusedFine"
+            self._lib, "PilotProxy_Supports_FusedFine"
         )
         if self._has_supports_fused_fine:
-            self._lib.FStat_Supports_FusedFine.argtypes = []
-            self._lib.FStat_Supports_FusedFine.restype = ctypes.c_int
+            self._lib.PilotProxy_Supports_FusedFine.argtypes = []
+            self._lib.PilotProxy_Supports_FusedFine.restype = ctypes.c_int
         self._has_fused_fine_mask_u64 = _has_symbol(
-            self._lib, "FStat_Compute_FusedFineMask_U64"
+            self._lib, "PilotProxy_Compute_FusedFineMask_U64"
         )
         if self._has_fused_fine_mask_u64:
-            self._lib.FStat_Compute_FusedFineMask_U64.argtypes = [
+            self._lib.PilotProxy_Compute_FusedFineMask_U64.argtypes = [
                 ctypes.c_void_p,   # handle
                 ctypes.c_void_p,   # weights pointer (host)
                 ctypes.c_int,      # anchor_bin
@@ -342,36 +343,36 @@ class FStatKernel:
                 ctypes.c_void_p,   # optional device uint64 frame powers (or NULL)
                 ctypes.c_void_p,   # optional device int32 row-projection tap (or NULL)
             ]
-            self._lib.FStat_Compute_FusedFineMask_U64.restype = None
+            self._lib.PilotProxy_Compute_FusedFineMask_U64.restype = None
         self._has_supports_fused_fine_mask = _has_symbol(
-            self._lib, "FStat_Supports_FusedFineMask"
+            self._lib, "PilotProxy_Supports_FusedFineMask"
         )
         if self._has_supports_fused_fine_mask:
-            self._lib.FStat_Supports_FusedFineMask.argtypes = []
-            self._lib.FStat_Supports_FusedFineMask.restype = ctypes.c_int
+            self._lib.PilotProxy_Supports_FusedFineMask.argtypes = []
+            self._lib.PilotProxy_Supports_FusedFineMask.restype = ctypes.c_int
         self._has_fused_fine_mask_with_support_u64 = _has_symbol(
-            self._lib, "FStat_Compute_FusedFineMaskWithSupport_U64"
+            self._lib, "PilotProxy_Compute_FusedFineMaskWithSupport_U64"
         )
         if self._has_fused_fine_mask_with_support_u64:
-            self._lib.FStat_Compute_FusedFineMaskWithSupport_U64.argtypes = [
+            self._lib.PilotProxy_Compute_FusedFineMaskWithSupport_U64.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
                 ctypes.POINTER(ctypes.c_uint64), ctypes.c_int, ctypes.c_ulonglong,
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                 ctypes.c_void_p, ctypes.c_void_p,
             ]
-            self._lib.FStat_Compute_FusedFineMaskWithSupport_U64.restype = None
+            self._lib.PilotProxy_Compute_FusedFineMaskWithSupport_U64.restype = None
         self._has_supports_fused_fine_mask_with_support = _has_symbol(
-            self._lib, "FStat_Supports_FusedFineMaskWithSupport"
+            self._lib, "PilotProxy_Supports_FusedFineMaskWithSupport"
         )
         if self._has_supports_fused_fine_mask_with_support:
-            self._lib.FStat_Supports_FusedFineMaskWithSupport.argtypes = []
-            self._lib.FStat_Supports_FusedFineMaskWithSupport.restype = ctypes.c_int
-        self._has_get_fine_specs = _has_symbol(self._lib, "FStat_GetFineSpecs")
+            self._lib.PilotProxy_Supports_FusedFineMaskWithSupport.argtypes = []
+            self._lib.PilotProxy_Supports_FusedFineMaskWithSupport.restype = ctypes.c_int
+        self._has_get_fine_specs = _has_symbol(self._lib, "PilotProxy_GetFineSpecs")
         if self._has_get_fine_specs:
-            self._lib.FStat_GetFineSpecs.argtypes = [
+            self._lib.PilotProxy_GetFineSpecs.argtypes = [
                 ctypes.POINTER(ctypes.c_int)
             ] * 3
-            self._lib.FStat_GetFineSpecs.restype = None
+            self._lib.PilotProxy_GetFineSpecs.restype = None
 
     def _get_specs(self) -> KernelSpecs:
         """Query compile-time kernel parameters."""
@@ -380,13 +381,13 @@ class FStatKernel:
         c_b = ctypes.c_int()
         c_reference_offset_bins = ctypes.c_int()
 
-        self._lib.FStat_GetSpecs(
+        self._lib.PilotProxy_GetSpecs(
             ctypes.byref(c_k),
             ctypes.byref(c_n),
             ctypes.byref(c_b),
             ctypes.byref(c_reference_offset_bins),
         )
-        _raise_library_error(self._lib, "FStat_GetSpecs")
+        _raise_library_error(self._lib, "PilotProxy_GetSpecs")
 
         return KernelSpecs(
             K=c_k.value,
@@ -413,19 +414,19 @@ class FStatKernel:
         c_constant_weight_lanes = ctypes.c_int()
         c_shared_weight_lanes = ctypes.c_int()
         c_grid_max_blocks = ctypes.c_int()
-        self._lib.FStat_GetFeatures(
+        self._lib.PilotProxy_GetFeatures(
             ctypes.byref(c_dp4a),
             ctypes.byref(c_uint64_power),
             ctypes.byref(c_threads),
         )
-        _raise_library_error(self._lib, "FStat_GetFeatures")
+        _raise_library_error(self._lib, "PilotProxy_GetFeatures")
         if getattr(self, "_has_optimization_features", False):
-            self._lib.FStat_GetOptimizationFeatures(
+            self._lib.PilotProxy_GetOptimizationFeatures(
                 ctypes.byref(c_constant_weight_lanes),
                 ctypes.byref(c_shared_weight_lanes),
                 ctypes.byref(c_grid_max_blocks),
             )
-            _raise_library_error(self._lib, "FStat_GetOptimizationFeatures")
+            _raise_library_error(self._lib, "PilotProxy_GetOptimizationFeatures")
         return KernelFeatures(
             use_dp4a=bool(c_dp4a.value),
             use_uint64_power_accumulation=bool(c_uint64_power.value),
@@ -441,12 +442,12 @@ class FStatKernel:
         c_minor = ctypes.c_int()
         c_patch = ctypes.c_int()
 
-        self._lib.FStat_GetVersion(
+        self._lib.PilotProxy_GetVersion(
             ctypes.byref(c_major),
             ctypes.byref(c_minor),
             ctypes.byref(c_patch),
         )
-        _raise_library_error(self._lib, "FStat_GetVersion")
+        _raise_library_error(self._lib, "PilotProxy_GetVersion")
 
         return KernelVersion(
             major=int(c_major.value),
@@ -502,31 +503,31 @@ class FStatKernel:
             field="detector_rows_per_block",
             minimum=1,
         )
-        handle = self._lib.FStat_Create(in_ptr, rows)
+        handle = self._lib.PilotProxy_Create(in_ptr, rows)
         if not handle:
             raise RuntimeError(
-                self.last_error() or "FStat_Create returned NULL."
+                self.last_error() or "PilotProxy_Create returned NULL."
             )
         return handle
 
     def create_raw_batch(self, M: int, batch: int, in_ptr: int):
         """Create a batched handle from a raw device input pointer."""
         if not getattr(self, "_has_batch_create", False):
-            raise RuntimeError("Kernel library does not expose FStat_Create_Batch.")
+            raise RuntimeError("Kernel library does not expose PilotProxy_Create_Batch.")
         rows = _checked_c_int(
             M,
             field="detector_rows_per_block",
             minimum=1,
         )
         batch_count = _checked_c_int(batch, field="batch", minimum=1)
-        handle = self._lib.FStat_Create_Batch(
+        handle = self._lib.PilotProxy_Create_Batch(
             in_ptr,
             rows,
             batch_count,
         )
         if not handle:
             raise RuntimeError(
-                self.last_error() or "FStat_Create_Batch returned NULL."
+                self.last_error() or "PilotProxy_Create_Batch returned NULL."
             )
         return handle
 
@@ -550,7 +551,7 @@ class FStatKernel:
         if not getattr(self, "_has_matched_filter_row_projections_i32", False):
             return False
         if getattr(self, "_has_supports_row_projections", False):
-            return bool(int(self._lib.FStat_Supports_RowSums()) == 1)
+            return bool(int(self._lib.PilotProxy_Supports_RowSums()) == 1)
         return True
 
     def compute_row_projections_i32(
@@ -560,36 +561,36 @@ class FStatKernel:
 
         row_projections_ptr must address a device buffer of
         batch * num_weight_terms * detector_rows_per_block * 2 int32
-        elements; layout per the FStat_Compute_RowSums_I32 contract
+        elements; layout per the PilotProxy_Compute_RowSums_I32 contract
         (term-major, stream-major rows, interleaved re/im).
         """
         if not getattr(self, "_has_matched_filter_row_projections_i32", False):
             raise RuntimeError(
-                "Kernel library does not expose FStat_Compute_RowSums_I32."
+                "Kernel library does not expose PilotProxy_Compute_RowSums_I32."
             )
-        self._lib.FStat_Compute_RowSums_I32(
+        self._lib.PilotProxy_Compute_RowSums_I32(
             handle, weights_ptr, row_projections_ptr
         )
-        self._check_call("FStat_Compute_RowSums_I32")
+        self._check_call("PilotProxy_Compute_RowSums_I32")
 
     def supports_fine_powers(self) -> bool:
         """Return True when the on-device fine-power stage is available."""
         if not getattr(self, "_has_fine_powers_u64", False):
             return False
         if getattr(self, "_has_supports_fine_powers", False):
-            return bool(int(self._lib.FStat_Supports_FinePowers()) == 1)
+            return bool(int(self._lib.PilotProxy_Supports_FinePowers()) == 1)
         return True
 
     def get_fine_specs(self) -> dict[str, int]:
         """Frozen fine-reduction geometry compiled into the library."""
         if not getattr(self, "_has_get_fine_specs", False):
             raise RuntimeError(
-                "Kernel library does not expose FStat_GetFineSpecs."
+                "Kernel library does not expose PilotProxy_GetFineSpecs."
             )
         w = ctypes.c_int(0)
         p = ctypes.c_int(0)
         b = ctypes.c_int(0)
-        self._lib.FStat_GetFineSpecs(
+        self._lib.PilotProxy_GetFineSpecs(
             ctypes.byref(w), ctypes.byref(p), ctypes.byref(b)
         )
         return {
@@ -618,7 +619,7 @@ class FStatKernel:
         """
         if not getattr(self, "_has_fine_powers_u64", False):
             raise RuntimeError(
-                "Kernel library does not expose FStat_Compute_FinePowers_U64."
+                "Kernel library does not expose PilotProxy_Compute_FinePowers_U64."
             )
         terms = _checked_c_int(
             self.specs.num_weight_terms,
@@ -645,7 +646,7 @@ class FStatKernel:
             maximum=FINE_WINDOWS_PER_STREAM,
         )
         batch_count = _checked_c_int(batch, field="batch", minimum=1)
-        self._lib.FStat_Compute_FinePowers_U64(
+        self._lib.PilotProxy_Compute_FinePowers_U64(
             row_projections_ptr,
             terms,
             streams,
@@ -653,14 +654,14 @@ class FStatKernel:
             batch_count,
             fine_powers_ptr,
         )
-        self._check_call("FStat_Compute_FinePowers_U64")
+        self._check_call("PilotProxy_Compute_FinePowers_U64")
 
     def supports_fused_fine(self) -> bool:
         """Return True when the fused fine kernel (core 2.2.0) is available."""
         if not getattr(self, "_has_fused_fine_u64", False):
             return False
         if getattr(self, "_has_supports_fused_fine", False):
-            return bool(int(self._lib.FStat_Supports_FusedFine()) == 1)
+            return bool(int(self._lib.PilotProxy_Supports_FusedFine()) == 1)
         return True
 
     def compute_fused_fine_u64(
@@ -689,23 +690,23 @@ class FStatKernel:
         """
         if not getattr(self, "_has_fused_fine_u64", False):
             raise RuntimeError(
-                "Kernel library does not expose FStat_Compute_FusedFine_U64."
+                "Kernel library does not expose PilotProxy_Compute_FusedFine_U64."
             )
-        self._lib.FStat_Compute_FusedFine_U64(
+        self._lib.PilotProxy_Compute_FusedFine_U64(
             handle,
             weights_ptr,
             fine_powers_ptr,
             powers_ptr,
             row_projections_tap_ptr if row_projections_tap_ptr else None,
         )
-        self._check_call("FStat_Compute_FusedFine_U64")
+        self._check_call("PilotProxy_Compute_FusedFine_U64")
 
     def supports_fused_fine_mask(self) -> bool:
         """Return True when the decision epilogue (core 2.3.0) is available."""
         if not getattr(self, "_has_fused_fine_mask_u64", False):
             return False
         if getattr(self, "_has_supports_fused_fine_mask", False):
-            return bool(int(self._lib.FStat_Supports_FusedFineMask()) == 1)
+            return bool(int(self._lib.PilotProxy_Supports_FusedFineMask()) == 1)
         return True
 
     def compute_fused_fine_mask_u64(
@@ -725,7 +726,7 @@ class FStatKernel:
         if not getattr(self, "_has_fused_fine_mask_with_support_u64", False):
             return False
         if getattr(self, "_has_supports_fused_fine_mask_with_support", False):
-            return bool(int(self._lib.FStat_Supports_FusedFineMaskWithSupport()) == 1)
+            return bool(int(self._lib.PilotProxy_Supports_FusedFineMaskWithSupport()) == 1)
         return True
 
     def compute_fused_fine_mask_with_support_u64(
@@ -783,7 +784,7 @@ class FStatKernel:
         the frame powers. anchor/width/rank/multiplier are runtime bundle
         data.
         """
-        symbol = "FStat_Compute_FusedFineMaskWithSupport_U64" if support is not None else "FStat_Compute_FusedFineMask_U64"
+        symbol = "PilotProxy_Compute_FusedFineMaskWithSupport_U64" if support is not None else "PilotProxy_Compute_FusedFineMask_U64"
         feature = "_has_fused_fine_mask_with_support_u64" if support is not None else "_has_fused_fine_mask_u64"
         if not getattr(self, feature, False):
             raise RuntimeError(
@@ -838,8 +839,8 @@ class FStatKernel:
 
     def destroy(self, handle):
         """Destroy a kernel handle."""
-        self._lib.FStat_Destroy(handle)
-        self._check_call("FStat_Destroy")
+        self._lib.PilotProxy_Destroy(handle)
+        self._check_call("PilotProxy_Destroy")
 
 
 class _KernelHandle:
@@ -858,16 +859,16 @@ class _KernelHandle:
         if batch < 1:
             raise ValueError("batch must be >= 1.")
         if batch > 1:
-            create_batch = getattr(lib, "FStat_Create_Batch", None)
+            create_batch = getattr(lib, "PilotProxy_Create_Batch", None)
             if create_batch is None:
-                raise RuntimeError("Kernel library does not expose FStat_Create_Batch.")
+                raise RuntimeError("Kernel library does not expose PilotProxy_Create_Batch.")
             self._handle = create_batch(d_in.data.ptr, M, batch)
         else:
-            self._handle = lib.FStat_Create(d_in.data.ptr, M)
+            self._handle = lib.PilotProxy_Create(d_in.data.ptr, M)
         if not self._handle:
             last_error = _last_error_from_library(lib)
             raise RuntimeError(
-                last_error or "F-statistic kernel handle creation failed."
+                last_error or "PilotProxy kernel handle creation failed."
             )
 
     def __enter__(self):
@@ -876,5 +877,5 @@ class _KernelHandle:
 
     def __exit__(self, *args):
         """Destroy the underlying handle when exiting the context."""
-        self._lib.FStat_Destroy(self._handle)
-        _raise_library_error(self._lib, "FStat_Destroy")
+        self._lib.PilotProxy_Destroy(self._handle)
+        _raise_library_error(self._lib, "PilotProxy_Destroy")

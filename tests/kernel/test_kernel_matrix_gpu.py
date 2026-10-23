@@ -14,7 +14,7 @@ import pytest
 from pilot_proxy.fine_decision import fine_mask_decision, pack_bulk_mask
 from pilot_proxy.fxfft import fine_power_fx
 from gpu import cuda_available
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 
 pytestmark = pytest.mark.cuda
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,8 +40,8 @@ __global__ void test_wide_compare_kernel(const unsigned long long* v,
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= count) return;
     const unsigned long long* p = v + 6 * i;
-    out[2 * i] = fstat_frac_less(p[0], p[1], p[2], p[3]);
-    out[2 * i + 1] = fstat_triple_greater(p[0], p[1], p[2], p[3], p[4], p[5]);
+    out[2 * i] = pilotproxy_frac_less(p[0], p[1], p[2], p[3]);
+    out[2 * i + 1] = pilotproxy_triple_greater(p[0], p[1], p[2], p[3], p[4], p[5]);
 }
 extern "C" void test_wide_compare(const unsigned long long* v, int* out, int count) {
     test_wide_compare_kernel<<<(count + 127) / 128, 128>>>(v, out, count);
@@ -60,9 +60,9 @@ def kernel_build(request, tmp_path_factory):
         pytest.skip("nvcc is required for the kernel build matrix")
     k, mode, threads, grid = request.param
     build = tmp_path_factory.mktemp(f"kernel-{k}-{mode}")
-    source = build / "f_statistic.cu"
-    source.write_text((ROOT / "cuda/f_statistic.cu").read_text() + COMPARE_SHIM)
-    library = build / "libfstatistic.so"
+    source = build / "pilotproxy_detector.cu"
+    source.write_text((ROOT / "cuda/pilotproxy_detector.cu").read_text() + COMPARE_SHIM)
+    library = build / "libpilotproxy.so"
     result = subprocess.run(
         [
             nvcc,
@@ -73,12 +73,12 @@ def kernel_build(request, tmp_path_factory):
             "-Xcompiler=-fPIC",
             "--shared",
             f"-arch=sm_{cp.cuda.Device().compute_capability}",
-            f"-DFSTAT_DETECTOR_WINDOW_SAMPLES={k}",
-            f"-DFSTAT_USE_DP4A={int(mode != 'scalar')}",
-            f"-DFSTAT_USE_SHARED_WEIGHT_LANES={int(mode == 'shared')}",
-            f"-DFSTAT_USE_CONSTANT_WEIGHT_LANES={int(mode == 'constant')}",
-            f"-DFSTAT_BLOCK_THREADS={threads}",
-            f"-DFSTAT_GRID_MAX_BLOCKS={grid}",
+            f"-DPILOTPROXY_DETECTOR_WINDOW_SAMPLES={k}",
+            f"-DPILOTPROXY_USE_DP4A={int(mode != 'scalar')}",
+            f"-DPILOTPROXY_USE_SHARED_WEIGHT_LANES={int(mode == 'shared')}",
+            f"-DPILOTPROXY_USE_CONSTANT_WEIGHT_LANES={int(mode == 'constant')}",
+            f"-DPILOTPROXY_BLOCK_THREADS={threads}",
+            f"-DPILOTPROXY_GRID_MAX_BLOCKS={grid}",
             "-I",
             str(ROOT / "cuda"),
             str(source),
@@ -90,7 +90,7 @@ def kernel_build(request, tmp_path_factory):
         timeout=180,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    kernel = FStatKernel(library)
+    kernel = PilotProxyKernel(library)
     assert kernel.specs.detector_window_samples == k
     assert kernel.features.use_dp4a == (mode != "scalar")
     assert kernel.features.block_threads == threads

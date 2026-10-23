@@ -1,8 +1,8 @@
 """The knee: each channel's fine threshold word on its current era.
 
 The knee is an exact Q16 keep word read from the equal-event distribution of a
-channel's current-era fine keep boundaries: the word that maximizes the
-cumulative curve minus the straight line between the smallest and largest
+channel's current-era fine keep boundaries: the word that maximizes the absolute difference between the
+cumulative curve and the straight line between the smallest and largest
 words, plotted against log word. Every source event carries equal weight and
 its frames share that weight equally. The curve can bend two ways: above the
 line, where a population of low-scoring frames ends (the usual case), or below
@@ -13,7 +13,7 @@ v1, the bend above the line only, reproduces the knees recorded before
 2026-10-19. The rule describes the data it is read
 from. It is not a false-alarm calibration, a residual estimate or an
 observing-time optimum, and it never chooses reject-all; whether a channel is
-deployed at its knee is the threshold rule's decision
+assigned a threshold at its knee is the threshold rule's decision
 (:mod:`pilot_proxy.characterization.threshold_rule`).
 """
 

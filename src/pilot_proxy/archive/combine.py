@@ -12,7 +12,7 @@ keeps the existing plots and ``validate-products`` working unchanged on archive
 output.
 
 A "per-pilot product" is exactly what ``PilotProxyDetectorAnalyzer.save`` writes:
-the relevant fstat schema for one pilot, with
+the per-pilot product schema for one pilot, with
 the per-frame 2-D arrays shaped ``(frames, 1)``.
 """
 from __future__ import annotations

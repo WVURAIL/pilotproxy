@@ -1,52 +1,27 @@
-"""Each band's detector word, from the science tolerance table.
+"""Assign conditional channel thresholds from the detector and RFIsher table.
 
-For every distinct keep word ``w`` of a band's current era (``eta = w / 2**16``):
+For each exact Q16 keep word, sweep the current era's equal-event distribution.
+``kappa`` counts retained probability, including unsupported frames in the
+original denominator. ``x`` is the signed mean pilot excess times the shelf
+conversion, floored only after averaging. ``se`` is its event-clustered
+standard error. The upper end is ``x + 2 se``.
 
-    kept(w)   supported frames whose required word is at most w
-    kappa(w)  kept probability; every event has equal mass and unsupported
-              frames stay in the denominator
-    x(w)      interference power per input relative to the noise, over the
-              band: SHELF times the kept-weighted mean marker excess, floored at 0
-    se(w)     the event-clustered standard error of that mean, times SHELF
-    a(w)      (c x)^2 N G, the residual strength the tolerance table is written
-              in: c the coherent fraction of the power, N the samples in one
-              frame, G the frames it stays coherent, priced at the admissible
-              minimum the measured c allows, one value for every band (``coherent_gain``)
-    r(w)      a(w) R, the bias in units of the clean sigma; R is the band's
-              response from the table (the combined distance D_V)
-    r_hi(w)   r at x + 2 se, the value the rule tests
+The forecast strength is ``a = (gamma x_hi)**2 N G``. ``gamma`` is the measured
+calibrated redundant-stack amplitude divided by the archive shelf proxy. It
+is not an intrinsic coherent fraction. ``G`` is an assumed effective temporal
+gain, chosen from two stationary correlation families, not a measured
+cross-day coherence. These assumptions make every assigned word conditional.
 
-The decision starts at the band's knee, the detector's own operating point. A
-threshold is usable when it meets the tolerance, ``r_hi <= 1``, within
-``MAX_CALENDAR_YEARS``, so that its kept fraction is at least
-``1 / MAX_CALENDAR_YEARS``. A band whose knee is usable is deployed at its knee.
-Otherwise ``below_knee`` is the loosest threshold at or below the knee that meets
-the tolerance (None if there is none); it keeps the most frames of those that
-do, and the band is deployed there if it is usable. A band with no usable
-threshold is not useful for the science the table describes and is not
-deployed. Its ``reason`` is "out of time" when the tolerance is met but only
-beyond ``MAX_CALENDAR_YEARS``, and "above tolerance" when it is not met at all.
-A band can also be excluded with a stated reason (``exclude``), for example when
-the detector does not see its marker; it is then not deployed whatever the sweep
-says, and the sweep is still recorded.
-The calendar time to collect the one retained year the table assumes is
-``CALENDAR_YEARS_PER_RETAINED_YEAR / kappa``: a retained year is 8,760 h on the sky,
-observed at the science-quality duty ``ON_SKY_DUTY``.
+Test the knee first, then the loosest passing word below it. Both the full-era
+and last-year curves must satisfy the channel's nominal-strength budget
+(default 1; a smaller value incorporates finite-amplitude or transfer checks).
+The ideal calendar cost is ``1 / kappa`` with a 20-year limit. Pass
+``calendar_factor=LEGACY_CALENDAR_FACTOR`` to reproduce the historical duty
+scenario. The recent window keeps the full-era knee and event weights.
 
-The last-year guard (``decide_guarded``) protects the tolerance against a recent
-change the full era dilutes. The full-era decision stands; a deployed band's
-word is then tested on the curves of the era's last ``LAST_YEAR_DAYS`` of frames
-(``last_year``: kappa, x and its standard error from those frames, the same G
-and R). Twelve months is one full seasonal cycle, so the recent state is judged
-over every season and no season weighs twice. If r_hi there is at most 1 the
-decision is unchanged. Otherwise the band moves to the loosest word at or below
-its word whose r_hi is at most 1 on both the full-era and the last-year curves
-and whose full-era kappa meets ``MAX_CALENDAR_YEARS``; with no such word it is
-not deployed, "fails the tolerance on its last year". No knee is computed on
-the last year. Kappa, x, r and calendar years are always read on the full era.
-
-The table (``data/tolerance_table.json``) is the science side's only input
-here. RFIsher writes it once per forecast configuration.
+Serialized ``deployed*`` keys mean assigned candidates, not telescope operation.
+The historical ``coherent_fraction`` and ``coherent_gain`` data filenames and
+JSON keys are retained for reproducibility; see docs/TERMINOLOGY.md.
 """
 from __future__ import annotations
 
@@ -70,8 +45,8 @@ FINE_BIN_HZ = 390625 / 128                 # 3051.76 Hz, the bin the marker exce
 SHELF = 10 ** (_TEMPLATE.marker.marker_to_band_db / 10) * FINE_BIN_HZ / _TEMPLATE.band_width_hz
 FRAME_SAMPLES = 16384                      # samples per frame
 FRAME_SECONDS = FRAME_SAMPLES / 390625     # 41.94 ms
-# Coherent fraction: the share of the per-input interference amplitude that survives in a
-# calibrated visibility, measured in the matched captures (data/coherent_fraction.json).
+# Stack-to-proxy amplitude ratio measured in the matched captures. The historical
+# data filename is coherent_fraction.json; this does not measure intrinsic coherence.
 # Both measurements are CHIME-derived; the code-only cut withholds them (CHIME_DERIVED.md), and
 # then the module still imports but the rule refuses to price a band.
 
@@ -89,18 +64,19 @@ def _require(data: dict | None, name: str) -> dict:
 
 
 _COHERENT = _measurement("coherent_fraction.json")
-COHERENT_FRACTION_BY_BAND = {int(k): float(v) for k, v in (_COHERENT or {"by_band": {}})["by_band"].items()}
-COHERENT_FRACTION = float(_COHERENT["value"]) if _COHERENT else float("nan")
-COHERENT_FRACTION_SCALE = _COHERENT["scale"] if _COHERENT else None
-# G: the frames the residual keeps its phase. The coherent fraction is measured from products of
-# distinct frames, so it cannot be priced below the admissible minimum (data/coherent_gain.json).
-# One coherent fraction serves every band, so one G does too: that of the dumps that measured it.
+STACK_AMPLITUDE_RATIO_BY_BAND = {int(k): float(v) for k, v in (_COHERENT or {"by_band": {}})["by_band"].items()}
+STACK_AMPLITUDE_RATIO = float(_COHERENT["value"]) if _COHERENT else float("nan")
+STACK_AMPLITUDE_RATIO_SCALE = _COHERENT["scale"] if _COHERENT else None
+# G is a model-family budget for the unmeasured temporal transfer. The finite-dump
+# cross-moment in gamma is accounted for by G_int / mean_rho; this is not a
+# universal lower bound or a measurement of the long-time cross-day product.
 _GAIN = _measurement("coherent_gain.json")
 GAIN_FRAMES = int(_GAIN["frames"]) if _GAIN else None
 GUARD_STANDARD_ERRORS = 2.0
-MAX_CALENDAR_YEARS = 20.0                  # a threshold needing longer than this is not usable (20 since 2026-10-18; 30 before)
-ON_SKY_DUTY = 0.152                        # science-quality duty: night only, 94 of 309 days retained
-CALENDAR_YEARS_PER_RETAINED_YEAR = 8760 / (ON_SKY_DUTY * 8766)   # 6.57
+MAX_CALENDAR_YEARS = 20.0                  # assumed facility lifetime
+ON_SKY_DUTY = 0.152                        # historical operating-duty scenario, not the paper's primary comparison
+LEGACY_CALENDAR_FACTOR = 8760 / (ON_SKY_DUTY * 8766)
+CALENDAR_YEARS_PER_RETAINED_YEAR = 1.0       # Overview's ideal year; masking alone costs 1 / kappa
 LAST_YEAR_DAYS = 365.25                    # the last-year guard's window: one full seasonal cycle
 TABLE_SCHEMA = "rfisher-channel-table-v2"
 
@@ -197,6 +173,10 @@ def sweep(frames: ChannelFrames, shelf: float = SHELF) -> dict:
     idx = np.flatnonzero(frames.supported)
     idx = idx[np.argsort(frames.required[idx], kind="stable")]
     words = frames.required[idx]
+    if not len(words):
+        return dict(word=np.empty(0, dtype=np.uint64),
+                    **{key: np.empty(0, dtype=float) for key in ("kappa", "x", "se", "mean_excess")},
+                    kept_frames=np.empty(0, dtype=np.int64), kept_events=np.empty(0, dtype=np.int64))
     w, q, e = frames.weight[idx], frames.excess[idx], frames.event[idx]
     total = frames.weight.sum()
     A = np.zeros(int(frames.event.max()) + 1)   # per-event sum of w q over kept frames
@@ -249,7 +229,7 @@ def gain_of(tau, model: str):
 
 
 @lru_cache
-def admissible_min_gain(frames: int) -> float:
+def minimum_family_gain(frames: int) -> float:
     """The least G(tau) / rho_bar_n(tau) over the coherence time tau for an n-frame dump, the lower
     of an exponential and a triangular frame-to-frame correlation, with G(tau) the lag sum
     (``gain_of``). 6.75 for 4 frames, 15.23 for 11, 40.00 for 33; the triangular sets each."""
@@ -263,16 +243,15 @@ def admissible_min_gain(frames: int) -> float:
     return best
 
 
-def coherent_gain(channel: int) -> float:
-    """G the decision prices a band at: the admissible minimum of the dumps that measured the
-    coherent fraction, the same for every band."""
+def temporal_gain(channel: int) -> float:
+    """Assumed G_int / mean_rho budget; the same model-family value for each band."""
     _require(_GAIN, "coherent_gain.json")
-    return admissible_min_gain(GAIN_FRAMES)
+    return minimum_family_gain(GAIN_FRAMES)
 
 
-def strength(x, gain: float, c: float = COHERENT_FRACTION):
-    """Residual strength a = (c x)^2 N G."""
-    if c is COHERENT_FRACTION:
+def strength(x, gain: float, c: float = STACK_AMPLITUDE_RATIO):
+    """Residual strength a = (gamma x)^2 N G; legacy argument ``c`` means gamma."""
+    if c is STACK_AMPLITUDE_RATIO:
         _require(_COHERENT, "coherent_fraction.json")
     return (c * np.asarray(x)) ** 2 * FRAME_SAMPLES * gain
 
@@ -289,7 +268,8 @@ def _at(s: dict, word: int) -> int | None:
     return i if i >= 0 else None
 
 
-def _point(s: dict, word: int, R: float, gain: float) -> dict:
+def _point(s: dict, word: int, R: float, gain: float,
+           calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
     """Read the supplied sweep at ``word``.
 
     ``coherence_limit_s`` is the effective-gain-time diagnostic
@@ -303,31 +283,37 @@ def _point(s: dict, word: int, R: float, gain: float) -> dict:
     r, r_hi = (float(v[i]) for v in bias_over_sigma(s, R, gain))
     kappa = float(s["kappa"][i])
     return dict(word=int(word), eta=word / Q16, kappa=kappa,
-                time_years=CALENDAR_YEARS_PER_RETAINED_YEAR / kappa if kappa > 0 else float("inf"),
+                time_years=calendar_factor / kappa if kappa > 0 else float("inf"),
                 x=float(s["x"][i]), se=float(s["se"][i]), a=float(strength(s["x"][i], gain)),
                 r=r, r_hi=r_hi, kept_frames=int(s["kept_frames"][i]), kept_events=int(s["kept_events"][i]),
                 coherence_limit_s=FRAME_SECONDS * gain / r_hi if r_hi > 0 else float("inf"))
 
 
 def decide(s: dict, knee_word: int, R: float, *, gain: float, max_years: float = MAX_CALENDAR_YEARS,
-           exclude: str | None = None, budget: float = 1.0) -> dict:
-    """Where the band is deployed (its knee, or the loosest usable threshold below it), or why it is not.
-    ``gain`` is G, the band's coherence in frames (``coherent_gain``). ``budget`` is the largest first-order
-    bias ratio r_hi the band may carry: 1 (the tolerance) unless the finite-amplitude check found the true bias
-    reaching the tolerance at a smaller strength, in which case it is that fraction of the tolerated strength."""
+           exclude: str | None = None, budget: float = 1.0,
+           calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
+    """Assign a candidate at the knee or the loosest passing word below it.
+
+    ``gain`` is the assumed effective temporal gain G; ``budget`` caps the
+    nominal-proxy bias ratio. ``calendar_factor / kappa`` is the time cost.
+    """
+    if not np.isfinite(calendar_factor) or calendar_factor <= 0:
+        raise ValueError("calendar_factor must be finite and positive")
+    if not np.isfinite(budget) or not 0 < budget <= 1:
+        raise ValueError("budget must be finite and in (0, 1]")
     r, r_hi = bias_over_sigma(s, R, gain)
 
     def usable(p):
         return p is not None and p["r_hi"] is not None and p["r_hi"] <= budget and p["time_years"] <= max_years
 
-    knee = _point(s, knee_word, R, gain)
+    knee = _point(s, knee_word, R, gain, calendar_factor)
     below = None
     if usable(knee):
         deployed, at = knee, "knee"
     else:
         idx = np.flatnonzero((s["word"] <= np.uint64(knee_word)) & (r_hi <= budget) & (s["kappa"] > 0))
         if len(idx):
-            below = _point(s, int(s["word"][int(idx[-1])]), R, gain)
+            below = _point(s, int(s["word"][int(idx[-1])]), R, gain, calendar_factor)
         deployed, at = (below, "below the knee") if usable(below) else (None, None)
     reason = None if deployed else ("out of time" if below is not None else "above tolerance")
     if exclude:
@@ -340,7 +326,8 @@ GUARD_FAILED = "fails the tolerance on its last year"
 
 
 def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: float,
-                   max_years: float = MAX_CALENDAR_YEARS, exclude: str | None = None, budget: float = 1.0) -> dict:
+                   max_years: float = MAX_CALENDAR_YEARS, exclude: str | None = None, budget: float = 1.0,
+                   calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
     """``decide`` on the full era with the last-year guard (sweep ``last``).
 
     Adds ``full_era_word``, ``last_year_r_hi`` and ``guard_acted``.
@@ -351,22 +338,33 @@ def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: fl
     ``FRAME_SECONDS * gain / max(r_hi_full, r_hi_last)``, with both ratios
     evaluated at that final word; it is not stored in ``coherence_limit_s``.
     """
-    d = decide(full, knee_word, R, gain=gain, max_years=max_years, exclude=exclude, budget=budget)
+    d = decide(full, knee_word, R, gain=gain, max_years=max_years, exclude=exclude, budget=budget,
+               calendar_factor=calendar_factor)
     out = dict(d, full_era_word=d["deployed_word"], last_year_r_hi=None, guard_acted=False)
     if d["deployed"] is None:
         return out
     word = d["deployed_word"]
-    out["last_year_r_hi"] = _point(last, word, R, gain)["r_hi"]
+    out["last_year_r_hi"] = _point(last, word, R, gain, calendar_factor)["r_hi"]
     if out["last_year_r_hi"] is not None and out["last_year_r_hi"] <= budget:
         return out
     # Both curves are constant between the full era's swept words (the last year's words are among them).
     _, r_hi = bias_over_sigma(full, R, gain)
     _, r_hi_last = bias_over_sigma(last, R, gain)
     at_last = np.searchsorted(last["word"], full["word"], side="right") - 1
-    last_ok = (at_last >= 0) & (np.where(at_last >= 0, r_hi_last[np.maximum(at_last, 0)], np.inf) <= budget)
+    last_ok = np.zeros(len(full["word"]), dtype=bool)
+    supported = at_last >= 0
+    last_ok[supported] = r_hi_last[at_last[supported]] <= budget
     idx = np.flatnonzero((full["word"] <= np.uint64(word)) & (r_hi <= budget) & last_ok & (full["kappa"] > 0))
-    moved = _point(full, int(full["word"][idx[-1]]), R, gain) if len(idx) else None
+    moved = _point(full, int(full["word"][idx[-1]]), R, gain, calendar_factor) if len(idx) else None
     out["guard_acted"] = True
     if moved is None or moved["time_years"] > max_years:
         return dict(out, outcome="not useful", reason=GUARD_FAILED, deployed=None, deployed_at=None, deployed_word=None)
     return dict(out, deployed=moved, deployed_word=moved["word"], deployed_at="below the knee")
+
+
+# Historical analysis imports. Serialized field names also remain unchanged.
+COHERENT_FRACTION = STACK_AMPLITUDE_RATIO
+COHERENT_FRACTION_BY_BAND = STACK_AMPLITUDE_RATIO_BY_BAND
+COHERENT_FRACTION_SCALE = STACK_AMPLITUDE_RATIO_SCALE
+admissible_min_gain = minimum_family_gain
+coherent_gain = temporal_gain

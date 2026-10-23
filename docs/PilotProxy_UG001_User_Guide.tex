@@ -26,9 +26,9 @@
 \usepackage{float}
 \usepackage{placeins}
 
-\definecolor{FStatRed}{HTML}{A00000}
-\definecolor{FStatGray}{HTML}{555555}
-\definecolor{FStatBlue}{HTML}{144E8C}
+\definecolor{PilotProxyRed}{HTML}{A00000}
+\definecolor{PilotProxyGray}{HTML}{555555}
+\definecolor{PilotProxyBlue}{HTML}{144E8C}
 \definecolor{LightGray}{HTML}{F3F3F3}
 \definecolor{MidGray}{HTML}{D9D9D9}
 \definecolor{DarkText}{HTML}{1A1A1A}
@@ -43,14 +43,14 @@
 \setlist[itemize]{leftmargin=1.2em,itemsep=2pt,topsep=2pt}
 \setlist[enumerate]{leftmargin=1.4em,itemsep=2pt,topsep=2pt}
 
-\titleformat{\section}{\Large\bfseries\color{DarkText}}{}{0pt}{}[\vspace{-3pt}\color{FStatRed}\titlerule]
+\titleformat{\section}{\Large\bfseries\color{DarkText}}{}{0pt}{}[\vspace{-3pt}\color{PilotProxyRed}\titlerule]
 \titleformat{\subsection}{\large\bfseries\color{DarkText}}{}{0pt}{}
 \titleformat{\subsubsection}{\normalsize\bfseries\color{DarkText}}{}{0pt}{}
 
 \newcommand{\code}[1]{\texttt{\detokenize{#1}}}
 \newcommand{\apicode}[1]{\texttt{\detokenize{#1}}}
 \newcommand{\yes}{\textcolor{GoodGreen}{Yes}}
-\newcommand{\no}{\textcolor{FStatGray}{No}}
+\newcommand{\no}{\textcolor{PilotProxyGray}{No}}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
@@ -79,13 +79,13 @@
 \lstset{style=shell}
 
 \newcommand{\notebox}[1]{%
-  \vspace{4pt}\noindent\fcolorbox{FStatBlue}{LightGray}{%
+  \vspace{4pt}\noindent\fcolorbox{PilotProxyBlue}{LightGray}{%
   \begin{minipage}{0.965\linewidth}%
   \textbf{Note:} #1%
   \end{minipage}}\vspace{4pt}}
 
 \newcommand{\importantbox}[1]{%
-  \vspace{4pt}\noindent\fcolorbox{FStatRed}{LightGray}{%
+  \vspace{4pt}\noindent\fcolorbox{PilotProxyRed}{LightGray}{%
   \begin{minipage}{0.965\linewidth}%
   \textbf{Important:} #1%
   \end{minipage}}\vspace{4pt}}
@@ -106,9 +106,9 @@
 \fancyfoot[C]{\small Pilot-informed DTV detector}
 \fancyfoot[R]{\small Page \thepage\ of \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.8pt}
-\renewcommand{\headrule}{\hbox to\headwidth{\color{FStatRed}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{PilotProxyRed}\leaders\hrule height \headrulewidth\hfill}}
 \renewcommand{\footrulewidth}{0.8pt}
-\renewcommand{\footrule}{\hbox to\headwidth{\color{FStatRed}\leaders\hrule height \footrulewidth\hfill}}
+\renewcommand{\footrule}{\hbox to\headwidth{\color{PilotProxyRed}\leaders\hrule height \footrulewidth\hfill}}
 
 \title{PilotProxy CUDA F-Statistic DTV Pilot Detector\\User Guide}
 \author{Dylan J. Gormley}
@@ -117,11 +117,11 @@
 \begin{document}
 \thispagestyle{empty}
 \begin{tikzpicture}[remember picture,overlay]
-  \draw[FStatRed,line width=2pt] ($(current page.north west)+(0.72in,-0.35in)$) -- ($(current page.north east)+(-0.72in,-0.35in)$);
-  \draw[FStatRed,line width=1pt] ($(current page.south west)+(0.72in,0.45in)$) -- ($(current page.south east)+(-0.72in,0.45in)$);
+  \draw[PilotProxyRed,line width=2pt] ($(current page.north west)+(0.72in,-0.35in)$) -- ($(current page.north east)+(-0.72in,-0.35in)$);
+  \draw[PilotProxyRed,line width=1pt] ($(current page.south west)+(0.72in,0.45in)$) -- ($(current page.south east)+(-0.72in,0.45in)$);
 \end{tikzpicture}
 \vspace*{0.25in}
-{\fontsize{30}{32}\selectfont\bfseries\color{FStatRed}PilotProxy}\par
+{\fontsize{30}{32}\selectfont\bfseries\color{PilotProxyRed}PilotProxy}\par
 \vspace{0.12in}
 {\fontsize{23}{26}\selectfont\bfseries CUDA F-Statistic DTV Pilot Detector}\par
 \vspace{0.08in}
@@ -175,9 +175,9 @@ We first build and test the detector. We then generate an ATSC waveform, audit t
 
 The detector compares one target power with two local reference powers. For one result, we compute
 \begin{equation}
-  F=\frac{2P_t}{P_{r1}+P_{r2}},\qquad \rho=F-1.
+  F=\frac{2P_t}{P_{r1}+P_{r2}},\qquad Q=F/\mu_0,\qquad e=Q-1.
 \end{equation}
-We convert the one-bin excess to an equivalent DTV data-shelf SNR with
+The normalization \(\mu_0\) is the target/reference ratio of exact packed-weight squared norms. The raw diagnostic \(F-1\) is not the physical excess. We use \(\mathrm{PNR}_{\mathrm{bin},dB}=10\log_{10}e\) for \(e>0\), and convert it to an equivalent DTV data-shelf SNR with
 \begin{equation}
   \mathrm{SNR}_{\mathrm{shelf},dB} = \mathrm{PNR}_{\mathrm{bin},dB}
   -10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})
@@ -193,7 +193,7 @@ which gives the bandwidth spreading term
   10\log_{10}(6\,\mathrm{MHz}/B_{\mathrm{bin}})=32.936\dB.
 \end{equation}
 
-\notebox{We independently recomputed this conversion from the checked-in formulas. A 1 dB F-statistic level gives \(F=1.2589\), \(\rho=0.2589\), \(\mathrm{PNR}_{\mathrm{bin}}=-5.868\dB\), and \(\mathrm{SNR}_{\mathrm{shelf}}\approx -27.50\dB\) for the 3.052 kHz reference bin.}
+\notebox{We independently recomputed this conversion from the checked-in formulas. A 1 dB normalized power-ratio level gives \(Q=1.2589\), \(e=0.2589\), \(\mathrm{PNR}_{\mathrm{bin}}=-5.868\dB\), and \(\mathrm{SNR}_{\mathrm{shelf}}\approx -27.50\dB\) for the 3.052 kHz reference bin.}
 
 
 \begin{figure}[H]
@@ -202,16 +202,16 @@ which gives the bandwidth spreading term
   \draw[->,thick] (-0.2,0) -- (10.5,0) node[right]{frequency};
   \draw[->,thick] (0,-0.2) -- (0,4.1) node[above]{power / PSD};
   \draw[fill=LightGray,draw=none] (1.2,1.05) rectangle (8.8,1.72);
-  \draw[thick,FStatGray] (1.2,1.72) -- (8.8,1.72);
-  \draw[thick,FStatGray] (0.4,0.95) .. controls (0.9,1.25) and (1.0,1.55) .. (1.2,1.72);
-  \draw[thick,FStatGray] (8.8,1.72) .. controls (9.0,1.55) and (9.1,1.25) .. (9.6,0.95);
-  \draw[thick,FStatBlue] (0.4,1.0) -- (9.6,1.0);
-  \draw[thick,FStatRed] (2.0,1.0) -- (2.0,3.35);
-  \draw[fill=FStatRed,draw=FStatRed] (2.0,3.35) circle (0.055);
+  \draw[thick,PilotProxyGray] (1.2,1.72) -- (8.8,1.72);
+  \draw[thick,PilotProxyGray] (0.4,0.95) .. controls (0.9,1.25) and (1.0,1.55) .. (1.2,1.72);
+  \draw[thick,PilotProxyGray] (8.8,1.72) .. controls (9.0,1.55) and (9.1,1.25) .. (9.6,0.95);
+  \draw[thick,PilotProxyBlue] (0.4,1.0) -- (9.6,1.0);
+  \draw[thick,PilotProxyRed] (2.0,1.0) -- (2.0,3.35);
+  \draw[fill=PilotProxyRed,draw=PilotProxyRed] (2.0,3.35) circle (0.055);
   \draw[dashed,thick,WarnOrange] (1.52,1.0) -- (1.52,1.35);
   \draw[dashed,thick,WarnOrange] (2.48,1.0) -- (2.48,1.35);
-  \draw[<->,thick,FStatRed] (2.20,1.0) -- (2.20,3.35) node[midway,right]{pilot excess};
-  \draw[<->,thick,FStatBlue] (8.95,1.0) -- (8.95,1.72) node[midway,right]{data shelf SNR};
+  \draw[<->,thick,PilotProxyRed] (2.20,1.0) -- (2.20,3.35) node[midway,right]{pilot excess};
+  \draw[<->,thick,PilotProxyBlue] (8.95,1.0) -- (8.95,1.72) node[midway,right]{data shelf SNR};
   \draw[decorate,decoration={brace,mirror,amplitude=5pt},thick] (1.2,-0.25) -- (8.8,-0.25)
     node[midway,below=6pt]{nominal 6 MHz DTV channel};
   \node[align=center] at (2.0,3.72) {ATSC pilot\\target bin $P_t$};
@@ -259,9 +259,9 @@ Build for the target GPU architecture:
 \begin{lstlisting}[style=shell]
 make build-kernel   # SM auto-detected; pass SM=<arch> to override
 \end{lstlisting}
-This builds \code{cuda/libfstatistic.so} and stages a copy to:
+This builds \code{cuda/libpilotproxy.so} and stages a copy to:
 \begin{lstlisting}[style=shell]
-~/.cache/pilot_proxy/libfstatistic.so
+~/.cache/pilot_proxy/libpilotproxy.so
 \end{lstlisting}
 On WSL, the cached copy avoids loading the shared library directly from \code{/mnt/c}.  If you rebuild only under \code{cuda/}, remove the staged copy with:
 \begin{lstlisting}[style=shell]
@@ -564,7 +564,7 @@ For the synthetic threshold path, the user provides \code{threshold_data_shelf_s
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[node distance=0.35cm,>=Latex]
-\tikzstyle{block}=[rectangle,rounded corners,draw=FStatRed,thick,fill=LightGray,minimum height=0.60cm,text width=0.72\linewidth,align=center]
+\tikzstyle{block}=[rectangle,rounded corners,draw=PilotProxyRed,thick,fill=LightGray,minimum height=0.60cm,text width=0.72\linewidth,align=center]
 \node[block] (a) {User threshold: $S_{\mathrm{shelf,thr},dB}$};
 \node[block,below=of a] (b) {$\mathrm{PNR}_{\mathrm{bin,thr},dB}=S_{\mathrm{shelf,thr},dB}-\mathrm{pilot\_below\_data\_db}+10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})+10\log_{10}(\eta_p)$};
 \node[block,below=of b] (c) {$\rho_{\mathrm{thr}}=10^{\mathrm{PNR}_{\mathrm{bin,thr},dB}/10}$};
@@ -687,26 +687,26 @@ the stored fine spectrum and the detected-line stability across frames.
 
 \section{C API Overview}
 
-The public C API is declared in \code{cuda/f_statistic.h}. In this example, \code{d_in}, \code{d_fine_power_out}, and \code{d_power_out} are device pointers; \code{host_weights} is a host pointer. A typical measurement call is
+The public C API is declared in \code{cuda/pilotproxy_detector.h}. In this example, \code{d_in}, \code{d_fine_power_out}, and \code{d_power_out} are device pointers; \code{host_weights} is a host pointer. A typical measurement call is
 \begin{lstlisting}[style=cstyle,language=C]
 int K, N, bits, ref_offset;
-FStat_GetSpecs(&K, &N, &bits, &ref_offset);
+PilotProxy_GetSpecs(&K, &N, &bits, &ref_offset);
 
-void* h = FStat_Create(d_in, detector_rows_per_block);
+void* h = PilotProxy_Create(d_in, detector_rows_per_block);
 if (h == NULL) {
-    /* Read FStat_LastError() and stop. */
+    /* Read PilotProxy_LastError() and stop. */
     return;
 }
-FStat_Compute_FusedFine_U64(
+PilotProxy_Compute_FusedFine_U64(
     h,
     host_weights,
     d_fine_power_out,   /* batch * N * 256 uint64: S_n[b] */
     d_power_out,        /* batch * N uint64: P_n = sum_b S_n[b] */
     NULL);              /* optional int32 row-sum debug tap */
-if (FStat_LastError()[0] != 0) {
+if (PilotProxy_LastError()[0] != 0) {
     /* Handle the recorded CUDA/API error. */
 }
-FStat_Destroy(h);
+PilotProxy_Destroy(h);
 \end{lstlisting}
 The compute call writes the three frame powers
 \begin{equation}
@@ -721,19 +721,19 @@ ratio and no coarse mask (kernel core 3.0.0). A zero denominator cannot
 define \(F\): the host marks the frame invalid and forces its mask to zero, so
 Python callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before
 interpreting any conversion. The deployed mask bit comes from
-\apicode{FStat_Compute_FusedFineMask_U64} or
-\apicode{FStat_Compute_FusedFineMaskWithSupport_U64}.
+\apicode{PilotProxy_Compute_FusedFineMask_U64} or
+\apicode{PilotProxy_Compute_FusedFineMaskWithSupport_U64}.
 
 A capability probe guards the row-sum entry:
 \begin{lstlisting}[style=cstyle,language=C]
-if (FStat_Supports_RowSums()) {
+if (PilotProxy_Supports_RowSums()) {
     /* d_matched_filter_row_projections_out: device int32, batch * N * rows * 2 elements
        (term-major, stream-major rows, interleaved re/im). */
-    FStat_Compute_RowSums_I32(h, host_weights, d_matched_filter_row_projections_out);
+    PilotProxy_Compute_RowSums_I32(h, host_weights, d_matched_filter_row_projections_out);
 }
 \end{lstlisting}
 The values are exact integers, the input of
-\apicode{FStat_Compute_FinePowers_U64}; the staged path sums that stage's
+\apicode{PilotProxy_Compute_FinePowers_U64}; the staged path sums that stage's
 fine powers over bins on the host and obtains the same frame powers as the
 fused entry, bit for bit. Rows keep the packer's stream-major order, so a term
 slice reshapes to \code{[num_streams, windows_per_stream]} with no gather.
@@ -754,7 +754,7 @@ F = \frac{2\sum_r P_{t,r}}{\sum_r P_{r1,r}+\sum_r P_{r2,r}},
 \end{equation}
 where \(r\) indexes the summed blocks and each \(P_{n,r}\) is a frame power,
 the all-bin sum of that block's fine powers. We sum powers first and form one
-ratio; averaging per-block F-statistics would define a different estimator.
+ratio; averaging per-block power ratios would define a different estimator.
 
 When a product averages masked data, it excludes rejected blocks rather than zero-filling them:
 \begin{equation}
@@ -809,9 +809,9 @@ The shipped bank covers physical channels 14-36.  Use \code{pilot-proxy list-cha
 If \(F\leq1\), the raw pilot-excess ratio is non-positive and \(10\log_{10}(F-1)\) is undefined. The JSON value is therefore \code{null}; this can occur for noise-only and weak-signal trials.
 
 \subsection{A scan fails at launch for want of fine powers}
-The loaded \code{libfstatistic.so} lacks the row-sum or fine-power entry, or is
+The loaded \code{libpilotproxy.so} lacks the row-sum or fine-power entry, or is
 older than core 3.0.0. Rebuild and restage it with \code{make build-kernel},
-confirm \code{FStat_Supports_RowSums()} and \code{FStat_Supports_FinePowers()}
+confirm \code{PilotProxy_Supports_RowSums()} and \code{PilotProxy_Supports_FinePowers()}
 return 1 (the kernel-load check in \code{scripts/setup_env.sh} prints the loaded
 version), and relaunch. There is no degraded mode: the frame powers are the
 sums of the fine powers.

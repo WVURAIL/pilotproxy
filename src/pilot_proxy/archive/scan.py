@@ -723,7 +723,7 @@ def run_chime_scan(
             f"chime-scan: {analyzer} preflight failed:\n  - "
             + "\n  - ".join(_problems)
             + "\n  (a detector run needs a GPU node with a built "
-            "cuda/libfstatistic.so and the weight bank; run setup_env.sh on a "
+            "cuda/libpilotproxy.so and the weight bank; run setup_env.sh on a "
             "GPU node.)")
     fine_retention = analyzer_probe.fine_retention_scope(ctx)
 

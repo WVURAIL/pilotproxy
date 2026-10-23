@@ -181,7 +181,7 @@ def main():
     code["policy_inputs"] = {name: digest(measurement_dir / name) for name in
                             ("tolerance_table.json", "coherent_fraction.json", "coherent_gain.json")}
     code["resolved_constants"] = {key: getattr(rule, key) for key in
-                                  ("SHELF", "COHERENT_FRACTION", "GAIN_FRAMES", "FRAME_SAMPLES",
+                                  ("SHELF", "STACK_AMPLITUDE_RATIO", "GAIN_FRAMES", "FRAME_SAMPLES",
                                    "FRAME_SECONDS", "GUARD_STANDARD_ERRORS", "MAX_CALENDAR_YEARS",
                                    "CALENDAR_YEARS_PER_RETAINED_YEAR", "LAST_YEAR_DAYS")}
     published = {} if args.published_decisions is None else {
@@ -196,7 +196,7 @@ def main():
                    "last_year": frames.time >= frames.time.max() - rule.LAST_YEAR_DAYS * 86400}
         exclusion = "proxy invalid" if ch in (19, 33) else "radio astronomy control" if ch == 37 else None
         old = rule.decide_guarded(rule.sweep(frames), frames.knee_word, rule.sweep(rule.last_year(frames)),
-                                  rule.response(table, ch), gain=rule.coherent_gain(ch), exclude=exclusion)
+                                  rule.response(table, ch), gain=rule.temporal_gain(ch), exclude=exclusion)
         if published and ch != 37 and old["deployed_word"] != published[ch]["deployed_word"]:
             raise ValueError(f"original guard word does not reproduce the published decision on channel {ch}")
         for mode in args.modes:
@@ -251,7 +251,7 @@ def main():
             modified = {name: curve_for_rule(frames, words, mask, band["windows"][name])
                         for name, mask in windows.items()}
             sensitivity = rule.decide_guarded(modified["full_era"], frames.knee_word, modified["last_year"],
-                                              rule.response(table, ch), gain=rule.coherent_gain(ch), exclude=exclusion)
+                                              rule.response(table, ch), gain=rule.temporal_gain(ch), exclude=exclusion)
             points = {}
             for name, window in band["windows"].items():
                 points[name] = {"knee": at_word(words, window, frames.knee_word)}

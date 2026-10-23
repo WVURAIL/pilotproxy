@@ -58,7 +58,7 @@ def test_existing_broken_library_is_a_failure_not_a_skip(monkeypatch, module_pat
     def broken_library(*args):
         raise OSError("library ABI mismatch")
 
-    monkeypatch.setattr(module, "FStatKernel", broken_library)
+    monkeypatch.setattr(module, "PilotProxyKernel", broken_library)
     with pytest.raises(BaseException) as error:
         module._kernel_or_skip()
     assert isinstance(error.value, OSError), f"broken library hidden by {error.value!r}"

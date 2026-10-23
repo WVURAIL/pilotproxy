@@ -254,7 +254,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
     echo "==> building and staging CUDA kernel for detected arch sm_${SM}"
     # cuda/Makefile keys the build on a config stamp (arch + kernel flags), so
     # a rerun on a different GPU type recompiles automatically -- no need to
-    # delete cuda/libfstatistic.so first. Still drop the staged cache copy so a
+    # delete cuda/libpilotproxy.so first. Still drop the staged cache copy so a
     # failed build fails loud rather than silently serving a stale kernel.
     make -C "${PILOT_PROXY_DIR}" clean-cache
     make -C "${PILOT_PROXY_DIR}" build-kernel SM="${SM}"
@@ -300,8 +300,8 @@ echo "    survey CLI : datatrail -> $(command -v datatrail || echo 'NOT FOUND')"
 if command -v nvidia-smi >/dev/null 2>&1; then
     echo "==> verifying PilotProxy CUDA kernel load"
     (cd "${PILOT_PROXY_DIR}" && PYTHONPATH=src python - <<'PY'
-from pilot_proxy.kernel import FStatKernel
-kernel = FStatKernel()
+from pilot_proxy.kernel import PilotProxyKernel
+kernel = PilotProxyKernel()
 print("    specs   :", kernel.specs.as_descriptive_dict())
 print("    features:", kernel.features.as_dict())
 print("    version :", kernel.version.as_string())

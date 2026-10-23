@@ -1,5 +1,5 @@
 Historical: written before the kotekan pull requests 1669 to 1681 merged. The current contract is [OPERATOR_HANDOFF.md](OPERATOR_HANDOFF.md) and kotekan pull request 1677, which differs from this note in five points:
-the kernel is vendored under `external/pilotproxy/`, not `lib/cuda/pilotproxy/`; the detector handles are bound to the kotekan stream with `FStat_SetStream` instead of running on the default stream between events; the stage is fine-only, with no coarse mask: a bound channel needs a `calibrated` fine profile, a bound `pending_campaign` channel stops the instance at first-frame binding, and an uncalibrated channel is left unbound or listed in `dtv_permanent_mask_freq_ids`; the mask relays through the `DtvRfiMask` stage into the RFImask frame, not a correlator FIFO; and there is no `exceedance_10s` counter.
+the kernel is vendored under `external/pilotproxy/`, not `lib/cuda/pilotproxy/`; the detector handles are bound to the kotekan stream with `PilotProxy_SetStream` instead of running on the default stream between events; the stage is fine-only, with no coarse mask: a bound channel needs a `calibrated` fine profile, a bound `pending_campaign` channel stops the instance at first-frame binding, and an uncalibrated channel is left unbound or listed in `dtv_permanent_mask_freq_ids`; the mask relays through the `DtvRfiMask` stage into the RFImask frame, not a correlator FIFO; and there is no `exceedance_10s` counter.
 
 # Kotekan Interface Preparation
 
@@ -237,7 +237,7 @@ change.
 
 The fine candidate decision extends this ABI: the stage additionally binds
 the row-sum entry (kernel core 2.0.0) and the on-device fine power stage
-(kernel core 2.1.0, `FStat_Compute_FinePowers_U64`: the frozen fxfft256
+(kernel core 2.1.0, `PilotProxy_Compute_FinePowers_U64`: the frozen fxfft256
 v1 FFT plus exact uint64 feed sums, handle-free over the row-sum buffer).
 The remaining decision arithmetic --- F2 ratio, CFAR estimate,
 designated-set compare with the per-channel fine calibration fields
@@ -250,11 +250,11 @@ deployed form is a single fused kernel --- packed samples, packed
 weights, and bundle constants in; one mask bit per aligned frame out;
 row sums and exact powers as optional debug taps --- per the candidate-decision section of `docs/DESIGN_DECISIONS.md`.
 Kernel core 2.2.0 lands the fused datapath
-(`FStat_Compute_FusedFine_U64`: packed samples and weights in, exact
+(`PilotProxy_Compute_FusedFine_U64`: packed samples and weights in, exact
 fine and coarse power sums out in one launch, row sums global only via
 the optional debug tap, bit-identical to the two-entry composition ---
 `tests/kernel/test_fused_fine_gpu.py`). Kernel core 2.3.0 completes
-the form: `FStat_Compute_FusedFineMask_U64` binds the per-channel
+the form: `PilotProxy_Compute_FusedFineMask_U64` binds the per-channel
 `fine_calibration` bundle fields (anchor, designated width, 256-bit
 bulk mask, CFAR rank, Q16 multiplier) as arguments and emits the mask
 bit from the frozen fine decision v1 epilogue (bit-identical to

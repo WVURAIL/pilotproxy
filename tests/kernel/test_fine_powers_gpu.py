@@ -2,7 +2,7 @@
 """GPU gates for the on-device fine-power stage (kernel core 2.1.0) and the
 frame-power identity built on it (kernel core 3.0.0).
 
-The library's ``FStat_Compute_FinePowers_U64`` must reproduce the frozen
+The library's ``PilotProxy_Compute_FinePowers_U64`` must reproduce the frozen
 Python reference (``fine_power_fx``) bit-for-bit --- exact uint64
 equality, no tolerances. Three gates plus a rate-margin report:
 
@@ -10,12 +10,12 @@ equality, no tolerances. Three gates plus a rate-margin report:
    output == reference, including a non-block-multiple stream count and
    batch;
 2. chained: packed int4 frames -> device row projections
-   (``FStat_Compute_RowSums_I32``) -> fine powers from the SAME device
+   (``PilotProxy_Compute_RowSums_I32``) -> fine powers from the SAME device
    buffer, compared against the reference applied to the host readback ---
    the deployed composition with no host round-trip in between --- and the
    kernel core 3.0.0 frame-power identity on top: the fused entry's
    ``d_power_out`` == the host sum over bins of this staged output;
-3. geometry probe: ``FStat_GetFineSpecs`` returns the frozen 128/2/256.
+3. geometry probe: ``PilotProxy_GetFineSpecs`` returns the frozen 128/2/256.
 
 The timing report (printed rather than asserted) is the first rate-margin
 datapoint for the fine stage: ms per 2048-stream frame against the
@@ -30,7 +30,7 @@ import pytest
 
 from pilot_proxy.fxfft import fine_power_fx
 from gpu import cuda_available
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
 TERMS = 3
@@ -50,18 +50,18 @@ def _import_cupy_or_skip():
     return cp
 
 
-def _kernel_or_skip() -> FStatKernel:
+def _kernel_or_skip() -> PilotProxyKernel:
     try:
-        kernel = FStatKernel(DEFAULT_LIB_PATH)
+        kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     except FileNotFoundError:  # pragma: no cover - library not built
-        pytest.skip("libfstatistic.so is not built")
+        pytest.skip("libpilotproxy.so is not built")
     if (
         not kernel.supports_fine_powers()
         or not kernel.supports_fused_fine()
         or kernel.version.as_tuple() < (3, 0, 0)
     ):
         pytest.fail(
-            "libfstatistic.so predates kernel core 3.0.0 (no fine-power stage, "
+            "libpilotproxy.so predates kernel core 3.0.0 (no fine-power stage, "
             "no fused entry, or frame powers not yet the fine-bin sums): "
             "rebuild from the current CUDA sources."
         )

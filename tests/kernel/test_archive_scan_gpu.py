@@ -16,7 +16,7 @@ from pilot_proxy.chime.baseband_format import make_synth_file
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.fxfft import fine_power_fx
 from gpu import cuda_available
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH, DEFAULT_WEIGHTS_PATH
 
 pytestmark = pytest.mark.cuda
@@ -62,7 +62,7 @@ def test_archive_gpu_scan_interrupt_resume_and_cpu_reference(tmp_path):
         pytest.skip(reason)
     if not DEFAULT_LIB_PATH.is_file():
         pytest.skip("build the default K=128 CUDA library first")
-    kernel = FStatKernel(DEFAULT_LIB_PATH)
+    kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     assert kernel.specs.detector_window_samples == 128
     source = tmp_path / "input"
     source.mkdir()

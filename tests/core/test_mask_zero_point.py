@@ -167,7 +167,7 @@ def _mc_h0_frames(weights_packed: np.ndarray, *, rows: int, trials: int,
     is tested on the deployed statistic.
     """
     rng = np.random.default_rng(seed)
-    fstats = np.empty(trials, dtype=np.float64)
+    power_ratios = np.empty(trials, dtype=np.float64)
     p_targets = []
     p_refs = []
     k = weights_packed.shape[1]
@@ -181,8 +181,8 @@ def _mc_h0_frames(weights_packed: np.ndarray, *, rows: int, trials: int,
         p_ref = int(powers[1]) + int(powers[2])
         p_targets.append(p_target)
         p_refs.append(p_ref)
-        fstats[trial] = 2.0 * p_target / p_ref
-    return fstats, p_targets, p_refs
+        power_ratios[trial] = 2.0 * p_target / p_ref
+    return power_ratios, p_targets, p_refs
 
 
 @pytest.mark.parametrize(
@@ -202,17 +202,17 @@ def test_shipped_rom_h0_zero_point_and_normalized_mask(channel: int) -> None:
         "larger norm imbalance for this regression test"
     )
 
-    fstats, p_targets, p_refs = _mc_h0_frames(
+    power_ratios, p_targets, p_refs = _mc_h0_frames(
         np.asarray(weights, dtype=np.int8),
         rows=_MC_ROWS,
         trials=_MC_TRIALS,
         seed=_MC_SEED + channel,
     )
-    sem = fstats.std(ddof=1) / np.sqrt(len(fstats))
+    sem = power_ratios.std(ddof=1) / np.sqrt(len(power_ratios))
     # E[F] under H0 is null_power_ratio rather than 1: the bias is detected at >5 sigma and the
     # measured mean agrees with null_power_ratio within 6 sigma.
-    assert abs(fstats.mean() - null_power_ratio) < 6.0 * sem
-    assert abs(fstats.mean() - 1.0) > 5.0 * sem
+    assert abs(power_ratios.mean() - null_power_ratio) < 6.0 * sem
+    assert abs(power_ratios.mean() - 1.0) > 5.0 * sem
 
     normalized_mask = np.asarray(
         [

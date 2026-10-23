@@ -60,7 +60,7 @@ def matched_thresholds(control: dict[str, Any], false_alarm_rates: Sequence[floa
     """Thresholds at matched P_fa from the control's empirical quantiles, and the rates it supports.
 
     ``statistics`` maps an output name to the control's key for that
-    statistic (for example ``{"fstat": "fstat", "radiometer": "power"}``).
+    statistic (for example ``{"power_ratio": "power_ratio", "radiometer": "power"}``).
     """
     thresholds: dict[str, dict[str, float]] = {name: {} for name in statistics}
     usable_pfa: list[float] = []

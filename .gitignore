@@ -21,8 +21,8 @@ cuda/*.so*
 # the preserved kernel is machine-local; its manifest travels with it
 cuda/*.manifest.json
 cuda/test_c_header
-cuda/test_fstat_cuda
-cuda/test_fstat_reference
+cuda/test_pilotproxy_cuda
+cuda/test_pilotproxy_reference
 cuda/.config_*.stamp
 
 # Jupyter checkpoints

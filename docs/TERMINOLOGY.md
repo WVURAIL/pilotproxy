@@ -1,181 +1,97 @@
-# Terminology
+# Statistical names and compatibility fields
 
-This page gives the dissertation's symbols with the names the code uses for
-them, the words that have one meaning only, and the frozen tokens: names that
-files already written carry, kept as they are wherever they appear. The
-science side's page (RFIsher `docs/terminology.md`) repeats the rows both
-sides use, with the same code names.
+These names describe the current paper calculations. Symbols are local to the
+equations below; legacy serialized names are explicitly identified.
 
-## Symbols and code names
+| Quantity | Definition | Current implementation |
+|---|---|---|
+| Fine power `S_r[f]` | Fixed-point FFT power summed over inputs | `fine_power_u64` |
+| Frame power `P_r` | Sum over every fine bin | `product_contract.frame_powers_from_fine` |
+| Frame ratio `F` | `2 P_0 / (P_1 + P_2)` | `coarse_power_ratio` |
+| Flat-noise normalization `mu_0` | Target/reference integer weight-norm ratio | `null_power_ratio_from_weight_norms` |
+| Normalized ratio `Q` | `F / mu_0` | `normalized_coarse_power_ratio` |
+| Signed pilot excess `e` | `Q - 1` | `normalized_pilot_excess` |
+| Fine ratio `T[f]` | `2 S_0[f] / (S_1[f] + S_2[f])` | Reconstructed from exact fine powers |
+| Detection score `w` | Maximum marker ratio divided by bulk order statistic | `scores.required_eta_q16_by_rank` and `fine_decision` |
+| Rank `rho` | One-based bulk order statistic | `rho`; C ABI `cfar_rank` is zero-based |
+| Threshold `eta` | Dimensionless limit on `w` | `eta_q16 / 65536` |
+| Retention `kappa` | Equal-event probability kept | `threshold_rule.sweep` |
+| Shelf proxy `x` | Signed retained mean excess times `C_shelf`, floored after averaging | Sweep `x`; uncertainty in `se` |
+| Amplitude ratio `gamma` | Calibrated redundant-stack amplitude / archive shelf proxy | `STACK_AMPLITUDE_RATIO` |
+| Effective temporal gain `G` | Assumed `G_int / mean_rho` in two stationary families | `temporal_gain`, `minimum_family_gain` |
+| Forecast strength `a` | `(gamma x_hi)^2 N G` | `threshold_rule.strength` |
+| Bias ratio `r` | `a abs(R_DV)` | `bias_over_sigma` |
+| Calendar cost | `calendar_factor / kappa`, factor 1 by default | `decide`, `decide_guarded` |
 
-| Dissertation | Code |
+## Is this an F statistic?
+
+A suitably normalized ratio of independent Gaussian power sums can have an
+F distribution. The real detector's unequal reference norms, correlated inputs,
+fixed-point transform and rank normalization do not establish that null law.
+Call the measured quantities **power ratios** and the detection quantity the
+**rank-based fine score**. Ideal F models in validation are conditional models,
+not production false-alarm calibrations.
+
+## Native interface migration
+
+Package 2.0.0 and core 4.0.0 use descriptive names throughout:
+
+| Previous interface | Current interface |
 |---|---|
-| P_r (frame power) = Σ_f S_r[f] | `p_target_u64`, `p_ref_lower_u64`, `p_ref_upper_u64` (`pilot_proxy.product_contract.frame_powers_from_fine`) |
-| S_r[f] (fine power) | `fine_power_u64[:, r, f]` |
-| F (coarse power ratio) | `coarse_power_ratio` (product field) |
-| μ0 | `null_power_ratio` (`pilot_proxy.detector_contract.null_power_ratio_from_weight_norms`) |
-| Q = F/μ0 | `normalized_coarse_power_ratio`; OC column `statistic` = `Q` |
-| e_p = Q − 1 | `normalized_pilot_excess` |
-| Z_ρ, the fine OS-CFAR score | `pilot_proxy.detectors.narrowband_marker.scores.required_eta_q16_by_rank`; OC column `statistic` = `Z_rho` |
-| ρ, η, η_q16 | `rho`, `eta`, `eta_q16` |
-| M (marker bins), B (bulk) | `marker_bins`, `bulk` |
-| f | `masked_fraction` |
-| exposure cost 1/(1 − f) | `exposure_cost_uniform_loss` |
-| C = (1 + r_var)/(1 − f) | `rfisher.verdict.interval.cost` |
-| r_sys, r_sys at G = 1 | `r_sys`, `r_sys_incoherent` |
-| G, τ_c, n_coh | `chain_gain` (with `chain_gain_status`), `tau_c_minutes`, `n_coh` |
-| η_Pfa (the false-alarm limit) | `eta_pfa` |
-| η_eval | `eta_eval` |
-| r_tol | `r_tol` (`tolerance_basis` says which basis) |
-| S | `suppression_db` |
-| R = r_sys/r_tol | `R` |
-| "selector" | `rfisher.verdict.interval.select` |
+| `FStatKernel` | `PilotProxyKernel` |
+| `FStat_*`, `FStatHandle` | `PilotProxy_*`, `PilotProxyHandle` |
+| `FSTAT_*` build macros | `PILOTPROXY_*` |
+| `libfstatistic.so` | `libpilotproxy.so` |
+| `cuda/f_statistic.{h,cu}` | `cuda/pilotproxy_detector.{h,cu}` |
+| `cuda/f_statistic_reference.{h,cpp}` | `cuda/pilotproxy_reference.{h,cpp}` |
+| `fstat_ref_*` | `pilotproxy_ref_*` |
 
-## One meaning each
+Rebuild with `make build-kernel`, update imports and native consumers, and
+refresh kotekan's vendor pin. Old library symbols and Python class names
+are not aliases. The wrapper rejects another core major. Integer arithmetic,
+weights, frame-power schema v6 and threshold comparison are unchanged.
+The `FSTATWGT1` magic bytes still identify the existing weight-file format;
+changing a label does not require rewriting these binary data or their hashes.
+Historical evidence retains the filenames and versions actually used.
 
-- The anchors' former "designated set" is the **marker bins M**
-  (`marker_bins`).
-- **"Floor"** means only the **residual floor**, the level below which a
-  frame's residual is not resolved. η_Pfa is the **false-alarm limit**; the
-  capture's control-band reading (band 37) is the **control-band level**.
-- **Q** means only the statistic F/μ0. η_q16 is η in 16-bit fixed point;
-  `cal_q0.5` names the rung that keeps the frames whose Q is at or below the
-  calibration block's median Q.
-- **γ** is the phasor coherence of the capture; the per-feed SNR of the
-  dissertation's appendix C is ψ.
-- **Scenario**, never "world": a delay-filter suppression S with its role in
-  the verdict (`rule` or `sensitivity`). The file name `worlds.csv` and the
-  column prefixes `none_*` and `deployed_*` are frozen tokens.
-- **Credit** is not a term of the model. The model's term is the
-  **post-processing sensitivity**, an assumed downstream suppression (the
-  delay filter S, the ground filter, the coherence factor G → 1) that this
-  work does not measure; it is applied only on the science side
-  (RFIsher `verdict/sensitivity.py`). "Credit" survives in frozen tokens and
-  in the text of the 2026 records (`GROUND_CREDIT`, `credit_readings/`, the
-  readings of revisions 2 and 3).
-- **Operating characteristic** means f and r_sys against η, not P_d against
-  SNR.
-- **`proxy-low`, `proxy-high`**: an era whose marker level is low (consistent
-  with the transmitter off or weak) or high, the states of the author-dated
-  era list.
-- **Shelf**: the emitter's in-band power plateau, estimated per frame.
-- **Anchor**: the fine-axis bin where the marker sits; the marker bins M are
-  defined around it.
-- **Transmitter-off (dated)** is not **verified signal-free**: a dated off
-  epoch is inferred from the archive; only an independently verified,
-  null-like population sets η_Pfa.
-- **System noise power** in the code (the reference of every `r`) is the
-  dissertation's **receiver noise power**.
-- **`lb_priced`** (capture handoff, `capture_tau_bounds.csv`): the
-  within-dump lower bound on the coherence time that the science side prices.
-  It is a frozen v1 column name; this side prices nothing.
-- **`eta`** in the capture handoff is a rung of the coarse ladder on Q (the
-  archive threshold of a `cal_q` policy), not a deployable threshold.
-  `eta_rung` and `board_G_archive` are candidate names for a v2 of that
-  handoff.
+New injection-recovery reports use `power_ratio` in schema v2, and new
+result summaries use `power_ratio_histogram_png` in schema v2. Dated reports
+are unchanged; read their declared schema before consuming those fields.
+Clean-IQ metadata uses `pilotproxy_atsc_clean_iq_v1` in place of the former
+`fstat_atsc_clean_iq_v1` token.
 
-## Frozen tokens
+## Averaging and coherence
 
-Names that frozen files carry; the lints exempt them by name, and only these:
+The frame proxy keeps negative excesses. Only the retained **mean** is floored
+at zero; flooring individual frames was a development method and is not the
+paper's estimator. `x_hi = x + 2 se` is a working upper end, not a certified
+simultaneous confidence bound.
 
-- `pilotproxy_per_pilot_product_v5`, `pilotproxy_baonoise_health_view_v1`,
-  `urn:baonoise:*`, the bank provenance key `baonoise`;
-- `section-8.1-eras-v2`, the rung names `cal_q0.1`, `cal_q0.5`, `cal_q0.9`;
-- `r_tol_dilation` and the wide tolerance columns, `worlds.csv` with its
-  `none_*` and `deployed_*` columns, and the release basis name
-  `coarse_world_sensitivity_2026-09-09`;
-- `rfisher_results.archive.psd window spectra v1` (`spectra_window.json`),
-  `rfisher-archive-ledger` and `WVURAIL/RFIsher` (the ledger),
-  `rfisher-archive-report` (the report), `rfisher-dissertation-numbers`;
-- `FStat_NumDenToPilotExcess*`, `LOCKED_RAW_PILOT_EXCESS_DEFINITION`;
-- the capture handoff's `lb_priced` and `eta` columns (above).
+`gamma` includes spatial phase cancellation in calibrated redundant stacking
+and the archive-to-capture transfer. It is not the fraction of RFI that is
+intrinsically coherent. `G` is not a measured lifetime or a universal lower
+bound. Its family minimum does not qualify a cross-day threshold.
 
-## Detector measurement terms
+## Names retained by existing files and callers
 
-PilotProxy stores a target-to-local-reference **power ratio**, not an exact
-F-distributed statistic:
+| Legacy name | Meaning / current name |
+|---|---|
+| `coherent_fraction.json`, `coherent_fraction*` keys | Stack-to-proxy amplitude ratio `gamma` |
+| `COHERENT_FRACTION*` Python imports | Compatibility aliases for `STACK_AMPLITUDE_RATIO*` |
+| `coherent_gain.json`, `coherent_gain_by_band` | Assumed effective temporal gain |
+| `coherent_gain()`, `admissible_min_gain()` | Compatibility aliases for `temporal_gain()`, `minimum_family_gain()` |
+| `strength(..., c=...)` | Historical argument `c` is the amplitude ratio `gamma` |
+| `deployed*` decision fields | Assigned conditional thresholds; not installed hardware |
+| `finite_budget` decision field | Combined nominal-strength cap, including transfer allowances |
+| `coherence_limit_s` | Full-era effective-gain-time diagnostic; not a physical phase lifetime or joint guard limit |
+| `fine_score_z63` | Rank-63 fine score for the declared export geometry |
+| Cache knee rule v1 | Authentication of the saved cache; current decisions use v2 |
 
-\[
-R_\mathrm{coarse}
-  = \frac{2P_\mathrm{target}}
-         {P_\mathrm{ref,lower}+P_\mathrm{ref,upper}}.
-\]
+Schema-v5 archives are supported through their stored fine spectra; their old
+row-domain powers are not the current frame powers. Other frozen records retain
+their original schemas and meanings. Current readers accept only documented
+versions, not arbitrary old layouts. See [PRODUCT_SCHEMA.md](PRODUCT_SCHEMA.md).
 
-Each **frame power** is the all-bin sum of that term's exact fine power
-spectrum, \(P_r = \sum_f S_r[f]\), with \(S_r\) the uint64 output of the
-frozen `fxfft256_v1` summed over streams (kernel core 3.0.0, product schema v6,
-detector contract v2). The schema v5 products of record store a different
-quantity under the same field names, the row-domain sum
-\(\sum_m |z_r[m]|^2\); readers recompute their frame powers from the stored
-fine powers. "Coarse" names the one-number-per-frame statistic, not a separate
-measurement path: since core 3.0.0 there is only the fine spectrum.
-
-The exact integer squared norms of the packed target and reference weights set
-the flat-noise null ratio
-
-\[
-R_\mathrm{null}
-  = \frac{2\lVert w_\mathrm{target}\rVert^2}
-         {\lVert w_\mathrm{ref,lower}\rVert^2
-          +\lVert w_\mathrm{ref,upper}\rVert^2}.
-\]
-
-The normalized ratio and physical pilot excess are
-
-\[
-Q_\mathrm{coarse}=R_\mathrm{coarse}/R_\mathrm{null},
-\qquad
-e_p=Q_\mathrm{coarse}-1.
-\]
-
-`reject_mask` uses the exact integer form of `Q_coarse > 1`.
-`normalized_coarse_power_ratio_db = 10 log10(Q_coarse)` is the plotted level,
-so the null and the active positive-excess boundary are both exactly 0 dB.
-The reported `pilot_excess_db` is `10 log10(e_p)` where `e_p > 0`, and
-`estimated_data_shelf_snr_db` is derived from that same normalized excess.
-The linear `coarse_power_ratio` remains available for exact reconstruction;
-`raw_pilot_excess = R_coarse - 1` is diagnostic-only and is not a physical PNR.
-
-The fine product stores
-
-\[
-R_\mathrm{fine}[b]
-  = \frac{2S_\mathrm{target}[b]}
-         {S_\mathrm{ref,lower}[b]+S_\mathrm{ref,upper}[b]}.
-\]
-
-Its null is calibrated empirically from the independent non-designated bins.
-The name *fine power ratio* therefore states exactly what is measured without
-claiming an exact parametric null distribution. Since schema v3 the ratio is
-not stored: the scan writes the exact `fine_power_u64` terms and the ratio is
-recomputed from them in post-processing. `fine_power_ratio` survives only as
-the spelling of the corresponding key in the archived survey products.
-
-Under independent complex-Gaussian projections with equal reference scales,
-the corresponding idealized ratio can be written as an F variate.  The shipped
-int4 weights do not satisfy the equal-scale condition exactly (the lower and
-upper reference norms can differ), and telescope streams can be correlated or
-non-Gaussian.  "F-statistic" is therefore retained only where it names the
-existing CUDA/C ABI (`FStat_*`, `libfstatistic.so`) or discusses the idealized
-model.  A later ABI-only series can rename implementation symbols without
-mixing that mechanical change with scientific product semantics.
-
-Frozen evidence and manuscript provenance are not rewritten by this hard cut.
-They document earlier development snapshots and are not valid current product
-inputs; regenerate current products and figures rather than adding readers for
-those retired fields.
-
-## Configuration and implementation identities
-
-Current receiver profiles use stable descriptive IDs without development
-suffixes: `reference_800mhz_pfb`, `chime_dtv_fengine`,
-`chord_dtv_fengine`, and `chord_pathfinder_dtv_fengine`.  Every profile
-binds to the single detector-core identity
-`pilotproxy_cuda_local_reference_power_ratio`.  Stream maps and packed
-weight headers record those same IDs, so provenance does not depend on the
-order in which pre-release designs were tried.
-
-The compiled C/CUDA ABI remains `FStat_*` / `libfstatistic.so` in this
-series.  Those symbol and library names are an implementation boundary and
-are changed only by the separate ABI series; no compatibility aliases are
-introduced here.
+RFIsher's legacy matrix label `sigma_NL` denotes the derivative with respect to
+damping **variance**, `s_NL = sigma_NL^2`. Its `_Pres` row stores a residual bias
+projection and must be removed before inverting the fitted Fisher block.

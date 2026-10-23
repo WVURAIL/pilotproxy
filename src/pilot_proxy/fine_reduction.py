@@ -4,7 +4,7 @@
 Stage 1 (CUDA or reference) emits exact int32 complex row sums
 ``z[n, m]`` for every weight term ``n`` and detector row ``m``
 (term-major, stream-major rows, interleaved re/im — see
-``FStat_Compute_RowSums_I32`` in ``cuda/f_statistic.h``). This module is
+``PilotProxy_Compute_RowSums_I32`` in ``cuda/pilotproxy_detector.h``). This module is
 stage 2:
 
 1. reshape each term's rows to ``[num_streams, windows_per_stream]``
@@ -17,7 +17,7 @@ The deployed transform is the frozen fixed-point ``fxfft256``
 (:func:`pilot_proxy.fxfft.fine_power_fx`), and since kernel core 3.0.0 the
 frame powers are defined from it: ``P[n] = sum_b S[n, b]`` over the exact
 uint64 fine powers (:func:`frame_powers_from_fine_u64`, the reference for
-``FStat_Compute_FinePowers_U64`` summed over bins and for the fused entry's
+``PilotProxy_Compute_FinePowers_U64`` summed over bins and for the fused entry's
 ``d_power_out``). The rounded transform does not conserve energy exactly, so
 ``P[n]`` is not ``pad * windows * sum_m |z[n, m]|^2``; the row-domain
 marginal identity of detector contract revision 1 is retired, and nothing
@@ -218,7 +218,7 @@ def frame_powers_from_fine_u64(
 
     ``S`` is :func:`pilot_proxy.fxfft.fine_power_fx` of the integer row sums
     (the frozen fxfft256, summed over streams), so this is the CPU reference
-    for the kernel's frame powers: ``FStat_Compute_FinePowers_U64`` summed
+    for the kernel's frame powers: ``PilotProxy_Compute_FinePowers_U64`` summed
     over bins on the host, and the fused entry's device-reduced
     ``d_power_out``. Returns ``uint64[num_weight_terms]``. The sum fits uint64
     for every deployed geometry (the per-bin bound of ``fxfft`` summed over
@@ -314,11 +314,11 @@ def fine_reduce(
     power_ratio = xp.where(den > 0, 2.0 * s_t / xp.where(den > 0, den, 1.0), 0.0)
 
     power_host = power.get() if hasattr(power, "get") else power
-    fstat_host = power_ratio.get() if hasattr(power_ratio, "get") else power_ratio
+    pilotproxy_host = power_ratio.get() if hasattr(power_ratio, "get") else power_ratio
 
     return FineReductionResult(
         fine_power=np.asarray(power_host, dtype=np.float32),
-        fine_power_ratio=np.asarray(fstat_host, dtype=np.float32),
+        fine_power_ratio=np.asarray(pilotproxy_host, dtype=np.float32),
         coarse_power_by_term=np.asarray(row_energy, dtype=np.int64),
         num_streams=streams,
         windows_per_stream=windows,

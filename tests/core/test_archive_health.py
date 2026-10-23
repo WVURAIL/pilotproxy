@@ -70,8 +70,8 @@ def _product(
         rng = np.random.default_rng(8)
         fine = rng.normal(1.0, 0.04, size=(n, FINE_BINS)).astype(np.float32)
     frame_unit = np.arange(n, dtype=np.int32)
-    fstat = 2.0 * target.astype(float) / np.where(reference > 0, reference, 1)
-    fstat = np.where(reference > 0, fstat, 0.0)
+    power_ratio = 2.0 * target.astype(float) / np.where(reference > 0, reference, 1)
+    power_ratio = np.where(reference > 0, power_ratio, 0.0)
     return {
         "schema_version": np.asarray("pilotproxy_detector_datatrawl_v3"),
         "physical_channel": np.asarray([17], dtype=np.int32),
@@ -81,9 +81,9 @@ def _product(
         "frame_index": np.arange(n, dtype=np.int64),
         "p_target_u64": target[:, None],
         "p_ref_sum_u64": reference[:, None],
-        ARCHIVED_COARSE_POWER_RATIO: fstat[:, None],
+        ARCHIVED_COARSE_POWER_RATIO: power_ratio[:, None],
         ARCHIVED_NORMALIZED_COARSE_POWER_RATIO_DB: (
-            10.0 * np.log10(np.maximum(fstat, 1.0e-12))
+            10.0 * np.log10(np.maximum(power_ratio, 1.0e-12))
         )[:, None],
         ARCHIVED_PILOT_EXCESS_DB: np.full((n, 1), -10.0),
         ARCHIVED_DATA_SHELF_SNR_DB: np.full((n, 1), -31.0),

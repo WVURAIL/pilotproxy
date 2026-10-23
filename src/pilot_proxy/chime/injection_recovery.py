@@ -32,6 +32,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from pilot_proxy import wvu_palette as wvu
 from pilot_proxy.characterization import injection
 from pilot_proxy.characterization.injection import (
     detection_rates,
@@ -220,7 +221,7 @@ def _write_figures(report: dict[str, Any], output_dir: Path) -> list[Path]:
     grid = np.linspace(0.0, float(x.max()) * 1.05, 200)
     ax.plot(grid, fit["floor"] + fit["gain_per_lsb2"] * grid, "-",
             label=(r"Fit: $\hat{\rho} = \mathrm{floor} + g\,a^2$"))
-    ax.axhline(fit["floor"], linestyle=":", color="gray",
+    ax.axhline(fit["floor"], linestyle=":", color=wvu.MUTED,
                label=r"Ambient floor ($a = 0$)")
     ax.set_xlabel(r"Injected tone power $a^2$ [LSB$^2$]")
     ax.set_ylabel(r"Recovered pilot excess $\hat{\rho} = F/\mu_0 - 1$")

@@ -5,8 +5,9 @@
 %   pdftocairo -svg validation_flow_standalone.pdf validation_flow.svg
 \documentclass[tikz,border=6pt]{standalone}
 \usetikzlibrary{arrows.meta,positioning}
-\definecolor{PilotProxyBlue}{HTML}{144E8C}
-\definecolor{LightGray}{HTML}{F3F3F3}
+\input{wvu_palette.tex}
+\colorlet{PilotProxyBlue}{wvu-blue}
+\colorlet{LightGray}{wvu-not-quite-white}
 % \linewidth has no meaning in a standalone tikz page; give the blocks a
 % concrete width equivalent to the in-document rendering.
 \setlength{\linewidth}{11cm}

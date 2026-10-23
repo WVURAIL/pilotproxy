@@ -331,11 +331,13 @@ def report(out, make_figure=True, report_dir=None):
 
 
 def make_fig(out, thr, curves, gains, *, streams=STREAMS):
+    from pilot_proxy import wvu_palette as wvu
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    SURFACE, INK, INK2, GRID, BLUE = ("#fcfcfb", "#0b0b0b", "#52514e",
-                                      "#e5e4e0", "#2a78d6")
+    matplotlib.rcParams.update(wvu.plot_rcparams())
+    SURFACE, INK, INK2, GRID, BLUE = (wvu.WHITE, wvu.INK, wvu.MUTED,
+                                      wvu.tint(wvu.SENECA_GRAY, 0.3), wvu.BLUE)
     pfa = 1e-2
     fig, ax = plt.subplots(figsize=(8.4, 5.4), dpi=300, facecolor=SURFACE)
     ax.set_facecolor(SURFACE)

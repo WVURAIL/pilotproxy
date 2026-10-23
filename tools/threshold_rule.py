@@ -25,6 +25,8 @@ import csv
 import json
 from pathlib import Path
 
+from pilot_proxy import wvu_palette as wvu
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -33,8 +35,8 @@ import numpy as np  # noqa: E402
 
 from pilot_proxy.characterization import threshold_rule as t  # noqa: E402
 
-INK, MUTED, GRID, SURF = "#1c2126", "#5a6168", "#e4e6e2", "#ffffff"
-MEAS, HIGH, KNEE, PICK = "#2a78d6", "#9fc2ef", "#5a6168", "#eb6834"
+INK, MUTED, GRID, SURF = wvu.INK, wvu.MUTED, wvu.tint(wvu.SENECA_GRAY, 0.3), wvu.WHITE
+MEAS, HIGH, KNEE, PICK = wvu.MEASURED, wvu.SAFETY_BLUE, wvu.MUTED, wvu.MODEL
 OUTCOME = {"knee": "conditional candidate: assigned at the knee",
            "below the knee": "conditional candidate: assigned below the knee",
            "above tolerance": "not assigned: above tolerance at every threshold",
@@ -42,6 +44,8 @@ OUTCOME = {"knee": "conditional candidate: assigned at the knee",
 COLUMNS = ["channel", "outcome", "reason", "deployed_at", "deployed_word", "full_era_word", "last_year_r_hi", "guard_acted", "knee_word", "eta", "kappa", "time_years", "r", "r_hi", "kept_frames", "kept_events",
            "gain", "coherence_limit_s", "below_knee_eta", "below_knee_kappa", "below_knee_years", "below_knee_r_hi"]
 
+
+matplotlib.rcParams.update(wvu.plot_rcparams())
 
 def plate(ch, row, s, d, R, gain, out: Path, *, calendar_factor=1.0, budget=1.0) -> Path:
     eta = s["word"].astype(float) / t.Q16

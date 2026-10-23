@@ -16,6 +16,8 @@ from pathlib import Path
 for _key in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ[_key] = "1"
 
+from pilot_proxy import wvu_palette as wvu
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -24,11 +26,13 @@ import numpy as np
 
 MODES = ("noise", "txzero", "tone")
 TITLES = {"noise": "Receiver-only ambient", "txzero": "TX-active zero IQ", "tone": "Commanded steady tone"}
-COLORS = ("#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7")
+COLORS = wvu.SERIES[:5]
 FRAME_SAMPLES = 16384
 OUTPUT_RATE_HZ = 390625
 PLOT_NAME = "antenna-control-frame-ratios"
 
+
+matplotlib.rcParams.update(wvu.plot_rcparams())
 
 def sha(path):
     with Path(path).open("rb") as stream:
@@ -151,9 +155,9 @@ def render(study, output=None):
                     f"undefined {counts['undefined']}; infinite {counts['infinite']}; zeros {counts['zero']}",
                     transform=ax.transAxes, fontsize=7.7, ha="left", va="bottom")
             if not selected:
-                ax.text(.5, .5, "No complete records", transform=ax.transAxes, ha="center", color="#666666")
+                ax.text(.5, .5, "No complete records", transform=ax.transAxes, ha="center", color=wvu.MUTED)
             elif counts["frames"] == counts["undefined"] + counts["infinite"]:
-                ax.text(.5, .5, "No finite ratios", transform=ax.transAxes, ha="center", color="#666666")
+                ax.text(.5, .5, "No finite ratios", transform=ax.transAxes, ha="center", color=wvu.MUTED)
             if row == 0:
                 ax.set_title(TITLES[mode], fontsize=11.5, pad=29)
             else:

@@ -14,6 +14,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from pilot_proxy import wvu_palette as wvu
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -40,6 +42,8 @@ SCOPE = ("Descriptive single-RF-path comparison using floating single-row projec
          "No physical power calibration, packed-kernel/full-array validation, false-alarm "
          "certification, scientific acceptance or prospective observing policy.")
 
+
+matplotlib.rcParams.update(wvu.plot_rcparams())
 
 def sha(path):
     h = hashlib.sha256()
@@ -197,11 +201,11 @@ def distribution_figure(output, name, observed, simulated, lam, label):
         raise ValueError("invalid observed ratios: preserve diagnostics, do not silently censor")
     theoretical_label = r"Ideal $F_{2,4}$" if lam==0 else rf"Conditional $F_{{2,4}}(\lambda={lam:.3g})$"
     for i,(identifier, values) in enumerate(observed):
-        axes[0,1].plot(grid, ecdf(values,grid), color="#ca702c", alpha=.3, lw=.9,
+        axes[0,1].plot(grid, ecdf(values,grid), color=wvu.MEASURED, alpha=.3, lw=.9,
                        label=("Individual captures" if label.startswith("SDR") else "Simulation A") if i==0 else None)
         tail = 1-ecdf(values,grid)
-        axes[1,0].plot(grid,np.where(tail>0,tail,np.nan),color="#ca702c",alpha=.3,lw=.9)
-    for values, color, text in ((pooled,"#bb5b1b",label),(simulated,"#1879a0","Matched raw-IQ white-Gaussian simulation")):
+        axes[1,0].plot(grid,np.where(tail>0,tail,np.nan),color=wvu.MEASURED,alpha=.3,lw=.9)
+    for values, color, text in ((pooled,wvu.MEASURED,label),(simulated,wvu.MODEL,"Matched raw-IQ white-Gaussian simulation")):
         counts, _ = np.histogram(values,bins=bins)
         # Density divides by ALL rows, not only rows falling within displayed limits.
         axes[0,0].stairs(counts/(len(values)*np.diff(bins)),bins,color=color,label=text)
@@ -503,7 +507,7 @@ def compare(manifest_path,calibration_path,output):
     diagnostics_figure(output,captures)
     fig,axes=plt.subplots(1,3,figsize=(12,3.6),layout="constrained")
     for ax,mode in zip(axes,MODES):
-        grid,delta=differences[mode];ax.semilogx(grid,delta,color="#bb5b1b");ax.axhline(0,color="black",lw=.8)
+        grid,delta=differences[mode];ax.semilogx(grid,delta,color=wvu.MEASURED);ax.axhline(0,color="black",lw=.8)
         ax.set_title(mode);ax.set_xlabel("Single-row ratio");ax.set_ylabel("SDR ECDF minus ideal CDF");ax.grid(alpha=.2)
     fig.suptitle("Descriptive CDF differences; no IID goodness-of-fit p-values")
     for ext in ("png","pdf"):fig.savefig(output/f"cdf-differences.{ext}",dpi=170)

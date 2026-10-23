@@ -11,6 +11,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+from pilot_proxy import wvu_palette as wvu
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -21,6 +23,8 @@ CORE_PATH=Path(__file__).with_name("analyze_noise_signal_references.py")
 spec=importlib.util.spec_from_file_location("reference_core_v1",CORE_PATH)
 core=importlib.util.module_from_spec(spec);spec.loader.exec_module(core)
 
+
+matplotlib.rcParams.update(wvu.plot_rcparams())
 
 def read_gnuradio(directory,lam):
     directory=Path(directory).resolve()
@@ -71,9 +75,9 @@ def draw_density(output,mode,observed,simulated,lam):
     radio_density,radio_outside=density_per_dex(observed,edges)
     gnu_density,gnu_outside=density_per_dex(simulated,edges)
     fig,ax=plt.subplots(figsize=(8.4,5.3),layout="constrained")
-    ax.plot(x,theoretical,color="#292d32",lw=2.2,label=(r"Theory: $F_{2,4}$" if lam==0 else rf"Conditional theory: $F_{{2,4}}(\lambda={lam:.4g})$"))
-    ax.stairs(gnu_density,edges,color="#267ca5",lw=1.6,label=f"GNU Radio simulation ({len(simulated):,} rows)")
-    ax.stairs(radio_density,edges,color="#ce681c",lw=1.5,label=f"SDR comparison ({len(observed):,} rows)")
+    ax.plot(x,theoretical,color=wvu.MODEL,lw=2.2,label=(r"Theory: $F_{2,4}$" if lam==0 else rf"Conditional theory: $F_{{2,4}}(\lambda={lam:.4g})$"))
+    ax.stairs(gnu_density,edges,color=wvu.SAFETY_BLUE,lw=1.6,label=f"GNU Radio simulation ({len(simulated):,} rows)")
+    ax.stairs(radio_density,edges,color=wvu.MEASURED,lw=1.5,label=f"SDR comparison ({len(observed):,} rows)")
     ax.set_xlim(lo,hi);ax.set_ylim(bottom=0);ax.grid(alpha=.18)
     ax.set_xlabel(r"$x=\log_{10}R$, where $R=2|z_0|^2/(|z_-|^2+|z_+|^2)$")
     ax.set_ylabel(r"Probability density per dex: $p_x(x)=\ln(10)\,10^x p_R(10^x)$")

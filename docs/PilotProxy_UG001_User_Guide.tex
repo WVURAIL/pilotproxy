@@ -26,14 +26,15 @@
 \usepackage{float}
 \usepackage{placeins}
 
-\definecolor{PilotProxyRed}{HTML}{A00000}
-\definecolor{PilotProxyGray}{HTML}{555555}
-\definecolor{PilotProxyBlue}{HTML}{144E8C}
-\definecolor{LightGray}{HTML}{F3F3F3}
-\definecolor{MidGray}{HTML}{D9D9D9}
-\definecolor{DarkText}{HTML}{1A1A1A}
-\definecolor{GoodGreen}{HTML}{2B7A2B}
-\definecolor{WarnOrange}{HTML}{A65E00}
+\input{figures/wvu_palette.tex}
+\colorlet{PilotProxyRed}{wvu-woodburn}
+\colorlet{PilotProxyGray}{wvu-rattler-gray}
+\colorlet{PilotProxyBlue}{wvu-blue}
+\colorlet{LightGray}{wvu-not-quite-white}
+\colorlet{MidGray}{wvu-coopers-gray}
+\colorlet{DarkText}{wvu-coal}
+\colorlet{GoodGreen}{wvu-hemlock}
+\colorlet{WarnGold}{wvu-old-gold}
 
 \renewcommand{\familydefault}{\sfdefault}
 \setlength{\parindent}{0pt}
@@ -208,8 +209,8 @@ which gives the bandwidth spreading term
   \draw[thick,PilotProxyBlue] (0.4,1.0) -- (9.6,1.0);
   \draw[thick,PilotProxyRed] (2.0,1.0) -- (2.0,3.35);
   \draw[fill=PilotProxyRed,draw=PilotProxyRed] (2.0,3.35) circle (0.055);
-  \draw[dashed,thick,WarnOrange] (1.52,1.0) -- (1.52,1.35);
-  \draw[dashed,thick,WarnOrange] (2.48,1.0) -- (2.48,1.35);
+  \draw[dashed,thick,WarnGold] (1.52,1.0) -- (1.52,1.35);
+  \draw[dashed,thick,WarnGold] (2.48,1.0) -- (2.48,1.35);
   \draw[<->,thick,PilotProxyRed] (2.20,1.0) -- (2.20,3.35) node[midway,right]{pilot excess};
   \draw[<->,thick,PilotProxyBlue] (8.95,1.0) -- (8.95,1.72) node[midway,right]{data shelf SNR};
   \draw[decorate,decoration={brace,mirror,amplitude=5pt},thick] (1.2,-0.25) -- (8.8,-0.25)

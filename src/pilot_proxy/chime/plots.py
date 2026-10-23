@@ -8,11 +8,15 @@ import csv
 import json
 import os
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
 from numpy import dtype, float64, ndarray
 
+if TYPE_CHECKING:
+    from matplotlib.colors import Colormap
+
+from pilot_proxy import wvu_palette as wvu
 from pilot_proxy.dtv_units import (
     DB_LINEAR_BASE,
     DB_POWER_FACTOR,
@@ -746,7 +750,7 @@ def _plot_spectrogram(
     title: str,
     colorbar_label: str,
     basename: str,
-    cmap: str,
+    cmap: str | Colormap,
     robust_limits: bool = False,
     discrete_mask_colorbar: bool = False,
 ) -> list[Path]:
@@ -795,7 +799,7 @@ def _plot_spectrogram(
         )
         if event_boundaries is not None:
             for _b in event_boundaries[0]:
-                ax.axvline(x_edges[int(_b)], color="tab:red", lw=0.7,
+                ax.axvline(x_edges[int(_b)], color=wvu.FAILURE, lw=0.7,
                            alpha=0.85, linestyle=(0, (2, 2)), zorder=3)
         image = ax.pcolormesh(
             x_edges,
@@ -852,7 +856,7 @@ def plot_baseband_spectrogram(run_dir: Path) -> list[Path]:
         title=r"Baseband power spectrogram",
         colorbar_label=r"$10\log_{10}P_{\mathrm{bb}}\;[\mathrm{dB}]$",
         basename="baseband_spectrogram",
-        cmap="viridis",
+        cmap=wvu.sequential_cmap(),
     )
 
 
@@ -870,7 +874,7 @@ def plot_normalized_coarse_power_ratio_db_spectrogram(run_dir: Path) -> list[Pat
         title=r"local-reference power ratio level spectrogram",
         colorbar_label=r"$10\log_{10}Q_\mathrm{coarse}\;[\mathrm{dB}]$",
         basename="normalized_coarse_power_ratio_db_spectrogram",
-        cmap="magma",
+        cmap=wvu.sequential_cmap(),
         robust_limits=True,
     )
 

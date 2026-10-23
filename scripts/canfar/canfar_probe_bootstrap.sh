@@ -118,11 +118,11 @@ else
   QUALIFIED=0
 fi
 if [ "$QUALIFIED" = 0 ]; then
-  SHA=$(sha256sum cuda/libfstatistic.so | cut -d' ' -f1)
+  SHA=$(sha256sum cuda/libpilotproxy.so | cut -d' ' -f1)
   KDIR="/arc/home/$CANFAR_USER/pp_kernels"
   mkdir -p "$KDIR"
   KLIB="$KDIR/pilotproxy-detector-core-2.3.0-sm${SM}-${SHA:0:12}.so"
-  cp --no-clobber cuda/libfstatistic.so "$KLIB"; chmod 555 "$KLIB" 2>/dev/null || true
+  cp --no-clobber cuda/libpilotproxy.so "$KLIB"; chmod 555 "$KLIB" 2>/dev/null || true
   echo "preserved: $KLIB"
   echo "sha256   : $SHA"
 fi
@@ -135,8 +135,8 @@ else
 fi
 PYTHONPATH=src python - "$KLIB" <<'PY'
 import sys
-from pilot_proxy.kernel import FStatKernel
-k = FStatKernel(sys.argv[1])
+from pilot_proxy.kernel import PilotProxyKernel
+k = PilotProxyKernel(sys.argv[1])
 print("kernel", k._get_version().as_string(), "fine:", k.supports_fine_powers(), "fused:", k.supports_fused_fine())
 PY
 

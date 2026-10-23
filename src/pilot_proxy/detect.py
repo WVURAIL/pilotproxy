@@ -41,7 +41,7 @@ from .dtv_units import (
 from .fine_decision import FINE_BINS
 from .fxfft import N_IN as FINE_WINDOWS_PER_STREAM
 from .json_utils import write_json_strict
-from .kernel import FStatKernel
+from .kernel import PilotProxyKernel
 from .paths import DEFAULT_LIB_PATH, DEFAULT_WEIGHTS_PATH
 from .result_schema import (
     COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO,
@@ -175,7 +175,7 @@ def detect_packed_detector_input(
     *,
     packed: np.ndarray,
     weights: np.ndarray,
-    kernel: FStatKernel,
+    kernel: PilotProxyKernel,
     emit_row_projections: bool = False,
 ) -> dict[str, Any]:
     """Run fixed-point detection and return exact power ratios.
@@ -183,8 +183,8 @@ def detect_packed_detector_input(
     The three frame powers are the all-bin sums of the exact fine power
     spectra (kernel core 3.0.0): ``P_r = sum_f S_r[f]`` with ``S_r`` the
     uint64 output of the frozen fxfft256 stage over the device row
-    projections (``FStat_Compute_RowSums_I32`` ->
-    ``FStat_Compute_FinePowers_U64``, summed on the host in uint64). The
+    projections (``PilotProxy_Compute_RowSums_I32`` ->
+    ``PilotProxy_Compute_FinePowers_U64``, summed on the host in uint64). The
     transform length cancels in the ratio, so ``coarse_power_ratio =
     2 P_0 / (P_1 + P_2)`` keeps its form; the fused kernel's ``d_power_out``
     is the same sum formed on the device.
@@ -201,9 +201,9 @@ def detect_packed_detector_input(
     _validate_kernel_inputs(packed=packed, weights=weights, kernel=kernel)
     if not kernel.supports_row_projections() or not kernel.supports_fine_powers():
         raise RuntimeError(
-            "Kernel library does not expose FStat_Compute_RowSums_I32 and "
-            "FStat_Compute_FinePowers_U64 (the frame powers are their all-bin "
-            "sums since kernel core 3.0.0); rebuild libfstatistic.so with the "
+            "Kernel library does not expose PilotProxy_Compute_RowSums_I32 and "
+            "PilotProxy_Compute_FinePowers_U64 (the frame powers are their all-bin "
+            "sums since kernel core 3.0.0); rebuild libpilotproxy.so with the "
             "current CUDA sources."
         )
 
@@ -539,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:
         float(args.pilot_frequency_tolerance_hz),
     )
     packed, batch, rows = _load_detector_input(resolved_input_path)
-    kernel = FStatKernel(args.lib_path)
+    kernel = PilotProxyKernel(args.lib_path)
     weights_bank = DetectorWeightBank(
         explicit_path=args.weights_path,
         expected_kernel=kernel.specs,

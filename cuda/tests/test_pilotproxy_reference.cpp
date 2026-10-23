@@ -1,5 +1,5 @@
-#include "f_statistic.h"
-#include "f_statistic_reference.h"
+#include "pilotproxy_detector.h"
+#include "pilotproxy_reference.h"
 
 #include <cassert>
 #include <cmath>
@@ -21,9 +21,9 @@ constexpr int INT4_NEGATIVE_ONE_VALUE = -1;
 constexpr int UNINITIALIZED_SENTINEL = 999;
 constexpr int SINGLE_STREAM = 1;
 constexpr int TWO_STREAMS = 2;
-constexpr int WINDOWS = FSTAT_FINE_WINDOWS_PER_STREAM;
-constexpr int TERMS = FSTAT_NUM_WEIGHT_TERMS;
-constexpr int BINS = FSTAT_FINE_NUM_BINS;
+constexpr int WINDOWS = PILOTPROXY_FINE_WINDOWS_PER_STREAM;
+constexpr int TERMS = PILOTPROXY_NUM_WEIGHT_TERMS;
+constexpr int BINS = PILOTPROXY_FINE_NUM_BINS;
 
 constexpr unsigned long long ZERO_POWER = 0ULL;
 constexpr unsigned long long UNIT_POWER = 1ULL;
@@ -44,7 +44,7 @@ void assert_unpack(InputType packed, int expected_real, int expected_imag)
 {
     int real = 0;
     int imag = 0;
-    fstat_ref_unpack_complex_i4(packed, &real, &imag);
+    pilotproxy_ref_unpack_complex_i4(packed, &real, &imag);
     assert(real == expected_real);
     assert(imag == expected_imag);
 }
@@ -59,7 +59,7 @@ void assert_mul(
 {
     int real = UNINITIALIZED_SENTINEL;
     int imag = UNINITIALIZED_SENTINEL;
-    fstat_ref_complex_mul_conj(xr, xi, wr, wi, &real, &imag);
+    pilotproxy_ref_complex_mul_conj(xr, xi, wr, wi, &real, &imag);
     assert(real == expected_real);
     assert(imag == expected_imag);
 }
@@ -75,29 +75,29 @@ void assert_impulse_fine_powers(int component)
     row_sums[static_cast<std::size_t>(component)] = 1;  // window 0 of the target term
 
     unsigned long long fine[TERMS][BINS];
-    fstat_ref_fine_powers_u64(row_sums.data(), SINGLE_STREAM, fine);
+    pilotproxy_ref_fine_powers_u64(row_sums.data(), SINGLE_STREAM, fine);
     for (int f = 0; f < BINS; ++f) {
-        assert(fine[FSTAT_TARGET_WEIGHT_INDEX][f] == UNIT_POWER);
-        assert(fine[FSTAT_LOWER_REFERENCE_WEIGHT_INDEX][f] == ZERO_POWER);
-        assert(fine[FSTAT_UPPER_REFERENCE_WEIGHT_INDEX][f] == ZERO_POWER);
+        assert(fine[PILOTPROXY_TARGET_WEIGHT_INDEX][f] == UNIT_POWER);
+        assert(fine[PILOTPROXY_LOWER_REFERENCE_WEIGHT_INDEX][f] == ZERO_POWER);
+        assert(fine[PILOTPROXY_UPPER_REFERENCE_WEIGHT_INDEX][f] == ZERO_POWER);
     }
 
     unsigned long long powers[TERMS];
-    fstat_ref_powers_from_fine_u64(fine, powers);
-    assert(powers[FSTAT_TARGET_WEIGHT_INDEX] == static_cast<unsigned long long>(BINS));
-    assert(powers[FSTAT_LOWER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
-    assert(powers[FSTAT_UPPER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
+    pilotproxy_ref_powers_from_fine_u64(fine, powers);
+    assert(powers[PILOTPROXY_TARGET_WEIGHT_INDEX] == static_cast<unsigned long long>(BINS));
+    assert(powers[PILOTPROXY_LOWER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
+    assert(powers[PILOTPROXY_UPPER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
 
     // Two streams carrying the same impulse: the feed sum doubles exactly.
     std::vector<int> two(static_cast<std::size_t>(TERMS) * TWO_STREAMS * WINDOWS * 2, 0);
     two[static_cast<std::size_t>(component)] = 1;
     two[static_cast<std::size_t>(WINDOWS) * 2 + component] = 1;
-    fstat_ref_fine_powers_u64(two.data(), TWO_STREAMS, fine);
-    fstat_ref_powers_from_fine_u64(fine, powers);
+    pilotproxy_ref_fine_powers_u64(two.data(), TWO_STREAMS, fine);
+    pilotproxy_ref_powers_from_fine_u64(fine, powers);
     for (int f = 0; f < BINS; ++f) {
-        assert(fine[FSTAT_TARGET_WEIGHT_INDEX][f] == 2ULL * UNIT_POWER);
+        assert(fine[PILOTPROXY_TARGET_WEIGHT_INDEX][f] == 2ULL * UNIT_POWER);
     }
-    assert(powers[FSTAT_TARGET_WEIGHT_INDEX] == 2ULL * BINS);
+    assert(powers[PILOTPROXY_TARGET_WEIGHT_INDEX] == 2ULL * BINS);
 }
 
 void assert_null_arguments_are_harmless()
@@ -108,17 +108,17 @@ void assert_null_arguments_are_harmless()
             fine[n][f] = 7ULL;
         }
     }
-    fstat_ref_fine_powers_u64(nullptr, SINGLE_STREAM, fine);
+    pilotproxy_ref_fine_powers_u64(nullptr, SINGLE_STREAM, fine);
     for (int n = 0; n < TERMS; ++n) {
         for (int f = 0; f < BINS; ++f) {
             assert(fine[n][f] == ZERO_POWER);
         }
     }
-    fstat_ref_fine_powers_u64(nullptr, SINGLE_STREAM, nullptr);
-    fstat_ref_powers_from_fine_u64(fine, nullptr);
+    pilotproxy_ref_fine_powers_u64(nullptr, SINGLE_STREAM, nullptr);
+    pilotproxy_ref_powers_from_fine_u64(fine, nullptr);
 
     unsigned long long powers[TERMS] = {5ULL, 5ULL, 5ULL};
-    fstat_ref_powers_from_fine_u64(nullptr, powers);
+    pilotproxy_ref_powers_from_fine_u64(nullptr, powers);
     for (int n = 0; n < TERMS; ++n) {
         assert(powers[n] == ZERO_POWER);
     }
@@ -136,7 +136,7 @@ void assert_frame_power_is_the_all_bin_sum()
         }
     }
     unsigned long long powers[TERMS];
-    fstat_ref_powers_from_fine_u64(fine, powers);
+    pilotproxy_ref_powers_from_fine_u64(fine, powers);
     const unsigned long long bin_sum =
         static_cast<unsigned long long>(BINS) * (BINS - 1) / 2ULL;
     for (int n = 0; n < TERMS; ++n) {
@@ -158,10 +158,10 @@ static void run_row_sums_reference_checks()
     unsigned int state = 0xC0FFEEu;
 
     std::vector<InputType> x(
-        static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     std::vector<InputType> w(
-        static_cast<std::size_t>(FSTAT_NUM_WEIGHT_TERMS)
-        * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(PILOTPROXY_NUM_WEIGHT_TERMS)
+        * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     for (std::size_t i = 0; i < x.size(); ++i) {
         const int re = static_cast<int>(lcg_next(&state) % 15) - 7;
         const int im = static_cast<int>(lcg_next(&state) % 15) - 7;
@@ -174,36 +174,36 @@ static void run_row_sums_reference_checks()
     }
 
     std::vector<int> row_sums(
-        static_cast<std::size_t>(FSTAT_NUM_WEIGHT_TERMS) * rows * 2, 0);
-    fstat_ref_row_sums_i32(x.data(), w.data(), rows, row_sums.data());
+        static_cast<std::size_t>(PILOTPROXY_NUM_WEIGHT_TERMS) * rows * 2, 0);
+    pilotproxy_ref_row_sums_i32(x.data(), w.data(), rows, row_sums.data());
 
     // Exact equality against an independently ordered brute force
     // (term-outer, tap-outer accumulation): integer addition is associative,
     // so any ordering must agree bit-for-bit.
-    for (int n = 0; n < FSTAT_NUM_WEIGHT_TERMS; ++n) {
+    for (int n = 0; n < PILOTPROXY_NUM_WEIGHT_TERMS; ++n) {
         for (int m = 0; m < rows; ++m) {
             long long br = 0;
             long long bi = 0;
-            for (int k = 0; k < FSTAT_DETECTOR_WINDOW_SAMPLES; ++k) {
+            for (int k = 0; k < PILOTPROXY_DETECTOR_WINDOW_SAMPLES; ++k) {
                 int xr;
                 int xi;
                 int wr;
                 int wi;
                 int yr;
                 int yi;
-                fstat_ref_unpack_complex_i4(
+                pilotproxy_ref_unpack_complex_i4(
                     x[static_cast<std::size_t>(m)
-                          * FSTAT_DETECTOR_WINDOW_SAMPLES
+                          * PILOTPROXY_DETECTOR_WINDOW_SAMPLES
                       + k],
                     &xr,
                     &xi);
-                fstat_ref_unpack_complex_i4(
+                pilotproxy_ref_unpack_complex_i4(
                     w[static_cast<std::size_t>(n)
-                          * FSTAT_DETECTOR_WINDOW_SAMPLES
+                          * PILOTPROXY_DETECTOR_WINDOW_SAMPLES
                       + k],
                     &wr,
                     &wi);
-                fstat_ref_complex_mul_conj(xr, xi, wr, wi, &yr, &yi);
+                pilotproxy_ref_complex_mul_conj(xr, xi, wr, wi, &yr, &yi);
                 br += yr;
                 bi += yi;
             }
@@ -226,9 +226,9 @@ static void run_fine_reference_checks()
     unsigned int state = 0xF1DE5Au;
 
     std::vector<InputType> x(
-        static_cast<std::size_t>(rows) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(rows) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     std::vector<InputType> w(
-        static_cast<std::size_t>(TERMS) * FSTAT_DETECTOR_WINDOW_SAMPLES);
+        static_cast<std::size_t>(TERMS) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     for (std::size_t i = 0; i < x.size(); ++i) {
         const int re = static_cast<int>(lcg_next(&state) % 15) - 7;
         const int im = static_cast<int>(lcg_next(&state) % 15) - 7;
@@ -241,12 +241,12 @@ static void run_fine_reference_checks()
     }
 
     std::vector<int> row_sums(static_cast<std::size_t>(TERMS) * rows * 2, 0);
-    fstat_ref_row_sums_i32(x.data(), w.data(), rows, row_sums.data());
+    pilotproxy_ref_row_sums_i32(x.data(), w.data(), rows, row_sums.data());
 
     unsigned long long fine[TERMS][BINS];
     unsigned long long powers[TERMS];
-    fstat_ref_fine_powers_u64(row_sums.data(), TWO_STREAMS, fine);
-    fstat_ref_powers_from_fine_u64(fine, powers);
+    pilotproxy_ref_fine_powers_u64(row_sums.data(), TWO_STREAMS, fine);
+    pilotproxy_ref_powers_from_fine_u64(fine, powers);
 
     // (a) definition: P_n == sum_f S_n[f], summed independently here.
     for (int n = 0; n < TERMS; ++n) {
@@ -273,7 +273,7 @@ static void run_fine_reference_checks()
             }
         }
         unsigned long long fine_one[TERMS][BINS];
-        fstat_ref_fine_powers_u64(one.data(), SINGLE_STREAM, fine_one);
+        pilotproxy_ref_fine_powers_u64(one.data(), SINGLE_STREAM, fine_one);
         for (int n = 0; n < TERMS; ++n) {
             for (int f = 0; f < BINS; ++f) {
                 fine_sum[n][f] += fine_one[n][f];
@@ -306,15 +306,15 @@ int main()
 {
     run_row_sums_reference_checks();
     run_fine_reference_checks();
-    assert(fstat_ref_sign_extend_i4(INT4_ZERO_CODE) == INT4_ZERO_VALUE);
+    assert(pilotproxy_ref_sign_extend_i4(INT4_ZERO_CODE) == INT4_ZERO_VALUE);
     assert(
-        fstat_ref_sign_extend_i4(INT4_MAX_POSITIVE_CODE)
+        pilotproxy_ref_sign_extend_i4(INT4_MAX_POSITIVE_CODE)
         == INT4_MAX_POSITIVE_VALUE);
     assert(
-        fstat_ref_sign_extend_i4(INT4_MIN_NEGATIVE_CODE)
+        pilotproxy_ref_sign_extend_i4(INT4_MIN_NEGATIVE_CODE)
         == INT4_MIN_NEGATIVE_VALUE);
     assert(
-        fstat_ref_sign_extend_i4(INT4_NEGATIVE_ONE_CODE)
+        pilotproxy_ref_sign_extend_i4(INT4_NEGATIVE_ONE_CODE)
         == INT4_NEGATIVE_ONE_VALUE);
 
     assert_unpack(pack_i4(-8, 7), -8, 7);

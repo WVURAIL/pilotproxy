@@ -576,7 +576,7 @@ def _cmd_check_layout(args: argparse.Namespace) -> None:
         num_selected_channels=int(args.num_selected_channels),
     )
     payload = {
-        "schema_version": "fstat_layout_check_v1",
+        "schema_version": "pilotproxy_layout_check_v1",
         "receiver_profile": profile.to_dict(),
         "stream_map": None if stream_map is None else stream_map.to_dict(),
         "layout_check": check,
@@ -606,7 +606,7 @@ def _cmd_check_profile(args: argparse.Namespace) -> None:
         stream_map=stream_map,
     )
     payload = {
-        "schema_version": "fstat_profile_check_v1",
+        "schema_version": "pilotproxy_profile_check_v1",
         "receiver_profile": profile.to_dict(),
         "detector_core_profile": (
             None if detector_core is None else detector_core.to_dict()
@@ -1608,7 +1608,7 @@ def build_parser() -> argparse.ArgumentParser:
     recovery = _add_command(
         "analyze-injection-recovery",
         "Analyze injection-ladder run products: response linearity plus the "
-        "F-statistic vs radiometer comparison at matched false-alarm rates.",
+        "power-ratio vs radiometer comparison at matched false-alarm rates.",
     )
     recovery.add_argument("--point", type=Path, action="append", required=True,
                           dest="points",

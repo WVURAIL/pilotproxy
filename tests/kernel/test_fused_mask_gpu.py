@@ -1,7 +1,7 @@
 # coding=utf-8
 """GPU gates for the decision epilogue (kernel core 2.3.0).
 
-``FStat_Compute_FusedFineMask_U64`` is the deployed form: packed samples
+``PilotProxy_Compute_FusedFineMask_U64`` is the deployed form: packed samples
 and per-channel bundle constants in, one mask bit per aligned frame out.
 The epilogue's mask must be bit-identical to the frozen Python reference
 (``pilot_proxy.fine_decision.fine_mask_decision``) applied to the same
@@ -42,7 +42,7 @@ from pilot_proxy.fine_decision import fine_mask_decision, pack_bulk_mask
 from pilot_proxy.fine_reduction import independent_bin_mask
 from pilot_proxy.fxfft import fine_power_fx
 from gpu import cuda_available
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
 TERMS = 3
@@ -66,14 +66,14 @@ def _import_cupy_or_skip():
     return cp
 
 
-def _kernel_or_skip() -> FStatKernel:
+def _kernel_or_skip() -> PilotProxyKernel:
     try:
-        kernel = FStatKernel(DEFAULT_LIB_PATH)
+        kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     except FileNotFoundError:  # pragma: no cover - library not built
-        pytest.skip("libfstatistic.so is not built")
+        pytest.skip("libpilotproxy.so is not built")
     if not kernel.supports_fused_fine_mask():
         pytest.skip(
-            "libfstatistic.so predates kernel core 2.3.0 (no decision "
+            "libpilotproxy.so predates kernel core 2.3.0 (no decision "
             "epilogue): rebuild from the current CUDA sources."
         )
     return kernel
@@ -354,29 +354,29 @@ def test_mask_waits_for_delayed_power_writers(tmp_path, window_samples):
     if nvcc is None:
         pytest.skip("nvcc is required to build the scheduling regression")
     cuda_dir = Path(__file__).resolve().parents[2] / "cuda"
-    source = (cuda_dir / "f_statistic.cu").read_text()
+    source = (cuda_dir / "pilotproxy_detector.cu").read_text()
     write = "            atomicAdd(&fine[i], static_cast<unsigned long long>(re * re + im * im));"
     assert source.count(write) == 1
     # Delay the second warp before its final power additions, without changing them.
-    delay = """            if (MaskOut != NULL && n == FSTAT_NUM_WEIGHT_TERMS - 1
+    delay = """            if (MaskOut != NULL && n == PILOTPROXY_NUM_WEIGHT_TERMS - 1
                     && s == 0 && tid >= 32) {
                 const unsigned long long start = clock64();
                 while (clock64() - start < 5000000ULL) { }
             }
 """
-    instrumented = tmp_path / "f_statistic.cu"
+    instrumented = tmp_path / "pilotproxy_detector.cu"
     instrumented.write_text(source.replace(write, delay + write))
-    library = tmp_path / "libfstatistic.so"
+    library = tmp_path / "libpilotproxy.so"
     result = subprocess.run(
         [nvcc, "-std=c++14", "-O3", "-DNDEBUG", "-Xcompiler=-fPIC", "--shared",
          f"-arch=sm_{cp.cuda.Device().compute_capability}",
-         f"-DFSTAT_DETECTOR_WINDOW_SAMPLES={window_samples}",
-         "-DFSTAT_BLOCK_THREADS=64", "-I", str(cuda_dir), str(instrumented),
+         f"-DPILOTPROXY_DETECTOR_WINDOW_SAMPLES={window_samples}",
+         "-DPILOTPROXY_BLOCK_THREADS=64", "-I", str(cuda_dir), str(instrumented),
          "-o", str(library)],
         capture_output=True, text=True, timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    kernel = FStatKernel(library)
+    kernel = PilotProxyKernel(library)
     streams, batch, anchor = 2, 64, 40
     rng = np.random.default_rng(20260908)
     packed = rng.integers(0, 256, size=(batch, streams * WINDOWS, window_samples),

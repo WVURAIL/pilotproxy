@@ -144,12 +144,12 @@ def test_chime_plots_write_expected_files_and_summary_rows(tmp_path) -> None:
         newline="",
         encoding="utf-8",
     ) as f:
-        fstat_rows = list(csv.DictReader(f))
-    assert [int(row["physical_channel"]) for row in fstat_rows] == [14, 30]
-    assert fstat_rows[0]["num_detector_valid_frames"] == "4"
-    assert "mean_normalized_coarse_power_ratio_db" in fstat_rows[0]
-    assert "max_normalized_coarse_power_ratio_db" in fstat_rows[0]
-    assert "p99_normalized_coarse_power_ratio_db" not in fstat_rows[0]
+        power_ratio_rows = list(csv.DictReader(f))
+    assert [int(row["physical_channel"]) for row in power_ratio_rows] == [14, 30]
+    assert power_ratio_rows[0]["num_detector_valid_frames"] == "4"
+    assert "mean_normalized_coarse_power_ratio_db" in power_ratio_rows[0]
+    assert "max_normalized_coarse_power_ratio_db" in power_ratio_rows[0]
+    assert "p99_normalized_coarse_power_ratio_db" not in power_ratio_rows[0]
 
     with (run_dir / "tables" / "spectrum_before_after.csv").open(
         newline="",

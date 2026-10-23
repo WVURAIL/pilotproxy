@@ -3,6 +3,31 @@
 All notable changes to PilotProxy are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Handoff cleanup, October 23, 2026
+
+- Package 2.0.0 / core 4.0.0 renames the Python interface to
+  `PilotProxyKernel`, C API to `PilotProxy_*`, macros to `PILOTPROXY_*`,
+  native library to `libpilotproxy.so`, and source files to
+  `pilotproxy_detector.*` / `pilotproxy_reference.*`. Rebuild consumers;
+  the removed names are not aliases. Arithmetic and product schema v6 are
+  unchanged. See `docs/TERMINOLOGY.md` for the migration table.
+- Injection-recovery and result-summary schema v2 use `power_ratio` and
+  `power_ratio_histogram_png`; historical reports and weight bytes stay intact.
+- `STACK_AMPLITUDE_RATIO`, `temporal_gain` and `minimum_family_gain` replace
+  misleading coherence names in active code. Old imports remain aliases.
+- The threshold rule defaults to the paper's ideal calendar year, `1 / kappa`.
+  To reproduce historical duty-based times and decisions, pass
+  `calendar_factor=LEGACY_CALENDAR_FACTOR` (CLI: `--calendar-factor
+  6.574444324363269`). Recorded paper outcomes and words are unchanged under
+  the ideal-year convention. Saved records are not rewritten.
+- `--policy-budget` accepts the combined nominal-strength caps;
+  `--finite-budget` remains an alias. Empty recent-year support rejects the
+  candidate instead of raising an indexing error. Invalid budgets and time
+  factors are refused.
+- Installation detail is in `docs/USAGE.md`; current equations and tests are
+  indexed in `docs/PAPER_CODE_MAP.md`. The old capture-ratio study driver is
+  under `tools/archive/` and the tools catalog distinguishes historical work.
+
 ## Kernel core 3.0.0, per-pilot product schema v6 --- frame powers are fine-power sums
 
 The three frame powers are now defined as the all-bin sums of the exact fine
@@ -55,7 +80,7 @@ kernel's semantics. Tools and integrations that formed `sum |z|^2`
 now use the fine-power sums; their receipt and shard schemas were bumped where
 the stored values changed.
 
-`FStatKernel` refuses a library whose core major is not 3 before binding any
+`PilotProxyKernel` refuses a library whose core major is not 3 before binding any
 entry (a 2.x `FStat_Create` takes an output buffer the 3.0.0 binding lacks).
 Schema tokens whose meaning changed are bumped: the result schema to
 `pilotproxy_result_schema_v2`, the detector-core profile to

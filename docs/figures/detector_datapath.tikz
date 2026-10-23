@@ -4,15 +4,15 @@
 % PilotProxy_UG001 (User Guide); render detector_datapath.svg for markdown
 % use with detector_datapath_standalone.tex. Requires tikz libraries
 % arrows.meta + positioning + calc + decorations.pathreplacing, and the
-% colors FStatBlue, FStatRed, FStatGray, LightGray from the host document
+% colors PilotProxyBlue, PilotProxyRed, PilotProxyGray, LightGray from the host document
 % (or the standalone wrapper).
 % Re-render the svg after editing:
 %   cd docs/figures && pdflatex detector_datapath_standalone.tex \
 %     && pdftocairo -svg detector_datapath_standalone.pdf detector_datapath.svg
 \begin{tikzpicture}[node distance=0.40cm,>=Latex,
-  blk/.style={rectangle,rounded corners,draw=FStatBlue,thick,fill=LightGray,
+  blk/.style={rectangle,rounded corners,draw=PilotProxyBlue,thick,fill=LightGray,
               minimum height=0.62cm,align=center,text width=0.72\linewidth},
-  half/.style={rectangle,rounded corners,draw=FStatBlue,thick,fill=LightGray,
+  half/.style={rectangle,rounded corners,draw=PilotProxyBlue,thick,fill=LightGray,
                minimum height=0.62cm,align=center,text width=0.335\linewidth}]
 
 \node[blk] (in) {One selected coarse channel: 390.625\,kHz complex stream
@@ -43,14 +43,14 @@
 \draw[->,thick] (s1) -- (s2);
 \draw[->,thick] (s2.south -| v1.north) -- (v1.north);
 \draw[->,thick] (s2.south -| v2.north) -- (v2.north);
-\node[font=\scriptsize\color{FStatRed},align=center]
+\node[font=\scriptsize\color{PilotProxyRed},align=center]
   at ($(s2.south |- v2.south)+(0,-0.32)$)
   {one spectrum, two readings: no separate coarse power path (core 3.0.0)};
 
 \coordinate (brx) at ([xshift=0.22cm]s1.east);
-\draw[decorate,decoration={brace,amplitude=5pt},thick,FStatGray]
+\draw[decorate,decoration={brace,amplitude=5pt},thick,PilotProxyGray]
   (brx |- in.north) -- (brx |- v2.south)
-  node[midway,right=7pt,font=\scriptsize\color{FStatGray},align=left,
+  node[midway,right=7pt,font=\scriptsize\color{PilotProxyGray},align=left,
        text width=2.0cm]
   {two-stage zoom channelization:\\ 390.625\,kHz\\ $\to$ 3051.76\,Hz\\
    $\to$ 11.92\,Hz};

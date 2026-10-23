@@ -97,7 +97,7 @@
       "framing": {
         "frame_size_unit": "channelized complex samples per input stream",
         "frame_size_samples_may_be_overridden_per_run": true,
-        "kotekan_frame_note": "The kotekan chord configs advance the voltage ring buffer in GPU frames of num_times=8192 samples (41.94304 ms). One detector block is one GPU frame: 8192 samples at K=64 yield windows_per_stream = 128, the frozen fine-reduction transform length (FSTAT_FINE_WINDOWS_PER_STREAM), and the block aligns 1:1 with the 8192-sample n2k visibility integration."
+        "kotekan_frame_note": "The kotekan chord configs advance the voltage ring buffer in GPU frames of num_times=8192 samples (41.94304 ms). One detector block is one GPU frame: 8192 samples at K=64 yield windows_per_stream = 128, the frozen fine-reduction transform length (PILOTPROXY_FINE_WINDOWS_PER_STREAM), and the block aligns 1:1 with the 8192-sample n2k visibility integration."
       },
       "quantization": {
         "native_format_note": "kotekan chord DataType: one byte per complex sample, offset-binary (stored = value + 8), imaginary component in the low nibble, real component in the high nibble. Conversion to the kernel's two's-complement re-high/im-low layout is a per-byte XOR with 0x88 (subtract 8 per nibble); no nibble swap and no requantization.",

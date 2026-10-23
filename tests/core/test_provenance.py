@@ -20,9 +20,9 @@ def _ver(version="1.0.0", source="aaa111", kernel="2.1.0", kernel_sha="c85f50dd"
 
 def test_file_sha256_returns_digest_for_existing_file(tmp_path) -> None:
     path = tmp_path / "payload.bin"
-    path.write_bytes(b"fstat provenance\n")
+    path.write_bytes(b"kernel provenance\n")
 
-    assert file_sha256(path) == hashlib.sha256(b"fstat provenance\n").hexdigest()
+    assert file_sha256(path) == hashlib.sha256(b"kernel provenance\n").hexdigest()
 
 
 def test_file_sha256_returns_none_for_missing_file(tmp_path) -> None:

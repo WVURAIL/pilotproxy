@@ -14,7 +14,6 @@ import contextlib
 import hashlib
 import shutil
 import string
-import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -169,73 +168,3 @@ def stable_pdf_subset_tags():
         yield
     finally:
         PdfFile._get_subset_prefix = original
-
-
-def _fit_fontsize(ax, text: str, size: float, box_w: float,
-                  ratio: float, floor: float = 5.6) -> tuple[str, float]:
-    """Shrink size until the widest line fits box_w (axes fraction).
-
-    Never grows the size, so a box whose text already fits is untouched. The
-    width estimate is char-count times ratio ems, which is accurate enough for
-    the Latin Modern text used in these diagrams; floor stops a very long line
-    from being reduced to something unreadable.
-    """
-    lines = [ln for ln in text.replace(r"\\", "\n").split("\n") if ln]
-    if not lines:
-        return text, size
-    avail = box_w * ax.get_window_extent().width * 0.86
-    probe = ax.text(0, 0, text, transform=ax.transAxes, fontsize=size,
-                    linespacing=1.13, alpha=0)
-    try:
-        got = probe.get_window_extent(
-            renderer=ax.figure.canvas.get_renderer()).width
-    except Exception:
-        # No renderer available: fall back to a char-count estimate.
-        bbox = ax.get_position()
-        box_w_in = box_w * bbox.width * ax.figure.get_size_inches()[0]
-        widest = max(len(ln) for ln in lines)
-        probe.remove()
-        est = (box_w_in * 72.0 * 0.90) / (widest * ratio)
-        return text, max(floor, min(size, est))
-    probe.remove()
-    if got <= avail or got <= 0:
-        return text, size
-    # Re-wrap to the box before shrinking: a wide box with long lines should
-    # gain rows, not illegible type. Only shrink for what wrapping cannot fix
-    # (a single word, or math that must stay on one line).
-    per_char = got / max(len(ln) for ln in lines)
-    if per_char > 0 and not any("$" in ln for ln in lines):
-        cols = max(6, int(avail / per_char))
-        wrapped = "\n".join(
-            "\n".join(textwrap.wrap(ln, cols, break_long_words=False,
-                                    break_on_hyphens=False)) or ln
-            for ln in lines)
-        wlines = [ln for ln in wrapped.split("\n") if ln]
-        widest = max(len(ln) for ln in wlines) * per_char
-        if widest <= avail:
-            return wrapped, size
-        return wrapped, max(floor, size * avail / widest)
-    return text, max(floor, size * avail / got)
-
-
-def _text_height(ax, text: str, size: float) -> float:
-    probe = ax.text(0, 0, text, transform=ax.transAxes, fontsize=size,
-                    linespacing=1.13, alpha=0)
-    try:
-        h = probe.get_window_extent(
-            renderer=ax.figure.canvas.get_renderer()).height
-    except Exception:
-        h = 0.0
-    probe.remove()
-    return h
-
-
-def _fit_stack(ax, title: str, title_pt: float, body: str, body_pt: float,
-               box_h: float, floor: float = 5.6):
-    """Shrink both blocks together until they fit the box height."""
-    avail = box_h * ax.get_window_extent().height * 0.88
-    total = _text_height(ax, title, title_pt) + _text_height(ax, body, body_pt)
-    if total <= 0 or total <= avail:
-        return title_pt, body_pt
-    k = avail / total
-    return max(floor, title_pt * k), max(floor, body_pt * k)

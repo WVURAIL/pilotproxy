@@ -323,7 +323,7 @@ def _write_histogram_summary(
             )
 
 
-def _write_fstat_summary(
+def _write_power_ratio_summary(
     path: Path,
     *,
     physical_channel: np.ndarray,
@@ -388,7 +388,7 @@ def _survival_probability_on_grid(values: np.ndarray, grid: np.ndarray) -> ndarr
     return (float(finite.size) - count_below.astype(np.float64)) / float(finite.size)
 
 
-def _fstat_survival_plot_bounds(
+def _power_ratio_survival_plot_bounds(
     panel_values: Sequence[np.ndarray],
     *,
     include_comparison_range: bool,
@@ -493,7 +493,7 @@ def plot_snr_shelf_histogram(run_dir: Path) -> list[Path]:
         _save_figure(fig, path)
     plt.close(fig)
 
-    _write_fstat_summary(
+    _write_power_ratio_summary(
         Path(run_dir) / "tables" / "normalized_coarse_power_ratio_summary_by_channel.csv",
         physical_channel=physical_channel,
         pilot_frequency_hz=pilot_frequency_hz,
@@ -550,7 +550,7 @@ def plot_coarse_power_ratio_survival(run_dir: Path) -> list[Path]:
 
         panel_values = [values for _, _, values in channel_values]
         if panel_values:
-            xlim = _fstat_survival_plot_bounds(
+            xlim = _power_ratio_survival_plot_bounds(
                 panel_values,
                 include_comparison_range=False,
             )

@@ -28,7 +28,7 @@ from pilot_proxy.detector_reference import (
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.fxfft import fine_power_fx
 from gpu import cuda_available
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH, DEFAULT_WEIGHTS_PATH
 
 TARGET_FREQ_MHZ = 470.309441
@@ -59,7 +59,7 @@ def _import_cupy_or_skip():
 
 def _run_kernel(
     cp,
-    kernel: FStatKernel,
+    kernel: PilotProxyKernel,
     packed_samples: np.ndarray,
     packed_weights: np.ndarray,
 ):
@@ -113,7 +113,7 @@ def test_kernel_cpu_gpu_smoke_matches_prebuilt_dtv_weights() -> None:
     if not DEFAULT_WEIGHTS_PATH.exists():
         pytest.skip(f"Prebuilt weights not found: {DEFAULT_WEIGHTS_PATH}")
 
-    kernel = FStatKernel(DEFAULT_LIB_PATH)
+    kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     assert kernel.version.as_tuple() >= (3, 0, 0)
     wb = DetectorWeightBank(
         explicit_path=DEFAULT_WEIGHTS_PATH,

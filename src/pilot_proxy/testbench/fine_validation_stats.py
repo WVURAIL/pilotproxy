@@ -389,15 +389,3 @@ def raw_crossing_brackets(snr_db, rates, *, target):
             "estimate_db": upward[0]["estimate_db"] if unique else None,
             "raw_rates": y.tolist(), "snr_db": x.tolist(),
             "method": "raw adjacent sampled crossings; linear display interpolation; no extrapolation"}
-
-
-def _identities(values, expected, name):
-    ids = list(values)
-    if len(ids) != expected:
-        raise ValueError(f"{name} do not match the trial axis")
-    try:
-        if len(set(ids)) != expected:
-            raise ValueError(f"{name} must be unique")
-    except TypeError as exc:
-        raise TypeError(f"{name} must be hashable") from exc
-    return ids

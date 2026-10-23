@@ -99,11 +99,11 @@ def test_y_axis_upper_keeps_saturation_visible(
     assert _y_axis_upper(x_max, plotted_y) == expected
 
 
-def test_snr_shelf_fstat_axis_transform_round_trips() -> None:
+def test_snr_shelf_power_ratio_axis_transform_round_trips() -> None:
     snr_values = [-60.0, -42.0, -26.0, 0.0]
 
-    fstat_values = _estimated_data_shelf_snr_db_to_normalized_coarse_power_ratio_db(snr_values)
-    recovered = _normalized_coarse_power_ratio_db_to_estimated_data_shelf_snr_db(fstat_values)
+    power_ratio_values = _estimated_data_shelf_snr_db_to_normalized_coarse_power_ratio_db(snr_values)
+    recovered = _normalized_coarse_power_ratio_db_to_estimated_data_shelf_snr_db(power_ratio_values)
 
     assert list(recovered) == pytest.approx(snr_values)
 

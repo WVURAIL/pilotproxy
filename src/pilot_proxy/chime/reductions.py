@@ -108,7 +108,7 @@ def aggregate_frame_products(
     baseband = np.asarray(baseband_power_linear, dtype=np.float64)
     mask_arr = np.asarray(mask, dtype=np.uint8)
     valid_arr = np.asarray(valid, dtype=np.uint8) != 0
-    fstat_level = np.asarray(normalized_coarse_power_ratio_db, dtype=np.float64)
+    power_ratio_level = np.asarray(normalized_coarse_power_ratio_db, dtype=np.float64)
     shelf = np.asarray(estimated_data_shelf_snr_db, dtype=np.float64)
 
     for out_index, chunk_id in enumerate(unique_chunks):
@@ -134,11 +134,11 @@ def aggregate_frame_products(
         mask_fraction_valid[out_index, :] = counts["mask_fraction_valid"]
         mask_fraction_total[out_index, :] = counts["mask_fraction_total"]
 
-        fstat_chunk = np.where(valid_chunk, fstat_level[rows, :], np.nan)
+        power_ratio_chunk = np.where(valid_chunk, power_ratio_level[rows, :], np.nan)
         shelf_chunk = np.where(valid_chunk, shelf[rows, :], np.nan)
-        normalized_coarse_power_ratio_db_median[out_index, :] = _finite_stat(fstat_chunk, "median")
-        normalized_coarse_power_ratio_db_p95[out_index, :] = _finite_stat(fstat_chunk, "p95")
-        normalized_coarse_power_ratio_db_max[out_index, :] = _finite_stat(fstat_chunk, "max")
+        normalized_coarse_power_ratio_db_median[out_index, :] = _finite_stat(power_ratio_chunk, "median")
+        normalized_coarse_power_ratio_db_p95[out_index, :] = _finite_stat(power_ratio_chunk, "p95")
+        normalized_coarse_power_ratio_db_max[out_index, :] = _finite_stat(power_ratio_chunk, "max")
         estimated_data_shelf_snr_db_median[out_index, :] = _finite_stat(shelf_chunk, "median")
         estimated_data_shelf_snr_db_p95[out_index, :] = _finite_stat(shelf_chunk, "p95")
         estimated_data_shelf_snr_db_max[out_index, :] = _finite_stat(shelf_chunk, "max")

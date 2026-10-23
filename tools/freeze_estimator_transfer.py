@@ -500,7 +500,7 @@ def _digital_points(
         "schema_version": "digital_estimator_transfer_analysis_v1",
         "experiment": "digital_synthetic",
         "scope": {
-            "validated": "threshold-free coarse F-statistic normalization and shelf-SNR estimation transfer",
+            "validated": "threshold-free coarse power-ratio normalization and shelf-SNR estimation transfer",
             "not_validated": [
                 "decision threshold calibration",
                 "false-alarm or detection probability",
@@ -742,7 +742,7 @@ def _ota_points(
         "schema_version": "sdr_ota_estimator_transfer_analysis_v1",
         "experiment": "sdr_ota",
         "scope": {
-            "validated": "threshold-free coarse F-statistic shelf-SNR estimation through the direct radio path",
+            "validated": "threshold-free coarse power-ratio shelf-SNR estimation through the direct radio path",
             "not_validated": [
                 "decision threshold calibration",
                 "false-alarm or detection probability",
@@ -1163,7 +1163,7 @@ The exact plotter source that wrote the conditioning record is preserved by the 
 
 The publication PDF is a vector figure rendered through LaTeX with embedded T1 Latin Modern fonts. Its exact delivered bytes are pinned here. Rebuilds can differ at the byte level because embedded-font subset identifiers vary, even when the vector content and extracted text match.
 
-This validates coarse F-statistic normalization and SNR estimation. It does not test a decision threshold, Pfa, Pd, an ROC curve, or the full 2048-stream deployment geometry.
+This validates coarse power-ratio normalization and SNR estimation. It does not test a decision threshold, Pfa, Pd, an ROC curve, or the full 2048-stream deployment geometry.
 
 Repeat this sweep only after changes to estimator normalization or math, detector geometry or weights, numeric representation, or waveform and noise synthesis. Threshold-policy changes alone do not invalidate this threshold-free estimation evidence.
 
@@ -1329,7 +1329,7 @@ The exact runner and stream-worker sources are preserved by the annotated tag `{
 
 The publication PDF is a vector figure rendered through LaTeX with embedded T1 Latin Modern fonts. Its exact delivered bytes are pinned here. Rebuilds can differ at the byte level because embedded-font subset identifiers vary, even when the vector content and extracted text match.
 
-This validates threshold-free coarse F-statistic SNR estimation through the minimal direct radio path. It does not test a decision threshold, Pfa, Pd, an ROC curve, field propagation, or multipath performance.
+This validates threshold-free coarse power-ratio SNR estimation through the minimal direct radio path. It does not test a decision threshold, Pfa, Pd, an ROC curve, field propagation, or multipath performance.
 
 Repeat this sweep only after changes to estimator normalization or math, detector geometry or weights, numeric representation, waveform synthesis, or the hardware and radio path. Threshold-policy changes alone do not invalidate this threshold-free estimation evidence.
 

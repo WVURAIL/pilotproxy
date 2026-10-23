@@ -1,7 +1,7 @@
 # coding=utf-8
 """GPU gates for the fused fine kernel (kernel core 2.2.0 / 3.0.0).
 
-``FStat_Compute_FusedFine_U64`` is the fused form of the deployed fine
+``PilotProxy_Compute_FusedFine_U64`` is the fused form of the deployed fine
 path: one launch from packed int4 samples to exact uint64 fine powers,
 with row projections held in shared memory and materialized to global
 only through the optional debug tap, followed by the stream-ordered
@@ -38,7 +38,7 @@ import pytest
 
 from pilot_proxy.fxfft import fine_power_fx
 from gpu import cuda_available
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
 TERMS = 3
@@ -58,19 +58,19 @@ def _import_cupy_or_skip():
     return cp
 
 
-def _kernel_or_skip() -> FStatKernel:
+def _kernel_or_skip() -> PilotProxyKernel:
     try:
-        kernel = FStatKernel(DEFAULT_LIB_PATH)
+        kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     except FileNotFoundError:  # pragma: no cover - library not built
-        pytest.skip("libfstatistic.so is not built")
+        pytest.skip("libpilotproxy.so is not built")
     if not kernel.supports_fused_fine():
         pytest.skip(
-            "libfstatistic.so predates kernel core 2.2.0 (no fused fine "
+            "libpilotproxy.so predates kernel core 2.2.0 (no fused fine "
             "kernel): rebuild from the current CUDA sources."
         )
     if kernel.version.as_tuple() < (3, 0, 0):
         pytest.fail(
-            "libfstatistic.so predates kernel core 3.0.0: its d_power_out is "
+            "libpilotproxy.so predates kernel core 3.0.0: its d_power_out is "
             "not the fine-bin sum. Rebuild from the current CUDA sources."
         )
     return kernel
@@ -159,7 +159,7 @@ def test_fused_batch_case():
     cp = _import_cupy_or_skip()
     kernel = _kernel_or_skip()
     if not kernel.supports_batch:
-        pytest.skip("libfstatistic.so does not expose FStat_Create_Batch")
+        pytest.skip("libpilotproxy.so does not expose PilotProxy_Create_Batch")
     rng = np.random.default_rng(RNG_SEED + 1)
     streams, batch = 8, 3
     rows = streams * WINDOWS

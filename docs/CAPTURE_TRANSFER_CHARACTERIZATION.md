@@ -16,7 +16,7 @@ export PYTHONPATH=/home/djg/rail/pilotproxy/src
 python tools/characterize_capture_transfer.py freeze \
   --datasets /path/to/datasets --bundle /path/to/review-only/bundle \
   --weight-bank /path/to/original/ch14-to-37.bin \
-  --library /path/to/K128/libfstatistic.so --output /path/to/output
+  --library /path/to/K128/libpilotproxy.so --output /path/to/output
 python tools/characterize_capture_transfer.py reduce-one \
   --protocol /path/to/output/protocol.json --channel 29 --epoch 20260916162300
 python tools/characterize_capture_transfer.py summarize \

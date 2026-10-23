@@ -26,9 +26,9 @@
 \usepackage{float}
 \usepackage{placeins}
 
-\definecolor{FStatRed}{HTML}{A00000}
-\definecolor{FStatGray}{HTML}{555555}
-\definecolor{FStatBlue}{HTML}{144E8C}
+\definecolor{PilotProxyRed}{HTML}{A00000}
+\definecolor{PilotProxyGray}{HTML}{555555}
+\definecolor{PilotProxyBlue}{HTML}{144E8C}
 \definecolor{LightGray}{HTML}{F3F3F3}
 \definecolor{MidGray}{HTML}{D9D9D9}
 \definecolor{DarkText}{HTML}{1A1A1A}
@@ -43,14 +43,14 @@
 \setlist[itemize]{leftmargin=1.2em,itemsep=2pt,topsep=2pt}
 \setlist[enumerate]{leftmargin=1.4em,itemsep=2pt,topsep=2pt}
 
-\titleformat{\section}{\Large\bfseries\color{DarkText}}{}{0pt}{}[\vspace{-3pt}\color{FStatRed}\titlerule]
+\titleformat{\section}{\Large\bfseries\color{DarkText}}{}{0pt}{}[\vspace{-3pt}\color{PilotProxyRed}\titlerule]
 \titleformat{\subsection}{\large\bfseries\color{DarkText}}{}{0pt}{}
 \titleformat{\subsubsection}{\normalsize\bfseries\color{DarkText}}{}{0pt}{}
 
 \newcommand{\code}[1]{\texttt{\detokenize{#1}}}
 \newcommand{\apicode}[1]{\texttt{\detokenize{#1}}}
 \newcommand{\yes}{\textcolor{GoodGreen}{Yes}}
-\newcommand{\no}{\textcolor{FStatGray}{No}}
+\newcommand{\no}{\textcolor{PilotProxyGray}{No}}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
@@ -79,13 +79,13 @@
 \lstset{style=shell}
 
 \newcommand{\notebox}[1]{%
-  \vspace{4pt}\noindent\fcolorbox{FStatBlue}{LightGray}{%
+  \vspace{4pt}\noindent\fcolorbox{PilotProxyBlue}{LightGray}{%
   \begin{minipage}{0.965\linewidth}%
   \textbf{Note:} #1%
   \end{minipage}}\vspace{4pt}}
 
 \newcommand{\importantbox}[1]{%
-  \vspace{4pt}\noindent\fcolorbox{FStatRed}{LightGray}{%
+  \vspace{4pt}\noindent\fcolorbox{PilotProxyRed}{LightGray}{%
   \begin{minipage}{0.965\linewidth}%
   \textbf{Important:} #1%
   \end{minipage}}\vspace{4pt}}
@@ -106,9 +106,9 @@
 \fancyfoot[C]{\small Dylan Gormley}
 \fancyfoot[R]{\small Page \thepage\ of \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.8pt}
-\renewcommand{\headrule}{\hbox to\headwidth{\color{FStatRed}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{PilotProxyRed}\leaders\hrule height \headrulewidth\hfill}}
 \renewcommand{\footrulewidth}{0.8pt}
-\renewcommand{\footrule}{\hbox to\headwidth{\color{FStatRed}\leaders\hrule height \footrulewidth\hfill}}
+\renewcommand{\footrule}{\hbox to\headwidth{\color{PilotProxyRed}\leaders\hrule height \footrulewidth\hfill}}
 
 \title{PilotProxy CUDA F-Statistic DTV Pilot Detector\\Product Specification}
 \author{Dylan J. Gormley}
@@ -118,7 +118,7 @@
 \thispagestyle{fancy}
 {\sffamily
 \begin{minipage}[t]{0.39\textwidth}
-  {\fontsize{24}{26}\selectfont\bfseries\color{FStatRed}PilotProxy}\par
+  {\fontsize{24}{26}\selectfont\bfseries\color{PilotProxyRed}PilotProxy}\par
   {\small PilotProxy-DS001, August 2026}
 \end{minipage}
 \hfill
@@ -147,10 +147,10 @@ ATSC A/53 Part 2 specifies that the 8-VSB pilot is approximately 11.3 dB below t
   \item Three matched-filter terms: target pilot bin, lower reference bin, upper reference bin.
   \item Exact \code{uint64} fine powers per term and fine bin; the target/reference frame powers are their all-bin sums.
   \item Time-coherent front end: \code{int32} row sums, padded fine
-        spectrum, any-bin CFAR detection.
+        spectrum, rank-based marker detection.
   \item Synthetic-evaluator detection by an exact integer rational threshold comparison on the host; no division in that mask path.
   \item Synthetic-evaluator threshold coordinate is DTV shelf SNR in dB.
-  \item The corresponding threshold coordinate is a rational F-statistic half-threshold.
+  \item The corresponding threshold coordinate is a rational power-ratio half-threshold.
   \item GNU Radio ATSC 1.0 waveform generation, audit, AWGN injection, quantization, and SNR evaluation.
   \item Physical-channel helpers and shipped weights for U.S. UHF channels 14-36.
 \end{itemize}
@@ -176,7 +176,7 @@ Power accumulation & \code{uint64} \\ \hline
 \multicolumn{2}{|c|}{\bfseries User-Facing Controls}\\ \hline
 Target selection & \code{physical_channel} or \code{dtv_pilot_mhz} selects precomputed weights \\ \hline
 Frame size & Matched to the correlator frame; CHIME F-engine target $2^{14}$ \\ \hline
-Synthetic threshold & \code{threshold_data_shelf_snr_db}; converted by evaluator host software \\ \hline
+Synthetic threshold & Shelf SNR in dB; converted by evaluator host software \\ \hline
 \multicolumn{2}{|c|}{\bfseries Reference Testbench}\\ \hline
 Reference ADC rate & 800 MS/s real input \\ \hline
 Reference band & 400-800 MHz \\ \hline
@@ -196,7 +196,7 @@ Execution policy & Device-affine, default stream \\ \hline
 \end{minipage}
 
 \vfill
-{\small\color{FStatGray}Synthetic thresholds are distinct from the current CHIME $F>\mu_0$ mask; $F>1$ is the basic raw convention. Measure performance on the target system.}
+{\small\color{PilotProxyGray}The runtime decision uses the rank-based fine score. The archive $F>\mu_0$ flag and synthetic thresholds are separate diagnostics. Measure performance on the target system.}
 
 \newpage
 \tableofcontents
@@ -242,7 +242,7 @@ For one evaluated frame, the kernel produces three frame powers:
   P_n=\sum_{f}S[n,f],
 \end{equation}
 each the exact \code{uint64} all-bin sum of that term's fine power spectrum
-\(S[n,f]\) (Section~\ref{ssec:fine}; kernel core 3.0.0). The target term \(P_t\) is centered on the ATSC pilot. The lower and upper reference terms, \(P_{r1}\) and \(P_{r2}\), sample the nearby non-pilot floor. We form the raw F-statistic as
+\(S[n,f]\) (Section~\ref{ssec:fine}; kernel core 3.0.0). The target term \(P_t\) is centered on the ATSC pilot. The lower and upper reference terms, \(P_{r1}\) and \(P_{r2}\), sample the nearby non-pilot floor. We form the raw power ratio as
 \begin{equation}
   \boxed{F=\frac{2P_t}{P_{r1}+P_{r2}}.}
 \end{equation}
@@ -252,7 +252,7 @@ host code receives the three exact powers and must use
 
 \subsection{Pilot Excess and PNR}
 
-The raw F-statistic level is:
+The raw power ratio level is:
 \begin{equation}
   R_F=10\log_{10}F.
 \end{equation}
@@ -260,11 +260,16 @@ This level is not the physical pilot-to-noise ratio because \(F=1\) is the uncor
 \begin{equation}
   \boxed{\rho=F-1.}
 \end{equation}
-The one-bin pilot-excess PNR is:
+Physical pilot excess uses the exact packed-weight normalization,
+\(\mu_0=2\lVert w_t\rVert^2/(\lVert w_{r1}\rVert^2+\lVert w_{r2}\rVert^2)\):
 \begin{equation}
-  \boxed{\mathrm{PNR}_{\mathrm{bin},dB}=10\log_{10}(F-1).}
+  e=F/\mu_0-1,\qquad
+  \boxed{\mathrm{PNR}_{\mathrm{bin},dB}=10\log_{10}e.}
 \end{equation}
-If \(F\leq 1\), this logarithm is undefined. JSON reports encode the value as \code{null}.
+The raw excess \(\rho\) is diagnostic only. For \(e\leq0\), the logarithm is
+undefined and JSON reports encode it as \code{null}; the signed linear excess
+remains available. \(\mu_0\) is a ratio of expected powers under flat noise,
+not the finite-sample expectation of the random ratio \(F\).
 
 \subsection{DTV Shelf SNR}
 
@@ -333,12 +338,13 @@ not \(\mathrm{pad}\cdot W\sum_m|z[n,m]|^2\): the two agree to a median
 relative \(3\times10^{-6}\) on archive frames and depart by up to about 2 per
 cent on near-empty frames. Earlier cores computed that row-domain sum as a
 separate power and enforced a per-frame marginal identity against it; both
-are retired. Fine-bin detection uses a pre-registered null-bulk CFAR over the
-independent non-designated bins with an any-bin decision rule; the stored
-fields, CFAR calibration modes, and detection-list layout are specified in
+are retired. The runtime fine decision compares the largest marker-bin ratio with a
+calibrated multiple of a bulk order statistic. The archive also stores
+any-bin diagnostic tests. The stored fields, calibration modes, and
+detection-list layout are specified in
 \code{docs/PRODUCT_SCHEMA.md}.
 
-\subsection{Distributional Statement ($H_0$)}
+\subsection{Distributional Statement (Null Hypothesis)}
 \label{ssec:dist}
 
 Under the null hypothesis --- no pilot, a locally flat spectrum across the
@@ -357,10 +363,10 @@ F_{\mathrm{row}}
 \;\sim\; F(2,4),
 \end{equation}
 the F distribution with \((2,4)\) degrees of freedom: a 2-dof power over
-the mean of two independent 2-dof powers. The name F-statistic is
-therefore literal, not borrowed.
+the mean of two independent 2-dof powers. This F law is an idealized reference, not a distributional claim for the
+production detector or its rank-normalized fine score.
 
-The deployed statistic sums powers over \(M\) rows before the ratio
+The ideal frame statistic sums powers over \(M\) rows before the ratio
 (\code{all_rows_summed_before_ratio}), which replaces \((2,4)\) by
 \((2M,\,4M)\): under the same assumptions \(F \sim F(2M, 4M)\). The frame
 powers are the all-bin sums of the fine spectrum, which an exact transform
@@ -381,8 +387,9 @@ form is a Satterthwaite-style approximation; correlated or non-Gaussian
 interference violates the row-independence assumption. Each fine bin
 repeats the construction across \(N_{\mathrm{s}}\) streams,
 \(F_2[b] \sim F(2N_{\mathrm{s}},\,4N_{\mathrm{s}})\) on independent bins
-under \(H_0\); the fine CFAR deliberately calibrates its null from the
-data (the null bulk) rather than assuming this shape.
+under \(H_0\); the fine score instead normalizes marker ratios by a bulk order statistic.
+That normalization alone does not certify a false-alarm rate; calibration
+requires an appropriate independent noise population.
 
 \begin{figure}[H]
 \centering
@@ -410,16 +417,16 @@ separate coarse power path (\code{docs/DESIGN_DECISIONS.md}).}
   \draw[->,thick] (-0.2,0) -- (10.5,0) node[right]{frequency};
   \draw[->,thick] (0,-0.2) -- (0,4.1) node[above]{power / PSD};
   \draw[fill=LightGray,draw=none] (1.2,1.05) rectangle (8.8,1.72);
-  \draw[thick,FStatGray] (1.2,1.72) -- (8.8,1.72);
-  \draw[thick,FStatGray] (0.4,0.95) .. controls (0.9,1.25) and (1.0,1.55) .. (1.2,1.72);
-  \draw[thick,FStatGray] (8.8,1.72) .. controls (9.0,1.55) and (9.1,1.25) .. (9.6,0.95);
-  \draw[thick,FStatBlue] (0.4,1.0) -- (9.6,1.0);
-  \draw[thick,FStatRed] (2.0,1.0) -- (2.0,3.35);
-  \draw[fill=FStatRed,draw=FStatRed] (2.0,3.35) circle (0.055);
+  \draw[thick,PilotProxyGray] (1.2,1.72) -- (8.8,1.72);
+  \draw[thick,PilotProxyGray] (0.4,0.95) .. controls (0.9,1.25) and (1.0,1.55) .. (1.2,1.72);
+  \draw[thick,PilotProxyGray] (8.8,1.72) .. controls (9.0,1.55) and (9.1,1.25) .. (9.6,0.95);
+  \draw[thick,PilotProxyBlue] (0.4,1.0) -- (9.6,1.0);
+  \draw[thick,PilotProxyRed] (2.0,1.0) -- (2.0,3.35);
+  \draw[fill=PilotProxyRed,draw=PilotProxyRed] (2.0,3.35) circle (0.055);
   \draw[dashed,thick,WarnOrange] (1.52,1.0) -- (1.52,1.35);
   \draw[dashed,thick,WarnOrange] (2.48,1.0) -- (2.48,1.35);
-  \draw[<->,thick,FStatRed] (2.20,1.0) -- (2.20,3.35) node[midway,right]{pilot excess};
-  \draw[<->,thick,FStatBlue] (8.95,1.0) -- (8.95,1.72) node[midway,right]{data shelf SNR};
+  \draw[<->,thick,PilotProxyRed] (2.20,1.0) -- (2.20,3.35) node[midway,right]{pilot excess};
+  \draw[<->,thick,PilotProxyBlue] (8.95,1.0) -- (8.95,1.72) node[midway,right]{data shelf SNR};
   \draw[decorate,decoration={brace,mirror,amplitude=5pt},thick] (1.2,-0.25) -- (8.8,-0.25)
     node[midway,below=6pt]{nominal 6 MHz DTV channel};
   \node[align=center] at (2.0,3.72) {ATSC pilot\\target bin $P_t$};
@@ -435,7 +442,7 @@ separate coarse power path (\code{docs/DESIGN_DECISIONS.md}).}
 
 \section{Threshold Interpretation}
 
-For synthetic threshold tests, the user supplies \code{threshold_data_shelf_snr_db}. Host software converts this shelf-SNR threshold to the raw F-statistic coordinate and then to a rational half-threshold, which it applies to the integer frame powers:
+For synthetic threshold tests, the user supplies \code{threshold_data_shelf_snr_db}. Host software converts this shelf-SNR threshold to the raw power ratio coordinate and then to a rational half-threshold, which it applies to the integer frame powers:
 
 \begin{align}
 \mathrm{PNR}_{\mathrm{bin,thr},dB} &= S_{\mathrm{shelf,thr},dB} - \mathrm{pilot\_below\_data\_db} + 10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})+10\log_{10}(\eta_p),\\
@@ -593,20 +600,20 @@ from Parseval at these amplitudes; \code{cuda/config.h}).
 \begin{longtable}{|L{0.54\linewidth}|L{0.38\linewidth}|}
 \hline
 \textbf{Function} & \textbf{Purpose}\\ \hline
-\apicode{FStat_GetSpecs} & Query detector-window samples, number of weight terms, component bits, and reference-bin offset.\\ \hline
-\apicode{FStat_GetFeatures} & Query DP4A use, uint64 accumulation use, and CUDA block size.\\ \hline
-\apicode{FStat_GetOptimizationFeatures} & Query weight-lane placement and grid cap.\\ \hline
-\apicode{FStat_GetVersion} & Query the locked kernel version.\\ \hline
-\apicode{FStat_LastError} & Read the last CUDA/API error recorded by the calling thread.\\ \hline
-\apicode{FStat_Create} / \apicode{FStat_Create_Batch} & Create a device-affine handle over the packed input (no output buffer since core 3.0.0).\\ \hline
-\apicode{FStat_SetStream} & Select the CUDA stream for a handle's launches (core 2.4.0).\\ \hline
-\apicode{FStat_Compute_RowSums_I32} & Exact \code{int32} complex per-row dot products (term-major, stream-major rows, interleaved re/im); the input to the fine stage.\\ \hline
-\apicode{FStat_Supports_RowSums} & Runtime capability probe; returns 1 when the loaded library provides the row-sum entry.\\ \hline
-\apicode{FStat_Compute_FinePowers_U64} & On-device fine-reduction power stage (core 2.1.0): frozen fxfft256 v1 fixed-point FFT over the row-sum buffer plus exact \code{uint64} feed-power sums per fine bin; handle-free, composes directly with \apicode{FStat_Compute_RowSums_I32} output; bit-reproducible for any launch schedule. Policy-free: the fine statistic, CFAR, and designated-set decision form downstream.\\ \hline
-\apicode{FStat_Supports_FinePowers} / \apicode{FStat_GetFineSpecs} & Fine-stage capability probe and frozen geometry query (128 windows, pad 2, 256 bins).\\ \hline
-\apicode{FStat_Compute_FusedFine_U64} & One launch from packed samples to the exact fine powers (core 2.2.0); its required \code{d_power_out} receives the frame powers \(P_n=\sum_b S[n,b]\), reduced on the device (core 3.0.0).\\ \hline
-\apicode{FStat_Compute_FusedFineMask_U64} / \apicode{FStat_Compute_FusedFineMaskWithSupport_U64} & Fused fine powers plus the fine decision v1 epilogue: one mask bit per frame (core 2.3.0), and rank-valid and usable-bulk outputs (core 2.5.0); frame powers and row sums are optional taps.\\ \hline
-\apicode{FStat_Destroy} & Destroy handle.\\ \hline
+\apicode{PilotProxy_GetSpecs} & Query detector-window samples, number of weight terms, component bits, and reference-bin offset.\\ \hline
+\apicode{PilotProxy_GetFeatures} & Query DP4A use, uint64 accumulation use, and CUDA block size.\\ \hline
+\apicode{PilotProxy_GetOptimizationFeatures} & Query weight-lane placement and grid cap.\\ \hline
+\apicode{PilotProxy_GetVersion} & Query the locked kernel version.\\ \hline
+\apicode{PilotProxy_LastError} & Read the last CUDA/API error recorded by the calling thread.\\ \hline
+\apicode{PilotProxy_Create} / \apicode{PilotProxy_Create_Batch} & Create a device-affine handle over the packed input (no output buffer since core 3.0.0).\\ \hline
+\apicode{PilotProxy_SetStream} & Select the CUDA stream for a handle's launches (core 2.4.0).\\ \hline
+\apicode{PilotProxy_Compute_RowSums_I32} & Exact \code{int32} complex per-row dot products (term-major, stream-major rows, interleaved re/im); the input to the fine stage.\\ \hline
+\apicode{PilotProxy_Supports_RowSums} & Runtime capability probe; returns 1 when the loaded library provides the row-sum entry.\\ \hline
+\apicode{PilotProxy_Compute_FinePowers_U64} & On-device fine-reduction power stage (core 2.1.0): frozen fxfft256 v1 fixed-point FFT over the row-sum buffer plus exact \code{uint64} feed-power sums per fine bin; handle-free, composes directly with \apicode{PilotProxy_Compute_RowSums_I32} output; bit-reproducible for any launch schedule. Policy-free: the fine statistic, CFAR, and designated-set decision form downstream.\\ \hline
+\apicode{PilotProxy_Supports_FinePowers} / \apicode{PilotProxy_GetFineSpecs} & Fine-stage capability probe and frozen geometry query (128 windows, pad 2, 256 bins).\\ \hline
+\apicode{PilotProxy_Compute_FusedFine_U64} & One launch from packed samples to the exact fine powers (core 2.2.0); its required \code{d_power_out} receives the frame powers \(P_n=\sum_b S[n,b]\), reduced on the device (core 3.0.0).\\ \hline
+\apicode{PilotProxy_Compute_FusedFineMask_U64} / \apicode{PilotProxy_Compute_FusedFineMaskWithSupport_U64} & Fused fine powers plus the fine decision v1 epilogue: one mask bit per frame (core 2.3.0), and rank-valid and usable-bulk outputs (core 2.5.0); frame powers and row sums are optional taps.\\ \hline
+\apicode{PilotProxy_Destroy} & Destroy handle.\\ \hline
 \end{longtable}
 \normalsize
 

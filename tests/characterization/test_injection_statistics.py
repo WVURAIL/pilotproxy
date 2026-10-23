@@ -30,13 +30,13 @@ def test_the_weighted_fit_recovers_an_exact_line_and_weights_by_sem():
 def test_thresholds_are_the_controls_quantiles_at_supported_rates_only():
     rng = np.random.default_rng(4)
     control = {"n_valid": 5000, "f": rng.standard_normal(5000)}
-    thresholds, usable = injection.matched_thresholds(control, [1e-3, 1e-2, 0.1], statistics={"fstat": "f"})
+    thresholds, usable = injection.matched_thresholds(control, [1e-3, 1e-2, 0.1], statistics={"power_ratio": "f"})
     assert usable == [0.1, 0.01]                      # 1e-3 would need 10,000 frames
-    assert thresholds["fstat"]["0.1"] == float(np.quantile(control["f"], 0.9))
-    point = {"n_valid": 4, "f": np.array([-10.0, 10.0, 10.0, thresholds["fstat"]["0.1"]])}
-    row = injection.detection_rates(point, thresholds, usable, statistics={"fstat": "f"})
-    assert row["pd_fstat_pfa0.1"] == 0.5              # equality is not a detection
-    assert row["pd_fstat_pfa0.1_wilson95_lo"] < 0.5 < row["pd_fstat_pfa0.1_wilson95_hi"]
+    assert thresholds["power_ratio"]["0.1"] == float(np.quantile(control["f"], 0.9))
+    point = {"n_valid": 4, "f": np.array([-10.0, 10.0, 10.0, thresholds["power_ratio"]["0.1"]])}
+    row = injection.detection_rates(point, thresholds, usable, statistics={"power_ratio": "f"})
+    assert row["pd_power_ratio_pfa0.1"] == 0.5              # equality is not a detection
+    assert row["pd_power_ratio_pfa0.1_wilson95_lo"] < 0.5 < row["pd_power_ratio_pfa0.1_wilson95_hi"]
 
 
 def test_the_log_slope_reads_only_signal_dominated_points():

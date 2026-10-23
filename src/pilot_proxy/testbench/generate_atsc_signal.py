@@ -182,7 +182,7 @@ def generate_atsc_iq(
     iq.tofile(output_iq)
 
     metadata = {
-        "schema_version": "fstat_atsc_clean_iq_v1",
+        "schema_version": "pilotproxy_atsc_clean_iq_v1",
         "output_iq": str(output_iq),
         "output_ts": None if output_ts is None else str(output_ts),
         "num_iq_samples": int(num_iq_samples),

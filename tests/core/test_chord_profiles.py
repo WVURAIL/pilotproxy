@@ -173,7 +173,7 @@ def test_chord_detector_layout_matches_frozen_fine_geometry(
         num_input_streams=profile.num_input_streams,
     )
     # windows_per_stream must equal the frozen fine-reduction transform length
-    # (FSTAT_FINE_WINDOWS_PER_STREAM = 128) for the fused fine/mask kernels.
+    # (PILOTPROXY_FINE_WINDOWS_PER_STREAM = 128) for the fused fine/mask kernels.
     assert layout.windows_per_stream == 128
     assert layout.detector_rows_per_frame == expected_rows
     # One detector block = one kotekan GPU frame of 8192 samples (41.94304

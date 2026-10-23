@@ -53,7 +53,7 @@ from pilot_proxy.integration import (
 )
 from pilot_proxy.integration.packing import estimate_complex_scale
 from pilot_proxy.integration.stream_layout import validate_integration_compatibility
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH, DEFAULT_WEIGHTS_PATH
 from pilot_proxy.product_contract import frame_powers_from_fine
 from pilot_proxy.provenance import file_sha256, sidecar_manifest_path
@@ -801,7 +801,7 @@ def run_chime_analysis(
     physical_channel = np.asarray(
         [dataset.physical_channel for dataset in selected], dtype=np.int32
     )
-    kernel_obj = kernel if kernel is not None else FStatKernel(lib_path)
+    kernel_obj = kernel if kernel is not None else PilotProxyKernel(lib_path)
     weight_bank = (
         None
         if weights_by_channel is not None

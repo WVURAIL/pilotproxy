@@ -32,7 +32,7 @@ from pilot_proxy.detector_reference import (
 )
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.fxfft import fine_power_fx
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.testbench.evaluate_snr import _ideal_float_weights_from_layout
 from pilot_proxy.testbench.fine_validation_gpu import (
     DEFAULT_INPUT_SCALE,
@@ -244,8 +244,8 @@ def main():
         raise ValueError("this frozen audit requires all 23 profiles, channels14..36")
     combinations = [(8, ch) for ch in channels] + [(2048, ch) for ch in (14, 29, 36)]
     seeds, seed_audit = allocate_seeds(root, args.cache, args.engineering_root, combinations)
-    kernel_path = REPO / "cuda/libfstatistic.so"
-    kernel = FStatKernel(kernel_path)
+    kernel_path = REPO / "cuda/libpilotproxy.so"
+    kernel = PilotProxyKernel(kernel_path)
     inputs = {str(p): sha(p) for p in (args.cache / "plan.json", args.cache / "manifest.json", kernel_path)}
     for ch in channels:
         index = (ch - 14) * 28

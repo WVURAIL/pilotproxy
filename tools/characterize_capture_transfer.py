@@ -246,7 +246,7 @@ def reduce_one(args):
     from pilot_proxy.detector_weights import DetectorWeightBank
     from pilot_proxy.fine_decision import fine_mask_decision
     from pilot_proxy.fxfft import fxfft256
-    from pilot_proxy.kernel import FStatKernel
+    from pilot_proxy.kernel import PilotProxyKernel
 
     p, protocol_hash = load_protocol(args.protocol, args.source_amendment)
     ch, epoch = args.channel, args.epoch
@@ -265,7 +265,7 @@ def reduce_one(args):
     with np.load(saved, allow_pickle=False) as z:
         origins, want_autos = z['frame_fpga0'], z['autos']
         saved_meta = json.loads(str(z['meta']))
-    kernel = FStatKernel(p['library']['path'])
+    kernel = PilotProxyKernel(p['library']['path'])
     if kernel.specs.K != 128:
         raise ValueError('K128 library required')
     bank = DetectorWeightBank(explicit_path=p['weight_bank']['path'], expected_kernel=kernel.specs)

@@ -27,7 +27,7 @@ from pilot_proxy.dtv_units import (
 
 REFERENCE_EFFECTIVE_BIN_BW_HZ = 3051.7578125
 REFERENCE_SPREADING_LOSS_DB = 32.936012
-RAW_FSTAT_LEVEL_EXAMPLE_DB = 1.0
+RAW_PILOTPROXY_LEVEL_EXAMPLE_DB = 1.0
 EXPECTED_PNR_BIN_DB_FROM_1DB_RAW_F = -5.868253
 EXPECTED_SHELF_SNR_DB_FROM_1DB_RAW_F = -27.504265
 REFERENCE_CHANNEL_WIDTH_HZ = 390625.0
@@ -53,7 +53,7 @@ def test_reference_geometry_pnr_to_shelf_example_is_explicit() -> None:
         abs_tol=ABS_TOL_DB,
     )
 
-    f_raw = DB_LINEAR_BASE ** (RAW_FSTAT_LEVEL_EXAMPLE_DB / DB_POWER_FACTOR)
+    f_raw = DB_LINEAR_BASE ** (RAW_PILOTPROXY_LEVEL_EXAMPLE_DB / DB_POWER_FACTOR)
     pilot_excess_db = normalized_pilot_excess_to_db(
         normalized_coarse_power_ratio_to_pilot_excess(normalize_coarse_power_ratio(f_raw, 1.0))
     )

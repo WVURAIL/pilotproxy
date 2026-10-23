@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Coherent fraction c of the DTV residual, rebuilt from the source files: the derivation of
+"""Historical stack-to-proxy amplitude-ratio derivation (October 2026).
+
+This reproduces the original capture comparison and its old duty scenario.
+The ratio is not an intrinsic coherent fraction; use tools/threshold_rule.py
+for current conditional threshold assignments. The archived record is
 ``src/pilot_proxy/characterization/data/coherent_fraction.json``.
 
 Definition that reproduces the five hard-coded values of
@@ -24,11 +28,11 @@ script recomputes A_bao from the frame-residual products as well and reports bot
 Also: calibrated-scale c, the sensitivity of the per-channel rule to c, and the capture
 cross-check a_cap = A_net^2 * 16384 * G against a_tol = 1/|R|, with G the admissible minimum of the
 33-frame dumps that measured c, the same for every band
-(pilot_proxy.characterization.threshold_rule.coherent_gain), as the rule prices it.
+(pilot_proxy.characterization.threshold_rule.temporal_gain), as the rule prices it.
 Read-only on every input; writes c.json (the full report) in --out and, with --data-file, the
 coherent-fraction record the threshold rule reads.
 
-    python tools/derive_coherent_fraction.py --record <dissertation figure_src/data/record> \\
+    python tools/archive/derive_stack_amplitude_ratio.py --record <dissertation figure_src/data/record> \\
         --rule <threshold rule output> --scores <score cache> --channel-table <RFIsher channel_table.json> \\
         --hardcoded <simple-threshold-rule coherent_rule.json> --out DIR [--data-file FILE]
 """
@@ -43,7 +47,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pilot_proxy.characterization.threshold_rule import coherent_gain
+from pilot_proxy.characterization.threshold_rule import temporal_gain
 
 # the inputs, set from the command line (see main)
 REC = TOR = PRODUCTS = KAPPA = ANET_CAL = RULE = SCORES = TABLE = OLD = OUT = None
@@ -233,20 +237,20 @@ def derive():
         row = {}
         for lab, c in cgrid.items():
             if ch in NOT_DEPLOYED_ALWAYS:
-                r = dict(outcome='not deployed', at=NOT_DEPLOYED_ALWAYS[ch], knee_r_hi=rule(sw, d['knee_word'], d['response'], c, coherent_gain(ch))['knee_r_hi'])
+                r = dict(outcome='not deployed', at=NOT_DEPLOYED_ALWAYS[ch], knee_r_hi=rule(sw, d['knee_word'], d['response'], c, temporal_gain(ch))['knee_r_hi'])
             else:
-                r = rule(sw, d['knee_word'], d['response'], c, coherent_gain(ch))
-                r_onsky = rule(sw, d['knee_word'], d['response'], c, coherent_gain(ch), years_per=1.0)
+                r = rule(sw, d['knee_word'], d['response'], c, temporal_gain(ch))
+                r_onsky = rule(sw, d['knee_word'], d['response'], c, temporal_gain(ch), years_per=1.0)
                 if r_onsky['outcome'] != r['outcome']:
                     conv_check.setdefault(ch, []).append(lab)
             row[lab] = r
         # baseline reproduction against decisions.json (which used c0)
-        b = rule(sw, d['knee_word'], d['response'], c0, coherent_gain(ch), years_per=1.0)
+        b = rule(sw, d['knee_word'], d['response'], c0, temporal_gain(ch), years_per=1.0)
         row['_baseline_matches_decisions'] = (('deployed' if b['outcome'] == 'deployed' else 'not useful') ==
                                               ('deployed' if d['outcome'] == 'useful' else 'not useful')) or ch in NOT_DEPLOYED_ALWAYS
-        kr0 = rule(sw, d['knee_word'], d['response'], c0, coherent_gain(ch))['knee_r_hi']
+        kr0 = rule(sw, d['knee_word'], d['response'], c0, temporal_gain(ch))['knee_r_hi']
         row['_c_knee_limit'] = c0 / math.sqrt(kr0) if kr0 > 0 else math.inf   # c at which the knee's r_hi reaches 1
-        row['_knee_r_hi_check'] = abs(rule(sw, d['knee_word'], d['response'], c0, coherent_gain(ch))['knee_r_hi'] / d['knee_r_hi'] - 1) if d['knee_r_hi'] else None
+        row['_knee_r_hi_check'] = abs(rule(sw, d['knee_word'], d['response'], c0, temporal_gain(ch))['knee_r_hi'] / d['knee_r_hi'] - 1) if d['knee_r_hi'] else None
         sens[ch] = row
     changes = {}
     for ch, row in sens.items():
@@ -262,7 +266,7 @@ def derive():
             continue
         a_tol = 1 / abs(R[ch])
         cap = e['capture']
-        G = coherent_gain(ch)
+        G = temporal_gain(ch)
         floor_a = floor_a1 * G
         a_ew = max(cap['A_net_raw_record'], 0) ** 2 * N * G
         a_short = cap['short_bao_A_net'] ** 2 * N * G if cap['short_bao_A_net'] else None

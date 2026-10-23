@@ -150,7 +150,7 @@ int32 row sums, the device computes the padded window-axis FFT, the
 incoherent feed sum, the per-frame null-bulk CFAR estimate, and the
 designated-set compare, and emits one mask bit per aligned frame. The
 queue handoff design is unchanged. Status: the power stage landed in
-kernel core 2.1.0 (`FStat_Compute_FinePowers_U64` --- fxfft256 v1 on
+kernel core 2.1.0 (`PilotProxy_Compute_FinePowers_U64` --- fxfft256 v1 on
 device plus exact uint64 feed sums, bit-gated by
 `tests/kernel/test_fine_powers_gpu.py`); the CFAR estimate and
 designated-set compare remained downstream at that milestone pending the
@@ -174,7 +174,7 @@ decision epilogue lands after the calibration campaign supplies anchors
 and multipliers.
 
 Status (2026-08-04): fuse-through-powers landed in kernel core 2.2.0
-(`FStat_Compute_FusedFine_U64`): one launch, block-per-stream, row sums
+(`PilotProxy_Compute_FusedFine_U64`): one launch, block-per-stream, row sums
 in shared memory with the marginal identity internal, cooperative
 fxfft256 butterflies (disjoint writes per stage, so bits are
 schedule-independent), row sums exposed only through an optional debug
@@ -189,7 +189,7 @@ decision epilogue remains the only unfused stage, still gated on the
 calibration campaign.
 
 Status (2026-08-05): the decision epilogue landed in kernel core 2.3.0
-(`FStat_Compute_FusedFineMask_U64`), completing the one-solid-kernel
+(`PilotProxy_Compute_FusedFineMask_U64`), completing the one-solid-kernel
 form: packed samples, packed weights, and bundle constants in; one mask
 bit per aligned frame out; marginals and row sums demoted to optional
 debug taps. The epilogue runs in the last-arriving block per frame
@@ -246,7 +246,7 @@ across repeated concurrent runs), and the on-GPU gate
 `tests/kernel/test_fused_mask_gpu.py` (reference bit-equality per
 frame, injection firing, device-side degenerate rules, production
 no-tap form, 20-repeat last-block determinism, and the epilogue-cost
-rate report). `FStat_Compute_FusedFine_U64` remains bit-identical to
+rate report). `PilotProxy_Compute_FusedFine_U64` remains bit-identical to
 core 2.2.0.
 
 Measured (A100, 2026-08-05, all 19 kernel gates passing): fused
@@ -414,7 +414,7 @@ inputs.
 Status (2026-10-18): kernel core 3.0.0 removes the coarse branch. Until then
 the library computed the three frame powers twice in effect: once as the
 row-domain sum `sum_m |z[n, m]|^2` in an int32 `|z|^2` register
-(`FStat_Compute_Powers_U64`, the fused `d_power_out`), and once implicitly as
+(`PilotProxy_Compute_Powers_U64`, the fused `d_power_out`), and once implicitly as
 the fixed-point fine spectrum the fine statistic is built from. The two were
 tied only by the row-domain marginal identity, an exact check of one integer
 sum against another, and by an approximate fixed-point Parseval relation the

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""Evaluate DTV data-shelf SNR estimates from the CUDA F-statistic kernel."""
+"""Evaluate DTV data-shelf SNR estimates from the CUDA power-ratio kernel."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ from pilot_proxy.integration.packing import (  # noqa: E402
     pack_channelized_streams_for_detector,
 )
 from pilot_proxy.json_utils import write_json_strict  # noqa: E402
-from pilot_proxy.kernel import FStatKernel  # noqa: E402
+from pilot_proxy.kernel import PilotProxyKernel  # noqa: E402
 from pilot_proxy.paths import (  # noqa: E402
     DEFAULT_LIB_PATH,
     DEFAULT_WEIGHTS_PATH,
@@ -476,7 +476,7 @@ def assert_clean_pilot_lands_on_target(
         detector_window_samples=int(detector_window_samples),
         spectral_sense=str(spectral_sense),
     )
-    fstat, _ = coarse_power_ratio_cpu_reference(rows, cpu_float_weights)
+    power_ratio, _ = coarse_power_ratio_cpu_reference(rows, cpu_float_weights)
     target_norm_sq = float(
         np.sum(np.abs(cpu_float_weights[REFERENCE_TARGET_TERM_INDEX]) ** 2)
     )
@@ -487,7 +487,7 @@ def assert_clean_pilot_lands_on_target(
     null_ratio = float(
         COARSE_POWER_RATIO_SCALE * target_norm_sq / reference_norm_sum_sq
     )
-    normalized = float(normalize_coarse_power_ratio(fstat, null_ratio))
+    normalized = float(normalize_coarse_power_ratio(power_ratio, null_ratio))
     matrix = np.asarray(rows).reshape(-1, int(detector_window_samples))
     statistic_spectrum = (np.abs(np.fft.fft(np.conj(matrix), axis=1)) ** 2).mean(
         axis=0
@@ -564,7 +564,7 @@ def _pack_streams_for_kernel(
 
 def _kernel_measurements(
     *,
-    kernel: FStatKernel,
+    kernel: PilotProxyKernel,
     packed: np.ndarray,
     weights: np.ndarray,
     pilot_below_data_db: float,
@@ -623,7 +623,7 @@ def _cpu_reference_measurements(
     suite; a small same-seed GPU spot check ties a CPU-produced sweep to the
     deployed kernel (see docs/PUBLICATION_VALIDATION.md@30e50c2, item 2).
     """
-    _fstat, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, int(bits))
+    _power_ratio, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, int(bits))
     return _measurements_from_exact_powers(
         p_target=int(sums[REFERENCE_TARGET_TERM_INDEX]),
         p_ref_lower=int(sums[REFERENCE_LOWER_TERM_INDEX]),
@@ -825,7 +825,7 @@ def _evaluate_one_trial(
     args: argparse.Namespace,
     rng: np.random.Generator,
     cp: Any,
-    kernel: FStatKernel,
+    kernel: PilotProxyKernel,
     weights: np.ndarray,
     cpu_float_weights: np.ndarray,
     clean_iq: np.ndarray,
@@ -999,7 +999,7 @@ def _evaluate_one_trial(
         detector_window_samples=int(args.detector_window_samples),
         spectral_sense=str(args.spectral_sense),
     )
-    cpu_float_fstat, cpu_float_powers = coarse_power_ratio_cpu_reference(
+    cpu_float_power_ratio, cpu_float_powers = coarse_power_ratio_cpu_reference(
         cpu_float_rows,
         cpu_float_weights,
     )
@@ -1016,7 +1016,7 @@ def _evaluate_one_trial(
         / cpu_float_reference_norm_sum_sq
     )
     cpu_float_normalized_ratio = normalize_coarse_power_ratio(
-        cpu_float_fstat,
+        cpu_float_power_ratio,
         cpu_float_null_power_ratio,
     )
     cpu_float_normalized_excess = float(
@@ -1056,7 +1056,7 @@ def _evaluate_one_trial(
         scale=scale,
         spectral_sense=str(args.spectral_sense),
     )
-    cpu_packed_fstat, cpu_packed_powers = coarse_power_ratio_cpu_reference_packed(
+    cpu_packed_power_ratio, cpu_packed_powers = coarse_power_ratio_cpu_reference_packed(
         packed,
         weights,
         int(args.bits),
@@ -1154,7 +1154,7 @@ def _evaluate_one_trial(
         "normalized_positive_excess_decision": int(gpu["normalized_positive_excess_decision"]),
         "diagnostic_raw_float32": float(gpu["diagnostic_raw_float32"]),
         "diagnostic_level_db_float32": float(gpu["diagnostic_level_db_float32"]),
-        "cpu_float_coarse_power_ratio": float(cpu_float_fstat),
+        "cpu_float_coarse_power_ratio": float(cpu_float_power_ratio),
         "cpu_float_p_target": float(cpu_float_powers[REFERENCE_TARGET_TERM_INDEX]),
         "cpu_float_p_ref_lower": float(cpu_float_powers[REFERENCE_LOWER_TERM_INDEX]),
         "cpu_float_p_ref_upper": float(cpu_float_powers[REFERENCE_UPPER_TERM_INDEX]),
@@ -1195,8 +1195,8 @@ def _evaluate_one_trial(
             math.sqrt(mean_requested_noise_power / COMPLEX_COMPONENT_COUNT)
         ),
         "quantization_scale": float(scale),
-        "cpu_coarse_power_ratio": float(cpu_packed_fstat),
-        "cpu_packed_coarse_power_ratio": float(cpu_packed_fstat),
+        "cpu_coarse_power_ratio": float(cpu_packed_power_ratio),
+        "cpu_packed_coarse_power_ratio": float(cpu_packed_power_ratio),
         "cpu_packed_p_target": cpu_packed_p_target,
         "cpu_packed_p_ref_lower": cpu_packed_p_ref_lower,
         "cpu_packed_p_ref_upper": cpu_packed_p_ref_upper,
@@ -1214,7 +1214,7 @@ def _evaluate_one_trial(
         "cpu_float_reference_weight_norm_sum_sq": (
             cpu_float_reference_norm_sum_sq
         ),
-        "cpu_gpu_abs_diff": abs(float(gpu["coarse_power_ratio"]) - float(cpu_packed_fstat)),
+        "cpu_gpu_abs_diff": abs(float(gpu["coarse_power_ratio"]) - float(cpu_packed_power_ratio)),
         "cpu_float_gpu_snr_diff_db": (
             cpu_float_estimated_data_shelf_snr_db - estimated_data_shelf_snr_db
         ),
@@ -1395,8 +1395,8 @@ def _summarize_rows(
                 [row["snr_error_db"] for row in group],
                 dtype=np.float64,
             )
-            fstats = np.asarray([row["coarse_power_ratio"] for row in group], dtype=np.float64)
-            fstat_levels = np.asarray(
+            power_ratios = np.asarray([row["coarse_power_ratio"] for row in group], dtype=np.float64)
+            pilotproxy_levels = np.asarray(
                 [row["normalized_coarse_power_ratio_db"] for row in group],
                 dtype=np.float64,
             )
@@ -1417,7 +1417,7 @@ def _summarize_rows(
                 [row["cpu_float_snr_error_db"] for row in group],
                 dtype=np.float64,
             )
-            cpu_float_fstats = np.asarray(
+            cpu_float_power_ratios = np.asarray(
                 [row["cpu_float_coarse_power_ratio"] for row in group],
                 dtype=np.float64,
             )
@@ -1506,14 +1506,14 @@ def _summarize_rows(
                     "measured_truth_composite_atsc_snr_db_mean": _nanmean_or_nan(
                         truth_composite
                     ),
-                    "coarse_power_ratio_mean": _nanmean_or_nan(fstats),
-                    "normalized_coarse_power_ratio_db_mean": _nanmean_or_nan(fstat_levels),
+                    "coarse_power_ratio_mean": _nanmean_or_nan(power_ratios),
+                    "normalized_coarse_power_ratio_db_mean": _nanmean_or_nan(pilotproxy_levels),
                     "pilot_excess_db_mean": _nanmean_or_nan(pnr_bin),
                     "estimated_data_shelf_snr_db_mean": _nanmean_or_nan(estimates),
                     "estimated_data_shelf_snr_db_std": _nanstd_or_nan(estimates),
                     "snr_error_db_mean": _nanmean_or_nan(errors),
                     "snr_error_db_std": _nanstd_or_nan(errors),
-                    "cpu_float_coarse_power_ratio_mean": _nanmean_or_nan(cpu_float_fstats),
+                    "cpu_float_coarse_power_ratio_mean": _nanmean_or_nan(cpu_float_power_ratios),
                     "cpu_float_estimated_data_shelf_snr_db_mean": _nanmean_or_nan(
                         cpu_float_estimates
                     ),
@@ -1543,7 +1543,7 @@ def build_parser(add_help: bool = True) -> argparse.ArgumentParser:
         description=(
             "Inject AWGN into a clean GNU Radio ATSC IQ waveform, run the "
             "reference-channelizer/4+4-bit pipeline and CUDA kernel, and "
-            "compare the F-statistic-derived data-shelf SNR to measured truth."
+            "compare the power-ratio-derived data-shelf SNR to measured truth."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -1836,7 +1836,7 @@ def run(args: argparse.Namespace) -> int:
         kernel = None
     else:
         import cupy as cp
-        kernel = FStatKernel(args.lib_path)
+        kernel = PilotProxyKernel(args.lib_path)
     if str(args.synthesis_backend) == "cuda" and cp is None:
         import cupy  # noqa: F401
 
@@ -2131,7 +2131,7 @@ def run(args: argparse.Namespace) -> int:
         "schema_version": "pilotproxy_snr_validation_report_v2",
         "result_schema_version": RESULT_SCHEMA_TOKEN,
         "project_identity": (
-            "Standalone CUDA F-statistic DTV pilot detector and GNU Radio "
+            "Standalone CUDA power-ratio DTV pilot detector and GNU Radio "
             "ATSC 1.0 testbench."
         ),
         "input_iq": str(args.input_iq),
@@ -2193,7 +2193,7 @@ def run(args: argparse.Namespace) -> int:
             "snr_bias_db_std": _nanstd_or_nan(pooled_errors),
         },
         "detector_output": {
-            "fstat_definition": (
+            "pilotproxy_definition": (
                 "F = 2*P_target/(P_ref_lower + P_ref_upper); "
                 "P_r = sum_f S_r[f], S = fxfft256_v1 fine powers"
             ),
@@ -2340,7 +2340,7 @@ def run(args: argparse.Namespace) -> int:
                 "cpu_float_estimated_data_shelf_snr_db minus measured truth."
             ),
             "cpu_coarse_power_ratio": (
-                "Packed NumPy CPU reference F-statistic for fixed-point "
+                "Packed NumPy CPU reference power-ratio for fixed-point "
                 "CPU/GPU agreement diagnostics."
             ),
             "cpu_packed_normalized_coarse_power_ratio": (

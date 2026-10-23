@@ -9,7 +9,7 @@ serial 256-point transform, the structure documented in
 ``cuda/fxfft256_ref.c``); its twiddle table is generated from the frozen
 ``TWIDDLE_Q15`` literals at test time, so the source of truth stays
 single. Production integration moves this transform into the
-``f_statistic`` library after the row-sum stage; this gate proves the
+``pilotproxy_detector`` library after the row-sum stage; this gate proves the
 arithmetic ports exactly before that wiring exists.
 
 Gates:

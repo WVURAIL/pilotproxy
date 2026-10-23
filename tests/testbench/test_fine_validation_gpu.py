@@ -66,7 +66,7 @@ def test_output_digest_binds_name_shape_dtype_and_bytes():
 @pytest.fixture
 def engine():
     cp = pytest.importorskip("cupy")
-    from pilot_proxy.kernel import FStatKernel
+    from pilot_proxy.kernel import PilotProxyKernel
     from pilot_proxy.paths import DEFAULT_LIB_PATH
 
     if not cp.cuda.runtime.getDeviceCount():
@@ -80,7 +80,7 @@ def engine():
         profile(),
         signal,
         tone,
-        gpu=SimpleNamespace(cp=cp, kernel=FStatKernel(DEFAULT_LIB_PATH)),
+        gpu=SimpleNamespace(cp=cp, kernel=PilotProxyKernel(DEFAULT_LIB_PATH)),
         num_streams=8,
     )
 

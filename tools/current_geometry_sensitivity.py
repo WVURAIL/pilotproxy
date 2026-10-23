@@ -80,7 +80,7 @@ from pilot_proxy.fine_reduction import independent_bin_mask
 from pilot_proxy.fxfft import fxfft256, fine_power_fx
 from pilot_proxy.integration.receiver_profile import load_receiver_profile
 from pilot_proxy.json_utils import write_json_strict
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import (
     CONFIGS_DIR,
     DEFAULT_LIB_PATH,
@@ -197,7 +197,7 @@ class StudyProfile:
 @dataclass
 class GpuContext:
     cp: Any
-    kernel: FStatKernel
+    kernel: PilotProxyKernel
     execution_form: str
 
 
@@ -453,7 +453,7 @@ def _initialize_gpu(args: argparse.Namespace) -> GpuContext | None:
         return None
     import cupy as cp
 
-    kernel = FStatKernel(args.lib_path)
+    kernel = PilotProxyKernel(args.lib_path)
     if not kernel.supports_row_projections() or not kernel.supports_fine_powers():
         raise SystemExit(
             "--gpu requires a kernel with exact row projections and fine powers"

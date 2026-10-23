@@ -810,9 +810,9 @@ def _default_fine_calibration_block() -> dict[str, Any]:
     """Per-channel fine decision calibration, exported pending-campaign.
 
     The fused entry points consume these values as runtime arguments:
-    ``FStat_Compute_FusedFineMask_U64`` (added in core 2.3.0) and
-    ``FStat_Compute_FusedFineMaskWithSupport_U64`` (added in core 2.5.0, the
-    current core, and the one kotekan calls when its support buffer is bound).
+    ``PilotProxy_Compute_FusedFineMask_U64`` and
+    ``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` (the entry kotekan
+    calls when its support buffer is bound).
     The decision arithmetic is frozen (``fine_decision_v1``); the operating
     point is bundle data. The
     calibration campaign replaces the null fields and flips ``status`` to

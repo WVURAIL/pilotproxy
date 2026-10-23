@@ -33,7 +33,7 @@ RAIL = ROOT.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from pilot_proxy.detector_weights import DetectorWeightBank
-from pilot_proxy.kernel import FStatKernel
+from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.testbench.evaluate_snr import _ideal_float_weights_from_layout
 from pilot_proxy.testbench.fine_validation_gpu import (
     ALL_STAGES,
@@ -116,7 +116,7 @@ def payload_for(phase, index):
 def gpu_context(lib):
     import cupy as cp
 
-    return SimpleNamespace(cp=cp, kernel=FStatKernel(Path(lib)))
+    return SimpleNamespace(cp=cp, kernel=PilotProxyKernel(Path(lib)))
 
 
 def runtime(gpu):
@@ -1317,7 +1317,7 @@ def main():
         type=Path,
         default=RAIL / "results/fine_detector_validation_2026-09-09/cache",
     )
-    parser.add_argument("--lib", type=Path, default=ROOT / "cuda/libfstatistic.so")
+    parser.add_argument("--lib", type=Path, default=ROOT / "cuda/libpilotproxy.so")
     parser.add_argument("--engineering", action="store_true")
     parser.add_argument("--channel", type=int, nargs="+")
     parser.add_argument(

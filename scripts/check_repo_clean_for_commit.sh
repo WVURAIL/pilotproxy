@@ -10,8 +10,8 @@ blocked_paths=(
   ".idea"
   "inspection"
   "src/pilot_proxy.egg-info"
-  "cuda/libfstatistic.so"
-  "cuda/test_fstat_reference"
+  "cuda/libpilotproxy.so"
+  "cuda/test_pilotproxy_reference"
   "cuda/test_c_header.o"
 )
 

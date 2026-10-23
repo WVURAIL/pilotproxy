@@ -112,9 +112,9 @@ def kernel_core_version() -> str:
     text = (ROOT / "cuda" / "config.h").read_text(encoding="utf-8")
     parts: dict[str, str] = {}
     for field in ("MAJOR", "MINOR", "PATCH"):
-        match = re.search(rf"#define\s+FSTAT_CORE_VERSION_{field}\s+(\d+)", text)
+        match = re.search(rf"#define\s+PILOTPROXY_CORE_VERSION_{field}\s+(\d+)", text)
         if not match:
-            _die(f"FSTAT_CORE_VERSION_{field} not found in cuda/config.h")
+            _die(f"PILOTPROXY_CORE_VERSION_{field} not found in cuda/config.h")
         parts[field] = match.group(1)
     return "{MAJOR}.{MINOR}.{PATCH}".format(**parts)
 

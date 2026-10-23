@@ -568,7 +568,7 @@ def test_cpu_reference_measurements_match_exact_integers() -> None:
                  pilot_capture_efficiency=1.0, dtv_bandwidth_hz=6.0e6)
     out = _cpu_reference_measurements(packed=packed, weights=weights, bits=4, **calib)
 
-    fstat, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, 4)
+    power_ratio, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, 4)
     assert sums.dtype == np.dtype(np.uint64)
     assert out["p_target_u64"] == int(sums[0])
     assert out["p_ref_sum_u64"] == int(sums[1]) + int(sums[2])
@@ -587,7 +587,7 @@ def test_cpu_reference_measurements_match_exact_integers() -> None:
     assert out["coarse_power_ratio"] == pytest.approx(
         2.0 * out["p_target_u64"] / out["p_ref_sum_u64"]
     )
-    assert out["diagnostic_raw_float32"] == pytest.approx(fstat, rel=1e-6)
+    assert out["diagnostic_raw_float32"] == pytest.approx(power_ratio, rel=1e-6)
     nt, nl, nu = weight_term_norms_sq(weights)
     normalized_ratio = (
         out["p_target_u64"]
@@ -677,7 +677,7 @@ def test_kernel_measurements_equal_the_cpu_reference_exactly() -> None:
     cp = pytest.importorskip("cupy")
     if not cp.cuda.runtime.getDeviceCount():
         pytest.skip("CUDA unavailable")
-    from pilot_proxy.kernel import FStatKernel
+    from pilot_proxy.kernel import PilotProxyKernel
     from pilot_proxy.paths import DEFAULT_LIB_PATH
     from pilot_proxy.testbench.evaluate_snr import (
         _cpu_reference_measurements,
@@ -685,9 +685,9 @@ def test_kernel_measurements_equal_the_cpu_reference_exactly() -> None:
     )
 
     try:
-        kernel = FStatKernel(DEFAULT_LIB_PATH)
+        kernel = PilotProxyKernel(DEFAULT_LIB_PATH)
     except FileNotFoundError:
-        pytest.skip("libfstatistic.so is not built")
+        pytest.skip("libpilotproxy.so is not built")
     rng = np.random.default_rng(20261018)
     packed = rng.integers(-128, 128, size=(256, 128), dtype=np.int16).astype(np.int8)
     weights = rng.integers(-128, 128, size=(3, 128), dtype=np.int16).astype(np.int8)

@@ -3,14 +3,14 @@
 """Compare the fused fine-mask entry point with the staged path on CHIME frames.
 
 The staged path is the library's staged entry points
-(``FStat_Compute_RowSums_I32`` and ``FStat_Compute_FinePowers_U64``, called by
+(``PilotProxy_Compute_RowSums_I32`` and ``PilotProxy_Compute_FinePowers_U64``, called by
 ``detect_packed_detector_input``), whose frame powers are the host's exact
 uint64 all-bin sums of the staged fine powers (kernel core 3.0.0:
 ``P_r = sum_f S_r[f]``), with the fine decision made in Python by
 ``fine_decision.fine_mask_decision``.
 kotekan instead calls the fused entry point,
-``FStat_Compute_FusedFineMaskWithSupport_U64`` (or
-``FStat_Compute_FusedFineMask_U64`` when no support buffer is bound). This tool
+``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` (or
+``PilotProxy_Compute_FusedFineMask_U64`` when no support buffer is bound). This tool
 replays CHIME baseband files through both and compares every output word:
 
 * the fused mask, ``rank_valid`` and ``n_bulk`` against ``fine_mask_decision``
@@ -370,7 +370,7 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
         SPECTRAL_SENSE_NORMAL,
     )
     from pilot_proxy.detector_weights import DetectorWeightBank
-    from pilot_proxy.kernel import FStatKernel
+    from pilot_proxy.kernel import PilotProxyKernel
 
     started = time.perf_counter()
     timers = dict.fromkeys(("hash", "read", "pack", "staged", "reference", "fused", "product"), 0.0)
@@ -382,9 +382,9 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
         if int(nyquist_sign(int(instrument.nyquist_zone))) == -1
         else SPECTRAL_SENSE_NORMAL
     )
-    kernel = FStatKernel(str(args.lib))
+    kernel = PilotProxyKernel(str(args.lib))
     if not kernel.supports_fused_fine_mask_with_support():
-        raise SystemExit("library has no FStat_Compute_FusedFineMaskWithSupport_U64")
+        raise SystemExit("library has no PilotProxy_Compute_FusedFineMaskWithSupport_U64")
     window = int(kernel.specs.K)
     bank = DetectorWeightBank(explicit_path=args.weights, expected_kernel=kernel.specs)
     geometry_by_freq = load_geometry(args.thresholds)
@@ -424,8 +424,8 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
         "launches": {
             "staged": "detect_packed_detector_input(emit_row_projections=True) "
                       "+ fine_decision.fine_mask_decision",
-            "fused_with_support": "FStat_Compute_FusedFineMaskWithSupport_U64, frame-power tap on, row tap off",
-            "fused_legacy": "FStat_Compute_FusedFineMask_U64, no taps",
+            "fused_with_support": "PilotProxy_Compute_FusedFineMaskWithSupport_U64, frame-power tap on, row tap off",
+            "fused_legacy": "PilotProxy_Compute_FusedFineMask_U64, no taps",
             "boundary_probe": bool(args.boundary_probe),
         },
         "products": {

@@ -734,7 +734,7 @@ class PilotProxyKernel:
         cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, rank_valid_ptr,
         n_bulk_ptr, powers_ptr=0, row_projections_tap_ptr=0,
     ):
-        """Keep legacy mask bits and also write rank_valid and n_bulk int32[batch].
+        """Write mask bits and rank_valid and n_bulk int32[batch].
 
         Rank validity is separate from input-health or calibration qualification.
         All device output regions must be distinct. Required support outputs

@@ -1,4 +1,4 @@
-Historical: written before the kotekan pull requests 1669 to 1681 merged. The current contract is [OPERATOR_HANDOFF.md](OPERATOR_HANDOFF.md) and kotekan pull request 1677, which differs from this note in five points:
+Historical: written before the kotekan pull requests 1669 to 1681 merged. The current contract is [OPERATOR_HANDOFF.md](../OPERATOR_HANDOFF.md) and kotekan pull request 1677, which differs from this note in five points:
 the kernel is vendored under `external/pilotproxy/`, not `lib/cuda/pilotproxy/`; the detector handles are bound to the kotekan stream with `PilotProxy_SetStream` instead of running on the default stream between events; the stage is fine-only, with no coarse mask: a bound channel needs a `calibrated` fine profile, a bound `pending_campaign` channel stops the instance at first-frame binding, and an uncalibrated channel is left unbound or listed in `dtv_permanent_mask_freq_ids`; the mask relays through the `DtvRfiMask` stage into the RFImask frame, not a correlator FIFO; and there is no `exceedance_10s` counter.
 
 # Kotekan Interface Preparation

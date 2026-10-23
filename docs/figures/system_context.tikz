@@ -1,46 +1,26 @@
-% Shared architecture diagram: proposed deployment system context.
-% Single source of truth -- \input by PilotProxy_DS001 (Data Sheet) and
-% PilotProxy_UG001 (User Guide); render system_context.svg for markdown use
-% with system_context_standalone.tex. Requires tikz libraries arrows.meta +
-% positioning + calc, and the colors PilotProxyBlue, PilotProxyRed, PilotProxyGray,
-% LightGray from the host document (or the standalone wrapper).
-% Status: this depicts the PROPOSED Kotekan deployment interface (result
-% queue and correlator sync); see docs/KOTEKAN_INTERFACE_PREP.md. Only the
-% detector stage and runtime bundle are implemented and tested here.
-% Re-render the svg after editing:
-%   cd docs/figures && pdflatex system_context_standalone.tex \
-%     && pdftocairo -svg system_context_standalone.pdf system_context.svg
-\begin{tikzpicture}[node distance=0.45cm and 0.9cm,>=Latex,
+% Shared diagram of the implemented Kotekan mask path. Requires arrows.meta,
+% positioning, calc and the PilotProxy color names from the host document.
+\begin{tikzpicture}[node distance=0.5cm,>=Latex,
   blk/.style={rectangle,rounded corners,draw=PilotProxyBlue,thick,fill=LightGray,
-              minimum height=0.66cm,align=center,text width=3.6cm},
-  wide/.style={blk,text width=8.2cm},
-  fifo/.style={rectangle,draw=PilotProxyRed,thick,fill=LightGray,
-               minimum height=0.66cm,align=center,text width=3.6cm,
-               double,double distance=1.4pt},
-  lbl/.style={font=\scriptsize\color{PilotProxyGray},align=center}]
+              minimum height=0.75cm,align=center,text width=4.0cm},
+  wide/.style={blk,text width=9.1cm}]
 
-\node[wide] (fe) {Telescope front end: ADC + F-engine PFB\\
-  \scriptsize 2048-point, 390.625\,kHz coarse channels, packed complex int4};
-\node[blk,below left=0.60cm and -2.0cm of fe] (corr)
-  {Correlator / X-engine\\ \scriptsize primary science path,
-   slower per-frame processing};
-\node[blk,below right=0.60cm and -2.0cm of fe] (det)
-  {PilotProxy detector stage (GPU)\\ \scriptsize selected-channel
-   Rank-based fine score, one decision per aligned frame};
-\node[fifo,below=of det] (q)
-  {Mask result queue (FIFO)\\ \scriptsize decisions enqueue at kernel rate};
-\node[circle,draw=PilotProxyRed,thick,fill=LightGray,inner sep=1.8pt]
-  (sync) at (corr |- q) {$\otimes$};
-\node[wide] (out) at ($(sync)!0.5!(q) + (0,-1.45)$)
-  {DTV-masked integrated products\\ \scriptsize rejected frames excluded
-   from the accumulation};
+\node[wide] (voltage) {Channelized complex-int4 voltage ring\\
+  \scriptsize receiver-specific layout and aligned detector blocks};
+\node[blk] (rfi) at ($(voltage.south)+(-2.6,-0.9)$)
+  {Existing RFI mask\\ \scriptsize one bit per time sample and frequency};
+\node[blk] (detector) at ($(voltage.south)+(2.6,-0.9)$)
+  {PilotProxy detector\\ \scriptsize rejection bits, frame powers, rank support};
+\node[wide,below=1.8cm of voltage] (combine)
+  {\texttt{DtvRfiMask} (opt-in)\\
+   \scriptsize verify time/frequency alignment; combine rejection and validity};
+\node[wide,below=of combine] (consumers)
+  {Visibility correlator and sample-count consumers\\
+   \scriptsize both consume the same combined RFImask};
 
-\draw[->,thick] (fe.south -| corr.north) -- (corr.north);
-\draw[->,thick] (fe.south -| det.north) -- (det.north);
-\draw[->,thick] (det) -- (q);
-\draw[->,thick] (corr) -- (sync);
-\draw[->,thick,PilotProxyRed] (q.west) -- (sync.east)
-  node[midway,above,font=\scriptsize\color{PilotProxyRed},align=center]
-  {correlator pops on frame completion;\\ decision synced to the same frame};
-\draw[->,thick] (sync.south) |- ([yshift=2pt]out.west) -- (out.west);
+\draw[->,thick] (voltage.south -| rfi.north) -- (rfi.north);
+\draw[->,thick] (voltage.south -| detector.north) -- (detector.north);
+\draw[->,thick] (rfi.south) -- (combine.north -| rfi.south);
+\draw[->,thick,PilotProxyRed] (detector.south) -- (combine.north -| detector.south);
+\draw[->,thick] (combine) -- (consumers);
 \end{tikzpicture}

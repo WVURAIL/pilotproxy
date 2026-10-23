@@ -16,11 +16,7 @@ def file_sha256(path: Path | str | None) -> str | None:
     if not file_path.is_file():
         return None
 
-    digest = hashlib.sha256()
-    with file_path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return sha256_file(file_path)
 
 
 @functools.lru_cache(maxsize=8)

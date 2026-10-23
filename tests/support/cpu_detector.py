@@ -72,7 +72,7 @@ def cpu_detector_options():
 
 
 def exact_cpu_detector_fn(*, packed, weights, kernel=None, emit_row_projections=False):
-    """The kernel core 3.0.0 chain on the CPU, exactly.
+    """The fixed-point detector chain on the CPU, exactly.
 
     Packed rows -> exact int32 row projections -> frozen fxfft256 fine powers
     (summed over streams) -> frame powers ``P_r = sum_f S_r[f]``. Returns the

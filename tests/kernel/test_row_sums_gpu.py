@@ -16,7 +16,7 @@ import pytest
 
 from pilot_proxy.fine_reduction import fine_reduce
 from pilot_proxy.fxfft import fine_power_fx
-from gpu import cuda_available
+from gpu import cupy_or_skip
 from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
@@ -29,17 +29,6 @@ RNG_SEED = 20260729
 # One float32 ULP at the fine-power scale, with margin for FFT ordering:
 # relative gate, pre-registered before A100 runs.
 FINE_FFT_RELATIVE_TOLERANCE = 5.0e-6
-
-
-def _import_cupy_or_skip():
-    try:
-        import cupy as cp
-    except Exception:  # pragma: no cover - GPU-less hosts
-        pytest.skip("cupy is not available")
-    ok, reason = cuda_available()
-    if not ok:
-        pytest.skip(f"CUDA device is not available: {reason}")
-    return cp
 
 
 def _kernel_or_skip() -> PilotProxyKernel:
@@ -87,7 +76,7 @@ def _random_inputs(rng: np.random.Generator):
 
 
 def test_gpu_matched_filter_row_projections_exactly_match_numpy_reference():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     assert kernel.version.as_tuple() >= (3, 0, 0)
     rng = np.random.default_rng(RNG_SEED)
@@ -149,7 +138,7 @@ def test_gpu_matched_filter_row_projections_exactly_match_numpy_reference():
 
 
 def test_cupy_fine_reduction_matches_float64_prototype_within_ulp_gate():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     rng = np.random.default_rng(RNG_SEED + 1)
     matched_filter_row_projections = rng.integers(
         -14336, 14337, size=(TERMS, ROWS, 2), dtype=np.int32

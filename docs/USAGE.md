@@ -129,7 +129,7 @@ operating documentation as follows:
 - `docs/DATA_PRODUCTS.md` - emitted file, array, and table definitions.
 - `docs/LOCAL_PROCESSING.md` - authoritative local WSL archive procedure.
 - `docs/CANFAR_RUNBOOK.md` - bounded CANFAR operating procedure.
-- `docs/KOTEKAN_INTERFACE_PREP.md` - runtime-bundle and Kotekan handoff notes.
+- `docs/OPERATOR_HANDOFF.md` - runtime-bundle and Kotekan handoff notes.
 - `docs/DESIGN_DECISIONS.md` - recorded detector and integration decisions.
 - `docs/PilotProxy_DS001_Data_Sheet.tex` - formal data sheet (build to PDF).
 - `docs/PilotProxy_UG001_User_Guide.tex` - formal user guide (build to PDF).
@@ -252,7 +252,7 @@ The shipped receiver profiles have different roles and evidential status:
   marked `example_requires_data_product_verification`: the grid matches the
   kotekan chord-branch source, and the frame convention must still be
   verified against CRS F-engine data before an operational run
-  (`docs/KOTEKAN_INTERFACE_PREP.md`).
+  (`docs/OPERATOR_HANDOFF.md`).
 
 ---
 

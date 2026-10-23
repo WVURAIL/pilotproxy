@@ -71,21 +71,18 @@ or concurrency safety. The hardware gate must also run on the deployment GPU.
 Compute Sanitizer and a sustained full-pipeline shadow run remain separate
 hardware checks.
 
-The archive survey suite has 11 existing expected failures. They track legacy
-inventory readability, missing survey provenance, collection-restoration
-ambiguity and path validation, distinctions among empty/sub-floor/restored
-objects, interruption reporting, and stale exported views after a crash.
-Some are unconditional expected failures or design placeholders, so they need
-real acceptance assertions before they can serve as regression gates. Do not
-count them as passing validation. See `archive/test_publication_trust.py` and
-the survey stress/durability suites.
+The archive survey suite exercises inventory compatibility, provenance,
+collection restoration, path validation, interrupted writes, and recovery of
+exported views. These are executable assertions, not expected-failure
+placeholders. Tests that require external artifacts still skip when their
+inputs are absent; a skip is not validation of those artifacts.
 
 Large-product tests require `PILOT_PROXY_ATTACHED_PRODUCTS` or `PP_PER_PILOT`.
 The frozen-bundle rederivation additionally accepts
 `PILOT_PROXY_DEEP_BUNDLE_CHECK=1`; it reads the preserved source product archive.
 These checks validate existing artifacts and do not start a new campaign.
 
-The pre-PR testbench changes reject invalid packing/noise requests. They do not
+The testbench rejects invalid packing/noise requests. These checks do not
 change CUDA arithmetic, FFT tables, shipped weights, or valid-input
 quantization. The CHIME packed archive path preserves its native integer grid
 and does not use the synthetic floating-point quantizer or GNU Radio noise

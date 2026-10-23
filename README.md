@@ -61,7 +61,7 @@ print(kernel.version.as_string())
 ```
 
 `PilotProxyKernel` binds the `PilotProxy_*` C API in `libpilotproxy.so`.
-Package 2 / core 4 removes the old F-statistic interface names. Rebuild the
+Package 3 / core 4 removes the old F-statistic interface names. Rebuild the
 library and update callers together; see [migration notes](docs/TERMINOLOGY.md#native-interface-migration).
 
 ## Repository layout
@@ -77,6 +77,7 @@ library and update callers together; see [migration notes](docs/TERMINOLOGY.md#n
 | `tools/` | Explicit analysis, validation and maintenance commands |
 | `tools/archive/` | Superseded study drivers retained for reproducing old records |
 | `docs/` | Current contracts and operating guides |
+| `docs/archive/` | Superseded design proposals, kept for reference |
 | `docs/evidence/`, `docs/runtime_freezes/` | Frozen receipts and provenance; not onboarding instructions |
 
 Development tools are not imported by the detector package. Useful historical

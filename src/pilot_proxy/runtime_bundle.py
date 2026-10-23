@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import math
 from pathlib import Path
 from typing import Any, Sequence
@@ -39,7 +38,7 @@ from pilot_proxy.integration.weight_generation import (
     generate_weight_table_from_receiver_profile,
     profile_requires_window_time_reversal,
 )
-from pilot_proxy.json_utils import write_json_strict
+from pilot_proxy.json_utils import load_json_object, write_json_strict
 from pilot_proxy.provenance import file_sha256
 from pilot_proxy.schema_identity import schema_token
 
@@ -201,21 +200,6 @@ def _validate_required_fields(
             f"{label}.required_fields",
             f"missing required current-schema fields: {missing}",
         )
-
-
-def _load_json_object(path: Path, errors: list[dict[str, str]]) -> dict[str, Any]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        _add_error(errors, f"required_file.{path.name}", f"missing {path}")
-        return {}
-    except json.JSONDecodeError as exc:
-        _add_error(errors, f"json.{path.name}", f"invalid JSON: {exc}")
-        return {}
-    if not isinstance(data, dict):
-        _add_error(errors, f"json.{path.name}", "top-level JSON value is not an object")
-        return {}
-    return data
 
 
 def _read_sha256sums(path: Path, errors: list[dict[str, str]]) -> dict[str, str]:
@@ -1404,15 +1388,15 @@ def validate_runtime_weight_bundle(
                 f"missing {bundle / filename}",
             )
 
-    detector_contract = _load_json_object(
+    detector_contract = load_json_object(
         bundle / DEFAULT_DETECTOR_CONTRACT_FILENAME,
         errors,
     )
-    pilot_profiles = _load_json_object(
+    pilot_profiles = load_json_object(
         bundle / DEFAULT_PILOT_PROFILES_FILENAME,
         errors,
     )
-    weights_manifest = _load_json_object(
+    weights_manifest = load_json_object(
         bundle / DEFAULT_WEIGHTS_MANIFEST_FILENAME,
         errors,
     )

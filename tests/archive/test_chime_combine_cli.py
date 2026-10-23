@@ -33,17 +33,6 @@ CHANNELS = {14: 470.3125, 15: 476.3125}
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
 
 
-def _cpu_ref_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
-    """Input-dependent CPU reference standing in for the GPU kernel: the exact
-    kernel core 3.0.0 chain (rows -> fxfft256 -> all-bin sums)."""
-    return exact_cpu_detector_fn(
-        packed=packed,
-        weights=weights,
-        kernel=kernel,
-        emit_row_projections=emit_row_projections,
-    )
-
-
 def _stub_kernel(k):
     class _Kernel:
         detector_window_samples = k
@@ -69,7 +58,7 @@ def _build_work_dir(tmp_path):
             handle.attrs["delta_time"] = 1.0 / fmt.FS
             handle.attrs["time0_ctime"] = 1.0e9
         ctx = RunContext(instrument=inst, selection=[FREQ_IDS[ch]], options={
-            "detector_fn": _cpu_ref_detector_fn,
+            "detector_fn": exact_cpu_detector_fn,
             "kernel": _stub_kernel(K),
             "weights": weights_by_channel[ch],
         })

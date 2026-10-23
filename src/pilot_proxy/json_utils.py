@@ -34,3 +34,19 @@ def json_dumps_strict(value: Any, **kwargs: Any) -> str:
 def write_json_strict(path: Path, value: Any, **kwargs: Any) -> None:
     """Write strict JSON to the requested path."""
     path.write_text(json_dumps_strict(value, **kwargs), encoding="utf-8")
+
+
+def load_json_object(path: Path, errors: list[dict[str, str]]) -> dict[str, Any]:
+    """Read a JSON object, collecting file/format errors for a validation report."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        check, message = f"required_file.{path.name}", f"missing {path}"
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        check, message = f"json.{path.name}", f"invalid JSON: {exc}"
+    else:
+        if isinstance(data, dict):
+            return data
+        check, message = f"json.{path.name}", "top-level JSON value is not an object"
+    errors.append({"severity": "error", "check": check, "message": message})
+    return {}

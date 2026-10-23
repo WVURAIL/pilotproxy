@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""Reject pre-ground-zero schema tokens and stale generated source copies."""
+"""Reject retired schema tokens and stale generated source copies."""
 
 from __future__ import annotations
 

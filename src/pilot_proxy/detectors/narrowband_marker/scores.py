@@ -16,7 +16,6 @@ The rank is the median of the intended bulk geometry
 """
 from __future__ import annotations
 
-from functools import cmp_to_key
 from numbers import Integral
 
 import numpy as np
@@ -25,8 +24,10 @@ from pilot_proxy.fine_decision import (
     ALWAYS_MASKED_Q16,
     MAX_MULTIPLIER_Q16,
     MULTIPLIER_ONE as Q16_SCALE,
+    designated_bins,
 )
 from pilot_proxy.products.reader import FINE_BINS
+from pilot_proxy.rank_scores import required_multipliers_by_rank
 
 
 class ScoreRefused(RuntimeError):
@@ -34,18 +35,10 @@ class ScoreRefused(RuntimeError):
 
 
 def _declared_bins(anchor_bin, designated_half_width) -> np.ndarray:
-    for value, name in ((anchor_bin, "anchor_bin"),
-                        (designated_half_width, "designated_half_width")):
-        if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral):
-            raise ScoreRefused(f"{name} must be an integer")
-    anchor = int(anchor_bin)
-    width = int(designated_half_width)
-    if not 0 <= anchor < FINE_BINS:
-        raise ScoreRefused("anchor_bin must be in [0, 256)")
-    if not 0 <= width < FINE_BINS // 2:
-        raise ScoreRefused("designated_half_width must be in [0, 128)")
-    return np.asarray([(anchor + offset) % FINE_BINS
-                       for offset in range(-width, width + 1)], dtype="<i8")
+    try:
+        return designated_bins(anchor_bin, designated_half_width)
+    except (TypeError, ValueError) as exc:
+        raise ScoreRefused(str(exc)) from exc
 
 
 def _boolean_mask(values, size: int, name: str) -> np.ndarray:
@@ -54,18 +47,6 @@ def _boolean_mask(values, size: int, name: str) -> np.ndarray:
         raise ScoreRefused(
             f"{name} must be an explicit boolean vector of length {size}")
     return np.ascontiguousarray(result)
-
-
-def _rational_order(left, right) -> int:
-    left_num, left_den, left_bin = left
-    right_num, right_den, right_bin = right
-    first = left_num * right_den
-    second = right_num * left_den
-    if first < second:
-        return -1
-    if first > second:
-        return 1
-    return left_bin - right_bin
 
 
 def required_eta_q16_by_rank(
@@ -87,45 +68,10 @@ def required_eta_q16_by_rank(
     if bulk[designated].any():
         raise ScoreRefused("bulk_mask must exclude every designated bin")
 
-    numerator = [2 * int(value) for value in powers[0]]
-    denominator = [int(lower) + int(upper)
-                   for lower, upper in zip(powers[1], powers[2])]
-    ranked = [(numerator[bin_index], denominator[bin_index], bin_index)
-              for bin_index in np.flatnonzero(bulk)
-              if denominator[bin_index] > 0]
-    if not ranked:
-        raise ScoreRefused(
-            "declared bulk has no bin with a positive reference denominator")
-    ranked.sort(key=cmp_to_key(_rational_order))
-
-    designated_values = [
-        (numerator[int(bin_index)], denominator[int(bin_index)])
-        for bin_index in designated
-        if denominator[int(bin_index)] > 0 and numerator[int(bin_index)] > 0
-    ]
-    designated_maximum = None
-    for value in designated_values:
-        if (designated_maximum is None
-                or value[0] * designated_maximum[1]
-                > designated_maximum[0] * value[1]):
-            designated_maximum = value
-    boundaries = []
-    for rank_num, rank_den, _ in ranked:
-        if designated_maximum is None:
-            boundaries.append(1)
-            continue
-        if rank_num == 0:
-            boundaries.append(ALWAYS_MASKED_Q16)
-            continue
-        designated_num, designated_den = designated_maximum
-        numerator_product = designated_num * Q16_SCALE * rank_den
-        denominator_product = rank_num * designated_den
-        boundary = ((numerator_product + denominator_product - 1)
-                    // denominator_product)
-        boundaries.append(
-            ALWAYS_MASKED_Q16 if boundary > MAX_MULTIPLIER_Q16
-            else max(1, boundary))
-    return tuple(boundaries)
+    try:
+        return required_multipliers_by_rank(powers, designated=designated, bulk_mask=bulk)
+    except ValueError as exc:
+        raise ScoreRefused(str(exc)) from exc
 
 
 def rank_from_index(cfar_rank: int) -> int:

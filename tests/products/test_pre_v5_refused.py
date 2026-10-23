@@ -1,4 +1,4 @@
-"""Review M6 and T13 review H1: a product that does not declare the v5 schema is refused by the reader."""
+"""Products outside the supported v5/v6 schemas are refused by the reader."""
 from __future__ import annotations
 
 import numpy as np

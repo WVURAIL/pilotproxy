@@ -608,7 +608,7 @@ def test_validate_products_detects_fast_generation_publish(
     run_dir = tmp_path / "run"
     _write_products(run_dir)
     combine_module._write_recovery_generation_manifest(run_dir)
-    original_load_json = validate_products_module._load_json
+    original_load_json = validate_products_module.load_json_object
     published = False
 
     def publish_complete_generation_between_checks(path, errors):
@@ -623,7 +623,7 @@ def test_validate_products_detects_fast_generation_publish(
 
     monkeypatch.setattr(
         validate_products_module,
-        "_load_json",
+        "load_json_object",
         publish_complete_generation_between_checks,
     )
 
@@ -640,7 +640,7 @@ def test_validate_products_checks_for_journal_after_reading(
 ) -> None:
     run_dir = tmp_path / "run"
     _write_products(run_dir)
-    original_load_json = validate_products_module._load_json
+    original_load_json = validate_products_module.load_json_object
     started = False
 
     def begin_partial_publish_between_checks(path, errors):
@@ -655,7 +655,7 @@ def test_validate_products_checks_for_journal_after_reading(
 
     monkeypatch.setattr(
         validate_products_module,
-        "_load_json",
+        "load_json_object",
         begin_partial_publish_between_checks,
     )
 

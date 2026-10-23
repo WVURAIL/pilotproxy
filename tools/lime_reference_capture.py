@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import os
@@ -19,13 +18,7 @@ import time
 
 import numpy as np
 
-
-def sha(path):
-    h = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1048576), b""):
-            h.update(chunk)
-    return h.hexdigest()
+from pilot_proxy.provenance import sha256_file
 
 
 def now():
@@ -60,10 +53,10 @@ def prepare(output, *, build_manifest, serial, mode, record_seconds=2., tone_com
     manifest_path = Path(build_manifest).resolve()
     build = json.loads(manifest_path.read_text())
     for path, expected in build["inputs"].items():
-        if sha(path) != expected:
+        if sha256_file(path) != expected:
             raise ValueError(f"build input changed: {path}")
     worker, library = Path(build["worker"]).resolve(), Path(build["library"]).resolve()
-    if sha(worker) != build["worker_sha256"]:
+    if sha256_file(worker) != build["worker_sha256"]:
         raise ValueError("worker differs from build receipt")
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
@@ -113,20 +106,20 @@ def prepare(output, *, build_manifest, serial, mode, record_seconds=2., tone_com
                              "tone": "TX chain/stream active with additive deterministic complex tone"}[mode],
             "initialization_includes_internal_tx_gain_calibration": True,
             "initialization_scope": "Internal initialization calibration precedes the baseline; TX-disabled claims apply to the qualified accepted noise interval",
-            "inputs": {**build["inputs"], str(worker): sha(worker), str(library): sha(library),
-                       str(manifest_path): sha(manifest_path), str(Path(__file__).resolve()): sha(__file__), str(tx_path): sha(tx_path)}}
+            "inputs": {**build["inputs"], str(worker): sha256_file(worker), str(library): sha256_file(library),
+                       str(manifest_path): sha256_file(manifest_path), str(Path(__file__).resolve()): sha256_file(__file__), str(tx_path): sha256_file(tx_path)}}
     write_new(output/"plan.json", plan)
-    write_new(output/"plan-digest.json", {"sha256": sha(output/"plan.json")})
+    write_new(output/"plan-digest.json", {"sha256": sha256_file(output/"plan.json")})
     return plan
 
 
 def load(output):
     output = Path(output).resolve()
-    if sha(output/"plan.json") != json.loads((output/"plan-digest.json").read_text())["sha256"]:
+    if sha256_file(output/"plan.json") != json.loads((output/"plan-digest.json").read_text())["sha256"]:
         raise ValueError("frozen plan changed")
     plan = json.loads((output/"plan.json").read_text())
     for path, expected in plan["inputs"].items():
-        if sha(path) != expected:
+        if sha256_file(path) != expected:
             raise ValueError(f"frozen input changed: {path}")
     return plan
 
@@ -139,7 +132,7 @@ def capture(output, *, hardware_authorized=False, transmit=False, rf_confined_au
     if plan["mode"] != "noise" and not transmit:
         raise ValueError("TX-enabled modes also require explicit --transmit")
     write_new(output/"launch.json", {"started_utc": now(), "hardware_attempted": True,
-              "plan_sha256": sha(output/"plan.json"), "authorization": "explicit confined-room reference capture"})
+              "plan_sha256": sha256_file(output/"plan.json"), "authorization": "explicit confined-room reference capture"})
     env = os.environ.copy()
     env["LD_PRELOAD"] = plan["library"]
     process = None
@@ -155,7 +148,7 @@ def capture(output, *, hardware_authorized=False, transmit=False, rf_confined_au
     for signum in (signal.SIGINT, signal.SIGTERM):
         previous[signum] = signal.signal(signum, interrupt)
     receipt = {"schema": "lime-reference-receipt-v1", "hardware_attempted": True,
-               "plan_sha256": sha(output/"plan.json"), "scope": plan["scope"], "mode": plan["mode"]}
+               "plan_sha256": sha256_file(output/"plan.json"), "scope": plan["scope"], "mode": plan["mode"]}
     try:
         with (output/"worker.log").open("x") as log:
             if requested_stop:
@@ -209,7 +202,7 @@ def capture(output, *, hardware_authorized=False, transmit=False, rf_confined_au
         receipt["accepted_interval_confirmed"] = bool(report.get("accepted_interval_passed") and
             report.get("mode") == plan["mode"] and report.get("accepted_samples") == plan["record_samples"] and
             (output/"accepted.cfile").is_file() and (output/"accepted.cfile").stat().st_size == 8*plan["record_samples"])
-        receipt["artifacts"] = {path.name: sha(path) for path in output.iterdir() if path.is_file() and path.name != "receipt.json"}
+        receipt["artifacts"] = {path.name: sha256_file(path) for path in output.iterdir() if path.is_file() and path.name != "receipt.json"}
         receipt["success"] = bool(receipt.get("returncode") == 0 and not timeout and not requested_stop
                                   and not receipt.get("launch_error") and receipt["cleanup_confirmed"] and receipt["accepted_interval_confirmed"] and receipt.get("worker_report", {}).get("success"))
         write_new(output/"receipt.json", receipt)

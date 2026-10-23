@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -32,7 +31,7 @@ from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader
 from pilot_proxy.archive.combine import combine_detector_products
 from pilot_proxy.archive.chime_coarse import chime_freq_id_from_hz
 
-from cpu_detector import exact_cpu_detector_fn  # noqa: E402
+from cpu_detector import exact_cpu_detector_fn, stub_kernel  # noqa: E402
 
 NFFT = 16384
 K = 128
@@ -40,25 +39,6 @@ N_FRAMES = 2
 N_FEEDS = 4
 CHANNELS = {14: 470.3125, 15: 476.3125}  # ATSC channel -> coarse-center (MHz)
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
-
-
-def _cpu_ref_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
-    """Input-dependent CPU reference standing in for the GPU kernel: the exact
-    kernel core 3.0.0 chain (rows -> fxfft256 -> all-bin sums)."""
-    return exact_cpu_detector_fn(
-        packed=packed,
-        weights=weights,
-        kernel=kernel,
-        emit_row_projections=emit_row_projections,
-    )
-
-
-def _stub_kernel(k):
-    specs = SimpleNamespace(K=k, N=3, bits=4, reference_offset_bins=2,
-                            as_descriptive_dict=lambda: {"detector_window_samples": k,
-                            "num_weight_terms": 3, "sample_bits_per_component": 4,
-                            "reference_offset_bins": 2})
-    return SimpleNamespace(specs=specs, version=SimpleNamespace(as_string=lambda: "test"))
 
 
 def _assert_npz_equal(ref_path, got_path):
@@ -111,7 +91,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
         input_dir=input_dir, output_dir=ref_dir, receiver_profile_path=profile_path,
         stream_map_path=None, physical_channels=sorted(CHANNELS),
         frame_size_samples=NFFT, detector_window_samples=K, frames_per_chunk=1,
-        max_frames=N_FRAMES, kernel=_stub_kernel(K), detector_fn=_cpu_ref_detector_fn,
+        max_frames=N_FRAMES, kernel=stub_kernel(K), detector_fn=exact_cpu_detector_fn,
         weights_by_channel=weights_by_channel,
     )
 
@@ -121,7 +101,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
     per_pilot = []
     for ch in sorted(CHANNELS):
         ctx = RunContext(instrument=inst, selection=[FREQ_IDS[ch]], options={
-            "detector_fn": _cpu_ref_detector_fn, "kernel": _stub_kernel(K),
+            "detector_fn": exact_cpu_detector_fn, "kernel": stub_kernel(K),
             "weights": weights_by_channel[ch],
         })
         meta = dict(reader.probe(str(files[ch])))

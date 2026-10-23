@@ -3,6 +3,21 @@
 All notable changes to PilotProxy are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.0.0, October 23, 2026
+
+- Remove the unused `COHERENT_FRACTION*`, `coherent_gain`, and
+  `admissible_min_gain` Python aliases. Use `STACK_AMPLITUDE_RATIO*`,
+  `temporal_gain`, and `minimum_family_gain`. The third argument of `strength`
+  is now `stack_amplitude_ratio`, including keyword calls.
+- Share exact sorted-rank scoring between the archive and validation studies;
+  retain the independent counting reference and unchanged CUDA arithmetic.
+- Share JSON validation and capture-file hashing helpers. Invalid UTF-8 JSON
+  is reported as a validation error.
+- Correct detector terminology in both manuals and show the implemented
+  Kotekan mask path. Preserve the superseded interface design in `docs/archive/`.
+- Track the CUDA twiddle header in incremental builds and fix standalone
+  WVU diagram color initialization.
+
 ## Handoff cleanup, October 23, 2026
 
 - Package 2.0.0 / core 4.0.0 renames the Python interface to

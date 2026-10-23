@@ -41,7 +41,7 @@ import pytest
 from pilot_proxy.fine_decision import fine_mask_decision, pack_bulk_mask
 from pilot_proxy.fine_reduction import independent_bin_mask
 from pilot_proxy.fxfft import fine_power_fx
-from gpu import cuda_available
+from gpu import cupy_or_skip
 from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
@@ -53,17 +53,6 @@ ANCHOR = 62
 HALF_WIDTH = 2
 MULT_Q16 = int(1.5 * 65536)
 UNWRITTEN_POWER = 123  # sentinel an unbound frame-power tap must keep
-
-
-def _import_cupy_or_skip():
-    try:
-        import cupy as cp
-    except Exception:  # pragma: no cover - GPU-less hosts
-        pytest.skip("cupy is not available")
-    ok, reason = cuda_available()
-    if not ok:
-        pytest.skip(f"CUDA device is not available: {reason}")
-    return cp
 
 
 def _kernel_or_skip() -> PilotProxyKernel:
@@ -179,7 +168,7 @@ def _run_mask(cp, kernel, packed, weights, *, anchor, half_width, bulk,
 @pytest.mark.parametrize("case", ["ordinary", "empty_bulk", "rank_boundary", "last_usable_rank", "zero_target", "zero_references"])
 @pytest.mark.parametrize("with_taps", [False, True])
 def test_full_rate_rank_support_matches_reference_and_legacy(case, with_taps):
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     assert kernel.supports_fused_fine_mask_with_support()
     assert kernel.version.as_tuple() >= (3, 0, 0)
@@ -225,7 +214,7 @@ def test_full_rate_rank_support_matches_reference_and_legacy(case, with_taps):
 
 @pytest.mark.cuda
 def test_mask_matches_reference_noise_and_injected():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED)
     streams, batch = 8, 3
@@ -265,7 +254,7 @@ def test_mask_matches_reference_noise_and_injected():
 
 @pytest.mark.cuda
 def test_mask_degenerate_bulk_forced_zero_on_device():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 1)
     streams = 4
@@ -292,7 +281,7 @@ def test_mask_degenerate_bulk_forced_zero_on_device():
 
 @pytest.mark.cuda
 def test_mask_production_form_without_taps():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 2)
     streams, batch = 8, 2
@@ -320,7 +309,7 @@ def test_mask_production_form_without_taps():
 
 @pytest.mark.cuda
 def test_mask_last_block_determinism_over_repeats():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 3)
     streams, batch = 64, 2
@@ -349,7 +338,7 @@ def test_mask_last_block_determinism_over_repeats():
 @pytest.mark.cuda
 @pytest.mark.parametrize("window_samples", [64, 128])
 def test_mask_waits_for_delayed_power_writers(tmp_path, window_samples):
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     nvcc = shutil.which(os.environ.get("NVCC", "nvcc"))
     if nvcc is None:
         pytest.skip("nvcc is required to build the scheduling regression")
@@ -398,7 +387,7 @@ def test_mask_waits_for_delayed_power_writers(tmp_path, window_samples):
 
 @pytest.mark.cuda
 def test_mask_rate_margin_report():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 4)
     streams = 2048

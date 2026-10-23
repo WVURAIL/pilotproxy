@@ -19,10 +19,11 @@ the numpy path against an independent FFT, which is the same arithmetic.
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
+
+from cpu_detector import stub_kernel
 
 pytest.importorskip("h5py")
 import h5py  # noqa: E402
@@ -54,18 +55,6 @@ EVENT_ID = 1151515151
 ARCHIVE = "NT_3.1.0"
 GIT_VERSION_TAG = "receiver-build"
 COLLECTION_SERVER = "host-a"
-
-
-def _stub_kernel(detector_window_samples: int):
-    specs = SimpleNamespace(
-        K=detector_window_samples, N=3, bits=4, reference_offset_bins=2,
-        as_descriptive_dict=lambda: {
-            "detector_window_samples": detector_window_samples,
-            "num_weight_terms": 3, "sample_bits_per_component": 4,
-            "reference_offset_bins": 2,
-        },
-    )
-    return SimpleNamespace(specs=specs, version=SimpleNamespace(as_string=lambda: "test"))
 
 
 def _detector_fn_factory(reject):
@@ -105,7 +94,7 @@ def _detector_fn_factory(reject):
 
 def _ctx(detector_fn, weights):
     return RunContext(instrument=load_instrument("chime"), selection=[FREQ_ID], options={
-        "detector_fn": detector_fn, "kernel": _stub_kernel(K), "weights": weights,
+        "detector_fn": detector_fn, "kernel": stub_kernel(K), "weights": weights,
     })
 
 
@@ -221,7 +210,7 @@ def test_out_of_band_channel_has_zero_spectra(tmp_path):
                         f_center_mhz=643.75, f_tone_bb=1500.0, seed=3)
     ctx = RunContext(instrument=load_instrument("chime"), selection=[400], options={
         "detector_fn": _detector_fn_factory(reject=lambda i: False),
-        "kernel": _stub_kernel(K), "weights": _weights(),
+        "kernel": stub_kernel(K), "weights": _weights(),
     })
     reader = ChimeBasebandPackedReader()
     meta = dict(reader.probe(str(synth)))

@@ -5,7 +5,9 @@ excess power to estimate the broadband DTV shelf. It provides the fixed-point
 GPU detector, archive reduction, threshold assignment, and runtime-bundle
 compiler used by the DTV papers.
 
-**Start with [the pipeline guide](docs/START_HERE.md).** For equations, code
+**New here? Follow [the first-run walkthrough](docs/FIRST_RUN.md)** to install
+the code and reproduce a saved paper calculation without telescope access.
+Then read [the pipeline guide](docs/START_HERE.md). For equations, code
 locations, and verification tests, use [the paper/code map](docs/PAPER_CODE_MAP.md).
 The [terminology reference](docs/TERMINOLOGY.md) distinguishes the measured power
 ratios, rank-based detection score, and conditional forecast quantities.
@@ -14,6 +16,7 @@ ratios, rank-based detection score, and conditional forecast quantities.
 
 | Goal | Entry point |
 |---|---|
+| Get a first result in a clean environment | [First-run walkthrough](docs/FIRST_RUN.md) |
 | Understand or reproduce the paper calculations | [Pipeline guide](docs/START_HERE.md), [paper/code map](docs/PAPER_CODE_MAP.md) |
 | Process a local CHIME archive inventory | [Local runbook](docs/LOCAL_PROCESSING.md) |
 | Process archive data on CANFAR | [CANFAR runbook](docs/CANFAR_RUNBOOK.md) |

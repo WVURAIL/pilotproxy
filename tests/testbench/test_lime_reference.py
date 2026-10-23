@@ -26,8 +26,8 @@ def fake_build(tmp_path_factory):
     subprocess.run(["g++", "-std=c++17", "-shared", "-fPIC", "-pthread", "-I", str(HEADERS), str(source), "-o", str(library)], check=True)
     subprocess.run(["g++", "-std=c++17", "-pthread", "-I", str(HEADERS), str(REPO / "tools/lime_reference_worker.cpp"), str(library), "-o", str(worker)], check=True)
     manifest = base / "build.json"
-    manifest.write_text(json.dumps({"worker": str(worker), "worker_sha256": DRIVER["sha"](worker), "library": str(library),
-        "inputs": {str(source): DRIVER["sha"](source), str(library): DRIVER["sha"](library)}}))
+    manifest.write_text(json.dumps({"worker": str(worker), "worker_sha256": DRIVER["sha256_file"](worker), "library": str(library),
+        "inputs": {str(source): DRIVER["sha256_file"](source), str(library): DRIVER["sha256_file"](library)}}))
     return manifest
 
 
@@ -107,10 +107,10 @@ def test_launch_authorization_and_immutable_attempts(tmp_path, fake_build, mode)
             DRIVER["capture"](out, hardware_authorized=True, rf_confined_authorized=True)
         assert not (out / "launch.json").exists()
     capture(out)
-    before = {p.name: DRIVER["sha"](p) for p in out.iterdir()}
+    before = {p.name: DRIVER["sha256_file"](p) for p in out.iterdir()}
     with pytest.raises(FileExistsError):
         capture(out)
-    assert before == {p.name: DRIVER["sha"](p) for p in out.iterdir()}
+    assert before == {p.name: DRIVER["sha256_file"](p) for p in out.iterdir()}
 
 
 @pytest.mark.parametrize("bad", [0, -.1, 4.01, float("nan"), .02000001])

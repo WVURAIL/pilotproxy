@@ -38,7 +38,7 @@ def test_current_schema_tokens_are_ground_zero_revision_one() -> None:
     # Every token is revision one except those kernel core 3.0.0 redefined
     # (frame powers are the all-bin sums of the fine powers): the detector
     # contract and result schema (2) and the detector-core profile (3; its
-    # revision 2 token is a retired pre-ground-zero name).
+    # revision 2 token is a retired name).
     assert DETECTOR_CORE_PROFILE_SCHEMA_TOKEN == "pilotproxy_detector_core_profile_v3"
     assert RECEIVER_PROFILE_SCHEMA_TOKEN == "pilotproxy_receiver_profile_v1"
     assert STREAM_MAP_SCHEMA_TOKEN == "pilotproxy_stream_map_v1"

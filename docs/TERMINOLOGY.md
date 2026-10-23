@@ -34,7 +34,8 @@ not production false-alarm calibrations.
 
 ## Native interface migration
 
-Package 2.0.0 and core 4.0.0 use descriptive names throughout:
+Package 2 introduced the native rename; package 3 removes the remaining
+misleading Python aliases. Core 4.0.0 uses these descriptive names:
 
 | Previous interface | Current interface |
 |---|---|
@@ -77,10 +78,10 @@ bound. Its family minimum does not qualify a cross-day threshold.
 | Legacy name | Meaning / current name |
 |---|---|
 | `coherent_fraction.json`, `coherent_fraction*` keys | Stack-to-proxy amplitude ratio `gamma` |
-| `COHERENT_FRACTION*` Python imports | Compatibility aliases for `STACK_AMPLITUDE_RATIO*` |
+| Removed `COHERENT_FRACTION*` Python imports | Use `STACK_AMPLITUDE_RATIO*` |
 | `coherent_gain.json`, `coherent_gain_by_band` | Assumed effective temporal gain |
-| `coherent_gain()`, `admissible_min_gain()` | Compatibility aliases for `temporal_gain()`, `minimum_family_gain()` |
-| `strength(..., c=...)` | Historical argument `c` is the amplitude ratio `gamma` |
+| Removed `coherent_gain()`, `admissible_min_gain()` | Use `temporal_gain()`, `minimum_family_gain()` |
+| Removed `strength(..., c=...)` keyword | Use `strength(..., stack_amplitude_ratio=...)` for `gamma` |
 | `deployed*` decision fields | Assigned conditional thresholds; not installed hardware |
 | `finite_budget` decision field | Combined nominal-strength cap, including transfer allowances |
 | `coherence_limit_s` | Full-era effective-gain-time diagnostic; not a physical phase lifetime or joint guard limit |
@@ -92,6 +93,8 @@ row-domain powers are not the current frame powers. Other frozen records retain
 their original schemas and meanings. Current readers accept only documented
 versions, not arbitrary old layouts. See [PRODUCT_SCHEMA.md](PRODUCT_SCHEMA.md).
 
-RFIsher's legacy matrix label `sigma_NL` denotes the derivative with respect to
-damping **variance**, `s_NL = sigma_NL^2`. Its `_Pres` row stores a residual bias
-projection and must be removed before inverting the fitted Fisher block.
+RFIsher names its fitted damping **variance** `s_NL`; `sigma_nl` denotes the
+physical damping length. Its `_Pres` row stores a residual bias projection
+and must be removed before inverting the fitted Fisher block. Frozen older
+matrices labeled the variance derivative `sigma_NL`; those records retain
+their recorded schema.

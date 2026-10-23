@@ -18,7 +18,7 @@ from pilot_proxy.detector_contract import (
     NORMALIZED_POSITIVE_EXCESS_MASK_SOURCE,
     validate_record_or_current_detector_contract,
 )
-from pilot_proxy.json_utils import write_json_strict
+from pilot_proxy.json_utils import load_json_object, write_json_strict
 from pilot_proxy.provenance import file_sha256
 
 from .hdf5_input import (
@@ -55,21 +55,6 @@ class NpzLike(Protocol):
 
 def _add_error(errors: list[dict[str, str]], check: str, message: str) -> None:
     errors.append({"severity": "error", "check": str(check), "message": str(message)})
-
-
-def _load_json(path: Path, errors: list[dict[str, str]]) -> dict[str, Any]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        _add_error(errors, f"required_file.{path.name}", f"missing {path}")
-        return {}
-    except json.JSONDecodeError as exc:
-        _add_error(errors, f"json.{path.name}", f"invalid JSON: {exc}")
-        return {}
-    if not isinstance(data, dict):
-        _add_error(errors, f"json.{path.name}", "top-level JSON value is not an object")
-        return {}
-    return data
 
 
 def _load_npz(path: Path, errors: list[dict[str, str]]) -> NpzLike | None:
@@ -1187,9 +1172,9 @@ def validate_products(
         run, phase="before", errors=errors, validate_files=True
     )
 
-    run_config = _load_json(run / "run_config.json", errors)
-    input_manifest = _load_json(run / "input_manifest.json", errors)
-    stats = _load_json(run / "stats.json", errors)
+    run_config = load_json_object(run / "run_config.json", errors)
+    input_manifest = load_json_object(run / "input_manifest.json", errors)
+    stats = load_json_object(run / "stats.json", errors)
     manifest_identity = (
         _validate_input_manifest(input_manifest, errors=errors)
         if input_manifest

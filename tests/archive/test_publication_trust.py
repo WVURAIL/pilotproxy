@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
 """Publication-trust gates for the cadc-datatrail survey.
 
-These are the checks an independent referee would demand before trusting a
-published inventory, split into three kinds:
-
-  * PASSING tests lock a property the code already has but never asserted
-    (view determinism, the schema-2 migration arithmetic, the frozen bundle's
-    internal accounting).
-
-  * ``xfail(strict=True)`` tests are REAL, MEASURED GAPS. They are not
-    aspirational: each one fails today for the reason in its docstring, and
-    flips to XPASS -- a suite failure -- the moment the gap is closed. That
-    makes every gap machine-tracked instead of prose in a report.
-
-  * Bundle tests skip when the referenced artifact is not on this host, so the
-    file is runnable from a clean checkout.
+The tests exercise view determinism, schema migration, provenance, archive
+restoration, and frozen-bundle accounting. Bundle checks skip when their
+referenced artifacts are unavailable in the test environment.
 
 No network: the datatrail subprocess boundary is faked exactly as in
 tests/archive/test_datatrail_adapter.py.

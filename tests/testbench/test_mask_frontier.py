@@ -94,6 +94,24 @@ def test_the_bulk_mask_may_not_contain_a_designated_bin() -> None:
         )
 
 
+@pytest.mark.parametrize("designated", [[64.5], [True], [-1], [256], []])
+def test_marker_bins_cannot_be_silently_coerced(designated):
+    _, bulk = _geometry()
+    with pytest.raises(ValueError):
+        required_multipliers_by_rank(
+            _powers({64: 1}, reference=1), designated=designated, bulk_mask=bulk
+        )
+
+
+def test_bulk_membership_must_be_explicit_boolean_values():
+    designated, bulk = _geometry()
+    with pytest.raises(ValueError, match="boolean"):
+        required_multipliers_by_rank(
+            _powers({64: 1}, reference=1), designated=designated,
+            bulk_mask=bulk.astype(float),
+        )
+
+
 def test_keep_rule_is_inclusive_and_excludes_the_always_masked_sentinel() -> None:
     required = np.asarray([1, 100, 101, ALWAYS_MASKED_Q16], dtype=object)
     keep = kept_at(required, 101)

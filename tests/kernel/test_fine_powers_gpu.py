@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 
 from pilot_proxy.fxfft import fine_power_fx
-from gpu import cuda_available
+from gpu import cupy_or_skip
 from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
@@ -37,17 +37,6 @@ TERMS = 3
 WINDOWS = 128
 FINE_BINS = 256
 RNG_SEED = 20260801
-
-
-def _import_cupy_or_skip():
-    try:
-        import cupy as cp
-    except Exception:  # pragma: no cover - GPU-less hosts
-        pytest.skip("cupy is not available")
-    ok, reason = cuda_available()
-    if not ok:
-        pytest.skip(f"CUDA device is not available: {reason}")
-    return cp
 
 
 def _kernel_or_skip() -> PilotProxyKernel:
@@ -80,7 +69,7 @@ def test_fine_specs_are_frozen():
 
 @pytest.mark.cuda
 def test_device_fine_powers_match_reference_pure_stage():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED)
     for streams, batch in ((100, 1), (256, 3), (2048, 1)):
@@ -107,7 +96,7 @@ def test_device_fine_powers_match_reference_pure_stage():
 
 @pytest.mark.cuda
 def test_device_chain_matched_filter_row_projections_to_fine_powers():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 1)
     streams = 16
@@ -163,7 +152,7 @@ def test_device_chain_matched_filter_row_projections_to_fine_powers():
 
 @pytest.mark.cuda
 def test_fine_powers_rate_margin_report():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 2)
     streams = 2048

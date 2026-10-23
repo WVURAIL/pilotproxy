@@ -32,22 +32,11 @@ from pilot_proxy.fxfft import (
     fine_power_fx,
     fxfft256,
 )
-from gpu import cuda_available
+from gpu import cupy_or_skip
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 GOLDEN_PATH = REPO / "tests" / "data" / "fxfft256_golden_v1.npz"
 RNG_SEED = 20260731
-
-
-def _import_cupy_or_skip():
-    try:
-        import cupy as cp
-    except Exception:  # pragma: no cover - GPU-less hosts
-        pytest.skip("cupy is not available")
-    ok, reason = cuda_available()
-    if not ok:
-        pytest.skip(f"CUDA device is not available: {reason}")
-    return cp
 
 
 def _device_source() -> str:
@@ -134,7 +123,7 @@ def _run_device(cp, x_int32: np.ndarray) -> np.ndarray:
 
 @pytest.mark.cuda
 def test_device_matches_golden_vectors():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     z = np.load(GOLDEN_PATH, allow_pickle=False)
     got = _run_device(cp, z["inputs"])
     assert (got == z["outputs"]).all()
@@ -142,7 +131,7 @@ def test_device_matches_golden_vectors():
 
 @pytest.mark.cuda
 def test_device_matches_python_on_random_sweep():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     rng = np.random.default_rng(RNG_SEED)
     x14 = rng.integers(-16384, 16385, size=(2048, 128, 2), dtype=np.int64)
     x20 = rng.integers(
@@ -156,7 +145,7 @@ def test_device_matches_python_on_random_sweep():
 
 @pytest.mark.cuda
 def test_device_feed_sums_exact():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     rng = np.random.default_rng(RNG_SEED + 1)
     streams, windows = 32, 128
     terms = rng.integers(

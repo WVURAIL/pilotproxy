@@ -8,7 +8,7 @@ import pytest
 from pilot_proxy.characterization import knee
 from pilot_proxy.characterization import threshold_rule as t
 
-needs_measurements = pytest.mark.skipif(t._COHERENT is None or t._GAIN is None, reason="withheld from the code-only cut (CHIME_DERIVED.md)")
+needs_measurements = pytest.mark.skipif(t._STACK_RATIO_RECORD is None or t._GAIN is None, reason="withheld from the code-only cut (CHIME_DERIVED.md)")
 
 
 def synthetic(seed=1, n=600, events=80):

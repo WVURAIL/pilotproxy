@@ -211,7 +211,7 @@ operational status:
   robust per-frame null-bulk threshold, and any threshold exceedances are
   recomputed from those terms in post-processing and do not replace
   `reject_mask`.
-- Kernel core 2.3.0 and later (current 3.0.0) implement the fixed-point
+- Kernel core 4.0.0 implements the fixed-point
   designated-set order-statistic CFAR decision and have bit-equality tests
   against the Python reference. Its
   per-channel runtime-bundle calibration remains `pending_campaign`; a pending
@@ -228,13 +228,13 @@ effective ceilings. We independently recomputed the following bounds from
 the shipped packed weights and a pure-tone response:
 
 - **Int4 weight crosstalk.** Pilot power entering a reference term through
-  the quantized weights limits the reported F-statistic to `+39.055` to
+  the quantized weights limits the reported local-reference power ratio to `+39.055` to
   `+62.136` dB across ATSC channels 14--36. The corresponding individual
   reference-term crosstalk is `-68.244` to `-36.730` dB relative to the
   target term and depends on channel.
 - **Pilot-frequency offset.** A transmitter offset `df` from the nominal
   pilot places power in the references at exactly `+/-2` fine bins. At
-  `|df| = 300 Hz`, this effect limits the reported F-statistic to about
+  `|df| = 300 Hz`, this effect limits the reported local-reference power ratio to about
   `+25` to `+28` dB for the shipped weights. The exact value depends on the
   channel and the sign of the offset and is independent of additional pilot
   power.

@@ -63,10 +63,10 @@ def _require(data: dict | None, name: str) -> dict:
     return data
 
 
-_COHERENT = _measurement("coherent_fraction.json")
-STACK_AMPLITUDE_RATIO_BY_BAND = {int(k): float(v) for k, v in (_COHERENT or {"by_band": {}})["by_band"].items()}
-STACK_AMPLITUDE_RATIO = float(_COHERENT["value"]) if _COHERENT else float("nan")
-STACK_AMPLITUDE_RATIO_SCALE = _COHERENT["scale"] if _COHERENT else None
+_STACK_RATIO_RECORD = _measurement("coherent_fraction.json")
+STACK_AMPLITUDE_RATIO_BY_BAND = {int(k): float(v) for k, v in (_STACK_RATIO_RECORD or {"by_band": {}})["by_band"].items()}
+STACK_AMPLITUDE_RATIO = float(_STACK_RATIO_RECORD["value"]) if _STACK_RATIO_RECORD else float("nan")
+STACK_AMPLITUDE_RATIO_SCALE = _STACK_RATIO_RECORD["scale"] if _STACK_RATIO_RECORD else None
 # G is a model-family budget for the unmeasured temporal transfer. The finite-dump
 # cross-moment in gamma is accounted for by G_int / mean_rho; this is not a
 # universal lower bound or a measurement of the long-time cross-day product.
@@ -249,11 +249,11 @@ def temporal_gain(channel: int) -> float:
     return minimum_family_gain(GAIN_FRAMES)
 
 
-def strength(x, gain: float, c: float = STACK_AMPLITUDE_RATIO):
-    """Residual strength a = (gamma x)^2 N G; legacy argument ``c`` means gamma."""
-    if c is STACK_AMPLITUDE_RATIO:
-        _require(_COHERENT, "coherent_fraction.json")
-    return (c * np.asarray(x)) ** 2 * FRAME_SAMPLES * gain
+def strength(x, gain: float, stack_amplitude_ratio: float = STACK_AMPLITUDE_RATIO):
+    """Residual strength a = (gamma x)^2 N G; ``stack_amplitude_ratio`` is gamma."""
+    if stack_amplitude_ratio is STACK_AMPLITUDE_RATIO:
+        _require(_STACK_RATIO_RECORD, "coherent_fraction.json")
+    return (stack_amplitude_ratio * np.asarray(x)) ** 2 * FRAME_SAMPLES * gain
 
 
 def bias_over_sigma(s: dict, R: float, gain: float,
@@ -360,11 +360,3 @@ def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: fl
     if moved is None or moved["time_years"] > max_years:
         return dict(out, outcome="not useful", reason=GUARD_FAILED, deployed=None, deployed_at=None, deployed_word=None)
     return dict(out, deployed=moved, deployed_word=moved["word"], deployed_at="below the knee")
-
-
-# Historical analysis imports. Serialized field names also remain unchanged.
-COHERENT_FRACTION = STACK_AMPLITUDE_RATIO
-COHERENT_FRACTION_BY_BAND = STACK_AMPLITUDE_RATIO_BY_BAND
-COHERENT_FRACTION_SCALE = STACK_AMPLITUDE_RATIO_SCALE
-admissible_min_gain = minimum_family_gain
-coherent_gain = temporal_gain

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from types import SimpleNamespace
 from pathlib import Path
 
 import numpy as np
@@ -37,7 +36,7 @@ from pilot_proxy.archive.scan import (
 )
 from pilot_proxy.detect import _resolve_pilot_request
 
-from cpu_detector import stub_detector_fn  # noqa: E402
+from cpu_detector import stub_detector_fn, stub_kernel  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NFFT = 16384
@@ -54,17 +53,6 @@ def _stub_detector_fn(*, packed, weights, kernel):
     return stub_detector_fn(packed=packed, weights=weights, kernel=kernel)
 
 
-def _stub_kernel(k):
-    specs = SimpleNamespace(
-        K=k, N=3, bits=4, reference_offset_bins=2,
-        as_descriptive_dict=lambda: {
-            "detector_window_samples": k, "num_weight_terms": 3,
-            "sample_bits_per_component": 4, "reference_offset_bins": 2,
-        },
-    )
-    return SimpleNamespace(specs=specs, version=SimpleNamespace(as_string=lambda: "test"))
-
-
 def _cpu_detector_options():
     rng = np.random.default_rng(0)
     weights_by_channel = {
@@ -73,7 +61,7 @@ def _cpu_detector_options():
     }
     return {
         "detector_fn": _stub_detector_fn,
-        "kernel": _stub_kernel(K),
+        "kernel": stub_kernel(K),
         "weights_by_channel": weights_by_channel,
     }
 

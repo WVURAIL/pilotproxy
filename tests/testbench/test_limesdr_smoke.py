@@ -110,8 +110,8 @@ def fake_build(tmp_path_factory):
     subprocess.run(["g++", "-std=c++17", "-shared", "-fPIC", "-pthread", "-I", str(HEADERS), str(source), "-o", str(library)], check=True)
     subprocess.run(["g++", "-std=c++17", "-pthread", "-I", str(HEADERS), str(REPO/"tools/limesdr_smoke_worker.cpp"), str(library), "-o", str(worker)], check=True)
     manifest = base/"build.json"
-    manifest.write_text(json.dumps({"worker": str(worker), "worker_sha256": DRIVER["sha"](worker),
-                                   "library": str(library), "inputs": {str(source): DRIVER["sha"](source), str(library): DRIVER["sha"](library)}}))
+    manifest.write_text(json.dumps({"worker": str(worker), "worker_sha256": DRIVER["sha256_file"](worker),
+                                   "library": str(library), "inputs": {str(source): DRIVER["sha256_file"](source), str(library): DRIVER["sha256_file"](library)}}))
     return manifest
 
 

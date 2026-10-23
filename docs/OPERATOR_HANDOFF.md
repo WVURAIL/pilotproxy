@@ -121,3 +121,9 @@ Provide synchronized native voltage samples and detector outputs for CH14–36 p
 Ship a small human-readable manifest next to the bundle containing: release ID/date and owners; source/binary/vendor/bundle hashes; receiver profile and input population; rendered configuration and startup bindings; threshold criterion and calibration domain; source-data hashes and split definitions; per-channel thresholds, sample counts, confidence results, and limitations; test/replay/soak/10-second acceptance evidence; logging/data locations; and the verified site restart/rollback procedure. Keep commissioning qualification and conditional BAO results in separate fields. Store an example successful run and a failed or invalid-frame example so the next operator knows what each looks like.
 
 Implementation references: this repository’s `src/pilot_proxy/runtime_bundle.py` and `src/pilot_proxy/fine_decision.py`; Kotekan’s `lib/cuda/cudaPilotProxyDetector.cpp`, `config/fengine/include/dtv_chord.j2`, and `tests/test_pilotproxy_integration.py`. Record the reviewed revisions and evidence paths in the release manifest; paths alone are not a version pin.
+
+## Historical design
+
+The [superseded interface proposal](archive/kotekan_interface_design.md) is
+retained for its derivations and design history. Its default-stream and
+correlator-FIFO descriptions are not the implemented mask path.

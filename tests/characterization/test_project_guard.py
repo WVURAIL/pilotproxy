@@ -1,4 +1,4 @@
-"""Review M4: a project whose bound layers differ is refused."""
+"""A project whose bound layers differ is refused."""
 from __future__ import annotations
 
 import pytest

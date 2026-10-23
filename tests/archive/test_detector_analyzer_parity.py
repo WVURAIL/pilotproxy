@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -30,7 +29,7 @@ from pilot_proxy.integration.receiver_profile import default_reference_receiver_
 from pilot_proxy.archive.detector import PilotProxyDetectorAnalyzer
 from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader
 
-from cpu_detector import exact_cpu_detector_fn  # noqa: E402
+from cpu_detector import exact_cpu_detector_fn, stub_kernel  # noqa: E402
 
 NFFT = 16384
 K = 128
@@ -39,29 +38,6 @@ N_FEEDS = 4
 PHYS_CH = 14
 F_CENTER_MHZ = 470.3125
 FREQ_ID = 844  # coarse channel for 470.3125 MHz (== chime_freq_id_from_hz)
-
-
-def _cpu_ref_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
-    """Input-dependent CPU reference standing in for the GPU kernel: the exact
-    kernel core 3.0.0 chain (rows -> fxfft256 -> all-bin sums)."""
-    return exact_cpu_detector_fn(
-        packed=packed,
-        weights=weights,
-        kernel=kernel,
-        emit_row_projections=emit_row_projections,
-    )
-
-
-def _stub_kernel(detector_window_samples: int):
-    specs = SimpleNamespace(
-        K=detector_window_samples, N=3, bits=4, reference_offset_bins=2,
-        as_descriptive_dict=lambda: {
-            "detector_window_samples": detector_window_samples,
-            "num_weight_terms": 3, "sample_bits_per_component": 4,
-            "reference_offset_bins": 2,
-        },
-    )
-    return SimpleNamespace(specs=specs, version=SimpleNamespace(as_string=lambda: "test"))
 
 
 def test_detector_analyzer_matches_runner(tmp_path):
@@ -92,15 +68,15 @@ def test_detector_analyzer_matches_runner(tmp_path):
         receiver_profile_path=profile_path, stream_map_path=None,
         physical_channels=[PHYS_CH], frame_size_samples=NFFT,
         detector_window_samples=K, frames_per_chunk=1, max_frames=N_FRAMES,
-        kernel=_stub_kernel(K), detector_fn=_cpu_ref_detector_fn,
+        kernel=stub_kernel(K), detector_fn=exact_cpu_detector_fn,
         weights_by_channel={PHYS_CH: weights},
     )
     ref = np.load(ref_dir / "chime_detector_outputs.npz")
 
     # Candidate: the archive analyzer with the same file and injected pieces.
     ctx = RunContext(instrument=load_instrument("chime"), selection=[FREQ_ID], options={
-        "detector_fn": _cpu_ref_detector_fn,
-        "kernel": _stub_kernel(K),
+        "detector_fn": exact_cpu_detector_fn,
+        "kernel": stub_kernel(K),
         "weights": weights,
     })
     reader = ChimeBasebandPackedReader()

@@ -1,4 +1,4 @@
-"""Review M5: no general layer (characterization, products) imports the narrowband-marker detector directly."""
+"""No general layer (characterization, products) imports the narrowband-marker detector directly."""
 from __future__ import annotations
 
 import ast

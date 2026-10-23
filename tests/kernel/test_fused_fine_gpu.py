@@ -37,7 +37,7 @@ import numpy as np
 import pytest
 
 from pilot_proxy.fxfft import fine_power_fx
-from gpu import cuda_available
+from gpu import cupy_or_skip
 from pilot_proxy.kernel import PilotProxyKernel
 from pilot_proxy.paths import DEFAULT_LIB_PATH
 
@@ -45,17 +45,6 @@ TERMS = 3
 WINDOWS = 128
 FINE_BINS = 256
 RNG_SEED = 20260804
-
-
-def _import_cupy_or_skip():
-    try:
-        import cupy as cp
-    except Exception:  # pragma: no cover - GPU-less hosts
-        pytest.skip("cupy is not available")
-    ok, reason = cuda_available()
-    if not ok:
-        pytest.skip(f"CUDA device is not available: {reason}")
-    return cp
 
 
 def _kernel_or_skip() -> PilotProxyKernel:
@@ -99,7 +88,7 @@ def _reference_chain(matched_filter_row_projections: np.ndarray, streams: int):
 
 @pytest.mark.cuda
 def test_fused_matches_composed_path_bit_exact():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED)
     streams = 16
@@ -156,7 +145,7 @@ def test_fused_matches_composed_path_bit_exact():
 
 @pytest.mark.cuda
 def test_fused_batch_case():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     if not kernel.supports_batch:
         pytest.skip("libpilotproxy.so does not expose PilotProxy_Create_Batch")
@@ -195,7 +184,7 @@ def test_fused_batch_case():
 
 @pytest.mark.cuda
 def test_fused_production_form_without_tap():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 2)
     streams = 8
@@ -243,7 +232,7 @@ def test_fused_impulse_frame_is_exact_without_a_reference():
     one row, zero elsewhere. The impulse only ever enters a butterfly as the
     top leg, every bottom leg is an exact zero, so the frozen transform is
     exactly one in every bin: S_target[f] = 1, P_target = 256, references 0."""
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rows = WINDOWS
     packed = np.zeros((rows, 128), dtype=np.int8)
@@ -273,7 +262,7 @@ def test_fused_impulse_frame_is_exact_without_a_reference():
 
 @pytest.mark.cuda
 def test_fused_rate_margin_report():
-    cp = _import_cupy_or_skip()
+    cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(RNG_SEED + 3)
     streams = 2048

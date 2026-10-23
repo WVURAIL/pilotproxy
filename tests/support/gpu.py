@@ -45,6 +45,16 @@ def cuda_available() -> tuple[bool, str]:
     return True, ""
 
 
+def cupy_or_skip():
+    """Return CuPy when a CUDA device is usable, otherwise skip the test."""
+    import pytest
+
+    available, reason = cuda_available()
+    if not available:
+        pytest.skip(reason)
+    return cp
+
+
 def _nvidia_smi_summary() -> str:
     """Return a short NVML visibility diagnostic via nvidia-smi."""
     try:

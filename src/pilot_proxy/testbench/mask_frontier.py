@@ -1,5 +1,8 @@
 # coding=utf-8
-"""Mask-versus-residual frontier arithmetic for the synthetic bench.
+"""Historical floored-residual comparison for the synthetic bench.
+
+This study is not the paper's signed-mean retained-power estimator. It keeps
+an alternative residual convention to reproduce the validation comparison.
 
 The command-line driver lives in ``tools/mask_residual_frontier.py``.  This
 module holds the small, testable pieces: the archive's exact per-rank Q16
@@ -9,7 +12,7 @@ chapter 6 eq:detection:histogram, and the prefix-sum walk that turns that
 histogram into the frontier of eq:detection:frontier.
 
 Two quantities are carried through every bin of the histogram side by side.
-``systematic`` is what the archive books for a frame: ``10^(shelf/10)`` when
+``systematic`` is what this comparison assigns to a frame: ``10^(shelf/10)`` when
 the frame has a finite shelf estimate, the channel floor otherwise, and never
 below the floor.  ``injected`` is what the synthetic bench actually put into
 that frame, which the archive can never know.  Both are prefix-summed over the
@@ -17,8 +20,8 @@ same bins, so the frontier reports the claim and the truth on identical kept
 sets and any gap between them belongs to the residual convention rather than
 to the bookkeeping.
 
-The rules here are transcriptions of the deployed selector, not of a
-convenient approximation of it:
+The Q16 boundaries use the shared exact scorer. The residual floor and
+candidate selection below reproduce the historical study:
 
 * the per-rank boundary is ``ceil(max_D F2 * 2^16 / F2_rho)`` on exact
   rationals, with ``ALWAYS_MASKED_Q16`` for a rank whose reference numerator
@@ -37,108 +40,25 @@ from __future__ import annotations
 import math
 from bisect import bisect_left
 from dataclasses import dataclass
-from functools import cmp_to_key
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
+from pilot_proxy.fine_decision import (
+    ALWAYS_MASKED_Q16,
+    MAX_MULTIPLIER_Q16,
+    MULTIPLIER_ONE as Q16_SCALE,
+)
+from pilot_proxy.rank_scores import (
+    required_multipliers_by_rank as required_multipliers_by_rank,
+)
+
 MASK_FRONTIER_SCHEMA = "pilotproxy_mask_residual_frontier_v2"
 
-FINE_BINS = 256
-Q16_FRACTION_BITS = 16
-Q16_SCALE = 1 << Q16_FRACTION_BITS
-MAX_MULTIPLIER_Q16 = (1 << 64) - 1
-ALWAYS_MASKED_Q16 = 1 << 64
 MINIMUM_CANDIDATE_Q16 = 1
 MIN_RETAINED_FRAMES = 30
 FLOOR_PERCENTILE = 90.0
 FLOOR_MIN_FRAMES = 30
-
-
-def _rational_order(left: tuple[int, int, int], right: tuple[int, int, int]) -> int:
-    left_num, left_den, left_bin = left
-    right_num, right_den, right_bin = right
-    first = left_num * right_den
-    second = right_num * left_den
-    if first < second:
-        return -1
-    if first > second:
-        return 1
-    return left_bin - right_bin
-
-
-def required_multipliers_by_rank(
-    fine_powers: np.ndarray,
-    *,
-    designated: Sequence[int],
-    bulk_mask: Sequence[bool],
-) -> tuple[int, ...]:
-    """Return the exact one-based-rank Q16 boundaries of one frame.
-
-    Rank ``rho`` occupies index ``rho - 1``.  The rule is the deployed one:
-    ``F2 = 2 p_target / (p_lower + p_upper)`` as an exact rational per bin, the
-    declared bulk ordered by that rational with the bin index breaking ties,
-    and the boundary rounded upward so that the integer comparison keeps the
-    frame at exactly this multiplier and no smaller one.
-    """
-    powers = np.asarray(fine_powers)
-    if powers.shape != (3, FINE_BINS) or powers.dtype != np.dtype(np.uint64):
-        raise ValueError("fine_powers must be exact uint64 with shape [3, 256].")
-    mask = np.asarray(bulk_mask, dtype=bool)
-    if mask.shape != (FINE_BINS,):
-        raise ValueError("bulk_mask must have 256 entries.")
-    designated_bins = [int(value) for value in designated]
-    if not designated_bins:
-        raise ValueError("the designated set must not be empty.")
-    if any(not 0 <= value < FINE_BINS for value in designated_bins):
-        raise ValueError("designated bins must lie in [0, 256).")
-    if mask[designated_bins].any():
-        raise ValueError("the bulk mask must exclude every designated bin.")
-
-    numerator = [2 * int(value) for value in powers[0]]
-    denominator = [
-        int(lower) + int(upper) for lower, upper in zip(powers[1], powers[2])
-    ]
-    ranked = [
-        (numerator[index], denominator[index], index)
-        for index in np.flatnonzero(mask)
-        if denominator[index] > 0
-    ]
-    if not ranked:
-        raise ValueError("the declared bulk has no bin with a positive denominator.")
-    ranked.sort(key=cmp_to_key(_rational_order))
-
-    designated_maximum: tuple[int, int] | None = None
-    for index in designated_bins:
-        if denominator[index] <= 0 or numerator[index] <= 0:
-            continue
-        value = (numerator[index], denominator[index])
-        if (
-            designated_maximum is None
-            or value[0] * designated_maximum[1] > designated_maximum[0] * value[1]
-        ):
-            designated_maximum = value
-
-    boundaries: list[int] = []
-    for rank_num, rank_den, _ in ranked:
-        if designated_maximum is None:
-            boundaries.append(1)
-            continue
-        if rank_num == 0:
-            boundaries.append(ALWAYS_MASKED_Q16)
-            continue
-        designated_num, designated_den = designated_maximum
-        numerator_product = designated_num * Q16_SCALE * rank_den
-        denominator_product = rank_num * designated_den
-        boundary = (
-            numerator_product + denominator_product - 1
-        ) // denominator_product
-        boundaries.append(
-            ALWAYS_MASKED_Q16
-            if boundary > MAX_MULTIPLIER_Q16
-            else max(1, boundary)
-        )
-    return tuple(boundaries)
 
 
 def kept_at(required_q16: np.ndarray, eta_q16: int) -> np.ndarray:

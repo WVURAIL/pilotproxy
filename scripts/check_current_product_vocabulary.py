@@ -31,7 +31,7 @@ CURRENT_FILES = (
     ROOT / "docs" / "CANFAR_RUNBOOK.md",
     ROOT / "docs" / "CHIME_RUN_WORKFLOW.md",
     ROOT / "docs" / "VALIDATION_GATES.md",
-    ROOT / "docs" / "KOTEKAN_INTERFACE_PREP.md",
+    ROOT / "docs" / "OPERATOR_HANDOFF.md",
     ROOT / "docs" / "PilotProxy_DS001_Data_Sheet.tex",
     ROOT / "docs" / "PilotProxy_UG001_User_Guide.tex",
     ROOT / "docs" / "generated" / "specs.tex",

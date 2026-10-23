@@ -101,7 +101,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small PilotProxy-DS001}
-\fancyhead[C]{\small CUDA F-Statistic DTV Pilot Detector}
+\fancyhead[C]{\small CUDA DTV Pilot Detector}
 \fancyhead[R]{\small Product Specification}
 \fancyfoot[L]{\small PilotProxy-DS001}
 \fancyfoot[C]{\small Dylan Gormley}
@@ -111,7 +111,7 @@
 \renewcommand{\footrulewidth}{0.8pt}
 \renewcommand{\footrule}{\hbox to\headwidth{\color{PilotProxyRed}\leaders\hrule height \footrulewidth\hfill}}
 
-\title{PilotProxy CUDA F-Statistic DTV Pilot Detector\\Product Specification}
+\title{PilotProxy CUDA DTV Pilot Detector\\Product Specification}
 \author{Dylan J. Gormley}
 \date{PilotProxy-DS001 \\ August 2026}
 
@@ -125,7 +125,7 @@
 \hfill
 \begin{minipage}[t]{0.58\textwidth}
   \raggedleft
-  {\fontsize{18}{20}\selectfont\bfseries CUDA F-Statistic DTV Pilot Detector}\par
+  {\fontsize{18}{20}\selectfont\bfseries CUDA DTV Pilot Detector}\par
   {\small Product Specification}
 \end{minipage}
 }
@@ -220,22 +220,19 @@ The CUDA kernel implements only the fixed-point measurement. It receives a row-m
 \begin{figure}[H]
 \centering
 \input{figures/system_context.tikz}
-\caption{Proposed deployment system context. The detector stage consumes the
-same channelized baseband as the correlator and enqueues one binary rejection
-decision per aligned frame; the correlator pops the queue when its own
-processing of that frame completes, so the decision is synced to the
-integration it masks. The detector stage, runtime bundle, and mask API are
-implemented and tested; the queue and correlator synchronization are the
-proposed Kotekan interface (\code{docs/KOTEKAN_INTERFACE_PREP.md}), and the
-producer/consumer rate margin was measured on an earlier kernel build and
-must be re-measured for the current core.}
+\caption{Kotekan's implemented mask path. The detector reads the voltage ring
+and writes a rejection bit, frame powers, and optional rank support for each
+aligned block. The opt-in \code{DtvRfiMask} stage intersects those decisions
+with the existing RFImask; both visibility and sample-count consumers use
+the combined mask. CHIME's diagnostic include remains detect-only.
+See \code{docs/OPERATOR_HANDOFF.md} for receiver qualification.}
 \label{fig:system_context}
 \end{figure}
 
 
 \section{Signal Definitions}
 
-\subsection{Raw F-Statistic}
+\subsection{Raw Local-Reference Power Ratio}
 
 For one evaluated frame, the kernel produces three frame powers:
 \begin{equation}
@@ -620,14 +617,11 @@ from Parseval at these amplitudes; \code{cuda/config.h}).
 
 A zero reference denominator cannot define \(F\). The host therefore forces the mask to zero and marks the frame invalid; Python callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before interpreting any conversion. Core 3.0.0 removed the float and rational C helpers that formed these conversions in the library.
 
-The outputs serve three roles. Deployment consumes only the per-frame
-\code{mask} (1 = reject, 0 = keep); in the proposed Kotekan interface, this
-bit is the entire queue payload. The science-product path consumes the exact
-\code{uint64} fine powers and the frame powers that are their all-bin sums
---- the archive pipeline forms the norm-corrected decision on the host and
-stores the statistic --- and the exact \code{int32} row sums, the input to
-the fine spectrum, through an optional debug tap; none of these cross the
-deployment interface.
+Kotekan consumes the per-frame \code{mask} (1 = reject, 0 = keep) and,
+when enabled, rank-validity support. It also emits the three frame powers
+for diagnostics. The archive path stores exact \code{uint64} fine powers
+and their all-bin sums, and forms the coarse norm-corrected comparison on
+the host. Exact \code{int32} row projections are an optional diagnostic tap.
 
 \section{Build and Validation}
 

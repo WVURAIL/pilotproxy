@@ -101,7 +101,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small PilotProxy-UG001}
-\fancyhead[C]{\small CUDA F-Statistic DTV Pilot Detector}
+\fancyhead[C]{\small CUDA DTV Pilot Detector}
 \fancyhead[R]{\small User Guide}
 \fancyfoot[L]{\small PilotProxy-UG001}
 \fancyfoot[C]{\small Pilot-informed DTV detector}
@@ -111,7 +111,7 @@
 \renewcommand{\footrulewidth}{0.8pt}
 \renewcommand{\footrule}{\hbox to\headwidth{\color{PilotProxyRed}\leaders\hrule height \footrulewidth\hfill}}
 
-\title{PilotProxy CUDA F-Statistic DTV Pilot Detector\\User Guide}
+\title{PilotProxy CUDA DTV Pilot Detector\\User Guide}
 \author{Dylan J. Gormley}
 \date{PilotProxy-UG001 \\ August 2026}
 
@@ -124,7 +124,7 @@
 \vspace*{0.25in}
 {\fontsize{30}{32}\selectfont\bfseries\color{PilotProxyRed}PilotProxy}\par
 \vspace{0.12in}
-{\fontsize{23}{26}\selectfont\bfseries CUDA F-Statistic DTV Pilot Detector}\par
+{\fontsize{23}{26}\selectfont\bfseries CUDA DTV Pilot Detector}\par
 \vspace{0.08in}
 {\Large User Guide}\par
 \vspace{0.35in}
@@ -520,11 +520,12 @@ The kernel does not encode telescope metadata. Receiver integrations provide the
 \begin{figure}[H]
 \centering
 \input{figures/system_context.tikz}
-\caption{Proposed deployment system context: the detector enqueues one
-rejection decision per aligned frame and the correlator pops the queue when
-its own processing completes. The detector stage and runtime bundle are
-implemented; the queue and synchronization are the proposed Kotekan
-interface (\code{docs/KOTEKAN_INTERFACE_PREP.md}).}
+\caption{Kotekan's implemented mask path. The detector reads the voltage ring
+and writes a rejection bit, frame powers, and optional rank support for each
+aligned block. The opt-in \code{DtvRfiMask} stage intersects those decisions
+with the existing RFImask; both visibility and sample-count consumers use
+the combined mask. CHIME's diagnostic include remains detect-only.
+See \code{docs/OPERATOR_HANDOFF.md} for receiver qualification.}
 \label{fig:system_context}
 \end{figure}
 

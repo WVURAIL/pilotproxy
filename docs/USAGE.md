@@ -1,6 +1,10 @@
 # Installation and standalone usage
 
-Start with [the repository guide](../README.md) to choose a workflow. Run the commands below from the repository root. Archive operators should use the dedicated local or CANFAR runbook.
+Start with [the first-run walkthrough](FIRST_RUN.md) for a complete CPU-only
+installation and paper check. This page covers standalone and CUDA workflows.
+Create the environment and clone below from your chosen workspace; run the
+remaining commands from the repository root. Archive operators should use the
+dedicated local or CANFAR runbook.
 
 ## Environment
 
@@ -15,14 +19,15 @@ provides them.
 export VENV_DIR="${VENV_DIR:-$HOME/.venvs/pilot-proxy-archive}"
 export PYTHON_BIN="${PYTHON_BIN:-python3}"
 mkdir -p "$(dirname "$VENV_DIR")"
-"$PYTHON_BIN" -m venv --system-site-packages "$VENV_DIR"
+"$PYTHON_BIN" -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 ```
 
 Shared and image-managed Python installations may be read-only or marked as
 PEP 668 externally managed. In those environments, install into the virtual
-environment rather than using bare `pip`. The `--system-site-packages` option
-keeps a session image's CuPy and CUDA packages visible to the GPU workflows.
+environment rather than using bare `pip`. On a managed GPU image, adding
+`--system-site-packages` when creating the environment keeps that image's CuPy
+and CUDA packages visible. Leave it out for an isolated CPU installation.
 Activate the environment in every **new** session. It persists only when
 `VENV_DIR` is on persistent storage, such as `/arc` on CANFAR. The CANFAR
 runbook uses `setup_env.sh`, which creates and recreates its own configured
@@ -38,7 +43,7 @@ credentials, CUDA, or CHIME HDF5 data. Run it inside the
 [environment](#environment) above before using a standalone workflow.
 
 ```bash
-export REPO_DIR="${REPO_DIR:-$PWD/pilot-proxy}"
+export REPO_DIR="${REPO_DIR:-$PWD/pilotproxy}"
 git clone https://github.com/WVURAIL/pilotproxy.git "$REPO_DIR"
 cd "$REPO_DIR"
 python -m pip install -U pip setuptools wheel

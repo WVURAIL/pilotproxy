@@ -50,9 +50,10 @@ transfer to another population, temporal stationarity, or cross-day covariance.
 
 ## Compatibility and evidence
 
-`PilotProxy_*`, `cfar_rank`, `deployed*`, old coherence fields and cache rule v1 have
-specific compatibility meanings in [TERMINOLOGY.md](TERMINOLOGY.md). Do not
-infer a statistical model from these historical tokens. The frame-power
+`PilotProxy_*` is the current native API. Historical fields such as `cfar_rank`,
+`deployed*`, old coherence fields and cache rule v1 have specific compatibility
+meanings in [TERMINOLOGY.md](TERMINOLOGY.md). Do not infer a statistical model
+from those historical tokens. The frame-power
 schema, Q16 units, one-based versus zero-based ranks and receiver coordinates
 are contracts, not cosmetic names to change by search-and-replace.
 

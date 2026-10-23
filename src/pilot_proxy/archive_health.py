@@ -39,6 +39,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import numpy as np
 
+from pilot_proxy import wvu_palette as wvu
 from pilot_proxy.archived_product_keys import (
     ARCHIVED_TO_CURRENT,
     measurement,
@@ -3279,9 +3280,9 @@ def _plot_product_diagnostics(
             for axis, (values, label, line) in zip(axes, panels):
                 finite_values = np.asarray(values, dtype=np.float64)
                 finite_values = finite_values[np.isfinite(finite_values)]
-                axis.hist(finite_values, bins=80, color="#0072B2", alpha=0.82)
+                axis.hist(finite_values, bins=80, color=wvu.MEASURED, alpha=0.82)
                 if line is not None:
-                    axis.axvline(line, color="#D55E00", linewidth=1.1)
+                    axis.axvline(line, color=wvu.MODEL, linewidth=1.1)
                 axis.set_xlabel(label)
                 axis.set_ylabel("Healthy frames")
                 axis.set_yscale("log")
@@ -3300,7 +3301,7 @@ def _plot_product_diagnostics(
                     sky_offset[order] / 1.0e3,
                     after_db[order],
                     linewidth=0.65,
-                    color="#0072B2",
+                    color=wvu.MEASURED,
                     label="after stored mask, health corrected",
                 )
             else:
@@ -3312,12 +3313,12 @@ def _plot_product_diagnostics(
                     "and is not plotted.",
                     transform=axis.transAxes,
                     fontsize=8,
-                    color="#0072B2",
+                    color=wvu.MEASURED,
                     bbox={"facecolor": "white", "edgecolor": "0.8", "alpha": 0.9},
                 )
             axis.axvline(
                 0.0,
-                color="#D55E00",
+                color=wvu.MODEL,
                 linestyle="--",
                 linewidth=0.9,
                 label="nominal pilot",
@@ -3336,7 +3337,7 @@ def _plot_product_diagnostics(
                 vmin=float(vmin),
                 vmax=float(vmax),
                 extent=(0, months.size, freq[freq_order][0], freq[freq_order][-1]),
-                cmap="viridis",
+                cmap=wvu.sequential_cmap(),
             )
             anchor_hz = float(freq[fine_diag.predicted_anchor_bin])
             axis.axhline(
@@ -3366,7 +3367,7 @@ def _plot_product_diagnostics(
                 axis.plot(
                     [min(indices), max(indices) + 1],
                     [measured_hz, measured_hz],
-                    color="#D55E00",
+                    color=wvu.MODEL,
                     linewidth=1.25,
                     label=(
                         "accepted measured epoch anchor"

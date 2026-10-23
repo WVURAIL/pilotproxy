@@ -179,19 +179,21 @@ def main() -> int:
         rc = 2
 
     if args.png is not None:
+        from pilot_proxy import wvu_palette as wvu
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        matplotlib.rcParams.update(wvu.plot_rcparams())
         fig, ax = plt.subplots(figsize=(9, 4.6))
-        ax.semilogy(nu / 1e3, S / floor, lw=0.6, color="#444444",
+        ax.semilogy(nu / 1e3, S / floor, lw=0.6, color=wvu.INK,
                     label="measured spectrum")
         for m, (nm, col) in enumerate(zip(
                 ["target", "ref_lo", "ref_hi"],
-                ["#d62728", "#ff9896", "#ffbb78"])):
+                [wvu.BLUE, wvu.MODEL, wvu.SAFETY_BLUE])):
             ax.semilogy(nu_grid / 1e3,
                         1e3 * R[m] / R[m].max() + 1e-2,
                         lw=1.0, color=col, label=f"deployed {nm}")
-        ax.axvline(nu_star / 1e3, color="#2ca02c", lw=0.8, ls=":",
+        ax.axvline(nu_star / 1e3, color=wvu.HEMLOCK, lw=0.8, ls=":",
                    label="strongest line")
         ax.set_xlabel("raw baseband frequency [kHz]")
         ax.set_ylabel("power / median bin")

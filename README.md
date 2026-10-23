@@ -118,3 +118,14 @@ Use [CITATION.cff](CITATION.cff), the version from `pilot-proxy --version`, and
 the actual source/build identifiers of a run. See [CHANGELOG.md](CHANGELOG.md)
 for interface changes and [the survey trust contract](docs/survey_trust.md)
 for provenance and recovery rules.
+
+### Figure colors
+
+Plots and diagrams use the WVU colors from the
+[Beamer template](https://github.com/WVURAIL/wvu_beamer_template), with a standalone
+copy in `src/pilot_proxy/wvu_palette.py`. Update it with the template's
+`tools/export_plot_palette.py`. Blue denotes measurements; old gold provides
+contrast for model curves and small labels. Additional series use WVU accents
+and distinct markers or line styles where needed. Grayscale masks keep their
+binary meaning. Journal requirements take precedence; this palette does not
+change the numerical calculations or frozen records.

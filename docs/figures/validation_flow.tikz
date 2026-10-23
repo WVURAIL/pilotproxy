@@ -2,7 +2,7 @@
 % Single source of truth -- \input by PilotProxy_DS001 (Data Sheet) and
 % PilotProxy_UG001 (User Guide), and rendered to validation_flow.svg for
 % README.md. Requires: tikz libraries arrows.meta + positioning, and the
-% colors PilotProxyBlue (#144E8C) and LightGray (#F3F3F3) defined by the host
+% colors PilotProxyBlue (WVU blue) and LightGray (WVU not-quite-white) defined by the host
 % document (or by validation_flow_standalone.tex when rendering the svg).
 % Re-render the svg after editing:
 %   cd docs/figures && pdflatex validation_flow_standalone.tex \

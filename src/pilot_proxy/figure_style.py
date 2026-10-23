@@ -1,7 +1,7 @@
-"""Dissertation-wide plotting style.
+"""Publication plotting style with WVU colors and Latin Modern typography.
 
-This copy preserves the plotting conventions used by the recorded figures.
-The dissertation maintains its current style in figure_src/style.py.
+Colors come from the shared WVU palette. Existing recorded figures are not
+modified; newly rendered figures use these defaults.
 
 The body text is Latin Modern (LaTeX ``lmodern``).  Submission figures render
 all text through the same LaTeX stack, at a fixed physical size, so labels are
@@ -9,6 +9,7 @@ not silently substituted with DejaVu or shrunk differently from chapter to
 chapter.  This file also fixes the semantic palette and common line/axis rules.
 """
 from __future__ import annotations
+from . import wvu_palette as wvu
 
 import contextlib
 import hashlib
@@ -25,26 +26,14 @@ import matplotlib.pyplot as plt
 TEXT_WIDTH = 6.35
 HALF_WIDTH = 3.05
 
-INK = "#202225"
-MUTED = "#6F747A"
-GRID = "#D9DADD"
-PAPER = "#FFFFFF"
-PANEL = "#F7F7F5"
-# Semantic palette drawn from the WVU visual-identity color system
-# (scm.wvu.edu/brand/visual-identity/); role names are unchanged.
-MEASURED = "#0062A3"       # archive / instrument measurement (WVU safety blue)
-MODEL = "#7F6310"          # model, assumption, or transfer (WVU old gold)
-CONDITIONAL = "#6A724F"    # feasible/accepted, but conditional (WVU hemlock)
-FAILURE = "#8D4638"        # failure, rejection, or excision (WVU woodburn)
-PENDING = "#988E8B"        # unmeasured / contextual (WVU seneca gray)
-PURPLE = "#F58672"         # additional series only (WVU sunset)
-GOLD = "#EEAA00"           # additional series / warning (WVU gold)
-LIGHT_BLUE = "#DEEBF3"     # pale tints of the role colors for fills
-LIGHT_ORANGE = "#FCF2D9"
-LIGHT_GREEN = "#E1E3DC"
-LIGHT_RED = "#EADDDB"
-LIGHT_GRAY = "#F0EEEE"
-SERIES = [MEASURED, MODEL, CONDITIONAL, PURPLE, GOLD, PENDING]
+INK, MUTED = wvu.INK, wvu.MUTED
+GRID, PAPER, PANEL = wvu.tint(wvu.SENECA_GRAY, 0.3), wvu.WHITE, wvu.NOT_QUITE_WHITE
+MEASURED, MODEL = wvu.MEASURED, wvu.MODEL
+CONDITIONAL, FAILURE, PENDING = wvu.CONDITIONAL, wvu.FAILURE, wvu.PENDING
+SUNSET, GOLD = wvu.SUNSET, wvu.GOLD
+LIGHT_BLUE, LIGHT_GOLD = wvu.tint(MEASURED), wvu.tint(GOLD)
+LIGHT_GREEN, LIGHT_RED, LIGHT_GRAY = wvu.tint(CONDITIONAL), wvu.tint(FAILURE), wvu.tint(PENDING)
+SERIES = wvu.SERIES
 
 # Fixed PDF metadata makes repeated figure builds byte-for-byte reproducible.
 # The date identifies the frozen dissertation-export interface revision; it is
@@ -66,6 +55,7 @@ def configure(*, require_tex: bool = True) -> None:
             "figure text uses Latin Modern exactly like the dissertation."
         )
     matplotlib.rcParams.update({
+        **wvu.plot_rcparams(),
         "figure.facecolor": PAPER,
         "savefig.facecolor": PAPER,
         "axes.facecolor": PAPER,

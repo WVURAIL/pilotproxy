@@ -7,6 +7,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from . import wvu_palette as wvu
+
 
 def _command_available(command: str) -> bool:
     command_text = str(command)
@@ -88,6 +90,7 @@ def setup_matplotlib(
         )
     matplotlib.rcParams.update(
         {
+            **wvu.plot_rcparams(),
             "axes.unicode_minus": False,
             "font.family": "serif",
             "font.serif": (

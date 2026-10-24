@@ -1,6 +1,6 @@
 # Choosing the fixed rank by injection on real background bins
 
-30 September 2026. Design only; nothing here has been run beyond the frame counts in section 1 (`design/design_counts.py`, `design/design_counts.json`, `logs/design_counts.log`). Release of record: `results/archive_no_split_2026-09-24_r2`. Code: the cfar-choice-2026-09-29 clones (RFIsher f72bf34, pilot-proxy bdfcdce, RadioFisher 12a1616), used read-only.
+30 September 2026. Design only; nothing here has been run beyond the frame counts in section 1 (`design/design_counts.py`, `design/design_counts.json`, `logs/design_counts.log`). Release of record: `results/archive_no_split_2026-09-24_r2`. Code: the cfar-choice-2026-09-29 clones (RFIsher a281112, pilot-proxy bdfcdce, RadioFisher 12a1616), used read-only.
 
 ## Why this study
 

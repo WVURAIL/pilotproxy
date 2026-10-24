@@ -2,7 +2,7 @@
   "schema": "pilot_proxy_detector_register_v1",
   "side": "detector",
   "source": {
-    "copied_from": "RFIsher src/rfisher/selection_policy.py at e041d5e3d001499eb7758cd694d43ff5ff8bcf2d",
+    "copied_from": "RFIsher src/rfisher/selection_policy.py at 7edf11ce8f7511ba63795fc4707a05406f8d349d",
     "file_sha256": "a997e91999f879de8c7597a51cce7b6758e5d4a8d47ddca8a80cf78d9ab8c347",
     "snapshot_schema": "rfisher-threshold-decisions-v1",
     "snapshot_sha256": "b36c612ca1a59c0b5e09ced129bca9e15c589fb94a7e2e3648c6ebd815b68cf7",
@@ -225,7 +225,7 @@
       "status": "provisional",
       "rationale": "Below thirty null frames the tail percentile is treated as too thin to call measured and falls back to a stated detector-scale bound.",
       "evidence": [
-        "RFIsher src/rfisher/residual.py@e041d5e"
+        "RFIsher src/rfisher/residual.py@7edf11c"
       ],
       "sensitivity_values": [
         30,
@@ -242,7 +242,7 @@
       "status": "provisional",
       "rationale": "The nested shelf decomposition starts only above ten selected frames; this is a minimal execution guard, not a precision guarantee.",
       "evidence": [
-        "RFIsher src/rfisher/residual.py@e041d5e"
+        "RFIsher src/rfisher/residual.py@7edf11c"
       ],
       "sensitivity_values": [
         11,
@@ -259,7 +259,7 @@
       "status": "provisional",
       "rationale": "The reported kept-frame floor is called weight-norm determined only when it agrees with the exact edge prediction inside this band.",
       "evidence": [
-        "RFIsher src/rfisher/residual.py@e041d5e"
+        "RFIsher src/rfisher/residual.py@7edf11c"
       ],
       "sensitivity_values": [
         0.5,
@@ -289,7 +289,7 @@
       "status": "provisional",
       "rationale": "Three lower-tail quantiles diagnose whether the kept sample has a Gaussian-like null scale without using its contaminated upper tail.",
       "evidence": [
-        "RFIsher src/rfisher/residual.py@e041d5e"
+        "RFIsher src/rfisher/residual.py@7edf11c"
       ],
       "sensitivity_values": []
     },
@@ -319,7 +319,7 @@
       "status": "provisional",
       "rationale": "The upper percentile makes the undetected-shelf substitution a one-sided bound; its exact coverage is not calibrated.",
       "evidence": [
-        "RFIsher src/rfisher/residual.py@e041d5e"
+        "RFIsher src/rfisher/residual.py@7edf11c"
       ],
       "sensitivity_values": [
         75.0,
@@ -336,7 +336,7 @@
       "status": "derived",
       "rationale": "Histogram prefix sums are sufficient only when correlation and transfer corrections do not need refitting after masking.",
       "evidence": [
-        "RFIsher src/rfisher/thresholds.py@e041d5e"
+        "RFIsher src/rfisher/thresholds.py@7edf11c"
       ],
       "sensitivity_values": []
     },
@@ -349,7 +349,7 @@
       "status": "derived",
       "rationale": "The mask changes only when the integer multiplier reaches a frame's required value. Those deployable values give the exact empirical staircase without a geometric grid.",
       "evidence": [
-        "RFIsher src/rfisher/preparation.py@e041d5e"
+        "RFIsher src/rfisher/preparation.py@7edf11c"
       ],
       "sensitivity_values": []
     },
@@ -362,7 +362,7 @@
       "status": "locked",
       "rationale": "The intended bulk geometry fixes the median rank before invalid bins are removed. Both CHIME anchor parities give rho = 63; frames lacking that rank remain always masked.",
       "evidence": [
-        "RFIsher src/rfisher/preparation.py@e041d5e",
+        "RFIsher src/rfisher/preparation.py@7edf11c",
         "docs/HANDOFF.md@d3a3749"
       ],
       "sensitivity_values": []
@@ -387,7 +387,7 @@
       "status": "derived",
       "rationale": "Count fractions equal exposure fractions only when every accepted frame carries the same exposure.",
       "evidence": [
-        "RFIsher src/rfisher/thresholds.py@e041d5e"
+        "RFIsher src/rfisher/thresholds.py@7edf11c"
       ],
       "sensitivity_values": []
     },
@@ -424,7 +424,7 @@
       "status": "derived",
       "rationale": "The detector stores a zero-based array index, while the order statistic is written as a one-based rank.",
       "evidence": [
-        "RFIsher src/rfisher/preparation.py@e041d5e"
+        "RFIsher src/rfisher/preparation.py@7edf11c"
       ],
       "sensitivity_values": []
     },
@@ -463,7 +463,7 @@
       "status": "provisional",
       "rationale": "The current selector declines candidates supported by fewer than thirty retained frames; the value needs sensitivity testing.",
       "evidence": [
-        "RFIsher src/rfisher/thresholds.py@e041d5e"
+        "RFIsher src/rfisher/thresholds.py@7edf11c"
       ],
       "sensitivity_values": [
         30,

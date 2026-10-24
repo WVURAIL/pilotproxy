@@ -4,11 +4,11 @@
   "table_provenance": {
    "rfisher": {
     "version": "5.0.0",
-    "commit": "b397289b2a9eb91ec0355ff59cb0fed1eded98c9"
+    "commit": "1f842b4dd5bd9c38d142b694bafeab598edaadce"
    },
    "radiofisher": {
     "version": "1.0.0",
-    "commit": "8294315814ff483f2aa5eb96e669a66a9e3dc8b3"
+    "commit": "9c40ee42a1aa33cc2e99e499c177c8595955c7f2"
    },
    "pk_table": {
     "name": "pk_cmbspa2026.dat",

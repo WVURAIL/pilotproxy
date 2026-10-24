@@ -9,14 +9,14 @@
     },
     "DESIGN.md": {
       "bytes": 19747,
-      "copy": "byte for byte",
-      "sha256": "47c619784fb0c14acc680fb104c2ee7b055b90fe54b97f89c041f2bbc3d2f2ab",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "69d67ba1f78eed4ef9ace5e615e71c8e4d94e19e392f5fcce39b3be0f5651187",
       "source_path": "/home/djg/rail/output/rank-by-injection-2026-09-30/DESIGN.md",
       "source_sha256": "47c619784fb0c14acc680fb104c2ee7b055b90fe54b97f89c041f2bbc3d2f2ab"
     },
     "INPUTS.json": {
       "bytes": 56340,
-      "sha256": "f045096d48cb7f6ccacb313529da22c07e1d6cc543fbb779ffa596954b8335d3",
+      "sha256": "8279e02d4c101727d112235070f1d81d5936e9affc6e4780bee3e340ee2d7552",
       "source": "packaging metadata"
     },
     "README.md": {
@@ -642,8 +642,8 @@
     },
     "inputs/release/analysis-plan.json": {
       "bytes": 58656,
-      "copy": "byte for byte",
-      "sha256": "5a8c1f02cb31b2e4be2c4698460b06a24848ff5b34a44d2af9f83fe7fe53739e",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "9611ad5a72323edf1d4d93c03ae942963c081b793ba3847880ea94a4515cb324",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/analysis-plan.json",
       "source_sha256": "5a8c1f02cb31b2e4be2c4698460b06a24848ff5b34a44d2af9f83fe7fe53739e"
     },
@@ -810,8 +810,8 @@
     },
     "inputs/release/archive/ledger/run.json": {
       "bytes": 7038,
-      "copy": "byte for byte",
-      "sha256": "82dcb6c91e3853702e119ed4e2acaa76603839edbe22bd3aca6710dd28e30a4c",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "2858e1d071b763eee686ed4d5abf20a632c0fec5f2cc66336b28c09db0cc795a",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/run.json",
       "source_sha256": "82dcb6c91e3853702e119ed4e2acaa76603839edbe22bd3aca6710dd28e30a4c"
     },
@@ -824,8 +824,8 @@
     },
     "inputs/release/release-manifest.json": {
       "bytes": 86493,
-      "copy": "byte for byte",
-      "sha256": "7391023da84d780ec83f91a4c6a44b755095b0038048adf96bc37180aba8ffce",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "33722e89e2b6ba77e00f761c0bfb6b8e44f17a2a11b00b429ee42f4f8a8045e3",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/release-manifest.json",
       "source_sha256": "7391023da84d780ec83f91a4c6a44b755095b0038048adf96bc37180aba8ffce"
     },
@@ -838,8 +838,8 @@
     },
     "rank/common.py": {
       "bytes": 4598,
-      "copy": "byte for byte",
-      "sha256": "dd445f86fb273dd5883af944fd70fb4a030b27fb7a20b19f6dacc2fea7d3acd2",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "adc363455891fbf39f66a1cba04dbf7e62c34751a614c681148074e4176ad450",
       "source_path": "/home/djg/rail/output/rank-by-injection-2026-09-30/rank/common.py",
       "source_sha256": "dd445f86fb273dd5883af944fd70fb4a030b27fb7a20b19f6dacc2fea7d3acd2"
     },
@@ -989,7 +989,7 @@
       "source_sha256": "96db4ecab5e9dc54883a1eaa1a4e12dbcfbc062098dbec51cb88c75f8984de27"
     }
   },
-  "note": "Copied source and result bytes are unchanged. Large inputs are pinned, not embedded.",
+  "note": "Copied source and result bytes are unchanged, except that RFIsher commit IDs were re-pinned to the rewritten history on 2026-10-24 (same trees). Large inputs are pinned, not embedded.",
   "packaged_on": "2026-10-01",
   "schema": "recorded-study-evidence-v1",
   "study_rerun": false,

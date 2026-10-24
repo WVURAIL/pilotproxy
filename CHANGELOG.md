@@ -54,6 +54,8 @@ All notable changes to PilotProxy are recorded here. The project follows
   the implemented Kotekan mask path, and the documentation describes the
   current code. Incremental builds track the CUDA twiddle header. No result
   changes.
+- Provenance records name the rewritten RFIsher and RadioFisher commits; no
+  result changes.
 
 ## 1.0.0, October 22, 2026
 

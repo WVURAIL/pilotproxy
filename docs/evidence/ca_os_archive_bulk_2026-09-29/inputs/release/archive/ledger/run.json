@@ -6,19 +6,19 @@
  "generated": "2026-09-25T06:33:55+00:00",
  "producer": {
   "repository": "WVURAIL/RFIsher",
-  "commit": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+  "commit": "a281112133eb3ba49394ef91377019ca2068a3fa",
   "dirty": false,
   "dirty_files": "",
   "module": "rfisher_results.archive.run",
   "source_digest": "02d92c579a9a6d44ff614c80ec1c032d90cce5e86212a52df1fa353fb9914b16",
   "source_roots": {
-   "RFIsher/src": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-f72bf34/src",
-   "RFIsher/scripts": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-f72bf34/scripts",
+   "RFIsher/src": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-a281112/src",
+   "RFIsher/scripts": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-a281112/scripts",
    "pilot_proxy": "/home/djg/rail/output/refactor-equivalence-2026-09/checkouts/pilot-proxy-m1/src/pilot_proxy",
    "radiofisher": "/home/djg/rail/RadioFisher/radiofisher"
   },
   "policy_sha256": "b36c612ca1a59c0b5e09ced129bca9e15c589fb94a7e2e3648c6ebd815b68cf7",
-  "commit_at_end": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+  "commit_at_end": "a281112133eb3ba49394ef91377019ca2068a3fa",
   "source_changed_during_run": false
  },
  "products_dir": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot",

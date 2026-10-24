@@ -1,6 +1,6 @@
 # Can CA-CFAR replace OS-CFAR for the fine decision?
 
-29 September 2026. Release of record: `results/archive_no_split_2026-09-24_r2`, the release the dissertation vendors. Code: RFIsher f72bf34, pilot-proxy bdfcdce and RadioFisher 12a1616, cloned into `clones/`; no `.py` file differs from the release's `source_snapshots`. Definitions follow ch06: D is the anchor +/- 2 bins; B is the selector's bulk of 125 or 126 alternate bins (no product marks any census bins); Z(rho) = max_D T / T_(rho); Z_CA = max_D T / mean_B T over the same bulk.
+29 September 2026. Release of record: `results/archive_no_split_2026-09-24_r2`, the release the dissertation vendors. Code: RFIsher a281112, pilot-proxy bdfcdce and RadioFisher 12a1616, cloned into `clones/`; no `.py` file differs from the release's `source_snapshots`. Definitions follow ch06: D is the anchor +/- 2 bins; B is the selector's bulk of 125 or 126 alternate bins (no product marks any census bins); Z(rho) = max_D T / T_(rho); Z_CA = max_D T / mean_B T over the same bulk.
 
 ## Decision
 

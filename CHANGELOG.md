@@ -3,8 +3,28 @@
 All notable changes to PilotProxy are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 3.0.1, October 23, 2026
+## 1.1.0, October 24, 2026
 
+- Detector core 4.0.0 renames the native interface: the Python class to
+  `PilotProxyKernel`, the C API to `PilotProxy_*`, macros to `PILOTPROXY_*`,
+  the native library to `libpilotproxy.so`, and source files to
+  `pilotproxy_detector.*` / `pilotproxy_reference.*`. Rebuild consumers; the
+  earlier names are not aliases. Arithmetic and product schema v6 are
+  unchanged. `docs/TERMINOLOGY.md` maps the names.
+- `STACK_AMPLITUDE_RATIO*`, `temporal_gain` and `minimum_family_gain` replace
+  `COHERENT_FRACTION*`, `coherent_gain` and `admissible_min_gain`. The third
+  argument of `strength` is `stack_amplitude_ratio`, including keyword calls.
+- Injection-recovery and result-summary schema v2 use `power_ratio` and
+  `power_ratio_histogram_png`; existing reports and weight bytes are unchanged.
+- The threshold rule defaults to the paper's ideal calendar year, `1 / kappa`.
+  To reproduce the duty-based times and decisions of the frozen records, pass
+  `calendar_factor=LEGACY_CALENDAR_FACTOR` (CLI: `--calendar-factor
+  6.574444324363269`). The paper's outcomes and words are the same under the
+  ideal-year convention. Saved records are not rewritten.
+- `--policy-budget` accepts the combined nominal-strength caps;
+  `--finite-budget` is an alias. Empty recent-year support rejects the
+  candidate instead of raising an indexing error. Invalid budgets and time
+  factors are refused.
 - The CHIME receiver profile states its channelizer response as
   `sinc_hamming`: CHIME's F-engine is a 4-tap, 2048-point PFB with a
   sinc-Hamming window (Amiri et al. 2024, arXiv:2408.00172). The CHORD
@@ -23,48 +43,17 @@ All notable changes to PilotProxy are recorded here. The project follows
   still read, and a manifest's receiver-profile digest of the old
   serialization still binds its profile; nothing writes the old names.
   Runtime bundles keep every key Kotekan reads.
-- The shipped weight manifests are regenerated; both weight banks are
-  byte-identical. Documentation describes the current code and drops
-  development history. No result changes.
-
-## 3.0.0, October 23, 2026
-
-- Remove the unused `COHERENT_FRACTION*`, `coherent_gain`, and
-  `admissible_min_gain` Python aliases. Use `STACK_AMPLITUDE_RATIO*`,
-  `temporal_gain`, and `minimum_family_gain`. The third argument of `strength`
-  is now `stack_amplitude_ratio`, including keyword calls.
-- Share exact sorted-rank scoring between the archive and validation studies;
-  the independent counting reference and the CUDA arithmetic are unchanged.
-- Share JSON validation and capture-file hashing helpers. Invalid UTF-8 JSON
-  is reported as a validation error.
-- Correct detector terminology in both manuals and show the implemented
-  Kotekan mask path.
-- Track the CUDA twiddle header in incremental builds and fix standalone
-  WVU diagram color initialization.
-
-## 2.0.0, October 23, 2026
-
-- Detector core 4.0.0 renames the Python interface to `PilotProxyKernel`, the
-  C API to `PilotProxy_*`, macros to `PILOTPROXY_*`, the native library to
-  `libpilotproxy.so`, and source files to `pilotproxy_detector.*` /
-  `pilotproxy_reference.*`. Rebuild consumers; the earlier names are not
-  aliases. Arithmetic and product schema v6 are unchanged. `docs/TERMINOLOGY.md`
-  maps the names.
-- Injection-recovery and result-summary schema v2 use `power_ratio` and
-  `power_ratio_histogram_png`; existing reports and weight bytes are unchanged.
-- `STACK_AMPLITUDE_RATIO`, `temporal_gain` and `minimum_family_gain` replace
-  the coherence names; the coherence names remain aliases in this release.
-- The threshold rule defaults to the paper's ideal calendar year, `1 / kappa`.
-  To reproduce the duty-based times and decisions of the frozen records, pass
-  `calendar_factor=LEGACY_CALENDAR_FACTOR` (CLI: `--calendar-factor
-  6.574444324363269`). The paper's outcomes and words are the same under the
-  ideal-year convention. Saved records are not rewritten.
-- `--policy-budget` accepts the combined nominal-strength caps;
-  `--finite-budget` is an alias. Empty recent-year support rejects the
-  candidate instead of raising an indexing error. Invalid budgets and time
-  factors are refused.
+- The archive and validation studies share one exact sorted-rank scoring
+  routine, and JSON validation and capture-file hashing share helpers; the
+  independent counting reference and the CUDA arithmetic are unchanged.
+  Invalid UTF-8 JSON is reported as a validation error.
 - The capture-ratio study driver moves to
   `tools/archive/derive_stack_amplitude_ratio.py`.
+- The shipped weight manifests are regenerated; both weight banks are
+  byte-identical. The manuals use the current detector terminology and show
+  the implemented Kotekan mask path, and the documentation describes the
+  current code. Incremental builds track the CUDA twiddle header. No result
+  changes.
 
 ## 1.0.0, October 22, 2026
 

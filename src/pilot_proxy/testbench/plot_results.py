@@ -654,7 +654,7 @@ def _required_iq_samples(
 
 
 def _recorded_nyquist_zone(geometry: Mapping[str, Any], metadata_path: Path) -> int:
-    """The result's Nyquist zone; results before 3.0.1 recorded its old word."""
+    """The result's Nyquist zone; results before 1.1.0 recorded its old word."""
     zone = frequency_axis_nyquist_zone(
         geometry, context=f"{metadata_path}: detector_geometry"
     )

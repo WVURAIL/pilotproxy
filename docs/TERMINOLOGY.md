@@ -34,7 +34,7 @@ not production false-alarm calibrations.
 
 ## Native names before core 4
 
-Detector core 4 and package 2.0.0 renamed the native interface. Consumers
+Detector core 4 and package 1.1.0 renamed the native interface. Consumers
 built against an earlier core, such as a Kotekan vendor pin, map as follows:
 
 | Before core 4 | Core 4 |

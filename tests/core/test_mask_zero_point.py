@@ -246,7 +246,7 @@ def test_runtime_bundle_declares_norm_thresholds(tmp_path) -> None:
         receiver_profile_path=DEFAULT_CHIME_DTV_RECEIVER_PROFILE,
         detector_core_profile_path=DEFAULT_DETECTOR_CORE_PROFILE,
         physical_channels=[_MOST_BIASED_HIGH_CHANNEL],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=bundle_dir,
     )
     pilots = json.loads((bundle_dir / "pilot_profiles.json").read_text())

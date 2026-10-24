@@ -60,7 +60,9 @@ if str(SRC_ROOT) not in sys.path:
 
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
 from pilot_proxy.detector_geometry import (
-    apply_spectral_sense_to_detector_matrix,
+    MIRRORED_NYQUIST_ZONE,
+    add_nyquist_zone_argument,
+    apply_nyquist_zone_to_detector_matrix,
     predicted_pilot_fine_bin,
     stream_time_block_to_detector_matrix,
 )
@@ -522,11 +524,11 @@ def _study_config(
             "windows_per_stream": WINDOWS,
             "fine_bins": FINE_BINS,
             "fine_bin_width_hz": FINE_BIN_HZ,
-            "synthetic_reference_pfb_output_spectral_sense": str(
-                args.spectral_sense
+            "synthetic_reference_pfb_output_nyquist_zone": int(
+                args.nyquist_zone
             ),
-            "deployment_raw_input_spectral_sense": "inverted",
-            "weight_coordinate_system": "post_spectral_sense_normalized",
+            "deployment_raw_input_nyquist_zone": MIRRORED_NYQUIST_ZONE,
+            "weight_coordinate_system": "post_nyquist_zone_normalized",
         },
         "simulation": {
             "primary_backend": str(args.simulation_backend),
@@ -737,7 +739,7 @@ def _profile(
         sample_rate_hz=OUTPUT_SAMPLE_RATE_HZ,
         detector_window_samples=K,
         nfft=FRAME_SAMPLES,
-        spectral_sense=args.spectral_sense,
+        nyquist_zone=args.nyquist_zone,
         pad_factor=2,
     )
     designated = designated_bins(anchor, int(args.designated_half_width))
@@ -801,7 +803,7 @@ def _channelize_one(
         spec=ReferenceChannelizerSpec(),
     )
     # The checked-in current weights live in the
-    # post_spectral_sense_normalized coordinate.  The reference rFFT output is
+    # post_nyquist_zone_normalized coordinate.  The reference rFFT output is
     # already in that centered coordinate; applying the archive lower-edge
     # conversion or the CHIME raw-input reversal here would move the pilot away
     # from the manifest target.  ``_prepare_one_cache`` gates the resulting
@@ -873,8 +875,8 @@ def _prepare_one_cache(
     one_stream_rows = stream_time_block_to_detector_matrix(
         clean_stream[np.newaxis, :], detector_window_samples=K
     )
-    one_stream_rows = apply_spectral_sense_to_detector_matrix(
-        one_stream_rows, spectral_sense=args.spectral_sense
+    one_stream_rows = apply_nyquist_zone_to_detector_matrix(
+        one_stream_rows, nyquist_zone=args.nyquist_zone
     )
     z_target = one_stream_rows.astype(np.complex128) @ np.conjugate(
         profile.ideal_weights[0]
@@ -2772,14 +2774,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--guard-fine-bins", type=int, default=DEFAULT_GUARD_FINE_BINS)
     parser.add_argument("--bootstrap-replicates", type=int, default=None)
     parser.add_argument("--input-scale", type=float, default=DEFAULT_INPUT_SCALE)
-    parser.add_argument(
-        "--spectral-sense",
-        choices=("normal", "inverted"),
-        default="normal",
+    add_nyquist_zone_argument(
+        parser,
         help=(
-            "Sense of the synthetic reference-PFB output before the current "
-            "post-normalization weights. The reference channelizer is already "
-            "normalized, so normal is the validated current-weight path."
+            "Nyquist zone of the synthetic reference-PFB output before the "
+            "current post-normalization weights. The reference channelizer "
+            "samples in zone 1, the validated current-weight path."
         ),
     )
     parser.add_argument("--pilot-below-data-db", type=float, default=PILOT_BELOW_DATA_DB)

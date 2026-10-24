@@ -25,7 +25,10 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 from pilot_proxy.chime.frame_adapter import pack_chime_block_for_detector
 from pilot_proxy.chime.hdf5_input import CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4
-from pilot_proxy.detector_geometry import apply_spectral_sense_to_detector_matrix
+from pilot_proxy.detector_geometry import (
+    MIRRORED_NYQUIST_ZONE,
+    apply_nyquist_zone_to_detector_matrix,
+)
 from pilot_proxy.detector_reference import (
     matched_filter_row_projections_cpu_reference_packed,
     quantize_complex_numpy,
@@ -65,8 +68,8 @@ def raw_adapt(normal_rows):
     rows = np.asarray(normal_rows)
     if rows.ndim != 2 or rows.shape[1] != K:
         raise ValueError("normalized rows must be two-dimensional with K=128")
-    return apply_spectral_sense_to_detector_matrix(
-        np.conjugate(rows), spectral_sense="inverted"
+    return apply_nyquist_zone_to_detector_matrix(
+        np.conjugate(rows), nyquist_zone=MIRRORED_NYQUIST_ZONE
     )
 
 
@@ -123,7 +126,7 @@ def native_pack(normal_rows, *, streams, channel, coarse_channel):
         block,
         frame_size_samples=WINDOWS * K,
         detector_window_samples=K,
-        spectral_sense="inverted",
+        nyquist_zone=MIRRORED_NYQUIST_ZONE,
         frames_in_chunk=1,
         sample_encoding=CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
         selected_coarse_channel=coarse_channel,

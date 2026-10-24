@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from pilot_proxy.detector_contract import (
-    INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED,
+    INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED,
     INPUT_COORDINATE_RAW_INPUT,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
 )
 from pilot_proxy.provenance import file_sha256
@@ -41,7 +41,7 @@ def test_export_runtime_weight_bundle_writes_compact_profiles(tmp_path) -> None:
             CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
         ),
         physical_channels=[14, 21],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
     )
 
@@ -54,10 +54,10 @@ def test_export_runtime_weight_bundle_writes_compact_profiles(tmp_path) -> None:
 
     assert contract["schema_version"] == "pilotproxy_detector_contract_v2"
     assert contract["per_frequency_threshold"] is False
-    assert contract["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+    assert contract["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_NYQUIST_ZONE
     assert (
         contract["input_coordinate_system"]
-        == INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED
+        == INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED
     )
     assert (
         contract["input_preprocessing"][
@@ -67,8 +67,8 @@ def test_export_runtime_weight_bundle_writes_compact_profiles(tmp_path) -> None:
     )
     assert profiles["schema_version"] == "pilotproxy_runtime_pilot_profiles_v1"
     assert manifest["schema_version"] == "pilotproxy_runtime_weights_manifest_v1"
-    assert profiles["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
-    assert manifest["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+    assert profiles["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_NYQUIST_ZONE
+    assert manifest["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_NYQUIST_ZONE
     assert profiles["detector_contract_sha256"] == manifest["detector_contract_sha256"]
     assert profiles["weights_sha256"] == file_sha256(outputs["weights"])
     assert [row["physical_channel"] for row in profiles["profiles"]] == [14, 21]
@@ -109,7 +109,7 @@ def test_export_runtime_bundle_requires_exact_physical_channels(
                 / "pilotproxy_cuda_local_reference_power_ratio.json"
             ),
             physical_channels=[invalid_channel],
-            weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             output_dir=tmp_path / "bundle",
         )
 
@@ -126,7 +126,7 @@ def test_chime_runtime_bundle_post_coordinate_uses_detector_coordinate(
             CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
         ),
         physical_channels=[14, 21],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
     )
     contract = json.loads(outputs["detector_contract"].read_text("utf-8"))
@@ -135,7 +135,7 @@ def test_chime_runtime_bundle_post_coordinate_uses_detector_coordinate(
     channel_21 = _layout_by_channel(manifest, 21)
 
     assert contract["input_coordinate_system"] == (
-        INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED
+        INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED
     )
     assert (
         contract["input_preprocessing"][
@@ -194,7 +194,7 @@ def test_validate_runtime_weight_bundle_reports_bad_offset(tmp_path) -> None:
             CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
         ),
         physical_channels=[14, 21],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
     )
     profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
@@ -220,7 +220,7 @@ def test_validate_runtime_weight_bundle_reports_coordinate_mismatch(tmp_path) ->
             CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
         ),
         physical_channels=[14],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
     )
     manifest = json.loads(outputs["weights_manifest"].read_text("utf-8"))
@@ -246,7 +246,7 @@ def test_validate_runtime_weight_bundle_reports_input_coordinate_mismatch(
             CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
         ),
         physical_channels=[14],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
     )
     profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
@@ -271,7 +271,7 @@ def _export_reference_bundle(tmp_path):
             CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
         ),
         physical_channels=[14, 21],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
     )
     return output_dir, outputs
@@ -769,7 +769,7 @@ def _export_bundle_with_control(tmp_path):
             CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
         ),
         physical_channels=[14, 37],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
     )
     return output_dir, outputs

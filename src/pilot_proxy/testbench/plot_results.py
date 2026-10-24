@@ -12,7 +12,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 import zlib
 
 import numpy as np
@@ -31,6 +31,7 @@ from pilot_proxy.dtv_units import (
     pilot_excess_db_to_normalized_power_ratio_threshold,
 )
 from pilot_proxy.detector_contract import weight_term_norms_sq
+from pilot_proxy.detector_geometry import frequency_axis_nyquist_zone
 from pilot_proxy.detector_reference import coarse_power_ratio_cpu_reference_packed
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.integration import QUANTIZATION_SCALE_MODE_GLOBAL
@@ -652,6 +653,16 @@ def _required_iq_samples(
     return int(math.ceil(last_source_position)) + 1
 
 
+def _recorded_nyquist_zone(geometry: Mapping[str, Any], metadata_path: Path) -> int:
+    """The result's Nyquist zone; results before 1.1.0 recorded its old word."""
+    zone = frequency_axis_nyquist_zone(
+        geometry, context=f"{metadata_path}: detector_geometry"
+    )
+    if zone is None:
+        raise ValueError(f"{metadata_path}: detector_geometry has no nyquist_zone")
+    return zone
+
+
 def _clean_packed_terms(
     metadata: dict,
     metadata_path: Path,
@@ -746,7 +757,7 @@ def _clean_packed_terms(
         feed_streams,
         frame_size_samples=frame_size,
         detector_window_samples=detector_window,
-        spectral_sense=str(geometry["spectral_sense"]),
+        nyquist_zone=_recorded_nyquist_zone(geometry, metadata_path),
         quantization_scale_mode=QUANTIZATION_SCALE_MODE_GLOBAL,
         clip_sigma=clip_sigma,
         bits_per_component=bits,

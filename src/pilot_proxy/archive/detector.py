@@ -55,7 +55,7 @@ from pilot_proxy.detect import detect_packed_detector_input
 from pilot_proxy.detector_contract import (
     COARSE_POWER_DEFINITION,
     NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
     build_detector_contract,
     normalize_weight_coordinate_system,
@@ -65,8 +65,9 @@ from pilot_proxy.detector_contract import (
 )
 from pilot_proxy.detector_geometry import (
     DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS,
-    SPECTRAL_SENSE_INVERTED,
-    SPECTRAL_SENSE_NORMAL,
+    DEFAULT_NYQUIST_ZONE,
+    MIRRORED_NYQUIST_ZONE,
+    nyquist_zone_is_mirrored,
     predicted_fine_designated_bins,
     predicted_pilot_fine_bin,
 )
@@ -505,7 +506,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
     def __init__(self) -> None:
         self._nfft = 0
         self._K = int(DETECTOR_WINDOW_SAMPLES)
-        self._spectral_sense = SPECTRAL_SENSE_NORMAL
+        self._nyquist_zone = DEFAULT_NYQUIST_ZONE
         self._physical_channel = -1
         self._freq_id = -1
         self._f0_hz = 800_000_000.0
@@ -701,9 +702,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             np.asarray(data["sample_rate_hz"]).reshape(()).item()
         )
         self._K = int(data["detector_window_samples"])
-        self._spectral_sense = (
-            SPECTRAL_SENSE_INVERTED if int(data["sense"]) == -1
-            else SPECTRAL_SENSE_NORMAL
+        # Products store the zone's direction: -1 mirrored, +1 upright.
+        self._nyquist_zone = (
+            MIRRORED_NYQUIST_ZONE if int(data["sense"]) == -1
+            else DEFAULT_NYQUIST_ZONE
         )
         self._pilot_below_data_db = float(data["pilot_below_data_db"])
         self._bin_enbw_hz = float(data["bin_enbw_hz"])
@@ -833,7 +835,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         # let begin() verify the new input's identity matches what we restored
         self._resumed_identity = (
             self._freq_id, int(self._nfft), self._sample_rate_hz,
-            int(self._K), self._spectral_sense,
+            int(self._K), self._nyquist_zone,
             self._physical_channel, self._pilot_below_data_db,
             self._bin_enbw_hz, self._dtv_bandwidth_hz,
             self._pilot_capture_efficiency,
@@ -953,11 +955,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             if metadata_sample_rate_hz > 0.0
             else float(SAMPLE_RATE_HZ)
         )
-        # Instrument definitions expose spectral sense as nyquist_zone.
-        # not a "sense" attribute. nyquist_sign maps that to +1/-1.
+        # Only the zone's parity matters to the detector; keep its
+        # representative so a resumed product (which stores +1/-1) matches.
         sense = int(nyquist_sign(int(getattr(inst, "nyquist_zone", 1) or 1)))
-        self._spectral_sense = (
-            SPECTRAL_SENSE_INVERTED if sense == -1 else SPECTRAL_SENSE_NORMAL
+        self._nyquist_zone = (
+            MIRRORED_NYQUIST_ZONE if sense == -1 else DEFAULT_NYQUIST_ZONE
         )
 
         # pilot / channel geometry from the channel-center frequency
@@ -1096,7 +1098,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 sample_rate_hz=self._sample_rate_hz,
                 detector_window_samples=self._K,
                 nfft=self._nfft,
-                spectral_sense=self._spectral_sense,
+                nyquist_zone=self._nyquist_zone,
                 pad_factor=FINE_PAD_FACTOR,
             )
             self._fine_designated = predicted_fine_designated_bins(
@@ -1142,9 +1144,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             else float("nan")
         )
 
-        time_reverse = self._spectral_sense == SPECTRAL_SENSE_INVERTED
+        time_reverse = nyquist_zone_is_mirrored(self._nyquist_zone)
         default_wc = (
-            WEIGHT_COORDINATE_POST_SPECTRAL_SENSE if time_reverse
+            WEIGHT_COORDINATE_POST_NYQUIST_ZONE if time_reverse
             else WEIGHT_COORDINATE_RAW_INPUT
         )
         if bank is not None:
@@ -1155,7 +1157,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             )
             coordinate_metadata = _weight_coordinate_metadata(
                 weight_bank=bank,
-                input_spectral_sense=self._spectral_sense,
+                input_nyquist_zone=self._nyquist_zone,
             )
             contract_weight_coordinate = str(
                 coordinate_metadata["effective_weight_coordinate_system"]
@@ -1211,7 +1213,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._max_chunks_per_file = opts.get("max_chunks_per_file", None)
 
         # Detector contract, so the combine step can emit run_config/stats that
-        # validate-products accepts. Built from the kernel specs + spectral sense
+        # validate-products accepts. Built from the kernel specs + Nyquist zone
         # the same way run_chime_analysis builds it; the weight coordinate system
         # defaults to raw-input and is overridable via options.
         specs = getattr(self._kernel, "specs", None)
@@ -1256,7 +1258,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             now = (
                 self._freq_id, int(self._nfft), self._sample_rate_hz,
                 int(self._K),
-                self._spectral_sense, self._physical_channel,
+                self._nyquist_zone, self._physical_channel,
                 self._pilot_below_data_db, self._bin_enbw_hz,
                 self._dtv_bandwidth_hz, self._pilot_capture_efficiency,
             )
@@ -1584,7 +1586,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 native_block,
                 frame_size_samples=self._nfft,
                 detector_window_samples=self._K,
-                spectral_sense=self._spectral_sense,
+                nyquist_zone=self._nyquist_zone,
                 frames_in_chunk=1,
                 sample_encoding=CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
                 selected_coarse_channel=0,   # unused on the native (lossless) path
@@ -1977,7 +1979,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             detector_window_samples=np.asarray(int(self._K), dtype=np.int64),
             num_input_streams=np.asarray(int(self._num_input_streams), dtype=np.int64),
             sense=np.asarray(
-                -1 if self._spectral_sense == SPECTRAL_SENSE_INVERTED else 1,
+                -1 if nyquist_zone_is_mirrored(self._nyquist_zone) else 1,
                 dtype=np.int64,
             ),
             unit_keys=np.asarray(sorted(str(k) for k in self._keys), dtype=str),

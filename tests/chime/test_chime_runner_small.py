@@ -27,7 +27,7 @@ SMALL_RUN_DETECTOR_ROWS_PER_FRAME = (
 )
 # noinspection PyProtectedMember
 from pilot_proxy.chime.runner import (
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WeightBankLike,
     _reference_placement_summary,
     _validate_detector_window_contract,
@@ -371,10 +371,10 @@ def test_chime_runner_small_writes_expected_shapes(tmp_path) -> None:
     assert stats["detector_contract"]["per_frequency_threshold"] is False
     assert stats["detector_contract"]["mask_source"] == "normalized_positive_excess_decision"
     assert stats["detector_contract"]["weight_coordinate_system"] == (
-        WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+        WEIGHT_COORDINATE_POST_NYQUIST_ZONE
     )
     assert stats["detector_contract"]["input_coordinate_system"] == (
-        "post_spectral_sense_normalized"
+        "post_nyquist_zone_normalized"
     )
     assert (
         stats["detector_contract"]["input_preprocessing"][
@@ -406,7 +406,7 @@ def test_weight_coordinate_rejects_missing_coordinate_manifest() -> None:
                     "receiver_profile": {
                         "channelizer": {
                             "frequency_axis": {
-                                "spectral_sense": "inverted",
+                                "nyquist_zone": 2,
                             },
                         },
                     },
@@ -418,7 +418,7 @@ def test_weight_coordinate_rejects_missing_coordinate_manifest() -> None:
     with pytest.raises(ValueError, match="requires weight_coordinate_system"):
         _weight_coordinate_metadata(
             weight_bank=weight_bank,
-            input_spectral_sense="inverted",
+            input_nyquist_zone=2,
         )
 
 
@@ -434,7 +434,7 @@ def test_weight_coordinate_rejects_raw_inverted_manifest() -> None:
                     "receiver_profile": {
                         "channelizer": {
                             "frequency_axis": {
-                                "spectral_sense": "inverted",
+                                "nyquist_zone": 2,
                             },
                         },
                     },
@@ -446,7 +446,7 @@ def test_weight_coordinate_rejects_raw_inverted_manifest() -> None:
     with pytest.raises(ValueError, match="detector-coordinate weights"):
         _weight_coordinate_metadata(
             weight_bank=weight_bank,
-            input_spectral_sense="inverted",
+            input_nyquist_zone=2,
         )
 
 
@@ -458,14 +458,14 @@ def test_weight_coordinate_accepts_declared_post_normalization_manifest() -> Non
             SimpleNamespace(
                 path="weights/chime_detector_coordinate.bin",
                 manifest={
-                    "weight_coordinate_system": WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+                    "weight_coordinate_system": WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
                     "input_preprocessing": {
                         "time_reverse_detector_windows_before_kernel": True,
                     },
                     "receiver_profile": {
                         "channelizer": {
                             "frequency_axis": {
-                                "spectral_sense": "inverted",
+                                "nyquist_zone": 2,
                             },
                         },
                     },
@@ -476,11 +476,11 @@ def test_weight_coordinate_accepts_declared_post_normalization_manifest() -> Non
 
     metadata = _weight_coordinate_metadata(
         weight_bank=weight_bank,
-        input_spectral_sense="inverted",
+        input_nyquist_zone=2,
     )
 
     assert metadata["effective_weight_coordinate_system"] == (
-        WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+        WEIGHT_COORDINATE_POST_NYQUIST_ZONE
     )
     assert metadata["input_requires_time_reversal"] is True
 

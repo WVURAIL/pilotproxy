@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from pilot_proxy.archive.names import validate_identifier
+from pilot_proxy.detector_geometry import nyquist_zone_is_mirrored
 
 try:
     import yaml
@@ -69,7 +70,7 @@ class Instrument:
     bandwidth_mhz: float   # total processed bandwidth
     n_channels: int        # number of frequency channels
     descending: bool       # True if higher freq_id => lower frequency (CHIME)
-    nyquist_zone: int      # 1 = normal baseband direction, 2 = inverted (the
+    nyquist_zone: int      # 1 = upright baseband direction, 2 = mirrored (the
                            #   sign of the baseband->sky mapping; see nyquist_sign)
     n_feeds: int           # feeds/inputs incoherently combined
     nfft: int = DEFAULT_NFFT  # default analysis FFT length per frame
@@ -140,9 +141,9 @@ def nyquist_sign(nyquist_zone: int) -> int:
     """The +1/-1 baseband->sky direction implied by a Nyquist zone.
 
     Odd zones keep the baseband direction (sky = f_center + baseband); even zones
-    invert it (sky = f_center - baseband). This is the one place that rule lives.
+    mirror it (sky = f_center - baseband); see ``nyquist_zone_is_mirrored``.
     """
-    return 1 if int(nyquist_zone) % 2 else -1
+    return -1 if nyquist_zone_is_mirrored(int(nyquist_zone)) else 1
 
 
 # --------------------------------------------------------------------------
@@ -240,7 +241,7 @@ def _instrument_from_config(requested_name: str, cfg: Mapping) -> Instrument:
     if "sense" in cfg:
         raise ValueError(
             f"instrument {requested_name!r}: unsupported configuration key "
-            "'sense'; use nyquist_zone: 1 (normal) or 2 (inverted)")
+            "'sense'; use nyquist_zone: 1 (upright) or 2 (mirrored)")
     unknown = set(cfg) - _INSTRUMENT_KEYS
     if unknown:
         raise ValueError(

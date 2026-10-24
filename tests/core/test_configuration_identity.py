@@ -9,7 +9,7 @@ import pytest
 from pilot_proxy.detector_contract import (
     ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION,
     DETECTOR_POWER_RATIO_DEFINITION,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
     build_detector_contract,
     validate_detector_contract,
@@ -65,7 +65,7 @@ def test_public_detector_contract_uses_power_ratio_keys() -> None:
         skipped_guard_bins=1,
         reference_offset_bins=2,
         num_weight_terms=3,
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     assert "statistic" not in contract
     assert ("all_rows_" + "statistic") not in contract
@@ -85,7 +85,7 @@ def test_detector_contract_validates_optional_fine_reduction_block() -> None:
         skipped_guard_bins=1,
         reference_offset_bins=2,
         num_weight_terms=3,
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     contract["fine_reduction"] = {
         "pad_factor": 2,
@@ -109,7 +109,7 @@ def test_detector_contract_revision_two_defines_frame_powers_from_fine_powers() 
         skipped_guard_bins=1,
         reference_offset_bins=2,
         num_weight_terms=3,
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     assert contract["schema_version"] == "pilotproxy_detector_contract_v2"
     assert contract["coarse_power_ratio_definition"] == (

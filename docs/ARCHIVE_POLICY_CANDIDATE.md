@@ -29,7 +29,7 @@ For every finite channel, the original CHIME product must still be available. It
 
 ## Provenance and qualification
 
-Legacy calibrated profiles still require a finite `null_quantile` strictly between zero and one. An operating-curve candidate instead has `null_quantile: null` and a `threshold_selection` object with:
+Null-quantile calibrated profiles require a finite `null_quantile` strictly between zero and one. An operating-curve candidate instead has `null_quantile: null` and a `threshold_selection` object with:
 
 - `method: "operating_curve_candidate_v1"`;
 - `selection_granularity: "detector_frame"`;

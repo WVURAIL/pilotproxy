@@ -18,6 +18,7 @@ import numpy as np
 from pilot_proxy.detector_contract import (
     WEIGHT_COORDINATE_RAW_INPUT,
     input_coordinate_system_for_weight_coordinate,
+    normalize_input_coordinate_system,
     normalize_weight_coordinate_system,
 )
 from pilot_proxy.provenance import file_sha256
@@ -820,7 +821,7 @@ def _validate_manifest_spacing_schema(manifest: dict[str, object]) -> None:
     expected_input_coordinate = input_coordinate_system_for_weight_coordinate(
         coordinate_system
     )
-    if str(input_coordinate) != expected_input_coordinate:
+    if normalize_input_coordinate_system(input_coordinate) != expected_input_coordinate:
         raise ValueError(
             "Weight manifest input_coordinate_system does not match "
             f"weight_coordinate_system: {input_coordinate!r} != "

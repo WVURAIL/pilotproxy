@@ -81,7 +81,7 @@ release-check:
 	trap 'rm -rf "$$tmpdir"' EXIT; \
 	PYTHONPATH=src $(PYTHON) -m pilot_proxy.cli export-runtime-weight-bundle \
 	    --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
-	    --weight-coordinate-system post_spectral_sense_normalization \
+	    --weight-coordinate-system post_nyquist_zone_normalization \
 	    --physical-channel-range 14:36 \
 	    --output-dir "$$tmpdir"; \
 	PYTHONPATH=src $(PYTHON) -m pilot_proxy.cli validate-runtime-weight-bundle \

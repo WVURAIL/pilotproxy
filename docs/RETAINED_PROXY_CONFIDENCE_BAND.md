@@ -156,8 +156,8 @@ refusals, clipping, numerical cancellation, malformed input and reproducibility.
 
 The two drivers insert this checkout's `src` directory before importing the
 implementation. Run them from the canonical `pilotproxy` checkout, with NumPy
-and SciPy available. The examples below use the existing local interpreter
-and evidence paths; change paths for another installation. Keep the complete
+and SciPy available. Replace the `/path/to/` placeholders with your interpreter,
+inputs and a new output directory. Keep the complete
 output directories, input receipts and source revision together.
 
 Record the runtime before a run. A seed and source hash alone do not identify
@@ -167,9 +167,9 @@ Use a new receipt for every runtime used, including an interrupted run resumed
 on another platform; retain all receipts rather than overwriting the original.
 
 ```bash
-cd /home/djg/rail/pilotproxy
-proxy_python=/home/djg/rail/venvs/archive-local/bin/python
-proxy_replay=/home/djg/rail/output/proxy-confidence-replay
+cd /path/to/pilotproxy
+proxy_python=/path/to/venv/bin/python
+proxy_replay=/path/to/new-output
 mkdir -p "$proxy_replay"
 "$proxy_python" - "$proxy_replay/runtime.json" <<'PY'
 import contextlib
@@ -202,8 +202,8 @@ Create the archive diagnostic from the existing score products:
 
 ```bash
 "$proxy_python" tools/report_proxy_confidence_band.py \
-  --scores /home/djg/rail/output/threshold-scores-refit-2026-10-14/scores \
-  --published-decisions /home/djg/rail/dtv-mnras/data/decisions.json \
+  --scores /path/to/threshold-scores/scores \
+  --published-decisions /path/to/dtv-mnras/data/decisions.json \
   --output "$proxy_replay/archive" \
   --replicates 1999 --seed 2026101601 --modes event day week
 ```
@@ -231,7 +231,7 @@ before loading them:
 ```bash
 "$proxy_python" tools/report_proxy_confidence_band.py \
   --frozen-inputs "$proxy_replay/archive/inputs" \
-  --published-decisions /home/djg/rail/dtv-mnras/data/decisions.json \
+  --published-decisions /path/to/dtv-mnras/data/decisions.json \
   --output "$proxy_replay/archive-offline" \
   --replicates 1999 --seed 2026101601 --modes event day week
 ```
@@ -270,7 +270,7 @@ Run the declared seven-scenario protocol, including existing campaign products:
 "$proxy_python" tools/validate_proxy_confidence_band.py \
   --output "$proxy_replay/validation" \
   --replicates 400 --bootstrap-replicates 399 --seed 20261016 \
-  --campaign /home/djg/rail/results/fine_detector_validation_2026-09-09/campaign
+  --campaign /path/to/fine_detector_validation_2026-09-09/campaign
 ```
 
 Here `--replicates` counts independent datasets per scenario; it is distinct
@@ -415,11 +415,11 @@ original validator, with their source receipts retained separately. This avoids
 re-reading large waveform products and does not create new physical trials.
 
 ```bash
-cd /home/djg/rail/pilotproxy
+cd /path/to/pilotproxy
 export PYTHONPATH="$PWD/src"
-proxy_python=/home/djg/rail/venvs/archive-local/bin/python
-proxy_band_run=/home/djg/rail/output/paper-publication-followup-2026-10-16/confidence
-proxy_populations=/home/djg/rail/output/proxy-confidence-validation-compact
+proxy_python=/path/to/venv/bin/python
+proxy_band_run=/path/to/new-output/confidence
+proxy_populations=/path/to/proxy-confidence-validation-compact
 
 "$proxy_python" tools/calibrate_proxy_confidence_band.py \
   --phase calibrate --output "$proxy_band_run" \
@@ -474,7 +474,7 @@ accepted words nor the production sampling guard and supplies no physical
 transfer-calibration allowance.
 
 
-### Completed held-out result (2026-10-16)
+### Held-out result
 
 The frozen multiplier is **1.5651996017565912**, selected by the correctly
 blocked dependence model's calibration tolerance limit. All 2,400 calibration
@@ -495,15 +495,13 @@ upper limits 2.524% and 8.012%. It **failed qualification**, but the widened
 margin did not establish that its miss probability exceeds 5%. Thus this run
 supports the six declared model results while its negative control is not a
 successful detector of nominal undercoverage after widening. No procedure,
-seed or multiplier was changed in response. The original unwidened control's
-94/400 misses remain part of the preserved earlier diagnostic.
+seed or multiplier was changed in response. Before widening, the control had
+94/400 misses.
 
 These are joint eligible-staircase/window results. Diagnostic selected points
 exist in only a subset of datasets; their separate counts remain in the
 summary and must not be described as 400 successful operating selections.
-The complete artifact is under
-`output/paper-publication-followup-2026-10-16/confidence` in the local aggregate
-workspace: `summary.json`, `heldout_scenarios.csv`, `complete_records.zip`, the
+The complete artifact is kept with the private evidence: `summary.json`, `heldout_scenarios.csv`, `complete_records.zip`, the
 raw records, runtime/test receipts and `MANIFEST.json`. The protocol SHA256 is
 `2b83b2901c4d1ebc1869f07b987dede01ab85a6d0eb2893af6dc7cd06b7f0e24`;
 the calibrated artifact SHA256 is

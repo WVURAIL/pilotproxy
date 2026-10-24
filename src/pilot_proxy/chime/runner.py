@@ -17,7 +17,7 @@ from pilot_proxy.detector_contract import (
     CHIME_RUN_CONFIG_SCHEMA_TOKEN,
     CHIME_STATS_SCHEMA_TOKEN,
     COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     build_detector_contract,
     input_coordinate_system_for_weight_coordinate,
     normalize_weight_coordinate_system,
@@ -26,7 +26,11 @@ from pilot_proxy.detector_contract import (
     null_power_ratio_from_weight_norms,
     weight_term_norms_sq,
 )
-from pilot_proxy.detector_geometry import spectral_sense_requires_time_reversal
+from pilot_proxy.detector_geometry import (
+    frequency_axis_nyquist_zone,
+    normalize_nyquist_zone,
+    nyquist_zone_is_mirrored,
+)
 from pilot_proxy.detector_reference import REFERENCE_WEIGHT_TERMS
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.dtv_units import (
@@ -378,35 +382,40 @@ def _weights_for_channel(
     return weights, bool(valid)
 
 
-def _manifest_receiver_spectral_sense(manifest: Mapping[str, Any]) -> str | None:
+def _manifest_receiver_nyquist_zone(manifest: Mapping[str, Any]) -> int | None:
+    """The embedded receiver profile's Nyquist zone (or its old word), if any."""
     receiver_profile = manifest.get("receiver_profile")
     if not isinstance(receiver_profile, Mapping):
         return None
     channelizer = receiver_profile.get("channelizer")
+    candidates: list[Any] = []
     if isinstance(channelizer, Mapping):
-        frequency_axis = channelizer.get("frequency_axis")
-        if isinstance(frequency_axis, Mapping) and frequency_axis.get("spectral_sense"):
-            return str(frequency_axis["spectral_sense"]).strip().lower()
-        if channelizer.get("spectral_sense"):
-            return str(channelizer["spectral_sense"]).strip().lower()
-    if receiver_profile.get("spectral_sense"):
-        return str(receiver_profile["spectral_sense"]).strip().lower()
+        candidates += [channelizer.get("frequency_axis"), channelizer]
+    candidates.append(receiver_profile)
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            continue
+        try:
+            zone = frequency_axis_nyquist_zone(candidate)
+        except ValueError:
+            return None
+        if zone is not None:
+            return zone
     return None
 
 
 def _weight_coordinate_metadata(
     *,
     weight_bank: WeightBankLike | None,
-    input_spectral_sense: str,
+    input_nyquist_zone: int,
 ) -> dict[str, Any]:
-    input_requires_time_reversal = spectral_sense_requires_time_reversal(
-        input_spectral_sense
-    )
+    input_nyquist_zone = normalize_nyquist_zone(input_nyquist_zone)
+    input_requires_time_reversal = nyquist_zone_is_mirrored(input_nyquist_zone)
     if weight_bank is None:
         return {
-            "expected_weight_coordinate_system": WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            "expected_weight_coordinate_system": WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             "effective_weight_coordinate_system": "caller_supplied_weights",
-            "input_spectral_sense": str(input_spectral_sense),
+            "input_nyquist_zone": input_nyquist_zone,
             "input_requires_time_reversal": bool(input_requires_time_reversal),
             "validated": False,
         }
@@ -420,27 +429,27 @@ def _weight_coordinate_metadata(
             "explicit weight coordinate convention."
         )
     coordinate_system = normalize_weight_coordinate_system(declared)
-    manifest_sense = _manifest_receiver_spectral_sense(manifest)
+    manifest_zone = _manifest_receiver_nyquist_zone(manifest)
 
     metadata = {
-        "expected_weight_coordinate_system": WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        "expected_weight_coordinate_system": WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         "effective_weight_coordinate_system": coordinate_system,
         "declared_weight_coordinate_system": coordinate_system,
-        "manifest_receiver_spectral_sense": manifest_sense,
-        "input_spectral_sense": str(input_spectral_sense),
+        "manifest_receiver_nyquist_zone": manifest_zone,
+        "input_nyquist_zone": input_nyquist_zone,
         "input_requires_time_reversal": bool(input_requires_time_reversal),
         "weights_path": str(getattr(weight_bank, "path", "")),
         "validated": True,
     }
     if (
         input_requires_time_reversal
-        and coordinate_system != WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+        and coordinate_system != WEIGHT_COORDINATE_POST_NYQUIST_ZONE
     ):
         raise ValueError(
-            "CHIME input is time-reversed into the normal detector coordinate, "
+            "CHIME input is time-reversed into the upright detector coordinate, "
             "so the runner requires detector-coordinate weights. Use the shipped "
             "reference weights or a manifest declaring "
-            f"{WEIGHT_COORDINATE_POST_SPECTRAL_SENSE!r}; got {coordinate_system!r} "
+            f"{WEIGHT_COORDINATE_POST_NYQUIST_ZONE!r}; got {coordinate_system!r} "
             "from "
             f"{getattr(weight_bank, 'path', '<unknown>')}."
         )
@@ -460,7 +469,7 @@ def _weight_coordinate_metadata(
     if declared_time_reverse != bool(input_requires_time_reversal):
         raise ValueError(
             "Weight manifest preprocessing does not match the runtime input "
-            "spectral sense: declared time_reverse_detector_windows_before_kernel="
+            "Nyquist zone: declared time_reverse_detector_windows_before_kernel="
             f"{declared_time_reverse}, runtime requires {input_requires_time_reversal}."
         )
     return metadata
@@ -844,7 +853,7 @@ def run_chime_analysis(
     )
     weight_coordinate = _weight_coordinate_metadata(
         weight_bank=weight_bank,
-        input_spectral_sense=receiver_profile.spectral_sense,
+        input_nyquist_zone=receiver_profile.nyquist_zone,
     )
     reference_placement_summary = _reference_placement_summary(
         None if weight_bank is None else getattr(weight_bank, "manifest", None),
@@ -921,7 +930,7 @@ def run_chime_analysis(
                 block,
                 frame_size_samples=int(frame_size_samples),
                 detector_window_samples=int(detector_window_samples),
-                spectral_sense=receiver_profile.spectral_sense,
+                nyquist_zone=receiver_profile.nyquist_zone,
                 frames_in_chunk=int(chunk.frames_in_chunk),
                 sample_encoding=dataset.sample_encoding,
                 selected_coarse_channel=int(selection.coarse_channel_index),

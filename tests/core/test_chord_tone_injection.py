@@ -10,15 +10,15 @@ These tests close that gap from first principles:
 * synthesize channelized baseband ``amp * exp(+2j*pi*f*n)`` for a tone at
   the exact ATSC pilot RF (``physical_channel_to_pilot_hz``) in the coarse
   channel the bundle binds (``chord_channel_id * 195312.5 Hz`` center,
-  upright/true-sense frame, the kotekan chord data-product convention);
+  upright frame of Nyquist zone 1, the kotekan chord data-product convention);
 * quantize to packed int4, apply the bundle's declared input preprocessing
   (``time_reverse_detector_windows_before_kernel``), and run the exact
   integer frame powers (row projections through the frozen fxfft256, summed
   over fine bins: kernel core 3.0.0) plus the rational half-threshold mask,
   the deployed kernel decision, computed independently with numpy integers;
 * require the pilot tone to assert the mask with the target term dominant
-  on every ATSC channel 14-36; require a sense-flipped tone to collapse
-  the target response (this is the check that catches spectral-sense and
+  on every ATSC channel 14-36; require a mirrored (conjugated) tone to collapse
+  the target response (this is the check that catches Nyquist-zone and
   window-reversal regressions); require tones at the manifest's reference
   placements to drive the matching reference term and deassert the mask
   (including channel 14's edge-wrapped upper reference and channel 21's
@@ -28,8 +28,8 @@ These tests close that gap from first principles:
 History: this suite was added after the first CHORD end-to-end kotekan
 integration exported bundles with
 ``time_reverse_detector_windows_before_kernel = false`` (derived from the
-upright spectral sense). The explicit-baseband-frame weight synthesis
-assumes the adapter flip for any sense, so that chain was blind to upright
+upright zone 1). The explicit-baseband-frame weight synthesis
+assumes the adapter flip for any zone, so that chain was blind to upright
 pilot tones: every bit-exact test passed while a real ATSC pilot would
 have sailed through undetected. A2/A3 below fail on that regression.
 """
@@ -93,7 +93,7 @@ def chord_bundle(tmp_path_factory) -> dict:
         receiver_profile_path=CHORD_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=ATSC_CHANNELS,
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=bundle_dir,
     )
     profiles = json.loads((bundle_dir / "pilot_profiles.json").read_text("utf-8"))
@@ -119,7 +119,7 @@ def synth_packed(
 ) -> np.ndarray:
     """Packed int4 windows of ``amp * exp(+2j*pi*f_norm*n)`` plus noise.
 
-    The ``+`` sign is the upright true-sense baseband convention of the
+    The ``+`` sign is the upright (zone 1) baseband convention of the
     kotekan chord data product (a tone above the coarse-channel center
     rotates positively); it must NOT be derived from the weight bank.
     """
@@ -193,7 +193,7 @@ def test_pathfinder_bundle_requires_window_time_reversal(tmp_path) -> None:
         receiver_profile_path=PATHFINDER_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14, 21],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     contract = json.loads(
@@ -226,9 +226,9 @@ def test_pilot_tone_asserts_mask(chord_bundle, channel) -> None:
 
 
 @pytest.mark.parametrize("channel", ATSC_CHANNELS)
-def test_sense_flipped_tone_is_rejected(chord_bundle, channel) -> None:
-    # A conjugated (sense-flipped) pilot must not look like a pilot: this is
-    # the discriminating check for spectral-sense/window-reversal errors.
+def test_mirrored_tone_is_rejected(chord_bundle, channel) -> None:
+    # A conjugated (mirrored) pilot must not look like a pilot: this is
+    # the discriminating check for Nyquist-zone/window-reversal errors.
     # The achievable collapse depends on how far -f sits from +f on the
     # channelized frequency circle, measured in K=64 fine bins. The bound is
     # the unquantized Dirichlet prediction with 6 dB of headroom for int4
@@ -236,7 +236,7 @@ def test_sense_flipped_tone_is_rejected(chord_bundle, channel) -> None:
     # coarse-channel edge (channel 30, offset -96.8 kHz of the +/-97.66 kHz
     # half-width) the flipped tone lands only ~0.56 fine bins away, inside
     # the main lobe, so only a factor of about 3 is physically available and
-    # the bound falls to its floor of 2. A sense regression puts the full
+    # the bound falls to its floor of 2. A zone regression puts the full
     # pilot response in p_flip and the collapsed response in p_pilot, so
     # even the floor fails loudly.
     row, weight_bytes, _, _, f_norm = _channel_case(chord_bundle, channel)

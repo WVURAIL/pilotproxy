@@ -24,7 +24,7 @@ from pilot_proxy.archive.interfaces import RunContext
 
 from pilot_proxy.chime.runner import run_chime_analysis
 from pilot_proxy.chime.products import SCAN_INPUT_MANIFEST_SCHEMA_TOKEN
-from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED
+from pilot_proxy.detector_geometry import MIRRORED_NYQUIST_ZONE
 from pilot_proxy.integration.receiver_profile import default_reference_receiver_profile
 from pilot_proxy.archive.detector import PilotProxyDetectorAnalyzer
 from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader
@@ -79,7 +79,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
     profile = dataclasses.replace(
         default_reference_receiver_profile(frame_size_samples=NFFT,
                                            num_input_streams=N_FEEDS),
-        spectral_sense=SPECTRAL_SENSE_INVERTED,
+        nyquist_zone=MIRRORED_NYQUIST_ZONE,
         stream_map_required=False,
     )
     profile_path = tmp_path / "receiver_profile.json"

@@ -113,7 +113,7 @@
 
 \title{PilotProxy CUDA DTV Pilot Detector\\User Guide}
 \author{Dylan J. Gormley}
-\date{PilotProxy-UG001 \\ August 2026}
+\date{PilotProxy-UG001 \\ October 2026}
 
 \begin{document}
 \thispagestyle{empty}
@@ -129,7 +129,7 @@
 {\Large User Guide}\par
 \vspace{0.35in}
 {\large PilotProxy-UG001}\par
-{\large August 2026}\par
+{\large October 2026}\par
 \vfill
 \begin{tabularx}{\linewidth}{|>{\bfseries}L{0.25\linewidth}|Y|}
 \hline
@@ -346,7 +346,7 @@ List physical channels supported by the shipped weight bank:
 \begin{lstlisting}[style=shell]
 pilot-proxy list-channels
 \end{lstlisting}
-The included weights cover physical channels 14 through 36. The frequency helpers accept other UHF channels, but the detector still requires a matching row in the weight manifest. The standalone ascending-frequency reference coordinate places channels 14, 21, and 36 at coarse indices 179, 287, and 517. The shipped post-spectral-sense-normalization CHIME manifest, which \code{list-channels} reports, stores the same targets at 843, 735, and 505. Do not compare an index without naming its coordinate system.
+The included weights cover physical channels 14 through 36. The frequency helpers accept other UHF channels, but the detector still requires a matching row in the weight manifest. The standalone ascending-frequency reference coordinate places channels 14, 21, and 36 at coarse indices 179, 287, and 517. The shipped post-Nyquist-zone-normalization CHIME manifest, which \code{list-channels} reports, stores the same targets at 843, 735, and 505. Do not compare an index without naming its coordinate system.
 
 The default channel is physical channel 14:
 \begin{equation}
@@ -429,7 +429,7 @@ precision required for the plotted interval and record that choice. Add
 \(0\mathrm{Hz}\), and \(+1\mathrm{kHz}\) curves are needed; this triples the
 number of evaluated offset conditions.
 
-Large sweeps do not require a GPU. With \code{--detector-backend cpu-reference}, the primary fields come from the integer CPU reference and each row records the backend. Before interpreting a CPU-only sweep as representative of the CUDA implementation, compare a small same-seed sample across both backends as described in \code{docs/PUBLICATION_VALIDATION.md@30e50c2} (kept in the history):
+Large sweeps do not require a GPU. With \code{--detector-backend cpu-reference}, the primary fields come from the integer CPU reference and each row records the backend. Before interpreting a CPU-only sweep as representative of the CUDA implementation, compare a small same-seed sample across both backends, for example:
 \begin{lstlisting}[style=shell]
 pilot-proxy evaluate-snr \
   --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
@@ -505,14 +505,14 @@ The detector JSON includes:
   \item \field{mask_rule}, \field{target_norm_sq}, \field{reference_norm_sum_sq}, and \field{null_power_ratio}
   \item per-block \field{mask} and \field{normalized_positive_excess_mask}, exact powers, \field{coarse_power_ratio}, raw \field{raw_pilot_excess}, norm-corrected \field{normalized_pilot_excess}, and estimated shelf SNR.
 \end{itemize}
-The current \code{detect} command does not apply a user-supplied shelf-SNR threshold. Its threshold fields inside \field{result_schema} are \code{null}, and it masks a valid block at the norm-corrected condition \(F>\mu_0\). The earlier/basic raw convention \(F>1\) remains useful for defining \(\rho=F-1\), but it is not the current CHIME mask rule.
+The current \code{detect} command does not apply a user-supplied shelf-SNR threshold. Its threshold fields inside \field{result_schema} are \code{null}, and it masks a valid block at the norm-corrected condition \(F>\mu_0\). The basic raw convention \(F>1\) is useful for defining \(\rho=F-1\), but it is not the CHIME mask rule.
 
 \section{Receiver Integration Contract}
 
 The kernel does not encode telescope metadata. Receiver integrations provide the following JSON records and arrays:
 \begin{itemize}
   \item \code{configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json} describes the locked CUDA kernel contract.
-  \item \code{receiver_profile.json} describes RF band, channelizer geometry, spectral sense, frame size, input streams, quantization defaults, bin ENBW, and pilot-capture efficiency.
+  \item \code{receiver_profile.json} describes RF band, channelizer geometry, Nyquist zone, frame size, input streams, quantization defaults, bin ENBW, and pilot-capture efficiency.
   \item \code{stream_map.json} maps stream indices to feed, polarization, beam, or other receiver-specific identifiers.
   \item \code{check-profile}, \code{check-layout}, \code{make-weights}, and \code{chime-run} consume the applicable profile or stream-map records. The standalone \code{detect} command selects shipped weights from its sidecar or channel flag, while \code{evaluate-snr} uses the fixed testbench geometry.
 \end{itemize}
@@ -545,7 +545,7 @@ pilot-proxy make-weights \
   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json \
   --physical-channel-range 14:36 \
-  --weight-coordinate-system post_spectral_sense_normalization \
+  --weight-coordinate-system post_nyquist_zone_normalization \
   --output generated/weights/chime_dtv_weights_k128.bin
 \end{lstlisting}
 
@@ -598,7 +598,7 @@ slightly unequal, so each weight row has a fixed null point
 \mu_0=\frac{2\,\lVert w_t\rVert^2}
 {\lVert w_{r1}\rVert^2+\lVert w_{r2}\rVert^2}.
 \end{equation}
-The earlier/basic raw convention calls \(F>1\) positive excess. The current implementation instead masks a valid frame when \(F>\mu_0\), using integer cross
+The basic raw convention calls \(F>1\) positive excess. The implementation instead masks a valid frame when \(F>\mu_0\), using integer cross
 multiplication. We compute \(\mu_0\) from the packed weights; it is not a mean
 estimated from CANFAR data. This rule corrects the weight-normalization point,
 but it does not supply an empirical false-positive rate or an operational RFI
@@ -645,8 +645,8 @@ frozen fixed-point FFT (\code{fxfft256_v1}) along the window axis with
 \(\times\ppFinePadFactor\) zero padding gives
 \ppFineNumBins\ fine bins of \ppFineBinHz\ Hz, and an incoherent sum over
 streams yields the exact \code{uint64} fine powers \(S_n[b]\) and the
-fine-bin statistic \(F_2[b]=2S_t[b]/(S_{r1}[b]+S_{r2}[b])\). Since kernel
-core 3.0.0 the coarse statistic is formed from the same spectrum: the frame
+fine-bin statistic \(F_2[b]=2S_t[b]/(S_{r1}[b]+S_{r2}[b])\). The coarse
+statistic is formed from the same spectrum: the frame
 powers are defined as the all-bin sums \(P_n=\sum_b S_n[b]\), so \(F\) is
 exactly the all-bin marginal of the fine spectrum and there is no separate
 coarse power path. Every product stores both, and the readers check
@@ -719,7 +719,7 @@ and host code then computes
   F=\frac{2P_t}{P_{r1}+P_{r2}}
 \end{equation}
 and the norm-corrected mask in exact integer arithmetic; the library forms no
-ratio and no coarse mask (kernel core 3.0.0). A zero denominator cannot
+ratio and no coarse mask. A zero denominator cannot
 define \(F\): the host marks the frame invalid and forces its mask to zero, so
 Python callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before
 interpreting any conversion. The deployed mask bit comes from
@@ -812,7 +812,7 @@ If \(F\leq1\), the raw pilot-excess ratio is non-positive and \(10\log_{10}(F-1)
 
 \subsection{A scan fails at launch for want of fine powers}
 The loaded \code{libpilotproxy.so} lacks the row-sum or fine-power entry, or is
-older than core 3.0.0. Rebuild and restage it with \code{make build-kernel},
+from another core major. Rebuild and restage it with \code{make build-kernel},
 confirm \code{PilotProxy_Supports_RowSums()} and \code{PilotProxy_Supports_FinePowers()}
 return 1 (the kernel-load check in \code{scripts/setup_env.sh} prints the loaded
 version), and relaunch. There is no degraded mode: the frame powers are the

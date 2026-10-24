@@ -86,18 +86,32 @@ ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION_V1 = (
     "R_coarse = 2 * sum(P_target) / (sum(P_ref_lower) + sum(P_ref_upper))"
 )
 COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO = "all_rows_summed_before_ratio"
-WEIGHT_COORDINATE_POST_SPECTRAL_SENSE = "post_spectral_sense_normalization"
+# Detector-coordinate weights expect input already put upright for its Nyquist
+# zone (windows of a mirrored, even-zone channel time-reversed).
+WEIGHT_COORDINATE_POST_NYQUIST_ZONE = "post_nyquist_zone_normalization"
 WEIGHT_COORDINATE_RAW_INPUT = "raw_input_frequency_coordinate"
-INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED = (
-    "post_spectral_sense_normalized"
-)
+INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED = "post_nyquist_zone_normalized"
 INPUT_COORDINATE_RAW_INPUT = "raw_input_frequency_coordinate"
 VALID_WEIGHT_COORDINATE_SYSTEMS = frozenset(
     {
-        WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         WEIGHT_COORDINATE_RAW_INPUT,
     }
 )
+VALID_INPUT_COORDINATE_SYSTEMS = frozenset(
+    {
+        INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED,
+        INPUT_COORDINATE_RAW_INPUT,
+    }
+)
+# Names written by earlier releases (and still passed by older callers); they
+# are read as the current names and never written.
+OLD_WEIGHT_COORDINATE_NAMES = {
+    "post_spectral_sense_normalization": WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
+}
+OLD_INPUT_COORDINATE_NAMES = {
+    "post_spectral_sense_normalized": INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED,
+}
 _DETECTOR_CONTRACT_REQUIRED_FIELDS = frozenset(
     {
         "schema_version",
@@ -142,10 +156,23 @@ _FINE_REDUCTION_FIELDS = frozenset(
 def normalize_weight_coordinate_system(value: object) -> str:
     """Return a validated public weight-coordinate-system string."""
     normalized = str(value).strip()
+    normalized = OLD_WEIGHT_COORDINATE_NAMES.get(normalized, normalized)
     if normalized not in VALID_WEIGHT_COORDINATE_SYSTEMS:
         raise ValueError(
             "weight_coordinate_system must be one of "
             f"{sorted(VALID_WEIGHT_COORDINATE_SYSTEMS)}; got {value!r}."
+        )
+    return normalized
+
+
+def normalize_input_coordinate_system(value: object) -> str:
+    """Return a validated public input-coordinate-system string."""
+    normalized = str(value).strip()
+    normalized = OLD_INPUT_COORDINATE_NAMES.get(normalized, normalized)
+    if normalized not in VALID_INPUT_COORDINATE_SYSTEMS:
+        raise ValueError(
+            "input_coordinate_system must be one of "
+            f"{sorted(VALID_INPUT_COORDINATE_SYSTEMS)}; got {value!r}."
         )
     return normalized
 
@@ -157,7 +184,7 @@ def input_coordinate_system_for_weight_coordinate(
     normalized = normalize_weight_coordinate_system(weight_coordinate_system)
     if normalized == WEIGHT_COORDINATE_RAW_INPUT:
         return INPUT_COORDINATE_RAW_INPUT
-    return INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED
+    return INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED
 
 
 def _contract_int(contract: Mapping[str, Any], field: str) -> int:
@@ -311,7 +338,10 @@ def validate_detector_contract(contract: Mapping[str, Any]) -> None:
     expected_input_coordinate = input_coordinate_system_for_weight_coordinate(
         coordinate
     )
-    if contract["input_coordinate_system"] != expected_input_coordinate:
+    if (
+        normalize_input_coordinate_system(contract["input_coordinate_system"])
+        != expected_input_coordinate
+    ):
         raise ValueError(
             "detector contract input_coordinate_system does not match its "
             f"weight coordinate: {contract['input_coordinate_system']!r} != "
@@ -520,7 +550,7 @@ def build_detector_contract(
     input_coordinate = (
         input_coordinate_system_for_weight_coordinate(weight_coordinate)
         if input_coordinate_system is None
-        else str(input_coordinate_system)
+        else normalize_input_coordinate_system(input_coordinate_system)
     )
     contract: dict[str, Any] = {
         "schema_version": DETECTOR_CONTRACT_SCHEMA_TOKEN,
@@ -587,18 +617,22 @@ __all__ = [
     "CHIME_STATS_SCHEMA_TOKEN",
     "COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO",
     "DETECTOR_POWER_RATIO_DEFINITION",
-    "INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED",
+    "INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED",
     "INPUT_COORDINATE_RAW_INPUT",
     "NORMALIZED_POSITIVE_EXCESS_EQUIVALENT_RULE",
     "NORMALIZED_POSITIVE_EXCESS_MASK_RULE",
     "NORMALIZED_POSITIVE_EXCESS_MASK_SOURCE",
     "COARSE_POWER_RATIO_VALID_RULE",
+    "OLD_INPUT_COORDINATE_NAMES",
+    "OLD_WEIGHT_COORDINATE_NAMES",
+    "VALID_INPUT_COORDINATE_SYSTEMS",
     "VALID_WEIGHT_COORDINATE_SYSTEMS",
-    "WEIGHT_COORDINATE_POST_SPECTRAL_SENSE",
+    "WEIGHT_COORDINATE_POST_NYQUIST_ZONE",
     "WEIGHT_COORDINATE_RAW_INPUT",
     "build_detector_contract",
     "detector_contract_sha256",
     "input_coordinate_system_for_weight_coordinate",
+    "normalize_input_coordinate_system",
     "normalize_weight_coordinate_system",
     "normalized_positive_excess_policy",
     "validate_detector_contract",

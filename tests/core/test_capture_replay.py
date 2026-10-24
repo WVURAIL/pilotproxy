@@ -154,8 +154,8 @@ def test_unbound_frequency_must_also_match(tmp_path):
         ),
         (
             "packing_contract",
-            lambda p: p.__setitem__("spectral_sense", "inverted"),
-            "spectral sense",
+            lambda p: p.__setitem__("nyquist_zone", 2),
+            "Nyquist zone",
         ),
         (
             "packing_contract",

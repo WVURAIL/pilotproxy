@@ -9,7 +9,7 @@ import pytest
 
 from pilot_proxy import operating_policy as op, runtime_calibration as rc
 from pilot_proxy.config.project import default_project
-from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_NYQUIST_ZONE
 from pilot_proxy.runtime_bundle import REQUIRED_RUNTIME_BUNDLE_FILES, export_runtime_weight_bundle
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -217,7 +217,7 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
     export_runtime_weight_bundle(
         receiver_profile_path=receiver,
         detector_core_profile_path=ROOT / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json",
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         physical_channels=list(range(14, 37)), output_dir=bundle,
     )
     evidence = write(tmp_path / "evidence.json", {"scope": "test of the frozen decisions"})
@@ -274,7 +274,7 @@ def with_control(case, *, word=72850, capability=True):
     export_runtime_weight_bundle(
         receiver_profile_path=directory / "receiver_profile.json",
         detector_core_profile_path=directory / "detector_core_profile.json",
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         physical_channels=[14, 29, 37], output_dir=bundle,
     )
     profiles = read(bundle / "pilot_profiles.json")

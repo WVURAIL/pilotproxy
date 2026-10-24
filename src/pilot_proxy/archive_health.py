@@ -53,8 +53,8 @@ from pilot_proxy.chime.products import atomic_savez_compressed
 from pilot_proxy.config.project import default_project
 from pilot_proxy.detector_geometry import (
     DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS,
-    SPECTRAL_SENSE_INVERTED,
-    SPECTRAL_SENSE_NORMAL,
+    DEFAULT_NYQUIST_ZONE,
+    MIRRORED_NYQUIST_ZONE,
     predicted_fine_designated_bins,
     predicted_pilot_fine_bin,
 )
@@ -568,12 +568,13 @@ def temporary_residual_health_views(
         yield views
 
 
-def _spectral_sense_name(product: Mapping[str, Any]) -> str:
+def _product_nyquist_zone(product: Mapping[str, Any]) -> int:
+    """Products store the zone's direction as ``sense``: -1 mirrored, +1 upright."""
     value = int(_scalar(product, "sense"))
     if value == -1:
-        return SPECTRAL_SENSE_INVERTED
+        return MIRRORED_NYQUIST_ZONE
     if value == 1:
-        return SPECTRAL_SENSE_NORMAL
+        return DEFAULT_NYQUIST_ZONE
     raise ArchiveHealthError(f"sense must be +1 or -1, got {value}")
 
 
@@ -618,7 +619,7 @@ def corrected_fine_geometry(product: Mapping[str, Any]) -> dict[str, Any]:
         sample_rate_hz=_sample_rate_hz(product),
         detector_window_samples=detector_window,
         nfft=nfft,
-        spectral_sense=_spectral_sense_name(product),
+        nyquist_zone=_product_nyquist_zone(product),
         pad_factor=pad_factor,
     )
     predicted_acquisition = np.asarray(

@@ -134,10 +134,10 @@ threshold, mask, FFT window, or dilation still requires the source HDF5 files.
 ## Retrospective fine repair
 
 The archived fine-F arrays are retained, but the run's stored designated set
-was fine bin 0. That historical ancillary field is not reused as evidence. A
+was fine bin 0. That stored field is not reused as evidence. A
 pilot need not lie at envelope bin 0: the geometry-predicted centre is the
 residual between its RF frequency and the nearest coarse detector grid point,
-after applying the recorded spectral sense.
+after applying the recorded Nyquist-zone sign (`sense`).
 
 The repair deliberately publishes two different objects rather than calling
 one broad window a final designation:
@@ -319,49 +319,30 @@ heatmap is a detector-statistic diagnostic, not a raw-voltage spectrogram. The
 NPZs contain neither a flux/temperature calibration nor per-frame voltage FFTs,
 so those stronger product names would be scientifically false.
 
-## Dissertation policy and residual consumers
+## Residual consumers
 
-The released `rfisher` APIs used by the dissertation accept product paths
-and load their own frame arrays. Filtering only the surrounding report code
-would therefore be insufficient: the residual floor, correlation time,
-threshold sweep, and mask-fraction routines would silently read the excluded
-rows again.
+The released `rfisher` APIs accept product paths and load their own frame
+arrays. Filtering only the surrounding report code would therefore be
+insufficient: the residual floor, correlation time, threshold sweep, and
+mask-fraction routines would silently read the excluded rows again.
 
 `temporary_residual_health_views` closes that boundary. It applies the same v1
 gate and writes short-lived, deliberately incomplete NPZ views containing only
 the coarse-policy and residual columns used by RFIsher, plus the source
-product hash and health counts. It omits the superseded fine-decision fields
-and is not a replacement canonical survey product.
+product hash and health counts. It omits the fine-decision fields and is not a
+replacement canonical survey product. A science-side consumer routes every call
+through those views and applies `evaluate_frame_health` to its per-frame policy
+denominators.
 
-The dissertation-facing generators of the time
-(`analysis/make_report_data.py@30e50c2`, `analysis/make_policy_data.py@30e50c2`,
-`analysis/plot_channel_histograms.py@30e50c2` and
-`tools/make_chain_table.py@bdfcdce`) routed every science-side call
-through those views; their per-frame policy denominators also applied
-`evaluate_frame_health`. The census spectra of
-`tools/make_dissertation_tables.py@bdfcdce` used the exact v1 spectral
-correction, and its worked-example search refused excluded rows. This is the minimum boundary
-required before removing a manuscript qualifier that policy and chain values
-predate the archive health repair.
+On channels 22 and 24, every frame kept by the stored coarse rule is one of the
+full-scale rows excluded by v1. No health-included stored-mask kept/null frame
+remains, so the empirical residual floor and threshold sweep are unavailable; a
+consumer records that status and takes the conservative excision action rather
+than describing the two coherence brackets as agreeing. Reopening threshold
+optimization for either channel requires new clean or transmitter-off
+calibration data (or an independently justified synthetic floor), not more
+manipulation of the NPZs.
 
-The rebuild exposes one substantive consequence, rather than merely changing
-small denominators. On channels 22 and 24, every frame kept by the stored
-coarse rule is one of the full-scale rows excluded by v1. No health-included
-stored-mask kept/null frame remains, so the empirical residual floor and
-threshold sweep are unavailable. The policy generator now records that status
-and takes the conservative excision action; it does not describe the two
-coherence brackets as agreeing. Reopening threshold optimization for either
-channel requires new clean or transmitter-off calibration data (or an
-independently justified synthetic floor), not more manipulation of the NPZs.
-
-The audit does not rewrite `dissertation_summary_v3.json`,
-`channel_status.csv`, or `epoch_operating_points.csv`. Their status/epoch
-figures remain provisional legacy products and must not be called
-health-corrected by implication. The provisional v4 integration of those files
-(`tools/make_dissertation_status_v4.py@30e50c2`) is kept in the history; it was
-not a new blinded BAO verdict.
-
-In contrast, rerunning the repaired `tools/make_dissertation_tables.py@bdfcdce`
-produces final health-filtered `census_psd.csv` and
-`bao_time_vs_masking.csv` inputs; its optional worked example also refuses
-excluded frames.
+The audit does not rewrite the frozen summaries in `data/provenance/`
+(`dissertation_summary_v3.json` and its predecessors); their figures predate the
+health repair and are not health-corrected.

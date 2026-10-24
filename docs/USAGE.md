@@ -141,11 +141,8 @@ We commit documentation sources and the small, explicitly named artifacts
 needed for reproducibility: shipped weight banks and manifests, frozen test
 fixtures and dated scientific-provenance snapshots.
 Ordinary run products, rebuilt plots, formal-document PDFs, generated TeX
-facts, and CUDA shared libraries are ignored build artifacts. The active and
-historical weight-bank boundary is documented in `weights/README.md`. The
-2026-07 manuscript and its artifact policy are kept in the history of the
-private provenance repository (`paper/README.md@30e50c2`; see
-[PROVENANCE.md](../PROVENANCE.md)).
+facts, and CUDA shared libraries are ignored build artifacts. The shipped
+weight banks are described in `weights/README.md`.
 
 Built wheels include the shipped receiver profiles, stream map, weight bank, and
 weight manifest. The CUDA shared library is architecture-specific and is not
@@ -190,8 +187,8 @@ python -m pip install -e ".[archive,test]"
 A receiver integration translates telescope data into the detector's fixed
 input contract. It provides:
 
-- `receiver_profile.json` describing RF band, channelizer geometry, spectral
-  sense, frame size, input streams, quantization policy, bin ENBW, and pilot
+- `receiver_profile.json` describing RF band, channelizer geometry, Nyquist
+  zone, frame size, input streams, quantization policy, bin ENBW, and pilot
   capture efficiency;
 - optional `stream_map.json` describing the input-stream ordering;
 - channelized complex input arrays or packed detector matrices;
@@ -227,17 +224,18 @@ The shipped receiver profiles have different roles and evidential status:
 - `reference_800mhz_pfb.json` is the single-stream detector-coordinate reference
   profile used for shipped reference weights and tests.
 - `chime_dtv_fengine.json` is the target CHIME DTV adapter profile used by the
-  current integration: 2048 feed-polarization streams, inverted spectral sense,
+  current integration: 2048 feed-polarization streams, Nyquist zone 2 (each
+  channel's spectrum mirrored), a 4-tap sinc-Hamming PFB,
   descending RF channel order, and `frame_size_samples=16384`. The 16384-sample
   frame is the target for the CHIME F-engine upgrade rather than a claim about the
   currently deployed frame. The profile is frame-verified
   (`profile_status` in the file); still verify these values
   against the data product used for an operational run.
 - `chord_dtv_fengine.json` and `chord_pathfinder_dtv_fengine.json` are the
-  CHORD / CHORD-pathfinder adapter profiles for the kotekan (`chord` branch)
-  integration. Both share the CHORD channelization: 3.2 GS/s ADC, first
+  CHORD / CHORD-pathfinder adapter profiles for the Kotekan integration.
+  Both share the CHORD channelization: 3.2 GS/s ADC, first
   Nyquist zone, 16384-point PFB, 8192 coarse channels of exactly 195312.5 Hz,
-  upright spectral sense, ascending channel order, channel RF center =
+  upright channel spectrum, ascending channel order, channel RF center =
   `coarse_channel_index * 195312.5 Hz` (the kotekan `freq_id` namespace) --
   and differ only in stream count: 1024 dish-polarization streams (512
   dishes) for full CHORD, 128 (64 dishes) for the pathfinder. The 8192-sample
@@ -262,7 +260,7 @@ We generate the default CHIME DTV weight bank from the receiver and detector
 profiles:
 
 ```bash
-pilot-proxy make-weights   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --physical-channel-range 14:36   --weight-coordinate-system post_spectral_sense_normalization   --output weights/chime_dtv_weights_k128.bin
+pilot-proxy make-weights   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --physical-channel-range 14:36   --weight-coordinate-system post_nyquist_zone_normalization   --output weights/chime_dtv_weights_k128.bin
 ```
 
 By default, the detector looks for:
@@ -287,9 +285,8 @@ the next fine bin as the lower or upper reference. Placement works in the
 periodic normalized-frequency coordinate of the coarse-channel FFT, so a
 reference requested past the baseband-frame origin (nu = 0) wraps modulo 1;
 the wrapped weights are bit-identical to the unwrapped ones. The manifest
-records this as `edge_wrapped`, a name inherited from the earlier
-center-at-Nyquist frame convention: under the verified center-at-DC CHIME
-profile, nu = 0 is the coarse-channel *center* (the forbidden DC tone), not the
+records this as `edge_wrapped`; under the center-at-DC CHIME profile, nu = 0 is
+the coarse-channel *center* (the forbidden DC tone), not the
 channel edge, and the manifest's `frame_origin_description` says which. A
 reference that collides with the forbidden coarse-channel DC tone moves one bin
 farther from the target, and the manifest records a placement warning. A
@@ -314,7 +311,7 @@ For deployment, export the profiles and weights as a compact runtime bundle,
 then validate that bundle:
 
 ```bash
-pilot-proxy export-runtime-weight-bundle   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --weight-coordinate-system post_spectral_sense_normalization   --physical-channel-range 14:36   --output-dir generated/deploy/chime_dtv_k128
+pilot-proxy export-runtime-weight-bundle   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --weight-coordinate-system post_nyquist_zone_normalization   --physical-channel-range 14:36   --output-dir generated/deploy/chime_dtv_k128
 
 pilot-proxy validate-runtime-weight-bundle   --bundle-dir generated/deploy/chime_dtv_k128
 ```
@@ -512,9 +509,9 @@ CADC/CANFAR sequences, order constraint, and post-processing commands:
 
 ## Standalone synthetic/testbench workflow
 
-`tools/current_geometry_sensitivity.py` runs the dissertation's staged, paired
-fixed-versus-floating sensitivity measurement at the current 2048-stream
-geometry; its method note is `docs/CURRENT_GEOMETRY_SENSITIVITY.md@b52032c`.
+`tools/current_geometry_sensitivity.py` runs the staged, paired
+fixed-versus-floating sensitivity measurement at the 2048-stream geometry; its
+module docstring describes the method.
 The compact commands below remain useful for waveform and detector smoke
 tests; their reduced examples are not publication sensitivity estimates.
 

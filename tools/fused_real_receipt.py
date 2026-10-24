@@ -5,8 +5,7 @@
 The staged path is the library's staged entry points
 (``PilotProxy_Compute_RowSums_I32`` and ``PilotProxy_Compute_FinePowers_U64``, called by
 ``detect_packed_detector_input``), whose frame powers are the host's exact
-uint64 all-bin sums of the staged fine powers (kernel core 3.0.0:
-``P_r = sum_f S_r[f]``), with the fine decision made in Python by
+uint64 all-bin sums of the staged fine powers (``P_r = sum_f S_r[f]``), with the fine decision made in Python by
 ``fine_decision.fine_mask_decision``.
 kotekan instead calls the fused entry point,
 ``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` (or
@@ -18,7 +17,7 @@ replays CHIME baseband files through both and compares every output word:
 * the fused fine-power tap against the staged fine powers, and the fused
   frame-power tap (the device's all-bin sums) against the host sums of the
   staged fine powers;
-* the legacy fused entry point, without taps, against the same decision;
+* the fused entry point without support outputs or taps, against the same decision;
 * optionally, a boundary probe at the frame's exact required multiplier
   (``fine_required_multiplier_q16``) and one below it, so both mask values are
   exercised on every valid frame;
@@ -363,12 +362,8 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
         CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
         nearest_atsc_physical_channel,
     )
-    from pilot_proxy.config.instrument import load_instrument, nyquist_sign
+    from pilot_proxy.config.instrument import load_instrument
     from pilot_proxy.detect import detect_packed_detector_input
-    from pilot_proxy.detector_geometry import (
-        SPECTRAL_SENSE_INVERTED,
-        SPECTRAL_SENSE_NORMAL,
-    )
     from pilot_proxy.detector_weights import DetectorWeightBank
     from pilot_proxy.kernel import PilotProxyKernel
 
@@ -377,11 +372,7 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
 
     instrument = load_instrument(args.instrument)
     nfft = int(instrument.nfft)
-    sense = (
-        SPECTRAL_SENSE_INVERTED
-        if int(nyquist_sign(int(instrument.nyquist_zone))) == -1
-        else SPECTRAL_SENSE_NORMAL
-    )
+    nyquist_zone = int(instrument.nyquist_zone)
     kernel = PilotProxyKernel(str(args.lib))
     if not kernel.supports_fused_fine_mask_with_support():
         raise SystemExit("library has no PilotProxy_Compute_FusedFineMaskWithSupport_U64")
@@ -420,7 +411,7 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
         },
         "weights": {"path": str(Path(args.weights).resolve()), "sha256": _sha256(Path(args.weights))},
         "thresholds": {"path": str(Path(args.thresholds).resolve()), "sha256": _sha256(Path(args.thresholds))},
-        "instrument": {"name": args.instrument, "nfft": nfft, "spectral_sense": sense},
+        "instrument": {"name": args.instrument, "nfft": nfft, "nyquist_zone": nyquist_zone},
         "launches": {
             "staged": "detect_packed_detector_input(emit_row_projections=True) "
                       "+ fine_decision.fine_mask_decision",
@@ -507,7 +498,7 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
                 np.ascontiguousarray(arr.T)[:, np.newaxis, :],
                 frame_size_samples=nfft,
                 detector_window_samples=window,
-                spectral_sense=sense,
+                nyquist_zone=nyquist_zone,
                 frames_in_chunk=1,
                 sample_encoding=CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
                 selected_coarse_channel=0,

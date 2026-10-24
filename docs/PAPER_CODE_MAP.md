@@ -31,8 +31,8 @@ python tools/check_paper_thresholds.py --paper-root ../dtv-mnras
 ```
 
 This uses the paper's frozen sweeps and budgets; no raw telescope data are
-needed. It checks the historical record with its recorded calendar factor and
-the current ideal-year assignments separately. It also compares the shipped
+needed. It checks the frozen record with its recorded calendar factor and the
+ideal-year assignments separately. It also compares the shipped
 response table and measured amplitude ratio. It does not validate gamma's
 transfer to another population, temporal stationarity, or cross-day covariance.
 
@@ -45,18 +45,18 @@ transfer to another population, temporal stationarity, or cross-day covariance.
 - [kotekan](https://github.com/kotekan/kotekan): live receiver integration. The
   manifest in `external/pilotproxy/VENDOR.json` pins its exact upstream core.
   Do not edit vendored files or equate a new main-branch build with an archived
-  measurement. PR 1677 merged on October 22, 2026; live commissioning remains
-  independent of local arithmetic validation.
+  measurement. The stage comes from Kotekan PR 1677; live commissioning is
+  separate from local arithmetic validation.
 
 ## Compatibility and evidence
 
-`PilotProxy_*` is the current native API. Historical fields such as `cfar_rank`,
-`deployed*`, old coherence fields and cache rule v1 have specific compatibility
-meanings in [TERMINOLOGY.md](TERMINOLOGY.md). Do not infer a statistical model
-from those historical tokens. The frame-power
+`PilotProxy_*` is the native API. Fields such as `cfar_rank`, `deployed*`, the
+coherence-named fields and cache rule v1 have specific compatibility meanings in
+[TERMINOLOGY.md](TERMINOLOGY.md). Do not infer a statistical model from those
+tokens. The frame-power
 schema, Q16 units, one-based versus zero-based ranks and receiver coordinates
 are contracts, not cosmetic names to change by search-and-replace.
 
 `docs/evidence/`, runtime freezes, shipped data and dated era files support
-reproduction and remain in place. A tool's presence does not make its old
-hypothesis or estimator part of the current paper.
+reproduction and remain in place. A tool's presence does not make its
+hypothesis or estimator part of the paper.

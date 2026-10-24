@@ -129,7 +129,7 @@ receiver IDs and input state, exact bundle and threshold bindings, era, full-rat
 fine support, validity handling, and the intended frequency coverage. A release
 owner must approve activation. No review output changes a live configuration.
 
-`tests/core/test_operating_policy.py` compiles the frozen decisions of
-2026-10-12 (`tests/data/threshold_decisions_2026-10-12.json`) on the CHIME
+`tests/core/test_operating_policy.py` compiles the frozen decisions in
+`tests/data/threshold_decisions_2026-10-12.json` on the CHIME
 receiver profile: eight channels go to the permanent mask, channel 19 is left
 unmasked and fourteen go to their words.

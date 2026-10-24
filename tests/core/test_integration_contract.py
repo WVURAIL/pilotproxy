@@ -9,11 +9,11 @@ import pytest
 
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
 from pilot_proxy.detector_contract import (
-    INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
 )
-from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED
+from pilot_proxy.detector_geometry import MIRRORED_NYQUIST_ZONE
 from pilot_proxy.detector_reference import quantize_complex_numpy
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.integration import (
@@ -81,8 +81,8 @@ def test_receiver_profile_frequency_mapping_normal_and_inverted() -> None:
 
     inverted_data = copy.deepcopy(profile.to_dict())
     inverted_data["channelizer"]["frequency_axis"][
-        "spectral_sense"
-    ] = SPECTRAL_SENSE_INVERTED
+        "nyquist_zone"
+    ] = MIRRORED_NYQUIST_ZONE
     inverted = ReceiverProfile.from_dict(inverted_data)
     inverted_selection = receiver_frequency_to_channel(CHANNEL_14_PILOT_HZ, inverted)
     assert inverted_selection.coarse_channel_index == (
@@ -167,7 +167,7 @@ def test_chime_example_profile_values() -> None:
 
     assert profile.profile_status == "baseband_frame_verified_2026_07_29"
     assert profile.num_input_streams == 2048
-    assert profile.spectral_sense == SPECTRAL_SENSE_INVERTED
+    assert profile.nyquist_zone == MIRRORED_NYQUIST_ZONE
     assert profile.frequency_order == FREQUENCY_ORDER_DESCENDING_RF
     assert selection.coarse_channel_index == CHIME_CHANNEL_INDEX_FOR_CHANNEL_14
     assert selection.coarse_channel_center_hz == REFERENCE_CHANNEL_CENTER_HZ
@@ -313,7 +313,7 @@ def test_make_weights_from_receiver_profile_roundtrip(tmp_path) -> None:
         profile=profile,
         core=core,
         physical_channels=[PHYSICAL_CHANNEL_14],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     bank = DetectorWeightBank(explicit_path=output)
     output_again = tmp_path / "generated_weights_again.bin"
@@ -322,7 +322,7 @@ def test_make_weights_from_receiver_profile_roundtrip(tmp_path) -> None:
         profile=profile,
         core=core,
         physical_channels=[PHYSICAL_CHANNEL_14],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     regenerated = DetectorWeightBank(explicit_path=output_again)
     weights, valid = bank.get_weights_for_physical_channel(PHYSICAL_CHANNEL_14)
@@ -335,10 +335,10 @@ def test_make_weights_from_receiver_profile_roundtrip(tmp_path) -> None:
     assert output.with_suffix(output.suffix + ".manifest.json").exists()
     assert manifest["receiver_profile_hash"] == receiver_profile_hash(profile)
     assert manifest["schema_version"] == "pilotproxy_weight_manifest_v1"
-    assert manifest["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+    assert manifest["weight_coordinate_system"] == WEIGHT_COORDINATE_POST_NYQUIST_ZONE
     assert (
         manifest["input_coordinate_system"]
-        == INPUT_COORDINATE_POST_SPECTRAL_SENSE_NORMALIZED
+        == INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED
     )
     assert (
         manifest["input_preprocessing"][
@@ -389,7 +389,7 @@ def test_chime_weight_generation_post_coordinate_uses_detector_coordinate() -> N
         profile=profile,
         core=core,
         physical_channels=[PHYSICAL_CHANNEL_14, PHYSICAL_CHANNEL_21],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     by_channel = {int(row["physical_channel"]): row for row in layouts}
 
@@ -444,7 +444,7 @@ def test_chime_post_coordinate_generation_matches_shipped_weight_layout() -> Non
         profile=profile,
         core=core,
         physical_channels=[PHYSICAL_CHANNEL_14, PHYSICAL_CHANNEL_21],
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     bank = DetectorWeightBank(explicit_path=DEFAULT_WEIGHTS_PATH)
 

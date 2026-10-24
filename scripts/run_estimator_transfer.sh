@@ -109,7 +109,7 @@ common=(
   --noise-source gnuradio
   --gnuradio-python /usr/bin/python3
   --pilot-below-data-db-from-audit
-  --spectral-sense normal
+  --nyquist-zone 1
   --no-reference-archive-phase
 )
 

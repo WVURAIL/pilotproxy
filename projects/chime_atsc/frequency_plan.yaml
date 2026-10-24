@@ -5,8 +5,7 @@
 #   role control:  a band with no licensed transmitter, processed the same way
 #                  as a reference. Channel 37 (608-614 MHz) is the protected
 #                  allocation; its target is freq_id 491, the coarse channel of
-#                  the nominal marker position 608.309441 MHz (off DC), per the
-#                  author decision of 2026-09-24.
+#                  the nominal marker position 608.309441 MHz (off DC).
 name: atsc_uhf
 bands:
   - {label: "14", low_mhz: 470, high_mhz: 476, role: screened}

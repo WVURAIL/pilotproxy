@@ -1,21 +1,17 @@
 # CANFAR bounded-run guide
 
-This is the remote CANFAR GPU-session workflow for CHIME DTV pilot runs. It is
-a separately qualified path for the archive run in its own right. It is not the
-authority for the approved local archive run and changes no local setting. The local parameter
-register, gates, production command, and run record are in
+This is the remote CANFAR GPU-session workflow for CHIME DTV pilot runs, the
+alternative to the local workstation path in
+[`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md). The parameter register, gates,
+and run record are in
 [`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md),
-[`VALIDATION_GATES.md`](VALIDATION_GATES.md),
-[`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md), and the local run ledger.
-The archive products of record were made by the local run on the workstation,
-not on CANFAR; this guide records the CANFAR path as it was qualified.
-That qualification and the archive products of record used detector core
-2.3.0. A build from the current sources reports core 2.5.0, which adds an
-entry point without changing the mask or power outputs; a run made with it
-is still a new cohort (checklist item 7).
-Note (2026-10-18): kernel core 3.0.0 superseded this frame-power definition (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
+[`VALIDATION_GATES.md`](VALIDATION_GATES.md), and the run ledger; this guide
+changes none of them. The schema-v5 archive products of record were made with
+detector core 2.3.0. A build of the current sources is core 4 and writes
+schema v6 (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)), so a run made with it
+is a new cohort (checklist item 7).
 
-The approved run is historical estimation and sufficient-statistic
+The approved run is archive estimation and sufficient-statistic
 reprocessing. The coarse positive-excess flag is retained as a bootstrap
 diagnostic; the fine rank/eta decision is inactive and no calibrated detection
 policy is applied.
@@ -28,15 +24,15 @@ For the measured local workstation profile, use
 target whatever GPU architecture the remote session provides and cannot
 override the approved local settings.
 
-The older `pilot-proxy chime-run` command reads an already-staged HDF5
-directory in one process. We retain it for local calibration and regression
-comparisons, but new CADC/CANFAR work should start with `chime-scan`.
+`pilot-proxy chime-run` reads an already-staged HDF5 directory in one process;
+it serves local calibration and regression comparisons. CADC/CANFAR work
+starts with `chime-scan`.
 
 ---
 
 ## Baseline detector contract
 
-The current executable detector contract is:
+The executable detector contract is:
 
 ```text
 detector_window_samples = 128
@@ -91,12 +87,12 @@ Clone this repository before running the setup script. The script recreates the
 target virtual environment from scratch.
 
 ```bash
-git clone https://github.com/WVURAIL/pilotproxy.git ~/pilot-proxy
-cd ~/pilot-proxy
+git clone https://github.com/WVURAIL/pilotproxy.git ~/pilotproxy
+cd ~/pilotproxy
 
-VENV_DIR=~/pilot-proxy-venv PILOT_PROXY_DIR=~/pilot-proxy bash scripts/setup_env.sh
+VENV_DIR=~/pilotproxy-venv PILOT_PROXY_DIR=~/pilotproxy bash scripts/setup_env.sh
 
-source ~/pilot-proxy-venv/bin/activate
+source ~/pilotproxy-venv/bin/activate
 ```
 
 Do not point `VENV_DIR` at an environment that must be preserved. The script
@@ -118,11 +114,11 @@ Rerun `setup_env.sh` only when the environment should be rebuilt.
 If the environment should not be cleared, use the manual installation path:
 
 ```bash
-python3.12 -m venv --system-site-packages ~/pilot-proxy-venv
-source ~/pilot-proxy-venv/bin/activate
+python3.12 -m venv --system-site-packages ~/pilotproxy-venv
+source ~/pilotproxy-venv/bin/activate
 python -m pip install -U pip setuptools wheel
-python -m pip install -r "$HOME/pilot-proxy/requirements/archive.txt"
-python -m pip install -e "$HOME/pilot-proxy[archive,test]"
+python -m pip install -r "$HOME/pilotproxy/requirements/archive.txt"
+python -m pip install -e "$HOME/pilotproxy[archive,test]"
 ```
 
 Then confirm that the archive commands load:
@@ -150,13 +146,13 @@ gates required for the approved local run.
 SM=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n1 | tr -d '. ')
 echo "session arch sm_${SM}"
 
-# S2.1 - on-node library built from the current sources and reporting core 2.5.0
+# S2.1 - on-node library built from the current sources and reporting core 4
 make -C cuda clean && make -C cuda SM="$SM"
 python - <<'PY'
 from pilot_proxy.kernel import PilotProxyKernel
-v = PilotProxyKernel().version.as_string()
-assert v == "2.5.0", f"stale kernel library: {v}"
-print("kernel core", v)
+v = PilotProxyKernel().version
+assert v.major == 4, f"stale kernel library: {v.as_string()}"
+print("kernel core", v.as_string())
 PY
 
 # S2.2 - CUDA regression + exact row-sum parity (integers, no tolerance)
@@ -171,9 +167,9 @@ python -m pytest tests/kernel -q
 python -m pytest tests -q
 ```
 
-Frame parity is already closed by the 23-channel census over the legacy-epoch
-integrated spectra; no odd-channel profile override is needed.
-Optional belt-and-braces with any archived odd-`freq_id` baseband file:
+Frame parity is closed by the 23-channel census over the archive's integrated
+spectra; no odd-channel profile override is needed. As an optional check, use
+any archived odd-`freq_id` baseband file:
 
 ```bash
 H5_FILE=/absolute/path/to/odd_channel_baseband.h5
@@ -208,9 +204,7 @@ passed:
   frame-verified `chime_dtv_fengine` profile
   (`baseband_frame.channel_center_normalized = 0.0`);
 - `weights/chime_dtv_weights_k128.bin` - manifest
-  `receiver_profile_hash` starts `da047cdf453764e4`; the legacy half-band
-  bank (`weights/legacy_halfband/chime_dtv_weights_k128.bin@b52032c`) must
-  never be deployed;
+  `receiver_profile_hash` starts `c06744b1b4362d21`;
 - `cuda/libpilotproxy.so`, or its staged cache copy;
 - a working CuPy/CUDA runtime.
 
@@ -302,7 +296,7 @@ Then process one file and one full analysis chunk for `freq_id 844`:
 
 ```bash
 pilot-proxy chime-scan \
-  --output-dir "$HOME/pilot_proxy_runs/detector_smoke_844" \
+  --output-dir "$HOME/pilotproxy_runs/detector_smoke_844" \
   --source cadc-datatrail \
   --inventory-name chime-pilots \
   --analyzer pilot-proxy-detector \
@@ -320,11 +314,11 @@ Validate the combined products and generate the diagnostic plots:
 
 ```bash
 pilot-proxy validate-products \
-  --run-dir "$HOME/pilot_proxy_runs/detector_smoke_844" \
-  --output-json "$HOME/pilot_proxy_runs/detector_smoke_844/product_validation.json"
+  --run-dir "$HOME/pilotproxy_runs/detector_smoke_844" \
+  --output-json "$HOME/pilotproxy_runs/detector_smoke_844/product_validation.json"
 
 pilot-proxy chime-plot \
-  --run-dir "$HOME/pilot_proxy_runs/detector_smoke_844" \
+  --run-dir "$HOME/pilotproxy_runs/detector_smoke_844" \
   --clean-figures
 ```
 
@@ -353,16 +347,16 @@ python - <<'PY'
 import numpy as np, glob
 import os
 p = sorted(glob.glob(os.path.expanduser(
-        "~/pilot_proxy_runs/detector_smoke_844/**/_per_pilot/844.npz"),
+        "~/pilotproxy_runs/detector_smoke_844/**/_per_pilot/844.npz"),
         recursive=True))
 z = np.load(p[-1], allow_pickle=False)
 sv = str(np.asarray(z["schema_version"]).reshape(()).item())
 ev = str(np.asarray(z["source_event_key_schema_version"]).reshape(()).item())
 dv = str(np.asarray(z["detector_version"]).reshape(()).item())
 fs = str(np.asarray(z["fine_status"]).reshape(()).item())
-assert sv == "pilotproxy_per_pilot_product_v5", sv
+assert sv == "pilotproxy_per_pilot_product_v6", sv
 assert ev == "pilotproxy_namespaced_source_event_key_v1", ev
-assert "pilot-proxy/" in dv and "kernel=2.5.0" in dv, dv
+assert "pilot-proxy/" in dv and "kernel=4." in dv, dv
 assert fs == "enabled", fs
 assert z["fine_power_u64"].shape[1:] == (3, int(z["fine_num_bins"])), z["fine_power_u64"].shape
 assert z["fine_power_u64"].dtype == np.uint64, z["fine_power_u64"].dtype
@@ -414,8 +408,7 @@ in 2020 Q3 against quiet 2025-26 endpoints). Second, the shipped census
 lists at least one station on every physical channel 14-36, so a strictly
 station-free control does not exist in this pilot set; use the most
 isolated channels as approximate controls and take the operating zero point
-from the empirical calibration (`analysis/build_empirical_thresholds.py@30e50c2`)
-rather than from a census assumption.
+from an empirical calibration rather than from a census assumption.
 
 Run the bounded scan for the census-control channel and for one quiet channel
 with a known pilot. Then:
@@ -459,7 +452,7 @@ production settings.
 
    ```bash
    kernel_sha=$(sha256sum cuda/libpilotproxy.so | awk '{print $1}')
-   KERNEL_LIB="$PWD/cuda/libpilotproxy-2.5.0-sm${SM}-${kernel_sha:0:16}.so"
+   KERNEL_LIB="$PWD/cuda/libpilotproxy-sm${SM}-${kernel_sha:0:16}.so"
    cp --no-clobber --preserve=mode,timestamps cuda/libpilotproxy.so "$KERNEL_LIB"
    cmp -s cuda/libpilotproxy.so "$KERNEL_LIB" || exit 1
    export KERNEL_LIB
@@ -474,7 +467,7 @@ production settings.
    archive genuinely holds no more data, and that should be established
    before the run rather than discovered after it. The source survey has zero
    terminally incomplete events. Three events were still pending after two
-   attempts; an authenticated metadata check on 2026-08-25 found all 23
+   attempts; an authenticated metadata check found all 23
    selected files absent for each event, with no errors or sub-floor objects.
    The supplemental resolution is part of the frozen bundle. Its sparse
    channels are `freq_id` 598
@@ -517,7 +510,7 @@ production settings.
    genuinely short acquisition (the file opens cleanly and holds its full
    declared extent) rather than a staging problem. The completed inventory
    has 170,377 units. Prior products identify 4,692 units with no complete
-   frame, and the old quarantine contains three corrupt units. One corrupt
+   frame, and the existing quarantine contains three corrupt units. One corrupt
    unit is also below the inventory's one-frame size estimate. A frozen
    inventory that excludes all 4,695 unusable units therefore has 165,682
    units across 8,983 events. Preserve the full inventory and an exclusion
@@ -564,7 +557,7 @@ export LOCAL_H5=/path/to/chime_hdf5
 
 pilot-proxy chime-scan \
   --input-dir "$LOCAL_H5" \
-  --output-dir "$HOME/pilot_proxy_runs/local_detector_smoke_844" \
+  --output-dir "$HOME/pilotproxy_runs/local_detector_smoke_844" \
   --source local \
   --analyzer pilot-proxy-detector \
   --select 844 \
@@ -632,21 +625,19 @@ For each accepted run, archive:
 Do not commit CANFAR products, local HDF5 files, generated figures, or CUDA build
 artifacts to the source repository.
 
-## Inventory migration note
+## Inventory and resume compatibility
 
 Completed `inventory.jsonl` files remain readable, including inventories under
-the default `~/datatrawl-inventories` compatibility path. Do not resume old
-in-progress survey state; use a fresh `pilot-proxy chime-survey --name` or
+the default `~/datatrawl-inventories` path. Do not resume in-progress survey
+state written by another checkout; use a fresh `pilot-proxy chime-survey --name` or
 `--out`. Detector checkpoints fail closed after source changes, so use a fresh
 scan output directory after updating the checkout. See
 [INTEGRATION.md](../INTEGRATION.md#inventory-and-resume-compatibility).
 
-## September 2026 sharded run
+## Sharded runs
 
-The full archive run of September 2026 was executed as two channel-partitioned
-shards, one per GPU session, with per-shard gates, tripwires, and an external
-supervisor that resumes a shard across archive outages. The exact scripts,
-with the digests they assert, are committed under
-[`scripts/canfar/`](../scripts/canfar/README.md); the run ledger records what
-each of them found. The CADC outage encountered during that run is written up
-in `docs/CADC_OUTAGE_2026-09-01.md@30e50c2` (kept in the history).
+The archive scan of record ran as channel-partitioned shards, one per GPU
+session, with per-shard gates, tripwires, and an external supervisor that
+resumes a shard across archive outages. Its scripts, with the digests they
+assert, are in [`scripts/canfar/`](../scripts/canfar/README.md); the run ledger
+records what each of them found.

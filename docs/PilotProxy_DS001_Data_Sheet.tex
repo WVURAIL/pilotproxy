@@ -113,14 +113,14 @@
 
 \title{PilotProxy CUDA DTV Pilot Detector\\Product Specification}
 \author{Dylan J. Gormley}
-\date{PilotProxy-DS001 \\ August 2026}
+\date{PilotProxy-DS001 \\ October 2026}
 
 \begin{document}
 \thispagestyle{fancy}
 {\sffamily
 \begin{minipage}[t]{0.39\textwidth}
   {\fontsize{24}{26}\selectfont\bfseries\color{PilotProxyRed}PilotProxy}\par
-  {\small PilotProxy-DS001, August 2026}
+  {\small PilotProxy-DS001, October 2026}
 \end{minipage}
 \hfill
 \begin{minipage}[t]{0.58\textwidth}
@@ -240,7 +240,7 @@ For one evaluated frame, the kernel produces three frame powers:
   P_n=\sum_{f}S[n,f],
 \end{equation}
 each the exact \code{uint64} all-bin sum of that term's fine power spectrum
-\(S[n,f]\) (Section~\ref{ssec:fine}; kernel core 3.0.0). The target term \(P_t\) is centered on the ATSC pilot. The lower and upper reference terms, \(P_{r1}\) and \(P_{r2}\), sample the nearby non-pilot floor. We form the raw power ratio as
+\(S[n,f]\) (Section~\ref{ssec:fine}). The target term \(P_t\) is centered on the ATSC pilot. The lower and upper reference terms, \(P_{r1}\) and \(P_{r2}\), sample the nearby non-pilot floor. We form the raw power ratio as
 \begin{equation}
   \boxed{F=\frac{2P_t}{P_{r1}+P_{r2}}.}
 \end{equation}
@@ -328,15 +328,13 @@ is the window capture factor documented in \code{docs/METHOD_SPEC.md}
 (\(\mathrm{sinc}^2\) scalloping: \ppCaptureLossThreeHundredDb~dB at
 300\,Hz, at most \ppCaptureLossEdgeDb~dB at the fine-span edge). The frame
 powers of the coarse statistic are \emph{defined} as the all-bin sums of this
-spectrum, \(P_n=\sum_b S[n,b]\) (kernel core 3.0.0), so \(F\) is exactly the
+spectrum, \(P_n=\sum_b S[n,b]\), so \(F\) is exactly the
 all-bin marginal of the fine spectrum and no second power path exists; each
 product stores both and the readers check \(P_n=\sum_b S[n,b]\) exactly. The
 rounded fixed-point transform does not conserve energy exactly, so \(P_n\) is
 not \(\mathrm{pad}\cdot W\sum_m|z[n,m]|^2\): the two agree to a median
 relative \(3\times10^{-6}\) on archive frames and depart by up to about 2 per
-cent on near-empty frames. Earlier cores computed that row-domain sum as a
-separate power and enforced a per-frame marginal identity against it; both
-are retired. The runtime fine decision compares the largest marker-bin ratio with a
+cent on near-empty frames. The runtime fine decision compares the largest marker-bin ratio with a
 calibrated multiple of a bulk order statistic. The archive also stores
 any-bin diagnostic tests. The stored fields, calibration modes, and
 detection-list layout are specified in
@@ -403,8 +401,7 @@ candidate: coherent window integration recovers up to
 reduction, and the designated-set CFAR can form a per-frame candidate mask bit
 using a deterministic (bit-exact host/device) FFT implementation. The frame
 powers are the all-bin sums of the same fine powers and supply the current
-archive $F>\mu_0$ rejection flag; since kernel core 3.0.0 there is no
-separate coarse power path (\code{docs/DESIGN_DECISIONS.md}).}
+archive $F>\mu_0$ rejection flag; there is no separate coarse power path (\code{docs/DESIGN_DECISIONS.md}).}
 \label{fig:detector_datapath}
 \end{figure}
 
@@ -469,7 +466,7 @@ The shipped weight bank covers U.S. physical channels 14 through 36. The eCFR as
 36 & 602.000 MHz & 602.309441 MHz & 517 / 505\\ \hline
 \end{longtable}
 
-The first index is the standalone ascending-frequency reference coordinate. The second is the post-spectral-sense-normalization coordinate stored in the shipped CHIME manifest and printed by \code{pilot-proxy list-channels}. The nominal references are two detector bins below and above the target. In the shipped DC-centered bank, physical channel 14 is the only adaptive case: its target lies near a coarse-channel boundary, so the generated layout wraps the lower reference across the circular coarse-channel spectrum while preserving the two-bin offset, and \code{list-channels} prints the corresponding placement \code{NOTE}. No shipped channel collides with, or shifts around, the forbidden coarse-channel DC tone. Detection and validation reports copy the selected manifest row into \field{selected_weight_layout}, so this placement remains visible in each result.
+The first index is the standalone ascending-frequency reference coordinate. The second is the post-Nyquist-zone-normalization coordinate stored in the shipped CHIME manifest and printed by \code{pilot-proxy list-channels}. The nominal references are two detector bins below and above the target. In the shipped DC-centered bank, physical channel 14 is the only adaptive case: its target lies near a coarse-channel boundary, so the generated layout wraps the lower reference across the circular coarse-channel spectrum while preserving the two-bin offset, and \code{list-channels} prints the corresponding placement \code{NOTE}. No shipped channel collides with, or shifts around, the forbidden coarse-channel DC tone. Detection and validation reports copy the selected manifest row into \field{selected_weight_layout}, so this placement remains visible in each result.
 
 \section{Receiver Integration Contract}
 
@@ -478,7 +475,7 @@ The CUDA detector core does not interpret receiver metadata. A receiver adapter 
   \item \code{DetectorCoreProfile}: locked kernel contract, including the
         selected \(K\in\{64,128\}\), \(N=3\), int4 packed input, uint64
         fine and frame powers, and no threshold input.
-  \item \code{ReceiverProfile}: RF band, channelizer geometry, spectral sense, baseband frame convention (\field{baseband_frame.channel_center_normalized}), frame size, input-stream count, quantization defaults, detector-bin ENBW, and pilot-capture efficiency.
+  \item \code{ReceiverProfile}: RF band, channelizer geometry, Nyquist zone, baseband frame convention (\field{baseband_frame.channel_center_normalized}), frame size, input-stream count, quantization defaults, detector-bin ENBW, and pilot-capture efficiency.
   \item \code{stream_map}: stream-index metadata for feed, polarization, beam, or other receiver paths.
   \item \code{check-profile}, \code{check-layout}, \code{make-weights}, and \code{chime-run} consume the applicable profile or stream-map records. The standalone \code{detect} command selects shipped weights from its sidecar or channel flag, while \code{evaluate-snr} uses the fixed testbench geometry.
 \end{itemize}
@@ -494,7 +491,7 @@ F = \frac{2\sum_r P_{t,r}}{\sum_r P_{r1,r}+\sum_r P_{r2,r}},
 \end{equation}
 where \(r\) indexes detector rows. The result schema names this rule \code{all_rows_summed_before_ratio}. Per-stream packing remains available for integration diagnostics, but the combined detection path forms one \(F\) only after summing all selected rows.
 
-The frame size is not a free detector parameter: the adapter matches the correlator's frame, and the kernel requires that value to be a positive multiple of the profile-selected \(K\). The checked-in \code{chime_dtv_fengine} receiver profile selects \(K=\ppDetectorWindowSamples\) and uses \(2^{14}=16{,}384\) channelized samples per input stream --- the CHIME F-engine upgrade frame this integration is designed for --- and declares the frame-verified DC-centered baseband convention (\field{baseband_frame.channel_center_normalized}=0.0), validated against archived CHIME baseband; the earlier half-band bank is not shipped and must not be deployed. For this profile and one selected coarse channel, \(\ppChimeStreams\times\ppWindowsPerStream=\ppChimeRowsPerFrame\) detector rows form one frame. The CHORD profiles instead select \(K=64\) with an 8,192-sample frame; both profile families retain 128 windows per stream for the frozen fine transform. The frame sizes are integration contracts, not claims about a universally deployed correlator frame. The software does not infer one universal value from HDF5 metadata: \code{chime-run} accepts an explicit per-run frame-size override, while \code{chime-scan} takes \code{nfft} from the Pilot Proxy CHIME instrument configuration. Operators must verify and record the resolved value for each real-data product.
+The frame size is not a free detector parameter: the adapter matches the correlator's frame, and the kernel requires that value to be a positive multiple of the profile-selected \(K\). The checked-in \code{chime_dtv_fengine} receiver profile selects \(K=\ppDetectorWindowSamples\) and uses \(2^{14}=16{,}384\) channelized samples per input stream --- the CHIME F-engine upgrade frame this integration is designed for --- and declares the frame-verified DC-centered baseband convention (\field{baseband_frame.channel_center_normalized}=0.0), validated against archived CHIME baseband. For this profile and one selected coarse channel, \(\ppChimeStreams\times\ppWindowsPerStream=\ppChimeRowsPerFrame\) detector rows form one frame. The CHORD profiles instead select \(K=64\) with an 8,192-sample frame; both profile families retain 128 windows per stream for the frozen fine transform. The frame sizes are integration contracts, not claims about a universally deployed correlator frame. The software does not infer one universal value from HDF5 metadata: \code{chime-run} accepts an explicit per-run frame-size override, while \code{chime-scan} takes \code{nfft} from the Pilot Proxy CHIME instrument configuration. Operators must verify and record the resolved value for each real-data product.
 
 \section{Result Schema and Mask Convention}
 
@@ -533,7 +530,7 @@ The implemented fine designated-set CFAR is a candidate whose calibration
 status is \code{pending_campaign}; its spectrum, threshold, and exceedances are
 diagnostic and do not set \field{reject_mask}. Because
 \field{coarse_power_ratio} and the fine spectrum are persisted per frame,
-previously recorded epochs can be re-scored offline after a separately
+recorded epochs can be re-scored offline after a separately
 versioned policy is calibrated and adopted.
 
 CHIME per-pilot archive products use
@@ -603,14 +600,14 @@ from Parseval at these amplitudes; \code{cuda/config.h}).
 \apicode{PilotProxy_GetOptimizationFeatures} & Query weight-lane placement and grid cap.\\ \hline
 \apicode{PilotProxy_GetVersion} & Query the locked kernel version.\\ \hline
 \apicode{PilotProxy_LastError} & Read the last CUDA/API error recorded by the calling thread.\\ \hline
-\apicode{PilotProxy_Create} / \apicode{PilotProxy_Create_Batch} & Create a device-affine handle over the packed input (no output buffer since core 3.0.0).\\ \hline
-\apicode{PilotProxy_SetStream} & Select the CUDA stream for a handle's launches (core 2.4.0).\\ \hline
+\apicode{PilotProxy_Create} / \apicode{PilotProxy_Create_Batch} & Create a device-affine handle over the packed input (no output buffer).\\ \hline
+\apicode{PilotProxy_SetStream} & Select the CUDA stream for a handle's launches.\\ \hline
 \apicode{PilotProxy_Compute_RowSums_I32} & Exact \code{int32} complex per-row dot products (term-major, stream-major rows, interleaved re/im); the input to the fine stage.\\ \hline
 \apicode{PilotProxy_Supports_RowSums} & Runtime capability probe; returns 1 when the loaded library provides the row-sum entry.\\ \hline
-\apicode{PilotProxy_Compute_FinePowers_U64} & On-device fine-reduction power stage (core 2.1.0): frozen fxfft256 v1 fixed-point FFT over the row-sum buffer plus exact \code{uint64} feed-power sums per fine bin; handle-free, composes directly with \apicode{PilotProxy_Compute_RowSums_I32} output; bit-reproducible for any launch schedule. Policy-free: the fine statistic, CFAR, and designated-set decision form downstream.\\ \hline
+\apicode{PilotProxy_Compute_FinePowers_U64} & On-device fine-reduction power stage: frozen fxfft256 v1 fixed-point FFT over the row-sum buffer plus exact \code{uint64} feed-power sums per fine bin; handle-free, composes directly with \apicode{PilotProxy_Compute_RowSums_I32} output; bit-reproducible for any launch schedule. Policy-free: the fine statistic, CFAR, and designated-set decision form downstream.\\ \hline
 \apicode{PilotProxy_Supports_FinePowers} / \apicode{PilotProxy_GetFineSpecs} & Fine-stage capability probe and frozen geometry query (128 windows, pad 2, 256 bins).\\ \hline
-\apicode{PilotProxy_Compute_FusedFine_U64} & One launch from packed samples to the exact fine powers (core 2.2.0); its required \code{d_power_out} receives the frame powers \(P_n=\sum_b S[n,b]\), reduced on the device (core 3.0.0).\\ \hline
-\apicode{PilotProxy_Compute_FusedFineMask_U64} / \apicode{PilotProxy_Compute_FusedFineMaskWithSupport_U64} & Fused fine powers plus the fine decision v1 epilogue: one mask bit per frame (core 2.3.0), and rank-valid and usable-bulk outputs (core 2.5.0); frame powers and row sums are optional taps.\\ \hline
+\apicode{PilotProxy_Compute_FusedFine_U64} & One launch from packed samples to the exact fine powers; its required \code{d_power_out} receives the frame powers \(P_n=\sum_b S[n,b]\), reduced on the device.\\ \hline
+\apicode{PilotProxy_Compute_FusedFineMask_U64} / \apicode{PilotProxy_Compute_FusedFineMaskWithSupport_U64} & Fused fine powers plus the fine decision v1 epilogue: one mask bit per frame, and rank-valid and usable-bulk outputs; frame powers and row sums are optional taps.\\ \hline
 \apicode{PilotProxy_Destroy} & Destroy handle.\\ \hline
 \end{longtable}
 \normalsize

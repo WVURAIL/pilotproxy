@@ -15,8 +15,8 @@ import pytest
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
 from pilot_proxy.detector_geometry import (
     DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS,
-    SPECTRAL_SENSE_INVERTED,
-    SPECTRAL_SENSE_NORMAL,
+    DEFAULT_NYQUIST_ZONE,
+    MIRRORED_NYQUIST_ZONE,
     predicted_fine_designated_bins,
     predicted_pilot_fine_bin,
 )
@@ -42,21 +42,21 @@ def _center_hz(freq_id: int) -> float:
     return CHIME_F0_HZ - CHIME_BW_HZ * freq_id / CHIME_NCHAN
 
 
-def _predict(freq_id: int, channel: int, sense: str) -> int:
+def _predict(freq_id: int, channel: int, zone: int) -> int:
     return predicted_pilot_fine_bin(
         pilot_rf_hz=physical_channel_to_pilot_hz(channel),
         coarse_center_hz=_center_hz(freq_id),
         sample_rate_hz=SAMPLE_RATE_HZ,
         detector_window_samples=K,
         nfft=NFFT,
-        spectral_sense=sense,
+        nyquist_zone=zone,
     )
 
 
 @pytest.mark.parametrize("freq_id", sorted(MEASURED_ANCHORS))
 def test_measured_line_lands_in_the_default_window(freq_id):
     channel, measured = MEASURED_ANCHORS[freq_id]
-    predicted = _predict(freq_id, channel, SPECTRAL_SENSE_INVERTED)
+    predicted = _predict(freq_id, channel, MIRRORED_NYQUIST_ZONE)
     window = predicted_fine_designated_bins(
         predicted, DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS, FINE_BINS)
     assert measured in window, (
@@ -65,14 +65,14 @@ def test_measured_line_lands_in_the_default_window(freq_id):
 
 
 @pytest.mark.parametrize("freq_id", sorted(MEASURED_ANCHORS))
-def test_normal_sense_prediction_misses_the_measured_line(freq_id):
-    """The sense flip is load-bearing: the unflipped mapping must NOT fit.
+def test_upright_prediction_misses_the_measured_line(freq_id):
+    """The zone-2 mirror is load-bearing: the upright mapping must NOT fit.
 
     (Except where the pilot's residual happens to be small enough that both
     signs land inside the window; no surveyed channel is in that regime.)
     """
     channel, measured = MEASURED_ANCHORS[freq_id]
-    predicted = _predict(freq_id, channel, SPECTRAL_SENSE_NORMAL)
+    predicted = _predict(freq_id, channel, DEFAULT_NYQUIST_ZONE)
     window = predicted_fine_designated_bins(
         predicted, DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS, FINE_BINS)
     assert measured not in window

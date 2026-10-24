@@ -19,6 +19,10 @@ from pathlib import Path
 import numpy as np
 
 from pilot_proxy import operating_policy, runtime_calibration
+from pilot_proxy.detector_contract import (
+    OLD_INPUT_COORDINATE_NAMES,
+    OLD_WEIGHT_COORDINATE_NAMES,
+)
 from pilot_proxy.fine_decision import FINE_DECISION_VERSION, pack_bulk_mask
 from pilot_proxy.runtime_bundle import (
     CONTROL_PHYSICAL_CHANNEL,
@@ -31,6 +35,16 @@ PLAN_SCHEMA = "pilotproxy_archive_candidate_plan_v1"
 REVIEW_SCHEMA = "pilotproxy_archive_candidate_review_v1"
 METHOD = "operating_curve_candidate_v1"
 _REQUIRE = runtime_calibration._require
+
+
+def _current_coordinate_names(contract):
+    """The contract with coordinate names written by earlier releases renamed."""
+    out = dict(contract)
+    for key, rename in (("weight_coordinate_system", OLD_WEIGHT_COORDINATE_NAMES),
+                        ("input_coordinate_system", OLD_INPUT_COORDINATE_NAMES)):
+        if isinstance(out.get(key), str):
+            out[key] = rename.get(out[key], out[key])
+    return out
 
 
 def _fields(value, expected, label):
@@ -146,11 +160,13 @@ def _product_proof(meta, profile, contract, weight_bytes, base, bindings):
                      and int(value.reshape(-1)[0]) == expected_value, f"Archive {label} differs")
         _REQUIRE(str(z["weights_hash"].item()) == expected_weights,
                  "Archive and bundle packed weights differ")
-        actual_contract = json.loads(str(z["detector_contract_json"].item()))
+        actual_contract = _current_coordinate_names(
+            json.loads(str(z["detector_contract_json"].item())))
+        bundle_contract = _current_coordinate_names(contract)
         for key in ("detector_window_samples", "num_weight_terms", "sample_bits_per_component",
                     "input_format", "input_coordinate_system", "input_preprocessing",
                     "weight_coordinate_system"):
-            _REQUIRE(key in contract and actual_contract.get(key) == contract[key],
+            _REQUIRE(key in bundle_contract and actual_contract.get(key) == bundle_contract[key],
                      f"Archive and bundle {key} differ")
         for key in ("target_norm_sq", "reference_norm_sum_sq"):
             value = z[key]

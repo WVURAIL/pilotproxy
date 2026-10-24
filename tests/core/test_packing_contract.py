@@ -8,9 +8,9 @@ from pilot_proxy.integration.packing import pack_channelized_streams_for_detecto
 from pilot_proxy.integration.schemas import COMBINE_MODE_PER_STREAM_DIAGNOSTIC
 
 
-@pytest.mark.parametrize("sense", ["normal", "inverted"])
+@pytest.mark.parametrize("zone", [1, 2])
 @pytest.mark.parametrize("diagnostic", [False, True])
-def test_overlapping_blocks_keep_feed_channel_window_order(sense, diagnostic):
+def test_overlapping_blocks_keep_feed_channel_window_order(zone, diagnostic):
     rng = np.random.default_rng(291)
     data = (
         rng.integers(-4, 5, (2, 3, 20)) + 1j * rng.integers(-4, 5, (2, 3, 20))
@@ -23,7 +23,7 @@ def test_overlapping_blocks_keep_feed_channel_window_order(sense, diagnostic):
         detector_window_samples=4,
         num_blocks=3,
         block_step_samples=6,
-        spectral_sense=sense,
+        nyquist_zone=zone,
         quantization_scale_mode="provided",
         scale_by_stream=scales,
         selected_channel_indices=[900, 12, 77],
@@ -38,7 +38,7 @@ def test_overlapping_blocks_keep_feed_channel_window_order(sense, diagnostic):
                 rows = []
                 for offset in (0, 4):
                     values = data[feed, channel, start + offset : start + offset + 4]
-                    if sense == "inverted":
+                    if zone == 2:
                         values = values[::-1]
                     # Python's round uses the specified ties-to-even rule.
                     re = np.array(

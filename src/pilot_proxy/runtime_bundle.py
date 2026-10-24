@@ -12,11 +12,12 @@ import numpy as np
 
 from pilot_proxy.atsc_channels import validate_uhf_physical_channel
 from pilot_proxy.detector_contract import (
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
     build_detector_contract,
     detector_contract_sha256,
     input_coordinate_system_for_weight_coordinate,
+    normalize_input_coordinate_system,
     normalize_weight_coordinate_system,
     null_power_ratio_from_weight_norms,
     validate_detector_contract,
@@ -1307,7 +1308,12 @@ def _validate_bundle_coordinate_systems(
                 "missing input_coordinate_system",
             )
         else:
-            present_input_coordinates[label] = str(value)
+            try:
+                present_input_coordinates[label] = normalize_input_coordinate_system(
+                    value
+                )
+            except ValueError as exc:
+                _add_error(errors, f"{label}.input_coordinate_system", str(exc))
     if len(set(present_input_coordinates.values())) > 1:
         _add_error(
             errors,
@@ -1750,8 +1756,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--detector-core-profile", type=Path, required=True)
     parser.add_argument(
         "--weight-coordinate-system",
+        type=normalize_weight_coordinate_system,
         choices=[
-            WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             WEIGHT_COORDINATE_RAW_INPUT,
         ],
         required=True,

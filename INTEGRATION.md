@@ -14,7 +14,7 @@ product writers.
 
 | Part | Implementation |
 |---|---|
-| instrument | bundled CHIME target geometry: 800 MHz band top, 1024 coarse channels, `nfft=16384`, inverted spectral sense |
+| instrument | bundled CHIME target geometry: 800 MHz band top, 1024 coarse channels, `nfft=16384`, Nyquist zone 2 (mirrored channel spectrum) |
 | source | bundled `local` and `cadc-datatrail` sources |
 | reader | bundled packed CHIME reader for detector runs |
 | analyzer | bundled detector analyzer |
@@ -43,8 +43,8 @@ the frame size and stream layout against the data product used for each run.
 Clone this repository and install its archive workflow:
 
 ```bash
-git clone https://github.com/WVURAIL/pilotproxy.git ~/pilot-proxy
-cd ~/pilot-proxy
+git clone https://github.com/WVURAIL/pilotproxy.git
+cd pilotproxy
 python -m pip install -r requirements/archive.txt
 python -m pip install -e ".[archive,test]"
 ```
@@ -202,7 +202,7 @@ completed inventories and products stay readable, not a runtime dependency.
 
 The offline archive suite checks array layout, orchestration, resume behavior,
 product combination, selection, metadata inference, and parity against the
-earlier PilotProxy runner. It does not replace these operational gates:
+single-process `chime-run` runner. It does not replace these operational gates:
 
 - CUDA detector execution on a GPU node;
 - authenticated streaming through `cadc-datatrail`;
@@ -239,5 +239,7 @@ exactly the accepted shape.
 
 The receiver profile declares both the normalized coarse-channel center and the
 normalized physical data-DC location. It also declares whether the adapter
-reverses detector windows before the post-spectral-sense weight bank. There is
-no implicit center-at-Nyquist or spectral-sense fallback.
+reverses detector windows before the post-Nyquist-zone weight bank, and states
+its Nyquist zone (`channelizer.frequency_axis.nyquist_zone`; an even zone
+mirrors each channel's spectrum). There is no implicit center-at-Nyquist or
+zone fallback.

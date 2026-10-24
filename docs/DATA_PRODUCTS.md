@@ -146,25 +146,25 @@ The current mask is the norm-corrected positive-excess comparison:
 valid && (p_target * reference_norm_sum_sq > target_norm_sq * p_ref_sum)
 ```
 
-This is the integer form of `F > null_power_ratio`. The frame powers are the
-kernel core 3.0.0 definition, `P_r = sum_f S_r[f]` over the exact `fxfft256`
+This is the integer form of `F > null_power_ratio`. The frame powers are
+`P_r = sum_f S_r[f]` over the exact `fxfft256`
 fine powers (`METHOD_SPEC.md`). A `chime-run` output stores those fine powers
 in `fine_power_u64`, so every frame power can be re-formed from them: the
 writer and `validate-products` require `p_target_u64`, `p_ref_lower_u64` and
 `p_ref_upper_u64` to equal `fine_power_u64[..., r, :].sum()` exactly and
 `p_ref_sum_u64` to equal their reference sum. A `chime-scan` combine stores
 the reference split but leaves the fine powers in its per-pilot products (a
-combined copy would hold `num_frames x num_pilots x 768` words). Outputs
-written before core 3.0.0 (detector contract revision 1) carry the retired
-row-domain powers `sum_m |z|^2` in the frame-power fields and neither the
+combined copy would hold `num_frames x num_pilots x 768` words). Outputs of
+detector contract revision 1 (detector cores before 3.0.0) carry row-domain
+powers `sum_m |z|^2` in the frame-power fields and neither the
 split nor the fine powers; `chime-run` outputs identify them by
 `kernel_version` and `coarse_power_ratio_definition` in `stats.json`, and
 `chime-scan` combines by the per-pilot product schema (v5 or v6). Because
 `normalized_coarse_power_ratio_db` is referenced to `null_power_ratio`, the
 null and the positive-excess boundary both sit at exactly 0 dB. The current
 product contract requires the exact powers, all norm-related arrays, schema
-identity, and decision contract. Development snapshots that predate this
-contract are not accepted; regenerate them from authoritative inputs.
+identity, and decision contract. Products that do not meet it are not accepted;
+regenerate them from authoritative inputs.
 
 For `chime-scan`, `num_frames` is the event/frame intersection retained by the
 combine. The source per-pilot products can contain additional frames that were

@@ -1,7 +1,7 @@
-# Paths this repository deleted or renamed since the refactor began (M3 to M6), one per line, with the
+# Paths this repository deleted or renamed, one per line, with the
 # last commit that holds each; a reference to one cites it as <path>@<commit>.
-# The commits named here are in the private provenance repository (see PROVENANCE.md); paths of
-# withheld material are not listed.
+# The commits named here are in this repository or in the private provenance repository (see
+# PROVENANCE.md); paths of withheld material are not listed.
 analysis/README.md	30e50c2
 analysis/_calibration_paths.py	30e50c2
 analysis/_paths.py	30e50c2
@@ -313,3 +313,5 @@ src/pilot_proxy/characterization/working_thresholds.py	d3a3749
 tests/characterization/test_working_thresholds.py	d3a3749
 docs/FINE_THRESHOLD_CALIBRATION.md	d3a3749
 docs/ADAPTING.md	d3a3749
+docs/archive/kotekan_interface_design.md	81886b4
+docs/releases.md	81886b4

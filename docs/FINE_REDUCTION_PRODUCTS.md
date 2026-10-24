@@ -32,9 +32,8 @@ the fine terms. The float power ratio, the null-bulk location,
 scale, threshold and threshold-estimation mode, the null-bulk exceedance
 fraction, and the ragged exceedance list are not written by the scan. They are
 recomputed in post-processing from `fine_power_u64`, at whatever operating point
-is calibrated there; the scan applies no fine decision of its own. Earlier
-schema revisions stored those derived arrays, and `fine_power_ratio` still
-appears under that spelling when reading the archived survey products.
+is calibrated there; the scan applies no fine decision of its own. Reading the
+archived survey products exposes `fine_power_ratio` under that spelling.
 
 The current contract fails closed on status/shape disagreement. An enabled
 product has a positive bin count and all three terms for every frame. A pending
@@ -58,12 +57,9 @@ p_ref_sum_u64 == p_ref_lower_u64 + p_ref_upper_u64
 
 The writer (`archive/detector.py`), `validate_current_product_identity`,
 `products/reader.py` and `tools/audit_per_pilot.py` all enforce it, and every
-derived coarse column must equal `coarse_columns_from_fine(product)`. This
-invariant replaces the row-domain marginal identity of kernel cores 2.x, under
-which the integer sum of squared row projections reproduced a separately
-computed coarse power. That branch is removed: the coarse and fine
-measurements now come from one spectrum, and the diagnostic fine threshold is
-still not the active rejection policy. The padded fixed-point transform itself
+derived coarse column must equal `coarse_columns_from_fine(product)`. The
+coarse and fine measurements come from one spectrum, and the diagnostic fine
+threshold is not the active rejection policy. The padded fixed-point transform itself
 remains gated by its golden vectors and its Parseval drift bound
 (`tests/core/test_fxfft256.py`); it does not conserve energy exactly, so the
 frame powers are not `256 * sum_m |z|^2`.

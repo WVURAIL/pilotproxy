@@ -15,7 +15,7 @@ from pilot_proxy.archive.combine import (
     _load_sorted,
 )
 from pilot_proxy.detector_contract import (
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     build_detector_contract,
 )
 
@@ -28,7 +28,7 @@ def current_detector_contract() -> dict[str, object]:
         skipped_guard_bins=1,
         reference_offset_bins=2,
         num_weight_terms=3,
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         time_reverse_detector_windows_before_kernel=True,
     )
 

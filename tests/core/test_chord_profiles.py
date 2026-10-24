@@ -6,7 +6,7 @@ computed expectations:
 
 * channelizer grid: first Nyquist zone of a 3.2 GS/s ADC with a 16384-point
   PFB, so 8192 coarse channels of exactly 195312.5 Hz with channel RF center
-  ``coarse_channel_index * 195312.5 Hz`` (upright spectral sense, ascending
+  ``coarse_channel_index * 195312.5 Hz`` (Nyquist zone 1, upright, ascending
   order, kotekan ``freq_id == coarse_channel_index``);
 * ATSC 14-36 pilot placement: 23 unique coarse channels 2408..3084 with
   exact half-Hz fine offsets; channel 14's upper reference wraps the frame
@@ -73,7 +73,7 @@ CHORD_FINE_BIN_WIDTH = CHORD_COARSE_WIDTH / CHORD_DETECTOR_WINDOW
 
 ATSC_PHYSICAL_CHANNELS = list(range(14, 37))
 
-# Independently derived (documented in docs/archive/kotekan_interface_design.md):
+# Independently derived:
 # chord_freq_id = round(pilot_hz / 195312.5) for ATSC physical channels 14-36.
 EXPECTED_CHORD_CHANNEL_IDS = [
     2408, 2439, 2469, 2500, 2531, 2562, 2592, 2623, 2654, 2684, 2715,
@@ -116,7 +116,7 @@ def _expected_channel_and_offset(physical_channel: int) -> tuple[int, Fraction]:
 )
 def test_chord_profile_channelizer_grid(profile_path, num_streams) -> None:
     profile = load_receiver_profile(profile_path)
-    assert profile.spectral_sense == "normal"
+    assert profile.nyquist_zone == 1
     assert profile.frequency_order == FREQUENCY_ORDER_ASCENDING_RF
     assert profile.num_coarse_channels == CHORD_NUM_COARSE_CHANNELS
     assert profile.coarse_channel_width_hz == float(CHORD_COARSE_WIDTH)
@@ -148,7 +148,7 @@ def test_chord_pilot_channel_mapping(profile_path) -> None:
         pilot_hz = physical_channel_to_pilot_hz(channel)
         selection = receiver_frequency_to_channel(pilot_hz, profile)
         assert selection.coarse_channel_index == expected_index
-        # Upright sense: no window time reversal, fine offset = rf - center.
+        # Zone 1 (upright): no window time reversal, fine offset = rf - center.
         assert selection.requires_time_reversal is False
         assert selection.fine_bin_offset_hz == float(expected_offset)
         # Offsets are exact multiples of 0.5 Hz, representable in binary
@@ -225,7 +225,7 @@ def test_chord_reference_placement_adaptive_cases() -> None:
 
 
 def test_chord_weight_tables_identical_for_both_coordinate_systems() -> None:
-    # Upright spectral sense: post-spectral-sense-normalization and raw
+    # Zone 1 (upright): post-Nyquist-zone normalization and raw
     # input-frequency coordinates coincide, so both banks must be
     # bit-identical and no window time reversal is requested.
     profile = load_receiver_profile(CHORD_PROFILE)
@@ -234,7 +234,7 @@ def test_chord_weight_tables_identical_for_both_coordinate_systems() -> None:
         profile=profile,
         core=core,
         physical_channels=ATSC_PHYSICAL_CHANNELS,
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
     )
     table_raw, _ = generate_weight_table_from_receiver_profile(
         profile=profile,
@@ -285,7 +285,7 @@ def test_chord_runtime_bundle_populates_chord_channel_ids(
         receiver_profile_path=profile_path,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=ATSC_PHYSICAL_CHANNELS,
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     report = validate_runtime_weight_bundle(bundle_dir=tmp_path / "bundle")
@@ -306,10 +306,10 @@ def test_chord_runtime_bundle_populates_chord_channel_ids(
             row["coarse_channel_index"] * float(CHORD_COARSE_WIDTH)
         )
     contract = json.loads(outputs["detector_contract"].read_text("utf-8"))
-    # Explicit-baseband-frame profile: the post-spectral-sense weight
-    # synthesis emits exp(-2j*pi*f*k) templates in the true-sense raw frame
+    # Explicit-baseband-frame profile: the post-Nyquist-zone weight
+    # synthesis emits exp(-2j*pi*f*k) templates in the upright raw frame
     # and assumes the adapter's detector-window time reversal regardless of
-    # spectral sense; CHORD's upright sense does NOT exempt it. (A tone at
+    # Nyquist zone; CHORD's upright zone 1 does NOT exempt it. (A tone at
     # the pilot frequency is only matched after the flip; see
     # tests/core/test_chord_tone_injection.py for the signal-level proof.)
     assert contract["input_preprocessing"][
@@ -324,7 +324,7 @@ def test_chime_runtime_bundle_carries_chime_freq_ids(tmp_path) -> None:
         receiver_profile_path=CHIME_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14, 15],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     report = validate_runtime_weight_bundle(bundle_dir=tmp_path / "bundle")
@@ -345,7 +345,7 @@ def test_runtime_bundle_validator_rejects_duplicate_chord_channel_ids(
         receiver_profile_path=CHORD_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14, 15],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     profiles_path = tmp_path / "bundle" / "pilot_profiles.json"
@@ -372,7 +372,7 @@ def test_runtime_bundle_validator_rejects_window_length_mismatch(
         receiver_profile_path=CHORD_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     manifest_path = tmp_path / "bundle" / "weights.manifest.json"
@@ -393,7 +393,7 @@ def test_runtime_bundle_validator_rejects_alias_mismatch(tmp_path) -> None:
         receiver_profile_path=CHORD_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     profiles_path = tmp_path / "bundle" / "pilot_profiles.json"
@@ -415,7 +415,7 @@ def test_runtime_bundle_validator_binds_chord_ids_to_coarse_channel(
         receiver_profile_path=CHORD_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     payload = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
@@ -438,7 +438,7 @@ def test_runtime_bundle_validator_requires_consistent_channel_namespace(
         receiver_profile_path=CHORD_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     payload = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
@@ -460,7 +460,7 @@ def test_runtime_bundle_validator_requires_null_chime_id_for_chord(
         receiver_profile_path=CHORD_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     payload = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
@@ -484,7 +484,7 @@ def test_runtime_bundle_validator_requires_null_ids_for_null_namespace(
         receiver_profile_path=CHIME_PROFILE,
         detector_core_profile_path=CORE_PROFILE,
         physical_channels=[14],
-        weight_coordinate_system="post_spectral_sense_normalization",
+        weight_coordinate_system="post_nyquist_zone_normalization",
         output_dir=tmp_path / "bundle",
     )
     payload = json.loads(outputs["pilot_profiles"].read_text("utf-8"))

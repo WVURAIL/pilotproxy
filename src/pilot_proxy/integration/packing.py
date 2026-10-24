@@ -14,8 +14,9 @@ from pilot_proxy.detector_constants import (
     LOCKED_SAMPLE_BITS_PER_COMPONENT as DEFAULT_BITS_PER_COMPONENT,
 )
 from pilot_proxy.detector_geometry import (
+    DEFAULT_NYQUIST_ZONE,
     DetectorFrameLayout,
-    apply_spectral_sense_to_detector_matrix,
+    apply_nyquist_zone_to_detector_matrix,
     build_stream_map,
     flatten_feed_channel_streams,
     stream_time_block_to_detector_matrix,
@@ -207,7 +208,7 @@ def pack_channelized_streams_for_detector(
     *,
     frame_size_samples: int,
     detector_window_samples: int = DEFAULT_DETECTOR_WINDOW_SAMPLES,
-    spectral_sense: str = "normal",
+    nyquist_zone: int = DEFAULT_NYQUIST_ZONE,
     quantization_scale_mode: str = QUANTIZATION_SCALE_MODE_GLOBAL,
     clip_sigma: float = DEFAULT_CLIP_SIGMA,
     combine_mode: str = COMBINE_MODE_COMBINED_STREAMS,
@@ -284,9 +285,9 @@ def pack_channelized_streams_for_detector(
             flattened[:, start:stop],
             detector_window_samples=int(detector_window_samples),
         )
-        detector_matrix = apply_spectral_sense_to_detector_matrix(
+        detector_matrix = apply_nyquist_zone_to_detector_matrix(
             detector_matrix,
-            spectral_sense=spectral_sense,
+            nyquist_zone=nyquist_zone,
         )
         packed_matrix = _quantize_rows_by_stream(
             detector_matrix,

@@ -107,6 +107,7 @@ sys.modules["current_geometry_sensitivity"] = cgs
 _SPEC.loader.exec_module(cgs)
 
 from pilot_proxy.detector_contract import weight_term_norms_sq
+from pilot_proxy.detector_geometry import add_nyquist_zone_argument
 from pilot_proxy.detector_reference import quantize_complex_numpy
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.dtv_units import (
@@ -795,7 +796,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--designated-half-width", type=int, default=2)
     parser.add_argument("--guard-fine-bins", type=int, default=1)
     parser.add_argument("--null-quantile", type=float, default=0.5)
-    parser.add_argument("--spectral-sense", default="normal")
+    add_nyquist_zone_argument(
+        parser, help="Nyquist zone of the synthetic reference-PFB output."
+    )
     parser.add_argument("--input-scale", type=float, default=cgs.DEFAULT_INPUT_SCALE)
     parser.add_argument(
         "--pilot-below-data-db", type=float, default=PILOT_BELOW_DATA_DB
@@ -897,7 +900,7 @@ def _study_config(
             "designated_half_width": int(args.designated_half_width),
             "guard_fine_bins": int(args.guard_fine_bins),
             "bulk_size": int(np.count_nonzero(profile.bulk_mask)),
-            "spectral_sense": str(args.spectral_sense),
+            "nyquist_zone": int(args.nyquist_zone),
             "input_scale": float(args.input_scale),
         },
         "calibration": {

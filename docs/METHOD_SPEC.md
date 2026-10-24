@@ -35,8 +35,8 @@ The kernel first forms the exact integer matched-filter row projections
 reference) and detector row `m`, and then the exact fine power spectrum
 `S[n, f]` of each term: the frozen fixed-point 256-point transform
 (`fxfft256_v1`) of each stream's 128 projections, squared and summed over
-streams (see "Time-coherent fine reduction" below). Since kernel core 3.0.0
-the three frame powers are defined from that spectrum:
+streams (see "Time-coherent fine reduction" below). The three frame powers
+are defined from that spectrum:
 
 ```text
 P_target    = sum_f S[target, f]
@@ -122,8 +122,8 @@ F > null_power_ratio
 ```
 
 When `target_norm_sq : reference_norm_sum_sq = 1 : 2`, the comparison reduces to
-the earlier `F > 1` rule, `p_target > (p_ref_sum >> 1)`. Products written
-under that earlier rule identify it in `mask_rule`.
+the plain `F > 1` rule, `p_target > (p_ref_sum >> 1)`; products made under that
+rule identify it in `mask_rule`.
 
 The corrected pilot excess is
 
@@ -133,10 +133,9 @@ rho_corrected = F / null_power_ratio - 1
 
 and is stored per frame as `normalized_pilot_excess`. The comparison is
 applied on the host in exact integer arithmetic from the uint64 frame powers.
-The runtime bundle still records it as the rational half-threshold
-`half_num : half_den = target_norm_sq : reference_norm_sum_sq`; kernel core
-3.0.0 removed the device entry that applied it to the row-domain powers,
-because `P_target * half_den` no longer fits `uint64` at the new scale.
+The runtime bundle records it as the rational half-threshold
+`half_num : half_den = target_norm_sq : reference_norm_sum_sq`; the host applies
+it because `P_target * half_den` does not fit `uint64` at the fine-sum scale.
 
 Masked frames are omitted from before/after averages. They are not replaced
 with zeros.
@@ -162,7 +161,7 @@ P[n]    = sum_b S[n, b]                                      (frame power)
 
 The reduction is coherent in time within a frame and incoherent across
 streams and frames. The frame powers of the previous sections are the all-bin
-sums of the same `S` (kernel core 3.0.0), so the coarse ratio and the fine
+sums of the same `S`, so the coarse ratio and the fine
 statistic come from one spectrum and no second power path exists. The library
 reduces `P[n]` on the device for the fused entry points and the host sums the
 staged `PilotProxy_Compute_FinePowers_U64` output; both equal
@@ -172,10 +171,7 @@ staged `PilotProxy_Compute_FinePowers_U64` output; both equal
 The float prototype `fine_reduction.fine_reduce` uses `numpy.fft` or
 `cupy.fft` instead of the fixed-point transform. Its float Parseval identity
 `sum_b S[n, b] = pad * windows * sum_m |z[n, m]|^2` is a property of that
-float prototype only, gated at ULP tolerance in its own tests. The row-domain
-marginal identity that detector contract revision 1 enforced per frame
-(the integer `sum_m |z[n, m]|^2` against the removed
-`PilotProxy_Compute_Powers_U64`) is retired with that branch.
+float prototype only, gated at ULP tolerance in its own tests.
 
 Detection over fine bins uses a pre-registered null-bulk CFAR: the null is
 calibrated on the independent non-designated bins (every `pad`-th bin,

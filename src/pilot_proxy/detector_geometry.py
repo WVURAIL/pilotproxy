@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import argparse
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,9 +12,20 @@ import numpy as np
 
 from pilot_proxy.schema_identity import schema_token
 
-SPECTRAL_SENSE_NORMAL = "normal"
-SPECTRAL_SENSE_INVERTED = "inverted"
-SUPPORTED_SPECTRAL_SENSE = frozenset({SPECTRAL_SENSE_NORMAL, SPECTRAL_SENSE_INVERTED})
+# A real ADC sampling at f_s puts the RF band [(n - 1) f_s / 2, n f_s / 2] in
+# Nyquist zone n. Even zones fold the band onto baseband mirrored, so inside
+# every coarse channel the frequency runs backwards; odd zones keep it upright.
+# CHIME samples 400-800 MHz at 800 MS/s (zone 2, mirrored); CHORD samples
+# 300-1500 MHz at 3.2 GS/s (zone 1).
+DEFAULT_NYQUIST_ZONE = 1
+MIRRORED_NYQUIST_ZONE = 2
+# Profiles, manifests and bundles written before the zone was recorded state
+# only its parity, under this key, as "normal" (odd) or "inverted" (even).
+OLD_FREQUENCY_AXIS_KEY = "spectral_sense"
+OLD_FREQUENCY_AXIS_VALUES = {
+    "normal": DEFAULT_NYQUIST_ZONE,
+    "inverted": MIRRORED_NYQUIST_ZONE,
+}
 STREAM_LAYOUT_SCHEMA_NAME = "pilotproxy_stream_layout"
 STREAM_LAYOUT_SCHEMA_REVISION = 1
 STREAM_LAYOUT_SCHEMA_TOKEN = schema_token(
@@ -28,22 +41,100 @@ SUPPORTED_COMBINE_MODES = frozenset(
 )
 
 
-def normalize_spectral_sense(value: Any | None) -> str:
-    """Normalize detector input spectral-sense metadata."""
+def normalize_nyquist_zone(value: Any | None) -> int:
+    """Return a validated Nyquist zone (a positive integer; None means 1).
+
+    The words of the old ``spectral_sense`` key are read as the zone parity
+    they stated: "normal" as zone 1, "inverted" as zone 2.
+    """
     if value is None:
-        return SPECTRAL_SENSE_NORMAL
+        return DEFAULT_NYQUIST_ZONE
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in OLD_FREQUENCY_AXIS_VALUES:
+            return OLD_FREQUENCY_AXIS_VALUES[text]
+        if not text.isdigit():
+            raise ValueError(
+                f"nyquist_zone must be a positive integer, got {value!r}"
+            )
+        value = int(text)
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"nyquist_zone must be a positive integer, got {value!r}")
+    zone = int(value)
+    if zone < 1:
+        raise ValueError(f"nyquist_zone must be a positive integer, got {value!r}")
+    return zone
+
+
+def nyquist_zone_from_old_word(value: str) -> int:
+    """Read an old ``spectral_sense`` word ("normal" or "inverted") as a zone."""
     text = str(value).strip().lower()
-    if text not in SUPPORTED_SPECTRAL_SENSE:
+    if text not in OLD_FREQUENCY_AXIS_VALUES:
         raise ValueError(
-            f"spectral_sense must be one of {sorted(SUPPORTED_SPECTRAL_SENSE)}, "
-            f"got {value!r}"
+            f"expected one of {sorted(OLD_FREQUENCY_AXIS_VALUES)}, got {value!r}"
         )
-    return text
+    return OLD_FREQUENCY_AXIS_VALUES[text]
 
 
-def spectral_sense_requires_time_reversal(value: Any | None) -> bool:
-    """Return whether detector-window samples must be reversed for this sense."""
-    return normalize_spectral_sense(value) == SPECTRAL_SENSE_INVERTED
+def add_nyquist_zone_argument(parser: argparse.ArgumentParser, *, help: str) -> None:
+    """Add ``--nyquist-zone`` (default 1) to a command-line parser.
+
+    The flag it replaced, ``--spectral-sense normal|inverted``, is still
+    accepted, as zone 1 or 2, but no longer listed.
+    """
+    parser.add_argument(
+        "--nyquist-zone",
+        dest="nyquist_zone",
+        type=normalize_nyquist_zone,
+        default=DEFAULT_NYQUIST_ZONE,
+        help=help,
+    )
+    parser.add_argument(
+        "--spectral-sense",
+        dest="nyquist_zone",
+        type=nyquist_zone_from_old_word,
+        help=argparse.SUPPRESS,
+    )
+
+
+def nyquist_zone_is_mirrored(value: Any | None) -> bool:
+    """Return whether the channel-internal spectrum is mirrored (even zone).
+
+    A mirrored channel needs its detector windows time-reversed before the
+    kernel, and its RF offsets enter the fine grid with the opposite sign.
+    """
+    return normalize_nyquist_zone(value) % 2 == 0
+
+
+def frequency_axis_nyquist_zone(
+    frequency_axis: Mapping[str, Any], *, context: str = "frequency_axis"
+) -> int | None:
+    """Read ``nyquist_zone``, or the old ``spectral_sense`` word, from a mapping.
+
+    Returns None when neither key is present. A mapping that carries both
+    keys must have them agree.
+    """
+    zone = frequency_axis.get("nyquist_zone")
+    old = frequency_axis.get(OLD_FREQUENCY_AXIS_KEY)
+    if zone is None and old is None:
+        return None
+    if old is not None:
+        word = str(old).strip().lower()
+        if word not in OLD_FREQUENCY_AXIS_VALUES:
+            raise ValueError(
+                f"{context}.{OLD_FREQUENCY_AXIS_KEY} must be one of "
+                f"{sorted(OLD_FREQUENCY_AXIS_VALUES)}, got {old!r}"
+            )
+        if zone is None:
+            return OLD_FREQUENCY_AXIS_VALUES[word]
+        if nyquist_zone_is_mirrored(zone) != (word == "inverted"):
+            raise ValueError(
+                f"{context}: nyquist_zone={zone!r} disagrees with "
+                f"{OLD_FREQUENCY_AXIS_KEY}={old!r}"
+            )
+    if isinstance(zone, bool) or not isinstance(zone, int):
+        raise ValueError(f"{context}.nyquist_zone must be an integer, got {zone!r}")
+    return normalize_nyquist_zone(zone)
 
 
 # Half-width of the default designated window in padded fine bins. The
@@ -60,7 +151,7 @@ def predicted_pilot_fine_bin(
     sample_rate_hz: float,
     detector_window_samples: int,
     nfft: int,
-    spectral_sense: Any | None,
+    nyquist_zone: Any | None,
     pad_factor: int = 2,
 ) -> int:
     """Fine (envelope) bin where the pilot line is predicted to land.
@@ -70,7 +161,7 @@ def predicted_pilot_fine_bin(
     quantization residual -- not at zero envelope offset. Designating fine
     bin 0 therefore watches an empty bin and leaves the actual line inside
     the CFAR null bulk; this predicts the bin from the channel geometry
-    alone. The inverted-sense mapping is survey-verified: all six strong
+    alone. The mirrored (even-zone) mapping is survey-verified: all six strong
     2018--2026 carriers land within ~30 bins of the prediction, the
     difference being each station's own carrier offset, which the
     designated window's half-width absorbs.
@@ -79,9 +170,8 @@ def predicted_pilot_fine_bin(
     fine_bins = int(pad_factor) * windows
     coarse_bin_hz = float(sample_rate_hz) / float(detector_window_samples)
     fine_bin_hz = coarse_bin_hz / float(fine_bins)
-    sense_sign = (-1.0 if spectral_sense_requires_time_reversal(spectral_sense)
-                  else 1.0)
-    eff_hz = sense_sign * (float(pilot_rf_hz) - float(coarse_center_hz))
+    zone_sign = -1.0 if nyquist_zone_is_mirrored(nyquist_zone) else 1.0
+    eff_hz = zone_sign * (float(pilot_rf_hz) - float(coarse_center_hz))
     resid_hz = eff_hz - round(eff_hz / coarse_bin_hz) * coarse_bin_hz
     return int(round(resid_hz / fine_bin_hz)) % fine_bins
 
@@ -311,15 +401,14 @@ def stack_stream_time_blocks(
     return np.ascontiguousarray(np.stack(blocks))
 
 
-def apply_spectral_sense_to_detector_matrix(
+def apply_nyquist_zone_to_detector_matrix(
     detector_matrix: np.ndarray,
     *,
-    spectral_sense: str,
+    nyquist_zone: Any | None,
 ) -> np.ndarray:
-    """Apply spectral-sense correction to a detector-matrix view."""
-    sense = normalize_spectral_sense(spectral_sense)
+    """Time-reverse each detector window when the Nyquist zone is mirrored."""
     arr = np.asarray(detector_matrix)
-    if spectral_sense_requires_time_reversal(sense):
+    if nyquist_zone_is_mirrored(nyquist_zone):
         return np.ascontiguousarray(np.flip(arr, axis=-1))
     return np.ascontiguousarray(arr)
 
@@ -327,23 +416,27 @@ def apply_spectral_sense_to_detector_matrix(
 __all__ = [
     "COMBINE_MODE_COMBINED_STREAMS",
     "COMBINE_MODE_PER_STREAM_DIAGNOSTIC",
+    "DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS",
+    "DEFAULT_NYQUIST_ZONE",
     "DetectorFrameLayout",
-    "SPECTRAL_SENSE_INVERTED",
-    "SPECTRAL_SENSE_NORMAL",
+    "MIRRORED_NYQUIST_ZONE",
+    "OLD_FREQUENCY_AXIS_KEY",
+    "OLD_FREQUENCY_AXIS_VALUES",
     "STREAM_LAYOUT_SCHEMA_NAME",
     "STREAM_LAYOUT_SCHEMA_REVISION",
     "STREAM_LAYOUT_SCHEMA_TOKEN",
     "SUPPORTED_COMBINE_MODES",
-    "SUPPORTED_SPECTRAL_SENSE",
-    "DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS",
-    "apply_spectral_sense_to_detector_matrix",
+    "add_nyquist_zone_argument",
+    "apply_nyquist_zone_to_detector_matrix",
     "block_time_stream_to_detector_matrix",
     "build_stream_map",
     "flatten_feed_channel_streams",
-    "normalize_spectral_sense",
+    "frequency_axis_nyquist_zone",
+    "normalize_nyquist_zone",
+    "nyquist_zone_from_old_word",
+    "nyquist_zone_is_mirrored",
     "predicted_fine_designated_bins",
     "predicted_pilot_fine_bin",
-    "spectral_sense_requires_time_reversal",
     "stack_stream_time_blocks",
     "stream_time_block_to_detector_matrix",
 ]

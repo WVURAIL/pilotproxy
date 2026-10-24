@@ -23,7 +23,7 @@ from pilot_proxy.capture_reference import (
     CaptureGeometry,
     expected_products,
 )
-from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_NYQUIST_ZONE
 from pilot_proxy.fine_decision import pack_bulk_mask
 from pilot_proxy.fine_reduction import independent_bin_mask
 from pilot_proxy.runtime_bundle import (
@@ -98,7 +98,7 @@ def make_example(
     output_dir,
     *,
     valid_only=False,
-    weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
 ):
     """Write a new example directory and return its replay plan path."""
     output = Path(output_dir).resolve()
@@ -186,7 +186,7 @@ def make_example(
         "num_polarizations": 2,
         "windows_per_stream": 128,
         "frequency_ids": list(geometry.frequency_ids),
-        "spectral_sense": "normal",
+        "nyquist_zone": 1,
         "sample_rate_hz": "195312.5",
         "time_reverse_detector_windows_before_kernel": bundle["input_preprocessing"][
             "time_reverse_detector_windows_before_kernel"

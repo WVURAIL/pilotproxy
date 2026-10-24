@@ -16,10 +16,8 @@
 
 The source workbook is `TV_Stations_UHF_within500mi_DRAO.xlsx`, retrieved on
 2026-06-09. The workbook, the reduction script, and the upstream source
-material were kept in the lab's census repository (dtv-census, first named
-dtv-station-census), which was retired on 2026-09-25 and is archived by the
-lab; the archive is available on request. This directory vendors its derived
-`census.csv`. As of 2026-08-20 that file is the reduction
+material are in the lab's archived census repository (dtv-census), available
+on request. This directory vendors its derived `census.csv`: the reduction
 described below plus the census repository's ISED overlay (Canadian rows
 re-sited to licensed transmitter coordinates, licence-status adjudication, and
 `erp_kw`); all 499 rows declare `schema_version=dtv_transmitter_census_v1` and
@@ -27,8 +25,7 @@ carry `evidence_status` so the 11 licence-only candidates remain
 distinguishable from rows reported on air. The vendored file has SHA-256
 `05caae7a509e8a18eb98cb63e8637a985ace4eb503ecf06cc17a6da298dca12f` and is
 byte-identical to `census/census.csv` at every commit of the census repository
-(`bdc22f56`, `d2cc1e3d`, `5480e166`). This file used to cite commit
-`e217c40d`, which is not in that history and cannot be recovered.
+(`bdc22f56`, `d2cc1e3d`, `5480e166`).
 
 The archive is a full-history git bundle of the census repository
 (`dtv-census-all-refs.bundle`, with a `README.md` that lists the rest). Its
@@ -67,8 +64,7 @@ cd dtv-census
 python3 ingest/apply_ised_overlay.py
 ```
 
-This was checked on 2026-09-25: the output is byte-identical to the vendored
-file.
+The output is byte-identical to the vendored file.
 
 The overlay command invokes `census/census_from_xlsx.py` for the deterministic
 workbook reduction before applying the licensed Canadian transmitter sites,
@@ -77,10 +73,9 @@ reproduces only the pre-overlay census, not the 499-row CSV vendored here.
 
 The reduction applies the following rules:
 
-The row counts below were independently reproduced by running the reduction
-(later kept in the census repository) over the retained workbook. The RabbitEars study settings above are
-recorded source metadata; the separate result-list printout is unavailable,
-so those settings were not independently verified here.
+The row counts below were reproduced by running the census repository's
+reduction over the retained workbook. The RabbitEars study settings above are
+recorded source metadata and were not independently verified here.
 
 1. The workbook contains 521 rows. We retain the 485 rows whose `Type` is
    `on-air`. We remove 23 `off-air` rows because they do not describe a

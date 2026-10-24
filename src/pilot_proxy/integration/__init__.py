@@ -21,6 +21,7 @@ from .receiver_profile import (
     load_receiver_profile,
     receiver_frequency_to_channel,
     receiver_profile_hash,
+    receiver_profile_hash_matches,
     validate_weight_manifest_profile_hash,
 )
 from .schemas import (
@@ -106,6 +107,7 @@ __all__ = [
     "quantization_metadata",
     "receiver_frequency_to_channel",
     "receiver_profile_hash",
+    "receiver_profile_hash_matches",
     "validate_weight_manifest_profile_hash",
     "write_weight_bank_from_receiver_profile",
 ]

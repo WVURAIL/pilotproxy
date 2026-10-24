@@ -67,10 +67,10 @@ The plan specifies K=64 or K=128 and exactly 128 windows per stream. Thus the
 detector block has 8192 or 16384 samples. Voltage frames must divide a complete
 block; the supplied capture must contain whole, contiguous blocks. A mask frame
 contains `[F]` int8 values; a power frame contains `[F,3]` little-endian uint64
-values, the frame powers. The replay expects the kernel core 3.0.0 definition,
-the all-bin sums of the exact fine powers (`capture_reference.expected_products`);
-a capture recorded by a stage that vendors an older core carries the retired
-row-domain sums and fails power parity while its masks can still agree. Their FPGA sequence identifies the first voltage sample in the block,
+values, the frame powers. The replay expects the frame powers to be the all-bin
+sums of the exact fine powers (`capture_reference.expected_products`); a capture
+recorded by a stage that vendors a core before 3.0.0 carries row-domain sums and
+fails power parity while its masks can still agree. Their FPGA sequence identifies the first voltage sample in the block,
 and their downsampling is the input downsampling times the block length.
 
 The submitted loader binds physical channels 14–36. Unbound frequencies,
@@ -111,7 +111,7 @@ Packing schema `pilotproxy_capture_packing_v1` specifies `layout: TFPD`,
 `sample_encoding: int4x2_swapped_withoffset`, `voltage_tap: pre_dtv_mask`,
 `pre_detector_transform: none`, `num_times`, `num_dishes`, `num_polarizations`,
 `detector_window_samples`, `windows_per_stream`, `frequency_ids`,
-`sample_rate_hz`, `spectral_sense`, and
+`sample_rate_hz`, `nyquist_zone`, and
 `time_reverse_detector_windows_before_kernel`. Its ordered `frequency_map`
 contains `receiver_channel_id`, `coarse_channel_index`, and `rf_center_hz` for
 each frequency. The tool checks these against the receiver and bound profiles.

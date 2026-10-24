@@ -95,20 +95,21 @@ to be divisible by `K = 128`.
 
 ## Weight Coordinate Convention
 
-The CHIME receiver profile declares inverted spectral sense. The runner reverses
+The CHIME receiver profile declares Nyquist zone 2, which mirrors each coarse
+channel's spectrum. The runner reverses
 each detector window before the CUDA kernel, which places the samples in the
 detector frequency coordinate. It must therefore use weights defined in that
 same coordinate:
 
 ```text
-weight_coordinate_system = post_spectral_sense_normalization
-input_spectral_sense = inverted
+weight_coordinate_system = post_nyquist_zone_normalization
+input_nyquist_zone = 2
 input_requires_time_reversal = true
 ```
 
 Use the shipped detector-coordinate weight bank with this runner. A newly
 generated CHIME bank is acceptable only when its manifest declares
-`post_spectral_sense_normalization` and the matching time-reversal preprocessing.
+`post_nyquist_zone_normalization` and the matching time-reversal preprocessing.
 Otherwise the pilot offset can be reversed twice. The runner records the
 effective convention in `run_config.json` and `stats.json` and rejects a raw
 input-coordinate manifest when time reversal is active.
@@ -290,9 +291,9 @@ upper_reference_requested_relative_to_target_hz
 `run_config.json` and `stats.json` copy a compact
 `reference_placement_summary`, including the channels with adaptive placement,
 DC shifts, edge wraps, or a forbidden tone in the skipped guard. In the
-current DC-centered bank, DTV 14 is the only adaptive case.
+shipped DC-centered bank, DTV 14 is the only adaptive case.
 
-The SNR-shelf table uses explicit diagnostic names rather than historical
+The SNR-shelf table uses explicit diagnostic names rather than
 positive-excess aliases:
 
 ```text
@@ -315,9 +316,8 @@ denominator must be explicit.
 
 ## Injection recovery
 
-Three publication-analysis commands operate on the staged files or the
-archive-scale products. Their procedures were written for the 2026-07 manuscript
-and are kept in the history (`docs/PUBLICATION_VALIDATION.md@30e50c2`).
+Three analysis commands operate on the staged files or the archive-scale
+products:
 
 ```text
 pilot-proxy inject-pilot-tone
@@ -336,7 +336,7 @@ The plotting code uses Computer Modern mathtext by default. Set
 PNG; `PILOT_PROXY_FIGURE_FORMATS=png,pdf` adds a vector PDF copy. JPEG output is
 not implemented.
 
-The current SNR-shelf figure uses an `[-90, 0]` dB overview and an
+The SNR-shelf figure uses an `[-90, 0]` dB overview and an
 `[-90, -25]` dB detail panel. Each channel histogram is normalized over its
 finite shelf-SNR samples and by bin width. Frames with `F <= 1` therefore do not
 enter the histogram and must be counted separately.

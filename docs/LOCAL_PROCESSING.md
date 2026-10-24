@@ -1,18 +1,17 @@
 # Local archive processing
 
-This is the sole executable authority for streaming the frozen CHIME inventory
-from CADC and processing it on the local WSL workstation. Paths are those of
-the run of record under `~/rail` (`$HOME/rail` in the shell blocks); they are
-examples, so substitute your own workspace root. Scientific and
-product pins are in [`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md),
-mandatory gates are in [`VALIDATION_GATES.md`](VALIDATION_GATES.md), and actual
-launch values go in a run ledger (the template of the 2026-09 run is
-`docs/LOCAL_ARCHIVE_RUN_LEDGER_TEMPLATE.md@30e50c2`).
+This is the executable procedure for streaming the frozen CHIME inventory
+from CADC and processing it on a local WSL workstation. The shell blocks use
+`$WORK` for the workspace root and `$WORK/pilotproxy` for the checkout; set
+`WORK` to your own root. Scientific and product pins are in
+[`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md), mandatory gates
+are in [`VALIDATION_GATES.md`](VALIDATION_GATES.md), and actual launch values
+go in a run ledger.
 [`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md) documents the separately qualified
 CANFAR path and cannot override this file; neither file overrides the other,
 and the operator launches exactly one path.
 
-The run is historical estimation and sufficient-statistic reprocessing. The
+The run is archive estimation and sufficient-statistic reprocessing. The
 coarse positive-excess flag is retained as a bootstrap diagnostic; the fine
 rank/eta decision is inactive and no calibrated detection policy is applied.
 
@@ -30,20 +29,16 @@ Keep active staging on WSL ext4. Do not stage through `/mnt/c`, and do not run s
 ## Where a run writes
 
 Storage on the workstation is by pipeline stage, one producer each:
-`~/rail/datasets/` holds raw inputs, `~/rail/products/` holds everything
-pilot-proxy produces, `~/rail/results/` holds RFIsher's results. A scan
-therefore lives entirely under one directory of `~/rail/products/`, named for
-the run, with the layout the September 2026 campaign left behind
-(`~/rail/products/chime_pilots_rebuild_20260829/`):
+`$WORK/datasets/` holds raw inputs, `$WORK/products/` holds everything
+pilotproxy produces, `$WORK/results/` holds RFIsher's results. A scan
+therefore lives entirely under one directory of `$WORK/products/`, named for
+the run:
 
-    ~/rail/products/<run>/products/   the chime-scan output directory (_per_pilot/ inside)
-    ~/rail/products/<run>/staging/    staged downloads; delete only after `stop` confirms exit
-    ~/rail/products/<run>/logs/       scan and supervisor logs
+    $WORK/products/<run>/products/   the chime-scan output directory (_per_pilot/ inside)
+    $WORK/products/<run>/staging/    staged downloads; delete only after `stop` confirms exit
+    $WORK/products/<run>/logs/       scan and supervisor logs
 
-Smoke tests and rehearsals go under a dated `~/rail/products/dev_rehearsals_<YYYY-MM>/`.
-The former `~/rail/pilot_proxy_runs`, `pilot_proxy_staging` and
-`pilot_proxy_logs` directories were retired on 2026-09-06 and must not be
-recreated; the blocks below are written for the new layout.
+Smoke tests and rehearsals go under a dated `$WORK/products/dev_rehearsals_<YYYY-MM>/`.
 
 ## Freeze one source revision
 
@@ -51,7 +46,7 @@ Finish all source changes before any final gate. Commit and push them, then
 record one clean revision and package-source digest:
 
 ```bash
-cd $HOME/rail/pilot-proxy
+cd $WORK/pilotproxy
 set -euo pipefail
 git fetch origin --prune --tags
 test -z "$(git status --porcelain)"
@@ -73,14 +68,14 @@ and every resume. Any source change invalidates the later gate evidence.
 ## Environment
 
 ```bash
-cd $HOME/rail/pilot-proxy
-VENV_DIR=$HOME/rail/venvs/archive-local \
-PILOT_PROXY_DIR=$HOME/rail/pilot-proxy \
+cd $WORK/pilotproxy
+VENV_DIR=$WORK/venvs/archive-local \
+PILOT_PROXY_DIR=$WORK/pilotproxy \
 PILOT_PROXY_SKIP_REGISTRY=1 \
 PILOT_PROXY_USE_SYSTEM_PACKAGES=0 \
 PYTHON=python3.12 \
 bash scripts/setup_env.sh
-source $HOME/rail/venvs/archive-local/bin/activate
+source $WORK/venvs/archive-local/bin/activate
 umask 077
 ```
 
@@ -95,7 +90,7 @@ revision, and writes a hash-locked offline bundle:
 ```bash
 set -euo pipefail
 SOURCE_SHORT=$(git rev-parse --short=12 HEAD)
-RUNTIME_BUNDLE="$HOME/rail/runtime_freezes/archive-local-${SOURCE_SHORT}"
+RUNTIME_BUNDLE="$WORK/runtime_freezes/archive-local-${SOURCE_SHORT}"
 test ! -e "$RUNTIME_BUNDLE"
 python scripts/freeze_archive_runtime.py create \
   --output-dir "$RUNTIME_BUNDLE"
@@ -113,7 +108,7 @@ verify that separate binary with the pinned command below.
 Test an offline restore before launch, using a fresh path outside the checkout:
 
 ```bash
-RESTORE_VENV=$HOME/rail/venvs/archive-local-restore
+RESTORE_VENV=$WORK/venvs/archive-local-restore
 test ! -e "$RESTORE_VENV"
 python3.12 -m venv "$RESTORE_VENV"
 "$RESTORE_VENV/bin/python" -m pip install \
@@ -134,7 +129,7 @@ Renew and inspect the CADC certificate:
 
 ```bash
 set -euo pipefail
-$HOME/rail/venvs/canfar-client/bin/canfar login cadc --force
+$WORK/venvs/canfar-client/bin/canfar login cadc --force
 chmod 600 $HOME/.ssl/cadcproxy.pem
 test "$(stat -c '%a' $HOME/.ssl/cadcproxy.pem)" = "600"
 openssl x509 -in $HOME/.ssl/cadcproxy.pem -noout -checkend 259200
@@ -146,21 +141,19 @@ openssl x509 -in $HOME/.ssl/cadcproxy.pem -noout -dates
 The run is pinned to the already preserved SM89 library. Do not replace or
 rebuild it during this run.
 
-Status 2026-10-18: the 2026-09 run of record was pinned to the preserved core
-2.3.0 library `pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so` (sha256
-`f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2`, manifest
-sha256 `d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0`)
-with that run's frozen source, which wrote schema v5 products. The current
-checkout is kernel core 3.0.0 (frame powers are the all-bin sums of the fine
-powers, schema v6, `PilotProxy_Create` without the float output), and its
-`PilotProxyKernel` refuses a library of any other core major. A run with this
-checkout first preserves a core 3.0.0 build with its manifest under
-`$HOME/rail/kernels` and sets the four variables below to it; the block stops
-if any is unset.
+The checkout's `PilotProxyKernel` binds detector core 4 and refuses a library
+of any other core major. Preserve one SM89 build of the frozen source with its
+manifest under `$WORK/kernels` and set the four variables below to it; the
+block stops if any is unset. The schema-v5 archive products of record were made
+with the core 2.3.0 library `pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so`
+(sha256 `f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2`,
+manifest sha256
+`d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0`) and their
+own frozen source.
 
 ```bash
 set -euo pipefail
-: "${KERNEL_LIB:?path of the preserved core 3.0.0 SM89 library}"
+: "${KERNEL_LIB:?path of the preserved core 4 SM89 library}"
 : "${KERNEL_SHA256:?sha256 of that library}"
 : "${KERNEL_MANIFEST:?path of its preservation manifest}"
 : "${KERNEL_MANIFEST_SHA256:?sha256 of that manifest}"
@@ -174,7 +167,7 @@ import sys
 from pilot_proxy.kernel import PilotProxyKernel
 
 kernel = PilotProxyKernel(sys.argv[1])
-assert kernel.version.as_string() == "3.0.0"
+assert kernel.version.major == 4
 assert kernel.supports_fine_powers()
 assert kernel.supports_fused_fine()
 print("kernel", kernel.version.as_string(), kernel.get_fine_specs())
@@ -194,10 +187,10 @@ The production run is blocked unless the product validates and peak use stays
 below 13,900 MiB, leaving at least 15 percent of device memory free.
 
 ```bash
-SMOKE_INPUT=$HOME/rail/studies_2026-08/data_checks/datatrail_pull_844
+: "${SMOKE_INPUT:?local copy of the freq_id 844 smoke file's datatrail pull}"
 SMOKE_FILE="$SMOKE_INPUT/data/chime/baseband/raw/2020/07/15/astro_100050005/baseband_100050005_844.h5"
 SOURCE_SHORT=$(git rev-parse --short=12 HEAD)
-REHEARSALS="$HOME/rail/products/dev_rehearsals_$(date -u +%Y-%m)"
+REHEARSALS="$WORK/products/dev_rehearsals_$(date -u +%Y-%m)"
 mkdir -p "$REHEARSALS"
 SMOKE_OUTPUT="$REHEARSALS/local_file_smoke_844_${SOURCE_SHORT}"
 VRAM_LOG="$REHEARSALS/local_file_smoke_844_${SOURCE_SHORT}.vram.csv"
@@ -227,7 +220,7 @@ pilot-proxy chime-scan \
   --analyzer pilot-proxy-detector \
   --select 844 \
   --weights-path "$PWD/weights/chime_dtv_weights_k128.bin" \
-  --weight-coordinate-system post_spectral_sense_normalization \
+  --weight-coordinate-system post_nyquist_zone_normalization \
   --lib-path "$KERNEL_LIB" \
   --set fine_products=on \
   --max-files 1 \
@@ -283,8 +276,8 @@ PY
 ```
 
 Record the HDF5 shape, peak VRAM, validation result, output path, source digest,
-and library digest in the run ledger. Earlier smoke evidence used a different
-source digest and is not a final-source gate.
+and library digest in the run ledger. Smoke evidence made with another source
+digest is not a final-source gate.
 
 ## Measured transfer settings
 
@@ -313,9 +306,9 @@ checkpoint interval exists only to force an interruption and resume. Keep its
 capped product separate from production.
 
 ```bash
-BUNDLE_DIR=$HOME/rail/archive_inputs/chime-pilots-v5
+BUNDLE_DIR=$WORK/archive_inputs/chime-pilots-v5
 SOURCE_SHORT=$(git rev-parse --short=12 HEAD)
-REHEARSALS="$HOME/rail/products/dev_rehearsals_$(date -u +%Y-%m)"
+REHEARSALS="$WORK/products/dev_rehearsals_$(date -u +%Y-%m)"
 mkdir -p "$REHEARSALS"
 REHEARSAL_OUTPUT="$REHEARSALS/local_archive_rehearsal_844_${SOURCE_SHORT}"
 REHEARSAL_STAGING="$REHEARSALS/local_archive_rehearsal_844_${SOURCE_SHORT}.staging"
@@ -336,7 +329,7 @@ REHEARSAL_ARGS=(
   --max-staged-files 8
   --checkpoint-every 2
   --weights-path "$PWD/weights/chime_dtv_weights_k128.bin"
-  --weight-coordinate-system post_spectral_sense_normalization
+  --weight-coordinate-system post_nyquist_zone_normalization
   --lib-path "$KERNEL_LIB"
   --set fine_products=on
   --max-files 8
@@ -394,8 +387,8 @@ test -z "$(find "$REHEARSAL_STAGING" -type f -name '*.h5' -print -quit)"
 
 Record the interruption point, resume output, unique unit and frame counts,
 validation, empty-staging check, source digest, and kernel digest in the run
-ledger. Never reuse this capped output for production. Earlier rehearsal
-evidence used a different source digest and is not a final-source gate.
+ledger. Never reuse this capped output for production. Rehearsal evidence
+made with another source digest is not a final-source gate.
 
 ## WSL host controls
 
@@ -430,8 +423,8 @@ Set `EXPECTED_SOURCE_REVISION` and `EXPECTED_PACKAGE_SOURCE_SHA256` from the
 filled external run ledger. Do not derive either value from the current tree.
 
 ```bash
-cd $HOME/rail/pilot-proxy
-source $HOME/rail/venvs/archive-local/bin/activate
+cd $WORK/pilotproxy
+source $WORK/venvs/archive-local/bin/activate
 set -euo pipefail
 umask 077
 
@@ -440,15 +433,15 @@ umask 077
 test "$(stat -c '%a' $HOME/.ssl/cadcproxy.pem)" = "600"
 openssl x509 -in $HOME/.ssl/cadcproxy.pem -noout -checkend 259200
 
-BUNDLE_DIR=$HOME/rail/archive_inputs/chime-pilots-v5
+BUNDLE_DIR=$WORK/archive_inputs/chime-pilots-v5
 INVENTORY_PATH="$BUNDLE_DIR/inventory.jsonl"
-RUN_ROOT=$HOME/rail/products/chime_pilots_local_v5
+RUN_ROOT=$WORK/products/chime_pilots_local_v5
 OUTPUT_DIR="$RUN_ROOT/products"
 STAGING_DIR="$RUN_ROOT/staging"
 LOG_DIR="$RUN_ROOT/logs"
 RUN_LOG="$LOG_DIR/chime_pilots_local_v5.log"
 WEIGHTS_PATH="$PWD/weights/chime_dtv_weights_k128.bin"
-: "${KERNEL_LIB:?set to the preserved core 3.0.0 library (Preserved detector library)}"
+: "${KERNEL_LIB:?set to the preserved core 4 library (Preserved detector library)}"
 : "${KERNEL_SHA256:?set in Preserved detector library}"
 : "${KERNEL_MANIFEST:?set in Preserved detector library}"
 : "${KERNEL_MANIFEST_SHA256:?set in Preserved detector library}"
@@ -472,9 +465,9 @@ printf '%s  %s\n' \
   d0ab78db9dec847fb5270fb94e3fc45efd6bbbc71adc376830fb71467693079a "$BUNDLE_DIR/exclusions.jsonl" \
   077915779d234ad9cca1e9b52171e28025a60474f20fad7aff5684f55ce0c4c7 "$BUNDLE_DIR/pending_resolution.json" \
   5695e1cc9c007cb2c79ad39535cf9ed2fb20848ad00d3cf0215933670d0707e5 "$BUNDLE_DIR/inventory_manifest.json" \
-  bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15 "$PWD/configs/receiver_profiles/chime_dtv_fengine.json" \
+  fb6aaef8d26a836cb628f0669bd7b24d3b5813776a61bceb03bc6ec002538d65 "$PWD/configs/receiver_profiles/chime_dtv_fengine.json" \
   1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259 "$WEIGHTS_PATH" \
-  d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7 "$WEIGHTS_PATH.manifest.json" \
+  e8b2f5504870b4367081bca52ed042c48077e42dbbb2992bb612ade3f389a6ce "$WEIGHTS_PATH.manifest.json" \
   "$KERNEL_SHA256" "$KERNEL_LIB" \
   "$KERNEL_MANIFEST_SHA256" "$KERNEL_MANIFEST" | sha256sum --check --strict
 if pgrep -af '[p]ilot-proxy chime-scan'; then
@@ -494,7 +487,7 @@ RUN_ARGS=(
   --max-staged-files 8
   --checkpoint-every 250
   --weights-path "$WEIGHTS_PATH"
-  --weight-coordinate-system post_spectral_sense_normalization
+  --weight-coordinate-system post_nyquist_zone_normalization
   --lib-path "$KERNEL_LIB"
   --set fine_products=on
 )
@@ -520,7 +513,7 @@ units plus downloads that were prefetched but not represented by the last
 checkpoint. Complete the production-profile rehearsal before launch.
 
 `fine_products=on` retains exact fine powers. It does not enable fine
-detection. It is also the only accepted value: since kernel core 3.0.0 the
+detection. It is also the only accepted value: the
 frame powers are the all-bin sums of the fine powers, so `off` and `auto`
 are refused.
 
@@ -603,7 +596,7 @@ with np.load(sys.argv[1], allow_pickle=False) as product:
     assert all(int(a) + int(b) == int(c)
                for a, b, c in zip(lower[:, 0], upper[:, 0], reference[:, 0]))
     assert fine.dtype == np.uint64 and fine.shape == (frames, 3, 256)
-    # Kernel core 3.0.0: each frame power is the exact all-bin sum of its
+    # Each frame power is the exact all-bin sum of its
     # term's fine powers, checked here in Python integers.
     for term, power in enumerate((target, lower, upper)):
         assert all(sum(int(v) for v in fine[row, term]) == int(power[row, 0])
@@ -640,8 +633,8 @@ Resume only from the recorded source revision and preserved library. Do not
 rebuild, change options, or change the inventory. In a new shell:
 
 ```bash
-cd $HOME/rail/pilot-proxy
-source $HOME/rail/venvs/archive-local/bin/activate
+cd $WORK/pilotproxy
+source $WORK/venvs/archive-local/bin/activate
 set -euo pipefail
 umask 077
 : "${KERNEL_LIB:?set the path recorded in the run ledger}"
@@ -677,7 +670,7 @@ for the next checkpoint, stop as described above, and wait for every worker to
 exit. Renew and inspect the certificate:
 
 ```bash
-source $HOME/rail/venvs/canfar-client/bin/activate
+source $WORK/venvs/canfar-client/bin/activate
 set -euo pipefail
 canfar login cadc --force
 chmod 600 $HOME/.ssl/cadcproxy.pem
@@ -709,8 +702,8 @@ three expected values from that ledger, then run the closeout with no scan or
 download worker active:
 
 ```bash
-cd $HOME/rail/pilot-proxy
-source $HOME/rail/venvs/archive-local/bin/activate
+cd $WORK/pilotproxy
+source $WORK/venvs/archive-local/bin/activate
 set -euo pipefail
 umask 077
 
@@ -718,9 +711,9 @@ umask 077
 : "${EXPECTED_PACKAGE_SOURCE_SHA256:?set from the run ledger}"
 : "${EXPECTED_KERNEL_SHA256:?set from the run ledger}"
 
-BUNDLE_DIR=$HOME/rail/archive_inputs/chime-pilots-v5
+BUNDLE_DIR=$WORK/archive_inputs/chime-pilots-v5
 INVENTORY_PATH="$BUNDLE_DIR/inventory.jsonl"
-RUN_ROOT=$HOME/rail/products/chime_pilots_local_v5
+RUN_ROOT=$WORK/products/chime_pilots_local_v5
 OUTPUT_DIR="$RUN_ROOT/products"
 STAGING_DIR="$RUN_ROOT/staging"
 WEIGHTS_PATH="$PWD/weights/chime_dtv_weights_k128.bin"
@@ -743,9 +736,9 @@ printf '%s  %s\n' \
   d0ab78db9dec847fb5270fb94e3fc45efd6bbbc71adc376830fb71467693079a "$BUNDLE_DIR/exclusions.jsonl" \
   077915779d234ad9cca1e9b52171e28025a60474f20fad7aff5684f55ce0c4c7 "$BUNDLE_DIR/pending_resolution.json" \
   5695e1cc9c007cb2c79ad39535cf9ed2fb20848ad00d3cf0215933670d0707e5 "$BUNDLE_DIR/inventory_manifest.json" \
-  bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15 "$PROFILE_PATH" \
+  fb6aaef8d26a836cb628f0669bd7b24d3b5813776a61bceb03bc6ec002538d65 "$PROFILE_PATH" \
   1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259 "$WEIGHTS_PATH" \
-  d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7 "$WEIGHTS_PATH.manifest.json" \
+  e8b2f5504870b4367081bca52ed042c48077e42dbbb2992bb612ade3f389a6ce "$WEIGHTS_PATH.manifest.json" \
   "$EXPECTED_KERNEL_SHA256" "$KERNEL_LIB" \
   "$KERNEL_MANIFEST_SHA256" "$KERNEL_MANIFEST" | \
   sha256sum --check --strict
@@ -769,7 +762,7 @@ python tools/audit_local_archive_run.py \
   --weight-bank-sha256 \
     1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259 \
   --weight-manifest-sha256 \
-    d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7 \
+    e8b2f5504870b4367081bca52ed042c48077e42dbbb2992bb612ade3f389a6ce \
   --expected-inventory-sha256 \
     b2cfef752a6f2cf88317141a974161439299668a37a5464d710b3800b9a872d8 \
   --expected-units 165682 \

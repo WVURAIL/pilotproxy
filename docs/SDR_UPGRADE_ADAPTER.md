@@ -33,7 +33,7 @@ digital reference, at bins `[b, b-2, b+2]` with bin width 3051.7578125 Hz.
 All three centers must lie within the qualified +/-135 kHz passband. Natural
 weights have positive phase and projection uses `x dot conjugate(w)`. The
 configuration refuses translated bands crossing the raw input Nyquist
-boundary. It does not infer or reverse an unknown physical spectral sense.
+boundary. It does not infer or reverse an unknown Nyquist zone.
 
 Samples and weights use symmetric signed integer rails **[-7,7]**, nearest
 rounding with ties to even, and packed two's-complement components: real in
@@ -41,7 +41,7 @@ the high nibble and imaginary in the low nibble. Weight scale is 7. Sample
 scale is explicit and fixed by the caller; the adapter does not fit it to
 each frame. Receipts count components that require clipping and save the
 weight norms. Integer row projections use the existing CPU kernel reference.
-The frame powers (`term_power_sums`, exact uint64) are the kernel core 3.0.0
+The frame powers (`term_power_sums`, exact uint64) are the kernel's
 definition: each term's 128 row projections go through the frozen `fxfft256`
 and the fine powers are summed over all 256 bins (receipt schema
 `sdr-upgrade-digital-adapter-v2`; v1 summed `|z|^2` over the rows). The
@@ -83,11 +83,11 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   python -m pytest tests/core/test_sdr_upgrade_adapter.py -q
 
 python tools/validate_sdr_upgrade_adapter.py \
-  --capture-root ../results/sdr_reference_transport_2026-09-09 \
-  --output ../results/sdr_adapter_validation_2026-09-09
+  --capture-root /path/to/sdr_reference_transport_2026-09-09 \
+  --output /path/to/new-output
 ```
 
-The second command only reads the previously accepted antenna-attached,
+The second command only reads the accepted antenna-attached,
 RX-only record. It verifies that input and its receipt against their release
 manifest and frozen accepted-record hash. The tool sets numerical library
 thread limits to one and refuses a nonempty output directory. It saves

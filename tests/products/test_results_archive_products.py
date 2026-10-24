@@ -53,7 +53,7 @@ def test_geometry_reproduces_the_scan_prediction_when_pilot_proxy_is_available(p
         predicted = geometry_module.predicted_pilot_fine_bin(
             pilot_rf_hz=g.pilot_hz, coarse_center_hz=g.centre_hz, sample_rate_hz=390625.0,
             detector_window_samples=128, nfft=NFFT,
-            spectral_sense="inverted" if g.sense < 0 else "normal", pad_factor=2)
+            nyquist_zone=2 if g.sense < 0 else 1, pad_factor=2)
         assert g.nominal_fine_bin == predicted
 
 

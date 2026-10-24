@@ -4,7 +4,7 @@ Frozen record of the 2026-09-29 archive-bulk comparison on all 23 channels. No s
 
 `data/bulk/chNN.json` contains the channel statistics, persistent-bin profiles and geometry. `data/ideal_bulk.json` is the recorded ideal reference. The statistic r is mean_B(T)/median_B(T); it describes how the archive bulk differs from the ideal reference and is not an operational false-alarm calibration.
 
-`bulk_behaviour.py` and `common.py` preserve the producer bytes. `verify/v_bulk.py` and its recorded output preserve the independent check. `REPORT.md` and `CHECK.md` also discuss adjacent bench and frontier comparisons; those broader comparisons are outside this package's archive-bulk scope.
+`bulk_behaviour.py` and `common.py` preserve the producer bytes, except that the RFIsher commit ID in `common.py` was re-pinned to the rewritten history on 2026-10-24. `verify/v_bulk.py` and its recorded output preserve the independent check. `REPORT.md` and `CHECK.md` also discuss adjacent bench and frontier comparisons; those broader comparisons are outside this package's archive-bulk scope.
 
 `reader/b2_cfar.json` preserves the later figure table, including its bulk percentiles, without recomputation. The reader's extractor and source-hash list accompany it. Its bench section is a recorded comparison, not the newly rerun F1 bench.
 

@@ -1,6 +1,6 @@
 """Shared setup: the release's code (clones at the recorded commits), its era, blocks, anchor and bulk.
 
-Release of record: results/archive_no_split_2026-09-24_r2 (RFIsher f72bf34, pilot-proxy bdfcdce,
+Release of record: results/archive_no_split_2026-09-24_r2 (RFIsher a281112, pilot-proxy bdfcdce,
 RadioFisher 12a1616), the release the dissertation vendors. The clones under clones/ were checked
 against the release's source_snapshots (no .py file differs).
 """

@@ -27,7 +27,7 @@
     },
     "analysis-plan.json": {
       "bytes": 58656,
-      "sha256": "5a8c1f02cb31b2e4be2c4698460b06a24848ff5b34a44d2af9f83fe7fe53739e"
+      "sha256": "fc3152404a977d87441c50c1865ea20d0019bc65d187e4a743b7ff09686b7680"
     },
     "analysis_tools/coarse_retention_diagnostic_v1.py": {
       "bytes": 18861,
@@ -603,7 +603,7 @@
     },
     "archive/ledger/run.json": {
       "bytes": 7038,
-      "sha256": "82dcb6c91e3853702e119ed4e2acaa76603839edbe22bd3aca6710dd28e30a4c"
+      "sha256": "7b20e777807db9921b73465e2c5747dfbdeda1fa97fbd0b23e8b9cd963a7e11f"
     },
     "archive/products-preflight.json": {
       "bytes": 7321,
@@ -2045,7 +2045,7 @@
     "coarse/manifest.json"
   ],
   "physical_recovery_certified": false,
-  "rfisher_commit": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+  "rfisher_commit": "a281112133eb3ba49394ef91377019ca2068a3fa",
   "schema": "canfar-reanalysis-release-v1",
   "status": "complete; retrospective reanalysis on author-dated eras with no variance-split credit; residual ties broken by the selector order (r2)",
   "supersedes": "/home/djg/rail/results/archive_no_split_2026-09-24"

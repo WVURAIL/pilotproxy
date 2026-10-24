@@ -2,7 +2,7 @@
   "dependency_repositories": {
     "RFIsher": {
       "clean_when_packaged": true,
-      "commit": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+      "commit": "a281112133eb3ba49394ef91377019ca2068a3fa",
       "path": "/home/djg/rail/output/cfar-choice-2026-09-29/clones/RFIsher"
     },
     "RadioFisher": {

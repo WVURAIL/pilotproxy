@@ -6,7 +6,7 @@
  "generated": "2026-09-25T06:33:55+00:00",
  "producer": {
   "repository": "WVURAIL/RFIsher",
-  "commit": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+  "commit": "a281112133eb3ba49394ef91377019ca2068a3fa",
   "dirty": false,
   "dirty_files": "",
   "module": "rfisher_results.archive.run",
@@ -18,7 +18,7 @@
    "radiofisher": "/home/djg/rail/RadioFisher/radiofisher"
   },
   "policy_sha256": "b36c612ca1a59c0b5e09ced129bca9e15c589fb94a7e2e3648c6ebd815b68cf7",
-  "commit_at_end": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+  "commit_at_end": "a281112133eb3ba49394ef91377019ca2068a3fa",
   "source_changed_during_run": false
  },
  "products_dir": "/home/djg/rail/products/chime_pilots_rebuild_20260829/products/_per_pilot",

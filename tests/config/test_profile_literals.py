@@ -2,7 +2,7 @@
 """Every literal the project profile replaces, and the loader value that reproduces it.
 
 Each row names where the literal sat (``file:line`` at pilot-proxy bdfcdce or
-RFIsher e041d5e), the literal exactly as it was written (so its float arithmetic
+RFIsher 7edf11c), the literal exactly as it was written (so its float arithmetic
 is repeated here), and the profile value that stands in for it. The profile value
 must have the same type and compare exactly equal.
 
@@ -404,10 +404,10 @@ def test_hz_freq_id_helpers_agree_on_every_target():
 
 # Evidence strings of the register that named files since deleted (M6): the file at the last commit that holds it.
 EVIDENCE_REWRITES = {
-    "src/rfisher/residual.py": ["RFIsher src/rfisher/residual.py@e041d5e"],
-    "src/rfisher/thresholds.py": ["RFIsher src/rfisher/thresholds.py@e041d5e"],
-    "src/rfisher/preparation.py": ["RFIsher src/rfisher/preparation.py@e041d5e"],
-    "scripts/fine_operating_point.py": ["RFIsher scripts/fine_operating_point.py@e041d5e"],
+    "src/rfisher/residual.py": ["RFIsher src/rfisher/residual.py@7edf11c"],
+    "src/rfisher/thresholds.py": ["RFIsher src/rfisher/thresholds.py@7edf11c"],
+    "src/rfisher/preparation.py": ["RFIsher src/rfisher/preparation.py@7edf11c"],
+    "scripts/fine_operating_point.py": ["RFIsher scripts/fine_operating_point.py@7edf11c"],
     "docs/architecture.md": ["RFIsher docs/architecture.md"],
     "pilot-proxy/analysis/ppcal/era_view.py": ["pilot-proxy/analysis/ppcal/era_view.py@30e50c2"],
     "pilot-proxy/analysis/ppcal/eras.py": ["pilot-proxy/analysis/ppcal/eras.py@30e50c2"],
@@ -432,7 +432,7 @@ def test_register_evidence_names_no_deleted_file():
 
 
 def test_register_copies_the_detector_entries_value_for_value():
-    golden = json.loads((DATA / "selection_policy_e041d5e_detector_entries.json").read_text())
+    golden = json.loads((DATA / "selection_policy_7edf11c_detector_entries.json").read_text())
     assert golden["snapshot_sha256"] == P.register.source["snapshot_sha256"]
     copied = [d for d in golden["decisions"] if not d["id"].startswith("transfer.")]
     assert len(copied) == 59

@@ -183,7 +183,7 @@
   "era_overrides_sha256": "a988e813fcaca817670aa88b4db59b9e5ad92f130159a46524bc0bb722c95ffd",
   "era_overrides_source": "/home/djg/rail/output/era-audit-2026-09-23/author_eras.json",
   "producer": {
-    "commit": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+    "commit": "a281112133eb3ba49394ef91377019ca2068a3fa",
     "dirty": false,
     "dirty_files": "",
     "module": "rfisher_results.archive.run",
@@ -524,7 +524,7 @@
   },
   "source_states": {
     "RFIsher": {
-      "head": "f72bf342c5bc455b9e4629f8494c7e7cf7c39b75",
+      "head": "a281112133eb3ba49394ef91377019ca2068a3fa",
       "status": ""
     },
     "RadioFisher": {

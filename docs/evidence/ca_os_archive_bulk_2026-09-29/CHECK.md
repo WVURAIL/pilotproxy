@@ -1,6 +1,6 @@
 # Independent check: CA-CFAR against OS-CFAR for the fine decision
 
-29 September 2026. I did not do the analysis. My own code is in `verify/` (logs next to each script). It ran on the analysis venv with `-B`, `PYTHONDONTWRITEBYTECODE=1` and one thread. Nothing was written outside this folder. The three clones are still clean at f72bf34, 12a1616 and bdfcdce, and `selection_ca.diff` matches a freshly computed diff of `selection_ca.py` against the clone.
+29 September 2026. I did not do the analysis. My own code is in `verify/` (logs next to each script). It ran on the analysis venv with `-B`, `PYTHONDONTWRITEBYTECODE=1` and one thread. Nothing was written outside this folder. The three clones are still clean at a281112, 12a1616 and bdfcdce, and `selection_ca.diff` matches a freshly computed diff of `selection_ca.py` against the clone.
 
 ## 1. Part 1 recomputed on channels 21, 35 and 15 (`verify/v_bulk.py`)
 

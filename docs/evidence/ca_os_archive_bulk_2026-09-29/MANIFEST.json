@@ -2,25 +2,25 @@
   "files": {
     "CHECK.md": {
       "bytes": 7589,
-      "copy": "byte for byte",
-      "sha256": "92d716486150875566dec7fe9d6dc0beb1104e4918f48b999878c372e6f89f24",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "78bebcd70b1889604352e4f0d30fb7e9449dc54fb7c306a4aa03cd2e4f2b5f6a",
       "source_path": "/home/djg/rail/output/cfar-choice-2026-09-29/CHECK.md",
       "source_sha256": "92d716486150875566dec7fe9d6dc0beb1104e4918f48b999878c372e6f89f24"
     },
     "INPUTS.json": {
       "bytes": 21280,
-      "sha256": "e16d28c72ea4202ab570c91e3aa23bda4c3b937eaec606eb43dc5a1777ed8102",
+      "sha256": "10d8f883f27c09f90995ae1071f27df7e9bdcb6c238d4658d555f07b909cc1fb",
       "source": "packaging metadata"
     },
     "README.md": {
-      "bytes": 1588,
-      "sha256": "631f8ecf1549ffd56dbb88485c00b3f19b2af00f83331f2ab5a4471961d19e16",
+      "bytes": 1691,
+      "sha256": "4c140f77073cfcf5f8880da9d6c409b25cd221f326a3c0f0cc30dabbbc0b3a3e",
       "source": "packaging metadata"
     },
     "REPORT.md": {
       "bytes": 22575,
-      "copy": "byte for byte",
-      "sha256": "57d69099b9cf0b82b932997c92e786e5d89b1a2f6e08d122c0551b629bd1ddd9",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "ed89b5d4210a2ccd9d225c4472571a7bf11c21e95eb970f789142565621761c9",
       "source_path": "/home/djg/rail/output/cfar-choice-2026-09-29/REPORT.md",
       "source_sha256": "57d69099b9cf0b82b932997c92e786e5d89b1a2f6e08d122c0551b629bd1ddd9"
     },
@@ -33,8 +33,8 @@
     },
     "common.py": {
       "bytes": 4511,
-      "copy": "byte for byte",
-      "sha256": "1c837fc2bcfc5d0ebc35cab0a1667c309586c7940914226f2a304775f0bd8350",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "a9c04b18b5a604219ca0f1c0cc100498596a65f7aab36ea4a8a393d20c0d665a",
       "source_path": "/home/djg/rail/output/cfar-choice-2026-09-29/common.py",
       "source_sha256": "1c837fc2bcfc5d0ebc35cab0a1667c309586c7940914226f2a304775f0bd8350"
     },
@@ -215,8 +215,8 @@
     },
     "inputs/release/analysis-plan.json": {
       "bytes": 58656,
-      "copy": "byte for byte",
-      "sha256": "5a8c1f02cb31b2e4be2c4698460b06a24848ff5b34a44d2af9f83fe7fe53739e",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "fc3152404a977d87441c50c1865ea20d0019bc65d187e4a743b7ff09686b7680",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/analysis-plan.json",
       "source_sha256": "5a8c1f02cb31b2e4be2c4698460b06a24848ff5b34a44d2af9f83fe7fe53739e"
     },
@@ -383,8 +383,8 @@
     },
     "inputs/release/archive/ledger/run.json": {
       "bytes": 7038,
-      "copy": "byte for byte",
-      "sha256": "82dcb6c91e3853702e119ed4e2acaa76603839edbe22bd3aca6710dd28e30a4c",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "7b20e777807db9921b73465e2c5747dfbdeda1fa97fbd0b23e8b9cd963a7e11f",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/run.json",
       "source_sha256": "82dcb6c91e3853702e119ed4e2acaa76603839edbe22bd3aca6710dd28e30a4c"
     },
@@ -397,8 +397,8 @@
     },
     "inputs/release/release-manifest.json": {
       "bytes": 86493,
-      "copy": "byte for byte",
-      "sha256": "7391023da84d780ec83f91a4c6a44b755095b0038048adf96bc37180aba8ffce",
+      "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
+      "sha256": "a32a814f45b7f8f4c3995a9d3e4b450a118b71085344c85c8d5d37fc44e78aae",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/release-manifest.json",
       "source_sha256": "7391023da84d780ec83f91a4c6a44b755095b0038048adf96bc37180aba8ffce"
     },
@@ -443,7 +443,7 @@
       "source_sha256": "28de3c8838d3b2b30f444e022697fca3251134fa1beb2aefebcade0924f642ed"
     }
   },
-  "note": "Copied source and result bytes are unchanged. Large inputs are pinned, not embedded.",
+  "note": "Copied source and result bytes are unchanged, except that RFIsher commit IDs were re-pinned to the rewritten history on 2026-10-24 (same trees). Large inputs are pinned, not embedded.",
   "packaged_on": "2026-10-01",
   "schema": "recorded-study-evidence-v1",
   "study_rerun": false,

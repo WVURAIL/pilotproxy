@@ -1,6 +1,6 @@
 {
   "schema": "pilot_proxy_transmitter_off_v1",
-  "source": "Dates: read from the archive's own pilot series (the release maps SIGN_ON_OFF_THROUGH and SIGN_OFF_FROM, residual.py:125-153 at e041d5e). External records: the N1 search of 2026-09-23 (output/handoff-2026-09-23/evidence/transmitter_off_records.md).",
+  "source": "Dates: read from the archive's own pilot series (the release maps SIGN_ON_OFF_THROUGH and SIGN_OFF_FROM, residual.py:125-153 at 7edf11c). External records: the N1 search of 2026-09-23 (output/handoff-2026-09-23/evidence/transmitter_off_records.md).",
   "months": "YYYY-MM. from null means the start of the record; through null means open-ended.",
   "independently_verified": "True only for a date confirmed by an external record (regulator or broadcaster) whose window contains the archive-dated boundary; external_record gives the class of the best record found (confirmed, consistent, contradicted, not found).",
   "bands": {

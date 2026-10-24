@@ -15,7 +15,7 @@
     "num_coarse_channels": 8192,
     "coarse_channel_center_offset_hz": 0.0,
     "frequency_axis": {
-      "spectral_sense": "normal",
+      "nyquist_zone": 1,
       "order": "ascending_rf"
     }
   },
@@ -87,7 +87,7 @@
         "architecture": "fx_f_engine",
         "coarse_channel_width_hz": 195312.5,
         "output_sample_rate_hz": 195312.5,
-        "spectral_sense": "normal"
+        "nyquist_zone_note": "300-1500 MHz sampled at 3.2 GS/s is Nyquist zone 1"
       },
       "channelizer_frequency_axis": {
         "channel_index_to_rf_hz": "rf_hz = coarse_channel_index * adc_sample_rate_hz / pfb_fft_size",
@@ -111,7 +111,7 @@
       "baseband_frame": {
         "convention": "coarse_channel_center_at_dft_dc",
         "verification_required": true,
-        "note": "Assumed from the kotekan chord branch F-engine convention (channel RF center = coarse_channel_index * 195312.5 Hz at the per-channel DFT DC, first Nyquist zone, upright spectral sense). Verify frame convention, sense, and any per-parity decimation twiddle against CRS F-engine baseband before an operational run."
+        "note": "Assumed from the kotekan chord branch F-engine convention (channel RF center = coarse_channel_index * 195312.5 Hz at the per-channel DFT DC, first Nyquist zone, upright channel spectrum). Verify frame convention, Nyquist zone, and any per-parity decimation twiddle against CRS F-engine baseband before an operational run."
       }
     }
   }

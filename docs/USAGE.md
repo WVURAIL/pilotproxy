@@ -227,7 +227,8 @@ The shipped receiver profiles have different roles and evidential status:
 - `reference_800mhz_pfb.json` is the single-stream detector-coordinate reference
   profile used for shipped reference weights and tests.
 - `chime_dtv_fengine.json` is the target CHIME DTV adapter profile used by the
-  current integration: 2048 feed-polarization streams, inverted spectral sense,
+  current integration: 2048 feed-polarization streams, Nyquist zone 2 (each
+  channel's spectrum mirrored), a 4-tap sinc-Hamming PFB,
   descending RF channel order, and `frame_size_samples=16384`. The 16384-sample
   frame is the target for the CHIME F-engine upgrade rather than a claim about the
   currently deployed frame. The profile is frame-verified
@@ -237,7 +238,7 @@ The shipped receiver profiles have different roles and evidential status:
   CHORD / CHORD-pathfinder adapter profiles for the kotekan (`chord` branch)
   integration. Both share the CHORD channelization: 3.2 GS/s ADC, first
   Nyquist zone, 16384-point PFB, 8192 coarse channels of exactly 195312.5 Hz,
-  upright spectral sense, ascending channel order, channel RF center =
+  upright channel spectrum, ascending channel order, channel RF center =
   `coarse_channel_index * 195312.5 Hz` (the kotekan `freq_id` namespace) --
   and differ only in stream count: 1024 dish-polarization streams (512
   dishes) for full CHORD, 128 (64 dishes) for the pathfinder. The 8192-sample
@@ -262,7 +263,7 @@ We generate the default CHIME DTV weight bank from the receiver and detector
 profiles:
 
 ```bash
-pilot-proxy make-weights   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --physical-channel-range 14:36   --weight-coordinate-system post_spectral_sense_normalization   --output weights/chime_dtv_weights_k128.bin
+pilot-proxy make-weights   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --physical-channel-range 14:36   --weight-coordinate-system post_nyquist_zone_normalization   --output weights/chime_dtv_weights_k128.bin
 ```
 
 By default, the detector looks for:
@@ -314,7 +315,7 @@ For deployment, export the profiles and weights as a compact runtime bundle,
 then validate that bundle:
 
 ```bash
-pilot-proxy export-runtime-weight-bundle   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --weight-coordinate-system post_spectral_sense_normalization   --physical-channel-range 14:36   --output-dir generated/deploy/chime_dtv_k128
+pilot-proxy export-runtime-weight-bundle   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json   --weight-coordinate-system post_nyquist_zone_normalization   --physical-channel-range 14:36   --output-dir generated/deploy/chime_dtv_k128
 
 pilot-proxy validate-runtime-weight-bundle   --bundle-dir generated/deploy/chime_dtv_k128
 ```

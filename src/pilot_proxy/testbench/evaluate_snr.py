@@ -24,7 +24,8 @@ from pilot_proxy.detector_contract import (
 )
 from pilot_proxy.detector_geometry import (  # noqa: E402
     DetectorFrameLayout,
-    apply_spectral_sense_to_detector_matrix,
+    add_nyquist_zone_argument,
+    apply_nyquist_zone_to_detector_matrix,
     build_stream_map,
     flatten_feed_channel_streams,
     stream_time_block_to_detector_matrix,
@@ -456,7 +457,7 @@ def assert_clean_pilot_lands_on_target(
     cpu_float_weights: np.ndarray,
     detector_window_samples: int,
     frame_size_samples: int,
-    spectral_sense: str,
+    nyquist_zone: int,
     minimum_normalized_ratio: float = 8.0,
 ) -> dict[str, Any]:
     """Fail loudly when the detector statistic cannot see the noise-free pilot.
@@ -474,7 +475,7 @@ def assert_clean_pilot_lands_on_target(
         clean_streams,
         frame_size_samples=int(frame_size_samples),
         detector_window_samples=int(detector_window_samples),
-        spectral_sense=str(spectral_sense),
+        nyquist_zone=int(nyquist_zone),
     )
     power_ratio, _ = coarse_power_ratio_cpu_reference(rows, cpu_float_weights)
     target_norm_sq = float(
@@ -503,7 +504,7 @@ def assert_clean_pilot_lands_on_target(
         "normalized_coarse_power_ratio": normalized,
         "target_bin": target_bin,
         "observed_statistic_peak_bin": observed,
-        "spectral_sense": str(spectral_sense),
+        "nyquist_zone": int(nyquist_zone),
     }
     if observed != target_bin or not normalized >= float(minimum_normalized_ratio):
         raise SystemExit(
@@ -514,7 +515,7 @@ def assert_clean_pilot_lands_on_target(
             f"strongest bin is {observed} while the weight layout targets bin "
             f"{target_bin}; both must agree, or a straddling, attenuated line "
             "would be recorded as the on-target pilot. Every detection rate "
-            "below would describe noise. Try the opposite --spectral-sense, "
+            "below would describe noise. Try the other --nyquist-zone parity, "
             "toggle --reference-archive-phase, or check --physical-channel "
             "against the weight bank."
         )
@@ -526,16 +527,16 @@ def _float_streams_for_reference(
     *,
     frame_size_samples: int,
     detector_window_samples: int,
-    spectral_sense: str,
+    nyquist_zone: int,
 ) -> np.ndarray:
     """Convert unquantized streams to detector rows for the CPU float path."""
     matrix = stream_time_block_to_detector_matrix(
         np.asarray(streams)[:, : int(frame_size_samples)],
         detector_window_samples=int(detector_window_samples),
     )
-    return apply_spectral_sense_to_detector_matrix(
+    return apply_nyquist_zone_to_detector_matrix(
         matrix,
-        spectral_sense=spectral_sense,
+        nyquist_zone=nyquist_zone,
     )
 
 
@@ -546,14 +547,14 @@ def _pack_streams_for_kernel(
     detector_window_samples: int,
     bits: int,
     scale: float,
-    spectral_sense: str,
+    nyquist_zone: int,
 ) -> np.ndarray:
     feed_channel_streams = np.asarray(streams)[:, np.newaxis, :]
     packed_input = pack_channelized_streams_for_detector(
         feed_channel_streams,
         frame_size_samples=int(frame_size_samples),
         detector_window_samples=int(detector_window_samples),
-        spectral_sense=spectral_sense,
+        nyquist_zone=nyquist_zone,
         quantization_scale_mode=QUANTIZATION_SCALE_MODE_GLOBAL,
         clip_sigma=DEFAULT_CLIP_SIGMA,
         bits_per_component=int(bits),
@@ -997,7 +998,7 @@ def _evaluate_one_trial(
         streams,
         frame_size_samples=int(args.frame_size_samples),
         detector_window_samples=int(args.detector_window_samples),
-        spectral_sense=str(args.spectral_sense),
+        nyquist_zone=int(args.nyquist_zone),
     )
     cpu_float_power_ratio, cpu_float_powers = coarse_power_ratio_cpu_reference(
         cpu_float_rows,
@@ -1054,7 +1055,7 @@ def _evaluate_one_trial(
         detector_window_samples=int(args.detector_window_samples),
         bits=int(args.bits),
         scale=scale,
-        spectral_sense=str(args.spectral_sense),
+        nyquist_zone=int(args.nyquist_zone),
     )
     cpu_packed_power_ratio, cpu_packed_powers = coarse_power_ratio_cpu_reference_packed(
         packed,
@@ -1740,18 +1741,18 @@ def build_parser(add_help: bool = True) -> argparse.ArgumentParser:
     )
     parser.add_argument("--clip-sigma", type=float, default=DEFAULT_CLIP_SIGMA)
     parser.add_argument("--scale", type=float, default=None)
-    parser.add_argument(
-        "--spectral-sense",
-        choices=["normal", "inverted"],
-        default="normal",
+    add_nyquist_zone_argument(
+        parser,
         help=(
-            "Sense of the channelized stream relative to the deployed weight "
-            "bank. With the reference channelizer's native phase and the "
-            "shipped bank, 'normal' places the clean pilot on the statistic's "
-            "target term (measured on channel 14: clean normalized ratio 121 "
-            "against 1.1 for every other sense/phase combination). The "
-            "startup guard verifies the configured combination against the "
-            "clean waveform and refuses to sweep when the pilot misses."
+            "Nyquist zone of the channelized stream; an even zone "
+            "time-reverses each detector window before the deployed weights. "
+            "The reference channelizer samples its band in zone 1, which with "
+            "its native phase and the shipped bank places the clean pilot on "
+            "the statistic's target term (measured on channel 14: clean "
+            "normalized ratio 121 against 1.1 for every other zone/phase "
+            "combination). The startup guard verifies the configured "
+            "combination against the clean waveform and refuses to sweep "
+            "when the pilot misses."
         ),
     )
     parser.add_argument(
@@ -1958,7 +1959,7 @@ def run(args: argparse.Namespace) -> int:
         cpu_float_weights=cpu_float_weights,
         detector_window_samples=int(args.detector_window_samples),
         frame_size_samples=int(args.frame_size_samples),
-        spectral_sense=str(args.spectral_sense),
+        nyquist_zone=int(args.nyquist_zone),
     )
 
     for frequency_offset_hz in frequency_offset_values:
@@ -2125,7 +2126,7 @@ def run(args: argparse.Namespace) -> int:
         "dtv_pilot_hz": float(args.dtv_pilot_mhz) * HZ_PER_MHZ,
         "rf_center_hz": float(rf_center_hz),
         "reference_archive_phase": bool(args.reference_archive_phase),
-        "spectral_sense": str(args.spectral_sense),
+        "nyquist_zone": int(args.nyquist_zone),
     }
     summary = {
         "schema_version": "pilotproxy_snr_validation_report_v2",

@@ -111,7 +111,7 @@ Packing schema `pilotproxy_capture_packing_v1` specifies `layout: TFPD`,
 `sample_encoding: int4x2_swapped_withoffset`, `voltage_tap: pre_dtv_mask`,
 `pre_detector_transform: none`, `num_times`, `num_dishes`, `num_polarizations`,
 `detector_window_samples`, `windows_per_stream`, `frequency_ids`,
-`sample_rate_hz`, `spectral_sense`, and
+`sample_rate_hz`, `nyquist_zone`, and
 `time_reverse_detector_windows_before_kernel`. Its ordered `frequency_map`
 contains `receiver_channel_id`, `coarse_channel_index`, and `rf_center_hz` for
 each frequency. The tool checks these against the receiver and bound profiles.

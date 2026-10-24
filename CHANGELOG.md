@@ -3,6 +3,29 @@
 All notable changes to PilotProxy are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.0.1, October 23, 2026
+
+- The CHIME receiver profile states its channelizer response as
+  `sinc_hamming`: CHIME's F-engine is a 4-tap, 2048-point PFB with a
+  sinc-Hamming window (Amiri et al. 2024, arXiv:2408.00172). The CHORD
+  profiles keep `implementation_specific`.
+- `channelizer.frequency_axis.nyquist_zone` replaces `spectral_sense`. The
+  channel-internal spectrum is mirrored when the zone is even: CHIME samples
+  400-800 MHz at 800 MS/s in zone 2 (mirrored), CHORD samples in zone 1, and
+  the reference testbench mixes its band down to zone 1. The detector weight
+  coordinate is `post_nyquist_zone_normalization` (input
+  `post_nyquist_zone_normalized`), and `--nyquist-zone` replaces
+  `--spectral-sense` in `evaluate-snr`, `quantize` and the study tools. In
+  Python, `ReceiverProfile.nyquist_zone`, the `nyquist_zone=` keywords and
+  `apply_nyquist_zone_to_detector_matrix` replace the `spectral_sense` forms.
+- Older profiles, weight manifests, runtime bundles, products and command
+  lines that use `spectral_sense` or the `post_spectral_sense_*` names are
+  still read, and a manifest's receiver-profile digest of the old
+  serialization still binds its profile; nothing writes the old names.
+  Runtime bundles keep every key Kotekan reads.
+- The shipped weight manifests are regenerated; both weight banks are
+  byte-identical. No result changes.
+
 ## 3.0.0, October 23, 2026
 
 - Remove the unused `COHERENT_FRACTION*`, `coherent_gain`, and

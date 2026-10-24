@@ -22,14 +22,14 @@ from pilot_proxy.atsc_channels import (
     validate_uhf_physical_channel,
 )
 from pilot_proxy.detector_contract import (
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
     input_coordinate_system_for_weight_coordinate,
     normalize_weight_coordinate_system,
     null_power_ratio_from_weight_norms,
     weight_term_norms_sq,
 )
-from pilot_proxy.detector_geometry import SPECTRAL_SENSE_NORMAL
+from pilot_proxy.detector_geometry import DEFAULT_NYQUIST_ZONE
 from pilot_proxy.detector_reference import quantize_complex_numpy
 from pilot_proxy.detector_weights import (
     CRC32_UNSIGNED_MASK,
@@ -648,7 +648,7 @@ def generate_weight_table_from_receiver_profile(
     profile: ReceiverProfile,
     core: DetectorCoreProfile,
     physical_channels: Sequence[int],
-    weight_coordinate_system: str = WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    weight_coordinate_system: str = WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     pilot_overrides_hz: Mapping[int, float] | None = None,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
     """Return the weight table and manifest target-layout entries."""
@@ -665,14 +665,14 @@ def generate_weight_table_from_receiver_profile(
     )
     coordinate_system = normalize_weight_coordinate_system(weight_coordinate_system)
     use_normal_override = (
-        coordinate_system == WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+        coordinate_system == WEIGHT_COORDINATE_POST_NYQUIST_ZONE
         and not profile.time_reverse_detector_windows_before_kernel
     ) or (
         coordinate_system == WEIGHT_COORDINATE_RAW_INPUT
         and profile.time_reverse_detector_windows_before_kernel
     )
     generation_profile = (
-        replace(profile, spectral_sense=SPECTRAL_SENSE_NORMAL)
+        replace(profile, nyquist_zone=DEFAULT_NYQUIST_ZONE)
         if use_normal_override
         else profile
     )
@@ -771,7 +771,7 @@ def write_weight_bank_from_receiver_profile(
     profile: ReceiverProfile,
     core: DetectorCoreProfile,
     physical_channels: Sequence[int],
-    weight_coordinate_system: str = WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    weight_coordinate_system: str = WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     pilot_overrides_hz: Mapping[int, float] | None = None,
 ) -> dict[str, Any]:
     """Write a packed weight bank plus the adjacent manifest and return manifest."""

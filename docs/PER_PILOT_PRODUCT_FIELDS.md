@@ -39,7 +39,7 @@ of consumed input files.
 | `sample_rate_hz` | scalar | `float64` | Positive acquisition sample rate; finite `unit_delta_time` values must equal its reciprocal |
 | `detector_window_samples` | scalar | `int64` | Receiver-selected CUDA detector window `K` (128 for CHIME; 64 for the current CHORD profiles) |
 | `num_input_streams` | scalar | `int64` | Input feed/polarization streams summed |
-| `sense` | scalar | `int64` | Spectral sense, `+1` or `-1` |
+| `sense` | scalar | `int64` | Nyquist-zone sign: `+1` for an odd (upright) zone, `-1` for an even (mirrored) zone |
 | `source_event_key_schema_version` | scalar | `str` | Required namespaced event-identity contract; legacy basename-only products are rejected |
 
 The schema does not fix `nfft` to one value. The current software profile and

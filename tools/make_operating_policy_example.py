@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from pilot_proxy import operating_policy as op, runtime_calibration as rc
-from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_NYQUIST_ZONE
 from pilot_proxy.runtime_bundle import (
     REQUIRED_RUNTIME_BUNDLE_FILES,
     export_runtime_weight_bundle,
@@ -66,7 +66,7 @@ def make_example(output_dir):
     bundle = out / "bundle"
     export_runtime_weight_bundle(
         receiver_profile_path=receiver_path, detector_core_profile_path=core_path,
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         physical_channels=[14, 29], output_dir=bundle,
     )
     mask = np.zeros(256, dtype=bool)

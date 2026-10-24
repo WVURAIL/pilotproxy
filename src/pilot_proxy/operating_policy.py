@@ -42,7 +42,7 @@ from pilot_proxy.config.project import default_project
 from pilot_proxy.fine_decision import FINE_DECISION_VERSION, MAX_MULTIPLIER_Q16
 from pilot_proxy.integration.receiver_profile import (
     load_receiver_profile,
-    receiver_profile_hash,
+    receiver_profile_hash_matches,
 )
 from pilot_proxy.runtime_bundle import (
     CHANNEL_ID_NAMESPACE_FIELD_ALIASES,
@@ -143,7 +143,7 @@ def _bundle(plan, base, bindings, receiver):
     data = {name: calibration._read(path) for name, path in files.items() if name.endswith(".json")}
     profiles, manifest = data["pilot_profiles.json"], data["weights.manifest.json"]
     _require(profiles["receiver_profile_id"] == receiver.receiver_profile_id
-             and manifest["receiver_profile_hash"] == receiver_profile_hash(receiver),
+             and receiver_profile_hash_matches(receiver, manifest["receiver_profile_hash"]),
              "Bundle receiver profile differs")
     _require(profiles["receiver_channel_id_namespace"] == plan["receiver_channel_id_namespace"],
              "Bundle receiver frequency namespace differs")

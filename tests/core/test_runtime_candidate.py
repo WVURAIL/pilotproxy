@@ -40,7 +40,7 @@ def case(tmp_path):
     receiver = ROOT / "configs/receiver_profiles/chime_dtv_fengine.json"
     core = ROOT / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json"
     export_runtime_weight_bundle(receiver_profile_path=receiver, detector_core_profile_path=core,
-        weight_coordinate_system="post_spectral_sense_normalization", physical_channels=[14, 29], output_dir=bundle)
+        weight_coordinate_system="post_nyquist_zone_normalization", physical_channels=[14, 29], output_dir=bundle)
     profiles = json.loads((bundle / "pilot_profiles.json").read_text())
     profile = next(p for p in profiles["profiles"] if p["physical_channel"] == 29)
     packed = (bundle / "weights.bin").read_bytes()[profile["weight_bank_offset_bytes"]:]
@@ -238,7 +238,7 @@ def add_control(case, tmp_path, *, word=70000):
     bundle = tmp_path / "input_bundle37"
     core = ROOT / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json"
     export_runtime_weight_bundle(receiver_profile_path=case["receiver"], detector_core_profile_path=core,
-        weight_coordinate_system="post_spectral_sense_normalization", physical_channels=[14, 29, 37],
+        weight_coordinate_system="post_nyquist_zone_normalization", physical_channels=[14, 29, 37],
         output_dir=bundle)
     profiles = {p["physical_channel"]: p for p in json.loads((bundle / "pilot_profiles.json").read_text())["profiles"]}
     weights = (bundle / "weights.bin").read_bytes()

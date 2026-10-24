@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz  # noqa: E402
+from pilot_proxy.detector_geometry import add_nyquist_zone_argument  # noqa: E402
 from pilot_proxy.integration import QUANTIZATION_SCALE_MODE_GLOBAL  # noqa: E402
 from pilot_proxy.integration.packing import (  # noqa: E402
     estimate_complex_scale,
@@ -178,11 +179,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=LOCKED_DETECTOR_WINDOW_SAMPLES,
         help="Advanced: select a detector window supported by the current kernel.",
     )
-    parser.add_argument(
-        "--spectral-sense",
-        choices=["normal", "inverted"],
-        default="normal",
-        help="Detector-window spectral-sense correction to apply before packing.",
+    add_nyquist_zone_argument(
+        parser,
+        help=(
+            "Nyquist zone of the channelized stream; an even zone "
+            "time-reverses each detector window before packing."
+        ),
     )
     parser.add_argument(
         "--reference-archive-phase",
@@ -322,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         feed_channel_streams,
         frame_size_samples=int(args.frame_size_samples),
         detector_window_samples=int(args.detector_window_samples),
-        spectral_sense=str(args.spectral_sense),
+        nyquist_zone=int(args.nyquist_zone),
         quantization_scale_mode=QUANTIZATION_SCALE_MODE_GLOBAL,
         clip_sigma=float(args.clip_sigma),
         bits_per_component=int(args.bits),
@@ -370,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         "stream_map": stream_map,
         "input_stream_model": "replicated_single_input_iq",
         "num_blocks": int(args.num_blocks),
-        "spectral_sense": str(args.spectral_sense),
+        "nyquist_zone": int(args.nyquist_zone),
         "reference_archive_phase": bool(args.reference_archive_phase),
         "bits_per_component": int(args.bits),
         "packed_format": (

@@ -14,7 +14,7 @@ product writers.
 
 | Part | Implementation |
 |---|---|
-| instrument | bundled CHIME target geometry: 800 MHz band top, 1024 coarse channels, `nfft=16384`, inverted spectral sense |
+| instrument | bundled CHIME target geometry: 800 MHz band top, 1024 coarse channels, `nfft=16384`, Nyquist zone 2 (mirrored channel spectrum) |
 | source | bundled `local` and `cadc-datatrail` sources |
 | reader | bundled packed CHIME reader for detector runs |
 | analyzer | bundled detector analyzer |
@@ -239,5 +239,7 @@ exactly the accepted shape.
 
 The receiver profile declares both the normalized coarse-channel center and the
 normalized physical data-DC location. It also declares whether the adapter
-reverses detector windows before the post-spectral-sense weight bank. There is
-no implicit center-at-Nyquist or spectral-sense fallback.
+reverses detector windows before the post-Nyquist-zone weight bank, and states
+its Nyquist zone (`channelizer.frequency_axis.nyquist_zone`; an even zone
+mirrors each channel's spectrum). There is no implicit center-at-Nyquist or
+zone fallback.

@@ -13,8 +13,9 @@ from typing import Any, Mapping, Sequence, cast
 
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
 from pilot_proxy.detector_contract import (
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
+    normalize_weight_coordinate_system,
 )
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.dtv_units import (
@@ -616,10 +617,10 @@ def _cmd_check_profile(args: argparse.Namespace) -> None:
     if args.output_json:
         write_json_strict(Path(args.output_json), payload, indent=2, sort_keys=True)
         print(f"Wrote {args.output_json}")
-    print("receiver_profile_id, num_input_streams, frame_size_samples, spectral_sense")
+    print("receiver_profile_id, num_input_streams, frame_size_samples, nyquist_zone")
     print(
         f"{profile.receiver_profile_id}, {int(profile.num_input_streams)}, "
-        f"{int(profile.frame_size_samples)}, {profile.spectral_sense}"
+        f"{int(profile.frame_size_samples)}, {int(profile.nyquist_zone)}"
     )
 
 
@@ -1170,16 +1171,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     make_weights.add_argument(
         "--weight-coordinate-system",
+        type=normalize_weight_coordinate_system,
         choices=[
-            WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             WEIGHT_COORDINATE_RAW_INPUT,
         ],
         required=True,
         help=(
             "Coordinate convention used to generate the weights. Use "
-            "post_spectral_sense_normalization for detector-coordinate weights "
-            "after any spectral-sense normalization, or raw_input_frequency_coordinate "
-            "for native receiver-coordinate weights."
+            "post_nyquist_zone_normalization for detector-coordinate weights "
+            "(input windows of a mirrored, even-zone channel time-reversed "
+            "first), or raw_input_frequency_coordinate for native "
+            "receiver-coordinate weights."
         ),
     )
     make_weights.add_argument(
@@ -1210,8 +1213,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_bundle.add_argument(
         "--weight-coordinate-system",
+        type=normalize_weight_coordinate_system,
         choices=[
-            WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             WEIGHT_COORDINATE_RAW_INPUT,
         ],
         required=True,
@@ -1807,7 +1811,8 @@ def build_parser() -> argparse.ArgumentParser:
     chime_scan.add_argument("--lib-path", type=Path, default=None)
     chime_scan.add_argument(
         "--weight-coordinate-system",
-        choices=[WEIGHT_COORDINATE_POST_SPECTRAL_SENSE, WEIGHT_COORDINATE_RAW_INPUT],
+        type=normalize_weight_coordinate_system,
+        choices=[WEIGHT_COORDINATE_POST_NYQUIST_ZONE, WEIGHT_COORDINATE_RAW_INPUT],
         default=None,
     )
     chime_scan.add_argument(

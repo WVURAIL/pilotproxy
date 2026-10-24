@@ -7,7 +7,7 @@ which the products code at 0.01 dB relative to the frame's own median positive
 fine bin across the coarse channel, and keeps the 501 fine bins centred on
 the nominal marker. The median over the frames of each UTC month gives one
 column; a month with no such frame stays empty. The fine axis is converted to
-sky frequency with the settled inverted sense,
+sky frequency for CHIME's mirrored Nyquist zone 2,
 ``sky = coarse centre - m * f_s/nfft`` for signed fine bin ``m``, so a
 positive fine bin is a lower sky frequency, and the rows are stored in
 ascending sky frequency. The saved eras of the characterization release, with
@@ -131,7 +131,7 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
             codes = np.asarray(z["psd_frame_db_i16"])
         if step != 0.01 or invalid != -32768 or codes.shape != (eligible.size, NFFT):
             raise ValueError(f"PSD coding changed: channel {ch}")
-        # Inverted sense: sky = center - m * FINE_HZ, so the pilot sits at
+        # Mirrored (zone 2): sky = center - m * FINE_HZ, so the pilot sits at
         # m = (center - pilot) / FINE_HZ; FFT order stores bin m at m mod NFFT.
         exact = (center - pilot) / FINE_HZ
         nominal = int(round(exact))
@@ -202,7 +202,7 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
             "statistic": "per-bin median over the month's frames of psd_frame_db_i16 * 0.01; invalid code -32768 excluded",
             "psd_reference": "each frame's own median positive fine bin across the whole coarse channel, feeds summed (pilot_proxy.archive.detector._append_psd_frame)",
             "fine_bin_hz": FINE_HZ, "half_width_bins": HALF,
-            "sky_frequency": "sky = chime_frequency_hz - m * fine_bin_hz for signed fine bin m (inverted sense of 2026-09-21); rows stored in ascending sky offset from pilot_frequency_hz",
+            "sky_frequency": "sky = chime_frequency_hz - m * fine_bin_hz for signed fine bin m (Nyquist zone 2 mirrors each channel); rows stored in ascending sky offset from pilot_frequency_hz",
         },
         "eras_source": {"release_manifest_sha256": RELEASE_SHA256,
                         "tree": str(ERAS),

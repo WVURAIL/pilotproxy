@@ -15,7 +15,7 @@ from pilot_proxy.archive.chime_coarse import chime_freq_id_from_hz  # noqa: E402
 from pilot_proxy.chime import baseband_format as fmt  # noqa: E402
 from pilot_proxy.chime.runner import run_chime_analysis  # noqa: E402
 from pilot_proxy.chime.validate_products import validate_products  # noqa: E402
-from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED  # noqa: E402
+from pilot_proxy.detector_geometry import MIRRORED_NYQUIST_ZONE  # noqa: E402
 from pilot_proxy.integration.receiver_profile import (  # noqa: E402
     default_reference_receiver_profile,
 )
@@ -51,7 +51,7 @@ def test_gpu_chime_run_matches_the_cpu_chain_including_fine_powers(tmp_path):
         )
     profile = dataclasses.replace(
         default_reference_receiver_profile(frame_size_samples=NFFT, num_input_streams=N_FEEDS),
-        spectral_sense=SPECTRAL_SENSE_INVERTED,
+        nyquist_zone=MIRRORED_NYQUIST_ZONE,
         stream_map_required=False,
     )
     profile_path = tmp_path / "receiver_profile.json"

@@ -798,7 +798,7 @@ def _check_invariants(products: Sequence[Mapping[str, Any]],
 
     The combiner takes per-pilot frame arrays and the first product's metadata; it
     must verify the rest of the products were produced with the same geometry/config
-    (nfft, K, spectral sense, schema, sample rate), or stacking would silently fuse
+    (nfft, K, Nyquist-zone sign, schema, sample rate), or stacking would silently fuse
     inconsistent products into one canonical output.
 
     `detector_version` gets token-aware treatment: its `pilot-proxy/<version>`

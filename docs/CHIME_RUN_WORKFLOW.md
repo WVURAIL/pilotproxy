@@ -95,20 +95,21 @@ to be divisible by `K = 128`.
 
 ## Weight Coordinate Convention
 
-The CHIME receiver profile declares inverted spectral sense. The runner reverses
+The CHIME receiver profile declares Nyquist zone 2, which mirrors each coarse
+channel's spectrum. The runner reverses
 each detector window before the CUDA kernel, which places the samples in the
 detector frequency coordinate. It must therefore use weights defined in that
 same coordinate:
 
 ```text
-weight_coordinate_system = post_spectral_sense_normalization
-input_spectral_sense = inverted
+weight_coordinate_system = post_nyquist_zone_normalization
+input_nyquist_zone = 2
 input_requires_time_reversal = true
 ```
 
 Use the shipped detector-coordinate weight bank with this runner. A newly
 generated CHIME bank is acceptable only when its manifest declares
-`post_spectral_sense_normalization` and the matching time-reversal preprocessing.
+`post_nyquist_zone_normalization` and the matching time-reversal preprocessing.
 Otherwise the pilot offset can be reversed twice. The runner records the
 effective convention in `run_config.json` and `stats.json` and rejects a raw
 input-coordinate manifest when time reversal is active.

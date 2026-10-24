@@ -10,7 +10,7 @@ import pytest
 
 from pilot_proxy import cli
 from pilot_proxy import detect as detect_module
-from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_NYQUIST_ZONE
 from pilot_proxy.paths import CONFIGS_DIR, DEFAULT_WEIGHTS_PATH, PACKAGE_ROOT
 
 CUSTOM_GNURADIO_PYTHON = "/custom/gnuradio-python"
@@ -538,7 +538,7 @@ def test_make_weights_from_reference_profile(tmp_path, capsys) -> None:
             "--physical-channel-range",
             CHANNEL_14,
             "--weight-coordinate-system",
-            WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             "--output",
             str(output),
         ]
@@ -563,7 +563,7 @@ def test_make_weights_reports_adaptive_reference_on_stderr(tmp_path, capsys) -> 
             "--physical-channel-range",
             "21",
             "--weight-coordinate-system",
-            WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             "--output",
             str(output),
         ]
@@ -633,7 +633,7 @@ def test_export_runtime_weight_bundle_wrapper(monkeypatch, tmp_path, capsys) -> 
             "--physical-channel-range",
             "14:15",
             "--weight-coordinate-system",
-            WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             "--output-dir",
             str(tmp_path / "bundle"),
         ]
@@ -643,7 +643,7 @@ def test_export_runtime_weight_bundle_wrapper(monkeypatch, tmp_path, capsys) -> 
     assert len(calls) == 1
     assert calls[0]["physical_channels"] == [14, 15]
     assert calls[0]["weight_coordinate_system"] == (
-        WEIGHT_COORDINATE_POST_SPECTRAL_SENSE
+        WEIGHT_COORDINATE_POST_NYQUIST_ZONE
     )
     assert calls[0]["output_dir"] == tmp_path / "bundle"
     out = capsys.readouterr().out

@@ -20,9 +20,11 @@ from pilot_proxy.detector_constants import (
     LOCKED_SAMPLE_BITS_PER_COMPONENT as DEFAULT_BITS_PER_COMPONENT,
 )
 from pilot_proxy.detector_geometry import (
-    SPECTRAL_SENSE_NORMAL,
-    normalize_spectral_sense,
-    spectral_sense_requires_time_reversal,
+    DEFAULT_NYQUIST_ZONE,
+    OLD_FREQUENCY_AXIS_KEY,
+    frequency_axis_nyquist_zone,
+    normalize_nyquist_zone,
+    nyquist_zone_is_mirrored,
 )
 from pilot_proxy.dtv_units import (
     DTV_BANDWIDTH_HZ,
@@ -118,7 +120,9 @@ _CHANNELIZER_FIELDS = frozenset(
         "frequency_axis",
     }
 )
-_FREQUENCY_AXIS_FIELDS = frozenset({"spectral_sense", "order"})
+_FREQUENCY_AXIS_FIELDS = frozenset({"order"})
+# One of the two is required: nyquist_zone, or the old key it replaced.
+_FREQUENCY_AXIS_ZONE_FIELDS = frozenset({"nyquist_zone", OLD_FREQUENCY_AXIS_KEY})
 _FRAMING_FIELDS = frozenset({"frame_size_samples"})
 _INPUT_STREAM_FIELDS = frozenset(
     {
@@ -281,7 +285,7 @@ class ReceiverProfile:
     input_stream_unit: str
     stream_map_required: bool
     combine_default: str
-    spectral_sense: str
+    nyquist_zone: int
     frequency_order: str
     channelizer: ChannelizerProfile
     native_channelized_sample_format: str
@@ -333,8 +337,8 @@ class ReceiverProfile:
             )
         object.__setattr__(
             self,
-            "spectral_sense",
-            normalize_spectral_sense(self.spectral_sense),
+            "nyquist_zone",
+            normalize_nyquist_zone(self.nyquist_zone),
         )
         frequency_order = str(self.frequency_order).strip().lower()
         if frequency_order not in SUPPORTED_FREQUENCY_ORDER:
@@ -520,8 +524,16 @@ class ReceiverProfile:
             channelizer,
             "frequency_axis",
             required=_FREQUENCY_AXIS_FIELDS,
+            optional=_FREQUENCY_AXIS_ZONE_FIELDS,
             context="receiver profile channelizer.frequency_axis",
         )
+        nyquist_zone = frequency_axis_nyquist_zone(
+            frequency_axis, context="channelizer.frequency_axis"
+        )
+        if nyquist_zone is None:
+            raise ValueError(
+                "receiver profile channelizer.frequency_axis requires nyquist_zone."
+            )
         framing = _require_mapping(
             raw,
             "framing",
@@ -599,10 +611,7 @@ class ReceiverProfile:
                 input_streams["combine_default"],
                 "input_streams.combine_default",
             ),
-            spectral_sense=_require_nonempty_str(
-                frequency_axis["spectral_sense"],
-                "channelizer.frequency_axis.spectral_sense",
-            ),
+            nyquist_zone=nyquist_zone,
             frequency_order=_require_nonempty_str(
                 frequency_axis["order"],
                 "channelizer.frequency_axis.order",
@@ -716,7 +725,7 @@ class ReceiverProfile:
                     self.coarse_channel_center_offset_hz
                 ),
                 "frequency_axis": {
-                    "spectral_sense": self.spectral_sense,
+                    "nyquist_zone": int(self.nyquist_zone),
                     "order": self.frequency_order,
                 },
             }
@@ -788,7 +797,7 @@ class ChannelSelection:
     coarse_channel_index: int
     coarse_channel_center_hz: float
     fine_bin_offset_hz: float
-    spectral_sense: str
+    nyquist_zone: int
     requires_time_reversal: bool
 
     def to_dict(self) -> dict[str, Any]:
@@ -797,7 +806,7 @@ class ChannelSelection:
             "coarse_channel_index": int(self.coarse_channel_index),
             "coarse_channel_center_hz": float(self.coarse_channel_center_hz),
             "fine_bin_offset_hz": float(self.fine_bin_offset_hz),
-            "spectral_sense": str(self.spectral_sense),
+            "nyquist_zone": int(self.nyquist_zone),
             "requires_time_reversal": bool(self.requires_time_reversal),
         }
 
@@ -832,7 +841,9 @@ def default_reference_receiver_profile(
         input_stream_unit="input_stream",
         stream_map_required=stream_count > 1,
         combine_default=COMBINE_MODE_COMBINED_STREAMS,
-        spectral_sense=SPECTRAL_SENSE_NORMAL,
+        # The reference testbench mixes the band down by its lower edge before
+        # the real ADC, so the samples occupy the first Nyquist zone.
+        nyquist_zone=DEFAULT_NYQUIST_ZONE,
         frequency_order=FREQUENCY_ORDER_ASCENDING_RF,
         channelizer=ChannelizerProfile(
             type=DEFAULT_CHANNELIZER_TYPE,
@@ -867,18 +878,48 @@ def load_receiver_profile(path: str | Path) -> ReceiverProfile:
     return ReceiverProfile.from_dict(data)
 
 
-def receiver_profile_hash(profile: ReceiverProfile | dict[str, Any]) -> str:
-    """Return the SHA-256 of the canonical strict profile serialization."""
-    canonical = (
-        profile.to_dict()
+def _canonical_profile(profile: ReceiverProfile | dict[str, Any]) -> ReceiverProfile:
+    return (
+        profile
         if isinstance(profile, ReceiverProfile)
-        else ReceiverProfile.from_dict(dict(profile)).to_dict()
+        else ReceiverProfile.from_dict(dict(profile))
     )
+
+
+def _serialization_sha256(canonical: dict[str, Any]) -> str:
     text = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     if len(digest) != PROFILE_HASH_HEX_CHARS:
         raise RuntimeError("unexpected SHA-256 digest length.")
     return digest
+
+
+def receiver_profile_hash(profile: ReceiverProfile | dict[str, Any]) -> str:
+    """Return the SHA-256 of the canonical strict profile serialization."""
+    return _serialization_sha256(_canonical_profile(profile).to_dict())
+
+
+def receiver_profile_hash_matches(
+    profile: ReceiverProfile | dict[str, Any], digest: object
+) -> bool:
+    """Return whether ``digest`` binds this profile.
+
+    Manifests and bundles written before ``nyquist_zone`` replaced
+    ``spectral_sense`` hashed the frequency axis as that key's word; their
+    digest is accepted as well as the current one.
+    """
+    resolved = _canonical_profile(profile)
+    canonical = resolved.to_dict()
+    if str(digest) == _serialization_sha256(canonical):
+        return True
+    axis = canonical["channelizer"]["frequency_axis"]
+    canonical["channelizer"]["frequency_axis"] = {
+        OLD_FREQUENCY_AXIS_KEY: (
+            "inverted" if nyquist_zone_is_mirrored(axis["nyquist_zone"]) else "normal"
+        ),
+        "order": axis["order"],
+    }
+    return str(digest) == _serialization_sha256(canonical)
 
 
 def receiver_frequency_to_channel(
@@ -904,20 +945,15 @@ def receiver_frequency_to_channel(
         )
     center = profile.coarse_channel_center_hz(idx)
     rf_offset = rf - center
-    fine_offset = (
-        -rf_offset
-        if spectral_sense_requires_time_reversal(profile.spectral_sense)
-        else rf_offset
-    )
+    mirrored = nyquist_zone_is_mirrored(profile.nyquist_zone)
+    fine_offset = -rf_offset if mirrored else rf_offset
     return ChannelSelection(
         rf_hz=rf,
         coarse_channel_index=idx,
         coarse_channel_center_hz=center,
         fine_bin_offset_hz=fine_offset,
-        spectral_sense=profile.spectral_sense,
-        requires_time_reversal=spectral_sense_requires_time_reversal(
-            profile.spectral_sense
-        ),
+        nyquist_zone=int(profile.nyquist_zone),
+        requires_time_reversal=mirrored,
     )
 
 
@@ -930,7 +966,7 @@ def validate_weight_manifest_profile_hash(
     if "receiver_profile_hash" not in manifest:
         raise ValueError("weight manifest does not contain receiver_profile_hash.")
     got = str(manifest["receiver_profile_hash"])
-    if got != expected:
+    if not receiver_profile_hash_matches(profile, got):
         raise ValueError(
             "weight manifest receiver profile hash does not match: "
             f"manifest={got}, expected={expected}"
@@ -948,5 +984,6 @@ __all__ = [
     "load_receiver_profile",
     "receiver_frequency_to_channel",
     "receiver_profile_hash",
+    "receiver_profile_hash_matches",
     "validate_weight_manifest_profile_hash",
 ]

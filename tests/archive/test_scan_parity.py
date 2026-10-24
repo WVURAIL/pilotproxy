@@ -27,7 +27,7 @@ pytest.importorskip("h5py")
 from pilot_proxy.chime import baseband_format as fmt
 
 from pilot_proxy.chime.runner import run_chime_analysis
-from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED
+from pilot_proxy.detector_geometry import MIRRORED_NYQUIST_ZONE
 from pilot_proxy.integration.receiver_profile import default_reference_receiver_profile
 from pilot_proxy.archive.scan import run_chime_scan
 from pilot_proxy.archive.chime_coarse import chime_freq_id_from_hz
@@ -83,7 +83,7 @@ def test_chime_scan_matches_runner(tmp_path):
     profile = dataclasses.replace(
         default_reference_receiver_profile(frame_size_samples=NFFT,
                                            num_input_streams=N_FEEDS),
-        spectral_sense=SPECTRAL_SENSE_INVERTED,
+        nyquist_zone=MIRRORED_NYQUIST_ZONE,
         stream_map_required=False,
     )
     profile_path = tmp_path / "receiver_profile.json"

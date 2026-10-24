@@ -889,7 +889,7 @@ class GpuCaptureDetector:
             detector_window_samples=LOCKED_DETECTOR_WINDOW_SAMPLES,
             bits=LOCKED_BITS_PER_COMPONENT,
             scale=scale,
-            spectral_sense="normal",
+            nyquist_zone=1,
         )
         max_int = (1 << (LOCKED_BITS_PER_COMPONENT - 1)) - 1
         scaled = np.asarray(streams) * float(scale)

@@ -30,7 +30,7 @@ from pilot_proxy.archive.detector import PilotProxyDetectorAnalyzer
 from pilot_proxy.archive.scan import run_chime_scan
 from pilot_proxy.detector_contract import (
     NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     build_detector_contract,
 )
 from pilot_proxy.product_contract import (
@@ -54,7 +54,7 @@ def _current_detector_contract_json(*, detector_window_samples=K):
             skipped_guard_bins=1,
             reference_offset_bins=2,
             num_weight_terms=3,
-            weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+            weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
             time_reverse_detector_windows_before_kernel=True,
         ),
         sort_keys=True,

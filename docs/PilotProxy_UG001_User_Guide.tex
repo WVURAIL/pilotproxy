@@ -346,7 +346,7 @@ List physical channels supported by the shipped weight bank:
 \begin{lstlisting}[style=shell]
 pilot-proxy list-channels
 \end{lstlisting}
-The included weights cover physical channels 14 through 36. The frequency helpers accept other UHF channels, but the detector still requires a matching row in the weight manifest. The standalone ascending-frequency reference coordinate places channels 14, 21, and 36 at coarse indices 179, 287, and 517. The shipped post-spectral-sense-normalization CHIME manifest, which \code{list-channels} reports, stores the same targets at 843, 735, and 505. Do not compare an index without naming its coordinate system.
+The included weights cover physical channels 14 through 36. The frequency helpers accept other UHF channels, but the detector still requires a matching row in the weight manifest. The standalone ascending-frequency reference coordinate places channels 14, 21, and 36 at coarse indices 179, 287, and 517. The shipped post-Nyquist-zone-normalization CHIME manifest, which \code{list-channels} reports, stores the same targets at 843, 735, and 505. Do not compare an index without naming its coordinate system.
 
 The default channel is physical channel 14:
 \begin{equation}
@@ -512,7 +512,7 @@ The current \code{detect} command does not apply a user-supplied shelf-SNR thres
 The kernel does not encode telescope metadata. Receiver integrations provide the following JSON records and arrays:
 \begin{itemize}
   \item \code{configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json} describes the locked CUDA kernel contract.
-  \item \code{receiver_profile.json} describes RF band, channelizer geometry, spectral sense, frame size, input streams, quantization defaults, bin ENBW, and pilot-capture efficiency.
+  \item \code{receiver_profile.json} describes RF band, channelizer geometry, Nyquist zone, frame size, input streams, quantization defaults, bin ENBW, and pilot-capture efficiency.
   \item \code{stream_map.json} maps stream indices to feed, polarization, beam, or other receiver-specific identifiers.
   \item \code{check-profile}, \code{check-layout}, \code{make-weights}, and \code{chime-run} consume the applicable profile or stream-map records. The standalone \code{detect} command selects shipped weights from its sidecar or channel flag, while \code{evaluate-snr} uses the fixed testbench geometry.
 \end{itemize}
@@ -545,7 +545,7 @@ pilot-proxy make-weights \
   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
   --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json \
   --physical-channel-range 14:36 \
-  --weight-coordinate-system post_spectral_sense_normalization \
+  --weight-coordinate-system post_nyquist_zone_normalization \
   --output generated/weights/chime_dtv_weights_k128.bin
 \end{lstlisting}
 

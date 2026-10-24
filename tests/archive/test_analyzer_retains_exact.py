@@ -28,7 +28,7 @@ from pilot_proxy.detector_contract import (
     normalized_positive_excess,
     weight_term_norms_sq,
 )
-from pilot_proxy.detector_geometry import SPECTRAL_SENSE_INVERTED
+from pilot_proxy.detector_geometry import MIRRORED_NYQUIST_ZONE
 from pilot_proxy.detector_reference import REFERENCE_WEIGHT_TERMS
 from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 from pilot_proxy.fine_decision import FINE_BINS
@@ -165,7 +165,7 @@ def _run(
         default_reference_receiver_profile(
             frame_size_samples=NFFT, num_input_streams=N_FEEDS
         ),
-        spectral_sense=SPECTRAL_SENSE_INVERTED,
+        nyquist_zone=MIRRORED_NYQUIST_ZONE,
         stream_map_required=False,
     )
     (tmp_path / "receiver_profile.json").write_text(

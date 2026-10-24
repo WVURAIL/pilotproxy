@@ -10,7 +10,7 @@ import numpy as np
 
 from pilot_proxy.detector_geometry import (
     DetectorFrameLayout,
-    apply_spectral_sense_to_detector_matrix,
+    apply_nyquist_zone_to_detector_matrix,
     stream_time_block_to_detector_matrix,
 )
 from pilot_proxy.integration.packing import pack_channelized_streams_for_detector
@@ -139,7 +139,7 @@ def _pack_native_quantized_block(
     *,
     frame_size_samples: int,
     detector_window_samples: int,
-    spectral_sense: str,
+    nyquist_zone: int,
     frames_in_chunk: int,
     sample_encoding: str,
 ) -> np.ndarray:
@@ -152,9 +152,9 @@ def _pack_native_quantized_block(
             streams[:, start:stop],
             detector_window_samples=int(detector_window_samples),
         )
-        matrix = apply_spectral_sense_to_detector_matrix(
+        matrix = apply_nyquist_zone_to_detector_matrix(
             matrix,
-            spectral_sense=spectral_sense,
+            nyquist_zone=nyquist_zone,
         )
         if sample_encoding == CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4:
             packed_frames.append(repack_chime_offset_binary_i4_to_twos_complement(matrix))
@@ -170,7 +170,7 @@ def pack_chime_block_for_detector(
     *,
     frame_size_samples: int,
     detector_window_samples: int,
-    spectral_sense: str,
+    nyquist_zone: int,
     frames_in_chunk: int,
     sample_encoding: str,
     selected_coarse_channel: int,
@@ -211,7 +211,7 @@ def pack_chime_block_for_detector(
             arr,
             frame_size_samples=int(frame_size_samples),
             detector_window_samples=int(detector_window_samples),
-            spectral_sense=spectral_sense,
+            nyquist_zone=nyquist_zone,
             frames_in_chunk=int(frames_in_chunk),
             sample_encoding=sample_encoding,
         )
@@ -243,7 +243,7 @@ def pack_chime_block_for_detector(
         feed_channel_streams=arr,
         frame_size_samples=int(frame_size_samples),
         detector_window_samples=int(detector_window_samples),
-        spectral_sense=spectral_sense,
+        nyquist_zone=nyquist_zone,
         quantization_scale_mode=mode,
         clip_sigma=float(clip_sigma),
         combine_mode=COMBINE_MODE_COMBINED_STREAMS,

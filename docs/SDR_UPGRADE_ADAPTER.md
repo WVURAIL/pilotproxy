@@ -33,7 +33,7 @@ digital reference, at bins `[b, b-2, b+2]` with bin width 3051.7578125 Hz.
 All three centers must lie within the qualified +/-135 kHz passband. Natural
 weights have positive phase and projection uses `x dot conjugate(w)`. The
 configuration refuses translated bands crossing the raw input Nyquist
-boundary. It does not infer or reverse an unknown physical spectral sense.
+boundary. It does not infer or reverse an unknown Nyquist zone.
 
 Samples and weights use symmetric signed integer rails **[-7,7]**, nearest
 rounding with ties to even, and packed two's-complement components: real in

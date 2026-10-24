@@ -469,7 +469,7 @@ The shipped weight bank covers U.S. physical channels 14 through 36. The eCFR as
 36 & 602.000 MHz & 602.309441 MHz & 517 / 505\\ \hline
 \end{longtable}
 
-The first index is the standalone ascending-frequency reference coordinate. The second is the post-spectral-sense-normalization coordinate stored in the shipped CHIME manifest and printed by \code{pilot-proxy list-channels}. The nominal references are two detector bins below and above the target. In the shipped DC-centered bank, physical channel 14 is the only adaptive case: its target lies near a coarse-channel boundary, so the generated layout wraps the lower reference across the circular coarse-channel spectrum while preserving the two-bin offset, and \code{list-channels} prints the corresponding placement \code{NOTE}. No shipped channel collides with, or shifts around, the forbidden coarse-channel DC tone. Detection and validation reports copy the selected manifest row into \field{selected_weight_layout}, so this placement remains visible in each result.
+The first index is the standalone ascending-frequency reference coordinate. The second is the post-Nyquist-zone-normalization coordinate stored in the shipped CHIME manifest and printed by \code{pilot-proxy list-channels}. The nominal references are two detector bins below and above the target. In the shipped DC-centered bank, physical channel 14 is the only adaptive case: its target lies near a coarse-channel boundary, so the generated layout wraps the lower reference across the circular coarse-channel spectrum while preserving the two-bin offset, and \code{list-channels} prints the corresponding placement \code{NOTE}. No shipped channel collides with, or shifts around, the forbidden coarse-channel DC tone. Detection and validation reports copy the selected manifest row into \field{selected_weight_layout}, so this placement remains visible in each result.
 
 \section{Receiver Integration Contract}
 
@@ -478,7 +478,7 @@ The CUDA detector core does not interpret receiver metadata. A receiver adapter 
   \item \code{DetectorCoreProfile}: locked kernel contract, including the
         selected \(K\in\{64,128\}\), \(N=3\), int4 packed input, uint64
         fine and frame powers, and no threshold input.
-  \item \code{ReceiverProfile}: RF band, channelizer geometry, spectral sense, baseband frame convention (\field{baseband_frame.channel_center_normalized}), frame size, input-stream count, quantization defaults, detector-bin ENBW, and pilot-capture efficiency.
+  \item \code{ReceiverProfile}: RF band, channelizer geometry, Nyquist zone, baseband frame convention (\field{baseband_frame.channel_center_normalized}), frame size, input-stream count, quantization defaults, detector-bin ENBW, and pilot-capture efficiency.
   \item \code{stream_map}: stream-index metadata for feed, polarization, beam, or other receiver paths.
   \item \code{check-profile}, \code{check-layout}, \code{make-weights}, and \code{chime-run} consume the applicable profile or stream-map records. The standalone \code{detect} command selects shipped weights from its sidecar or channel flag, while \code{evaluate-snr} uses the fixed testbench geometry.
 \end{itemize}

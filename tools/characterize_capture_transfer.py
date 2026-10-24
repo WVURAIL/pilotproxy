@@ -315,7 +315,7 @@ def reduce_one(args):
             else:
                 packed = pack_chime_block_for_detector(
                     np.ascontiguousarray(block.T)[:, None, :], frame_size_samples=16384,
-                    detector_window_samples=128, spectral_sense='inverted', frames_in_chunk=1,
+                    detector_window_samples=128, nyquist_zone=2, frames_in_chunk=1,
                     sample_encoding=CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
                     selected_coarse_channel=0, physical_channel=ch).packed
                 result = detect_packed_detector_input(packed=packed, weights=weights,

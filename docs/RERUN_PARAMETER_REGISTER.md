@@ -138,7 +138,7 @@ pins, not claims that a scientific choice is optimal.
 | Per-channel target, references, norms, and adaptation | exact rows in the shipped manifest; channel 14 is the sole adaptive wrap case | [`chime_dtv_weights_k128.bin.manifest.json`](../weights/chime_dtv_weights_k128.bin.manifest.json) |
 | Receiver-profile SHA-256 | `bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15` | Checked-in file digest at the run's source revision. The file later gained the CHIME `chime_freq_id` channel-id map and a corrected frequency-axis note (2026-10-13); no field the detector reads changed |
 | Weight-bank SHA-256 | `1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259` | Shipped manifest and checked-in file digest |
-| Weight-manifest SHA-256 | `d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7` | Checked-in file digest |
+| Weight-manifest SHA-256 | `d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7` | Checked-in file digest at the run's source revision. Release 3.0.1 regenerated the manifest from the updated profile (`sinc_hamming` response, `nyquist_zone` 2) with the same weight bank; no field the detector reads changed |
 
 Do not duplicate the 23 per-channel weight rows here. Pin the manifest path and
 digest in the run ledger, then check the resolved first product against it.
@@ -343,7 +343,7 @@ Fill these values after a real receiver capture exists:
 | Quantization clip sigma | `--clip-sigma 3`; leave `--scale` unset so the evaluator estimates it |
 | Channel gain and phase | `--channel-gain-db 0 --channel-phase-deg 0` |
 | Threshold override | Leave `--threshold-data-shelf-snr-db` unset |
-| Spectral sense | normal |
+| Nyquist zone | 1 (`--nyquist-zone 1`) |
 | Reference archive phase | off; pass `--no-reference-archive-phase` |
 | Added frequency offset | 0 Hz |
 | Output directory | fresh path outside the source checkout |

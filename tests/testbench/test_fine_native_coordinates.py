@@ -36,7 +36,7 @@ def test_native_offset_repack_all_bytes_including_negative_eight():
     offset = np.tile(np.arange(256, dtype=np.uint8), 64).reshape(1, 1, 16384)
     packed = pack_chime_block_for_detector(
         offset, frame_size_samples=16384, detector_window_samples=128,
-        spectral_sense="inverted", frames_in_chunk=1,
+        nyquist_zone=2, frames_in_chunk=1,
         sample_encoding=CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
         selected_coarse_channel=843, physical_channel=14,
     ).packed[0]

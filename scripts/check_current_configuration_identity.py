@@ -18,7 +18,7 @@ if str(SRC) not in sys.path:
 from pilot_proxy.detector_contract import (
     ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION,
     DETECTOR_POWER_RATIO_DEFINITION,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     build_detector_contract,
 )
 from pilot_proxy.detector_weights import DetectorWeightBank
@@ -191,7 +191,7 @@ def main() -> int:
         skipped_guard_bins=1,
         reference_offset_bins=2,
         num_weight_terms=3,
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     )
     if public_contract.get("schema_version") != "pilotproxy_detector_contract_v2":
         errors.append("public detector contract is not revision 2")

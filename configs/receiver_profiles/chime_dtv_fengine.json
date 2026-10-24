@@ -11,11 +11,11 @@
     "input_sample_rate_hz": 800000000.0,
     "pfb_fft_size": 2048,
     "taps": 4,
-    "response": "implementation_specific",
+    "response": "sinc_hamming",
     "num_coarse_channels": 1024,
     "coarse_channel_center_offset_hz": 390625.0,
     "frequency_axis": {
-      "spectral_sense": "inverted",
+      "nyquist_zone": 2,
       "order": "descending_rf"
     }
   },
@@ -72,12 +72,13 @@
         "architecture": "fx_f_engine",
         "coarse_channel_width_hz": 390625.0,
         "output_sample_rate_hz": 390625.0,
-        "spectral_sense": "inverted"
+        "nyquist_zone_note": "400-800 MHz sampled at 800 MS/s is Nyquist zone 2, so each coarse channel's spectrum is mirrored",
+        "response_note": "4-tap, 2048-point PFB with a sinc-Hamming window (CHIME holography paper, Amiri et al. 2024, arXiv:2408.00172)"
       },
       "channelizer_frequency_axis": {
         "channel_index_to_rf_hz": "rf_hz = upper_hz - (coarse_channel_index + 1) * coarse_channel_width_hz, with coarse_channel_width_hz = bandwidth_hz / num_coarse_channels = 390625 Hz",
         "verification_required": false,
-        "verified_note": "frame + sense verified against measured pilot ensemble, 2026-07-29"
+        "verified_note": "frame + Nyquist zone verified against measured pilot ensemble, 2026-07-29"
       },
       "framing": {
         "frame_size_unit": "channelized complex samples per input stream",

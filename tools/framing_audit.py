@@ -9,13 +9,13 @@ and the file's actual framing)?
 Method: (1) incoherent full-channel fine spectrum (23.8 Hz bins, all feeds
 summed); (2) exact response curves of the deployed target/reference filters
 in the same raw-baseband frame (padded FFT of the conjugated,
-window-flipped weights, matching the production spectral-sense path);
+window-flipped weights, matching the production Nyquist-zone path);
 (3) line list above 5 sigma (MAD); (4) verdict comparing the strongest line
 against the target lobe center and the nominal ATSC pilot.
 
 Usage:
     python framing_audit.py FILE.h5 [--channel N] [--chunks 4]
-        [--sense inverted] [--repo /path/to/pilot-proxy] [--png out.png]
+        [--nyquist-zone 2] [--repo /path/to/pilot-proxy] [--png out.png]
 
 Exit status: 0 = ALIGNED, 2 = MISMATCH, 3 = no line found (inconclusive).
 """
@@ -42,8 +42,8 @@ def main() -> int:
                     help="ATSC physical channel (default: infer from freq)")
     ap.add_argument("--chunks", type=int, default=4,
                     help="chunks of 16384 samples to average (default 4)")
-    ap.add_argument("--sense", default="inverted",
-                    choices=["inverted", "normal"])
+    ap.add_argument("--nyquist-zone", type=int, default=2,
+                    help="Nyquist zone of the capture (CHIME: 2, mirrored)")
     ap.add_argument("--repo", type=Path, default=Path("."),
                     help="pilot-proxy repo root (default: cwd)")
     ap.add_argument("--png", type=Path, default=None)
@@ -85,7 +85,7 @@ def main() -> int:
         print("no valid weights for this channel in the ROM")
         return 3
     from pilot_proxy.detector_geometry import (
-        apply_spectral_sense_to_detector_matrix,
+        apply_nyquist_zone_to_detector_matrix,
     )
     Wc = unpack_twos_complement_i4_to_complex(wp).astype(np.complex64)
     # empirical response sweep: real tones through the exact production path
@@ -95,8 +95,8 @@ def main() -> int:
 
     def _pipe(nu_p: float) -> np.ndarray:
         tone = np.exp(2j * np.pi * nu_p * n * TS).astype(np.complex64)
-        x = apply_spectral_sense_to_detector_matrix(
-            tone.reshape(1, W, K), spectral_sense=args.sense
+        x = apply_nyquist_zone_to_detector_matrix(
+            tone.reshape(1, W, K), nyquist_zone=args.nyquist_zone
         ).astype(np.complex64)
         z = np.einsum("fwk,mk->mfw", x, np.conj(Wc), optimize=True)
         return (np.abs(z) ** 2).sum(axis=(1, 2))

@@ -8,7 +8,7 @@ from pilot_proxy.detector_reference import coarse_power_ratio_cpu_reference_pack
 from pilot_proxy.detector_geometry import (
     DetectorFrameLayout,
     STREAM_LAYOUT_SCHEMA_TOKEN,
-    apply_spectral_sense_to_detector_matrix,
+    apply_nyquist_zone_to_detector_matrix,
     block_time_stream_to_detector_matrix,
     build_stream_map,
     flatten_feed_channel_streams,
@@ -267,19 +267,19 @@ def test_combined_feed_cpu_reference_equals_manual_power_sum() -> None:
     assert combined_power_ratio == pytest.approx(float(manual_power_ratio))
 
 
-def test_apply_spectral_sense_reverses_detector_window_axis() -> None:
+def test_even_nyquist_zone_reverses_detector_window_axis() -> None:
     matrix = np.arange(
         STACK_STREAMS * STACK_FRAME_SIZE_SAMPLES,
         dtype=np.int8,
     ).reshape(STACK_STREAMS, STACK_FRAME_SIZE_SAMPLES)
 
-    normal = apply_spectral_sense_to_detector_matrix(
+    normal = apply_nyquist_zone_to_detector_matrix(
         matrix,
-        spectral_sense="normal",
+        nyquist_zone=1,
     )
-    inverted = apply_spectral_sense_to_detector_matrix(
+    inverted = apply_nyquist_zone_to_detector_matrix(
         matrix,
-        spectral_sense="inverted",
+        nyquist_zone=2,
     )
 
     assert np.array_equal(normal, matrix)

@@ -20,6 +20,12 @@ import numpy as np
 
 from pilot_proxy.config.instrument import nyquist_sign
 from pilot_proxy.config.project import default_project
+from pilot_proxy.detector_contract import (
+    INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED,
+    OLD_INPUT_COORDINATE_NAMES,
+    OLD_WEIGHT_COORDINATE_NAMES,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
+)
 
 from .reader import (
     FINE_BINS,
@@ -469,10 +475,9 @@ def _product_record(path: Path) -> tuple[ArchiveProductAccounting, dict]:
                 "power_accumulator": "uint64",
                 "power_accumulator_bits": 64,
                 "combine_mode": "all_rows_summed_before_ratio",
-                "weight_coordinate_system": (
-                    "post_spectral_sense_normalization"),
+                "weight_coordinate_system": WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
                 "input_coordinate_system": (
-                    "post_spectral_sense_normalized"),
+                    INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED),
                 "mask_source": "normalized_positive_excess_decision",
                 "valid_rule": "p_ref_sum != 0",
                 "mask_rule": (
@@ -484,9 +489,16 @@ def _product_record(path: Path) -> tuple[ArchiveProductAccounting, dict]:
                 "per_frequency_threshold": False,
                 "threshold_mode": "none",
             }
+            # Products of record carry the coordinate names of their release.
+            stated = dict(detector)
+            for name, rename in (
+                    ("weight_coordinate_system", OLD_WEIGHT_COORDINATE_NAMES),
+                    ("input_coordinate_system", OLD_INPUT_COORDINATE_NAMES)):
+                if isinstance(stated.get(name), str):
+                    stated[name] = rename.get(stated[name], stated[name])
             differences = [
                 name for name, value in required_detector_values.items()
-                if detector.get(name) != value
+                if stated.get(name) != value
             ]
             if differences:
                 raise ArchiveAcceptanceError(

@@ -23,9 +23,14 @@ from pilot_proxy import (
     runtime_bundle,
     runtime_calibration,
 )
+from pilot_proxy.detector_geometry import (
+    OLD_FREQUENCY_AXIS_KEY,
+    frequency_axis_nyquist_zone,
+    nyquist_zone_is_mirrored,
+)
 from pilot_proxy.integration.receiver_profile import (
     load_receiver_profile,
-    receiver_profile_hash,
+    receiver_profile_hash_matches,
 )
 from pilot_proxy.integration.weight_generation import (
     profile_requires_window_time_reversal,
@@ -116,7 +121,17 @@ def _load_contracts(plan, base, bindings):
     _same(geometry.k, receiver.detector_window_samples, "receiver window")
     _same(geometry.block_samples, receiver.frame_size_samples, "receiver detector frame")
     _same(geometry.num_streams, receiver.num_input_streams, "receiver input population")
-    _same(packing.get("spectral_sense"), receiver.spectral_sense, "receiver spectral sense")
+    packing_zone = frequency_axis_nyquist_zone(packing, context="packing contract")
+    if "nyquist_zone" in packing:
+        _same(packing_zone, receiver.nyquist_zone, "receiver Nyquist zone")
+    else:
+        # A contract written with the old key states only the zone parity.
+        _require(
+            packing_zone is not None
+            and nyquist_zone_is_mirrored(packing_zone)
+            == nyquist_zone_is_mirrored(receiver.nyquist_zone),
+            f"receiver Nyquist zone mismatch (packing {OLD_FREQUENCY_AXIS_KEY})",
+        )
     _require(
         _fraction(packing.get("sample_rate_hz"), "sample_rate_hz", True)
         == _fraction(receiver.coarse_channel_width_hz, "receiver sample rate", True),
@@ -184,7 +199,7 @@ def _load_bundle(plan, base, bindings, paths, data, receiver, geometry):
     contract = loaded["detector_contract.json"]
     manifest = loaded["weights.manifest.json"]
     _same(bundle.get("receiver_profile_id"), receiver.receiver_profile_id, "bundle receiver")
-    _same(manifest.get("receiver_profile_hash"), receiver_profile_hash(receiver), "bundle receiver content")
+    _require(receiver_profile_hash_matches(receiver, manifest.get("receiver_profile_hash")), "bundle receiver content mismatch")
     _same(bundle.get("receiver_channel_id_namespace"), "chord_freq_id", "bundle namespace")
     _same(contract.get("detector_window_samples"), geometry.k, "bundle window")
     reverse = bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"]

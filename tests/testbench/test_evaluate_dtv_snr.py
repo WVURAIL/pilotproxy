@@ -727,14 +727,24 @@ def test_defaults_are_the_matched_clean_pilot_configuration() -> None:
     The archive phase convention's half-rate factor displaces the channelized
     pilot by half a coarse channel relative to the shipped weight layouts, so
     with it applied the detector measures noise at every SNR regardless of
-    spectral sense -- with the requested SNR still tracking perfectly, which
-    is why it went unnoticed twice. Measured on channel 14: clean normalized
-    ratio 121 with these defaults against 1.1 for every other combination,
-    and the startup guard now enforces whichever combination is configured.
+    Nyquist zone, with the requested SNR still tracking perfectly. Measured on
+    channel 14: clean normalized ratio 121 with these defaults against 1.1
+    for every other combination, and the startup guard enforces whichever
+    combination is configured.
     """
     args = evaluate_snr.build_parser().parse_args(["--input-iq", "x.cfile"])
-    assert args.spectral_sense == "normal"
+    assert args.nyquist_zone == 1
     assert args.reference_archive_phase is False
+
+
+def test_old_spectral_sense_flag_reads_as_a_nyquist_zone() -> None:
+    parser = evaluate_snr.build_parser()
+    for word, zone in (("normal", 1), ("inverted", 2)):
+        args = parser.parse_args(["--input-iq", "x.cfile", "--spectral-sense", word])
+        assert args.nyquist_zone == zone
+    assert parser.parse_args(
+        ["--input-iq", "x.cfile", "--nyquist-zone", "2"]
+    ).nyquist_zone == 2
 
 
 def _tone_stream(normalized_frequency: float, *, window: int, windows: int):
@@ -775,7 +785,7 @@ def test_clean_pilot_guard_accepts_a_line_the_statistic_sees() -> None:
         cpu_float_weights=weights,
         detector_window_samples=window,
         frame_size_samples=window * windows,
-        spectral_sense="normal",
+        nyquist_zone=1,
     )
     assert report["normalized_coarse_power_ratio"] > 8.0
     assert report["observed_statistic_peak_bin"] == target_bin
@@ -800,7 +810,7 @@ def test_clean_pilot_guard_rejects_a_mirrored_line() -> None:
             cpu_float_weights=weights,
             detector_window_samples=window,
             frame_size_samples=window * windows,
-            spectral_sense="normal",
+            nyquist_zone=1,
         )
 
 
@@ -880,7 +890,7 @@ def test_default_configuration_passes_the_clean_pilot_guard() -> None:
         cpu_float_weights=weights,
         detector_window_samples=window,
         frame_size_samples=frame,
-        spectral_sense=str(args.spectral_sense),
+        nyquist_zone=int(args.nyquist_zone),
     )
     assert report["normalized_coarse_power_ratio"] > 8.0
 
@@ -892,5 +902,5 @@ def test_default_configuration_passes_the_clean_pilot_guard() -> None:
             cpu_float_weights=weights,
             detector_window_samples=window,
             frame_size_samples=frame,
-            spectral_sense=str(args.spectral_sense),
+            nyquist_zone=int(args.nyquist_zone),
         )

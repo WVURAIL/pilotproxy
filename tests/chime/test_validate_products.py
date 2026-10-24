@@ -11,7 +11,7 @@ pytest.importorskip("h5py")
 from pilot_proxy.detector_contract import (
     CHIME_RUN_CONFIG_SCHEMA_TOKEN,
     CHIME_STATS_SCHEMA_TOKEN,
-    WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+    WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     build_detector_contract,
     normalized_positive_excess_policy,
 )
@@ -150,7 +150,7 @@ def _write_products(
         skipped_guard_bins=1,
         reference_offset_bins=2,
         num_weight_terms=3,
-        weight_coordinate_system=WEIGHT_COORDINATE_POST_SPECTRAL_SENSE,
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         time_reverse_detector_windows_before_kernel=True,
     )
     run_config: dict[str, object] = {

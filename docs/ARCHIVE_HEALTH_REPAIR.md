@@ -137,7 +137,7 @@ The archived fine-F arrays are retained, but the run's stored designated set
 was fine bin 0. That historical ancillary field is not reused as evidence. A
 pilot need not lie at envelope bin 0: the geometry-predicted centre is the
 residual between its RF frequency and the nearest coarse detector grid point,
-after applying the recorded spectral sense.
+after applying the recorded Nyquist-zone sign (`sense`).
 
 The repair deliberately publishes two different objects rather than calling
 one broad window a final designation:

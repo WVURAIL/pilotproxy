@@ -1,21 +1,14 @@
 # Power-era proposals
 
-> Superseded. The era list of record comes from `characterize era-boundaries --line-identity`
-> (`projects/chime_atsc/eras/line_identity_2026-10-17/`; see START_HERE.md, step 3). This page
-> documents the 2026-10-04 procedure, kept for the record.
-
 `python -m pilot_proxy.characterization.power_eras` proposes changes in a
-channel's dominant **relative spectral feature**. It is the era procedure of
-the threshold release of 2026-10-04, whose current-era spans it supplies:
-channel 20 from 2024-07, channel 27 from 2022-11 and channel 34 from 2022-09,
-the other channels unchanged. The section 8.1 rule
-(`src/pilot_proxy/characterization/eras.py`) and the author-dated list of
-2026-09-23 (`projects/chime_atsc/eras/author_eras_2026-09-23.json`) are the
-earlier era rule; they are what the archive releases of 2026-09 used
-(`releases.md`). The procedure does not set accepted boundaries, detector
-calibration, or science tolerance. All real channel displays were inspected
-before this design; none is held out. The defaults are practical choices, not
-a calibrated false-alarm guarantee.
+channel's dominant **relative spectral feature**. The era list the paper uses
+comes from `characterize era-boundaries --line-identity`
+(`projects/chime_atsc/eras/line_identity_2026-10-17/`; see START_HERE.md, step 2),
+not from this tool. The tool's proposals are recorded in
+`projects/chime_atsc/eras/power_eras_2026-10-04.json`. It does not set accepted
+boundaries, detector calibration, or science tolerance. All real channel
+displays were inspected before this design; none is held out. The defaults are
+practical choices, not a calibrated false-alarm guarantee.
 
 ## Input and command
 
@@ -120,7 +113,7 @@ It does not create a boundary. Raw monthly records are always retained.
 The module produces candidate clusters, not an accepted or complete working
 partition. A consumer may construct a separately labeled provisional partition
 from unambiguous candidates after explicitly resolving overlap and timing;
-it must preserve these diagnostics and the accepted historical record.
+it must preserve these diagnostics and the accepted era list.
 
 One-, two-, and three-month pulses fail the lasting-regime tests in the
 synthetic suite. Four-month episodes and seasonal changes can still produce

@@ -14,14 +14,13 @@ stage 2:
 4. form the fine-bin statistic ``F2[b] = 2 S_t[b] / (S_l[b] + S_u[b])``.
 
 The deployed transform is the frozen fixed-point ``fxfft256``
-(:func:`pilot_proxy.fxfft.fine_power_fx`), and since kernel core 3.0.0 the
-frame powers are defined from it: ``P[n] = sum_b S[n, b]`` over the exact
+(:func:`pilot_proxy.fxfft.fine_power_fx`), and the frame powers are defined
+from it: ``P[n] = sum_b S[n, b]`` over the exact
 uint64 fine powers (:func:`frame_powers_from_fine_u64`, the reference for
 ``PilotProxy_Compute_FinePowers_U64`` summed over bins and for the fused entry's
 ``d_power_out``). The rounded transform does not conserve energy exactly, so
-``P[n]`` is not ``pad * windows * sum_m |z[n, m]|^2``; the row-domain
-marginal identity of detector contract revision 1 is retired, and nothing
-compares the two.
+``P[n]`` is not ``pad * windows * sum_m |z[n, m]|^2``, and nothing compares
+the two.
 
 :func:`fine_reduce` is the float prototype (``numpy.fft``/``cupy.fft``). It is
 not the deployed statistic. Its float Parseval identity

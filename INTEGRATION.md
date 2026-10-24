@@ -43,8 +43,8 @@ the frame size and stream layout against the data product used for each run.
 Clone this repository and install its archive workflow:
 
 ```bash
-git clone https://github.com/WVURAIL/pilotproxy.git ~/pilot-proxy
-cd ~/pilot-proxy
+git clone https://github.com/WVURAIL/pilotproxy.git
+cd pilotproxy
 python -m pip install -r requirements/archive.txt
 python -m pip install -e ".[archive,test]"
 ```
@@ -202,7 +202,7 @@ completed inventories and products stay readable, not a runtime dependency.
 
 The offline archive suite checks array layout, orchestration, resume behavior,
 product combination, selection, metadata inference, and parity against the
-earlier PilotProxy runner. It does not replace these operational gates:
+single-process `chime-run` runner. It does not replace these operational gates:
 
 - CUDA detector execution on a GPU node;
 - authenticated streaming through `cadc-datatrail`;

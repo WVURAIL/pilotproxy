@@ -1,9 +1,9 @@
 # Same-frame capture characterization
 
 `tools/characterize_capture_transfer.py` freezes and runs a descriptive comparison
-on the four September16–17,2026 simultaneous captures. The first two epochs fit
-the model; the last two are held out from that fit. These captures were previously
-characterized, so this is not a blinded or previously unseen validation sample.
+on the four September 16–17, 2026 simultaneous captures. The first two epochs fit
+the model; the last two are held out from that fit. The captures were examined
+before this study, so they are not a blinded validation sample.
 
 The protocol is written before any new measured products. It binds the candidate
 profiles, original weight bank, shared library, input serial maps, native metadata,
@@ -12,7 +12,7 @@ outputs and saves an input/output receipt. A file-level operation can be resumed
 after interruption without restarting completed files.
 
 ```sh
-export PYTHONPATH=/home/djg/rail/pilotproxy/src
+export PYTHONPATH=/path/to/pilotproxy/src
 python tools/characterize_capture_transfer.py freeze \
   --datasets /path/to/datasets --bundle /path/to/review-only/bundle \
   --weight-bank /path/to/original/ch14-to-37.bin \
@@ -25,7 +25,7 @@ python tools/characterize_capture_transfer.py summarize \
 
 Run `reduce-one` for each protocol channel and epoch, including CH37, before
 summarizing. The eight finite channel words are copied from the candidate without
-retuning. Channels17/35 are separate permanently rejected diagnostics; their
+retuning. Channels 17/35 are separate permanently rejected diagnostics; their
 unmasked measurements are descriptive and their operational retained set is empty.
 CH37 has no policy word and is kept as an unmasked control. None of these operations
 activates the review-only candidate or constructs a production configuration.
@@ -33,14 +33,13 @@ activates the review-only candidate or constructs a production configuration.
 ## Measured quantities
 
 The raw high/low nibbles are decoded as real/imaginary offset-binary components,
-then ordered by input ID. Each exact saved FPGA origin defines one16384-sample
-frame. The detector applies its inverted-spectrum convention in128-sample windows.
-The per-input frame powers (each input's all-bin sum of its own fixed-point
-fine powers, the kernel core 3.0.0 definition) must reproduce the global frame
-powers exactly;
+then ordered by input ID. Each exact saved FPGA origin defines one 16384-sample
+frame. The detector applies its Nyquist-zone convention (zone 2, mirrored) in
+128-sample windows. The per-input frame powers (each input's all-bin sum of its
+own fixed-point fine powers) must reproduce the global frame powers exactly;
 the raw per-input autos must reproduce the saved pilot-cell autos exactly. Input
 serial maps must match across native pilot/control/payload captures. The fine
-decision uses all2048 inputs and the exact frozen channel word.
+decision uses all 2048 inputs and the exact frozen channel word.
 
 The signed pilot coordinate is
 `x = SHELF * (P_target / (P_lower + P_upper) * ref_norm / target_norm - 1)`.
@@ -49,8 +48,8 @@ ratios and an equal-input mean of ratios are distinct quantities. Zero reference
 power is missing, never zero. No negative estimate is clipped.
 
 For each input, the response starts with the mean raw auto power over the common
-native-backed nonpilot cells, divided by the same-frame CH37 fid491 auto. Divide
-this ratio by its training weighted mean and subtract1. Fit an intercept and slope
+native-backed nonpilot cells, divided by the same-frame CH37 fid 491 auto. Divide
+this ratio by its training weighted mean and subtract 1. Fit an intercept and slope
 against the signed per-input pilot coordinate, using only training rows. Every
 original epoch has equal total weight and every original frame within it has equal
 weight. Masking preserves those original weights. Live inputs are fixed using only
@@ -69,12 +68,12 @@ are reported as unavailable.
 ## Temporal scope
 
 Signed complex raw cross moments and within-capture demeaned covariance are saved
-at lags0–8, up to335.54ms. Only exact FPGA-spaced pairs with both endpoints retained
+at lags 0–8, up to 335.54 ms. Only exact FPGA-spaced pairs with both endpoints retained
 contribute. Pairs remain within captures and use actual FPGA separation; missing
 frames are not compressed into adjacent times. The representative payload
 cell is chosen by frequency proximity to the channel midpoint, before measuring
 power. Its saved raw redundant east-west co-polarized classes (1,0), (2,0), and (3,0), with separate within-cylinder baselines of at least
-40m are normalized by16384 times the same-frame representative-cell mean auto
+40 m are normalized by 16384 times the same-frame representative-cell mean auto
 power over the fixed training inputs. The raw moment is the uncentered moment of
 this normalized visibility. No gain is applied after stacking. The signed off-diagonal coherent cross
 moment is retained without square root or positive clipping.
@@ -85,7 +84,7 @@ descriptive moments and predictions, with no confidence interval. The existing
 eight-acquisition support floor is recorded only to explain the unavailable block
 uncertainty summary; reaching that count would not resolve physical identifiability.
 The short finite records do not determine a long-timescale coherence gain or the
-PaperII forecast's effective integration factor.
+Paper II forecast's effective integration factor.
 
 The analyzed frames are capture-aligned. They must not be joined by row index to
 the separate global-origin Kotekan replay or used to qualify pair-expanded
@@ -95,20 +94,16 @@ Raw files and large products remain external. Receipts hash selected raw frame
 bytes, the used saved arrays, and exact products; they do not claim a whole-HDF5
 byte hash when only selected frames were read.
 
-The October16 execution has explicit source-only amendments for per-frame
-checkpoints, verified per-epoch and per-payload-cell summary caches, and stricter input-byte identity checks. The original protocol and
-completed products are preserved. To resume that historical execution, use the
-executed source at commit `fbc548d2e1cf79cc3ef89739a79b4c65b32ce103` and pass
+The completed study ran at commit `fbc548d2e1cf79cc3ef89739a79b4c65b32ce103` with
+the source amendment `source_amendment_v3.json` (per-frame checkpoints, verified
+per-epoch and per-payload-cell summary caches, and stricter input-byte identity
+checks). To resume or replay it, use that source and pass
 `--source-amendment /path/to/source_amendment_v3.json` to `reduce-one` or
-`summarize`. A new execution freezes the current source normally. Frame
-checkpoints bind the exact selected raw bytes, FPGA origin, protocol, and executing
-source hash; a mismatched checkpoint is refused. All executed source versions are
-retained with the private evidence. These changes do not alter the numerical
-analysis or shorten its declared capture population.
+`summarize`. A new execution freezes the current source. Its executed sources and
+product hashes are kept with the private evidence.
 
-The per-epoch caches retain the verified observations and receipts needed by the fit. The final evidence retains these caches, but omits duplicate per-cell and per-frame checkpoints. Source revisions are explicit, and cache reuse requires an approved source hash plus unchanged protocol and payload digest.
-
-After the study, frame checkpoints gained a digest of every numerical array and
-identity field. New runs refuse altered payloads and legacy checkpoints without
-that digest. The completed study retains its exact executed sources and product
-hashes; this later guard does not change or requalify its numerical results.
+Frame checkpoints bind the selected raw bytes, FPGA origin, protocol, executing
+source hash, and a digest of every numerical array and identity field; a
+mismatched checkpoint or one without that digest is refused. The per-epoch caches
+keep the verified observations and receipts the fit needs. Cache reuse requires an
+approved source hash and an unchanged protocol and payload digest.

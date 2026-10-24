@@ -15,7 +15,7 @@ means TX-disabled accepted RX with before/after register evidence. No TX
 stream or payload is started. The existing LMS_Init internal gain calibration
 and LPF tuning still precede the accepted interval.
 
-Processing uses the previously fixed 100 kHz digital mixer, target bin 0,
+Processing uses the fixed 100 kHz digital mixer, target bin 0,
 sample scale 500 and single-input 16,384-sample upgrade output geometry.
 These are digital choices; they do not calibrate RF frequency response, absolute
 power or a telescope array. Every ratio status and clipping count is retained.
@@ -66,7 +66,7 @@ CPU service and observed backlog are descriptive. The queue bound is an
 implementation limit, not a calibrated deadline. The native helper has its
 existing finite deadlines; the wrapper has a 40-second host budget per attempt.
 The CPU consumer and its publication reader share one pinned logical CPU;
-the previously qualified native worker keeps the invoking affinity and its
+the qualified native worker keeps the invoking affinity and its
 existing I/O threads. Numerical library thread requests are one. This does
 not imply zero interference with other host work.
 
@@ -93,7 +93,7 @@ Set `PYTHONPATH=src` and `OPENBLAS_NUM_THREADS=OMP_NUM_THREADS=MKL_NUM_THREADS=N
 
 ```
 python tools/run_sdr_live_handoff.py prepare NEW_OUTPUT --kind smoke \
-  --build-manifest $HOME/rail/results/sdr_reference_transport_2026-09-09/build-v1/build.json \
+  --build-manifest /path/to/sdr_reference_transport_2026-09-09/build-v1/build.json \
   --serial 0x1d423d9108f273
 python tools/run_sdr_live_handoff.py run NEW_OUTPUT \
   --hardware-authorized --rf-confined-authorized

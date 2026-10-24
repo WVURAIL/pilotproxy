@@ -16,19 +16,18 @@ frozen evidence directories.
 | Receiver/SDR integration | `prepare_sdr_protocol.py`, `validate_sdr_upgrade_adapter.py`, `validate_sdr_upgrade_streaming.py`; [streaming guide](../docs/SDR_UPGRADE_STREAMING.md) |
 | Bench signal generation and audit | `generate_settled_atsc.py`, `audit_settled_waveform.py`, `generate_gnuradio_reference.py` |
 | Documentation and distributable maintenance | `generate_doc_specs.py`, `make_code_only_cut.py` |
-| Historical capture-ratio derivation | `archive/derive_stack_amplitude_ratio.py` |
+| Stack-to-proxy amplitude ratio of the frozen records | `archive/derive_stack_amplitude_ratio.py` |
 
 The confidence-band and mask-frontier drivers are validation studies, not the
-production retained-power estimator. In particular, `mask_residual_frontier.py`
-retains a superseded per-frame-floor comparison discussed in the detector
-supplement; current retained power is the signed mean in
-`characterization/threshold_rule.py`. Their tests and recorded outputs explain
-why those alternatives were not adopted, so they are kept.
+production retained-power estimator. `mask_residual_frontier.py` includes a
+per-frame-floor comparison, discussed in the detector supplement, that the
+method does not use; retained power is the signed mean in
+`characterization/threshold_rule.py`.
 
-## Historical driver migration
+## Stack amplitude ratio
 
-`derive_coherent_fraction.py` moved to
-`archive/derive_stack_amplitude_ratio.py`. Its archived inputs and `c.json`
-output retain their original fields. It reproduces an older duty scenario and
-must not be used to select today's thresholds. The measured ratio is not an
-intrinsic coherent fraction; see [terminology](../docs/TERMINOLOGY.md).
+`archive/derive_stack_amplitude_ratio.py` (`tools/derive_coherent_fraction.py`
+in 1.0.0) derives the stack-to-proxy amplitude ratio from the frozen inputs, and
+its `c.json` output keeps their field names. It reproduces the operating-duty
+scenario of those records and does not select thresholds. The measured ratio is
+not an intrinsic coherent fraction; see [terminology](../docs/TERMINOLOGY.md).

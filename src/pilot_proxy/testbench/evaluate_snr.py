@@ -617,12 +617,12 @@ def _cpu_reference_measurements(
     """CPU exact-integer sibling of ``_kernel_measurements``.
 
     Uses the exact CPU reference (``coarse_power_ratio_cpu_reference_packed``:
-    rows -> fxfft256 -> all-bin sums, the kernel core 3.0.0 frame powers) for the
+    rows -> fxfft256 -> all-bin sums, the kernel's frame powers) for the
     power sums and Python-integer arithmetic for the rational-half threshold
     decision, so the fields are the kernel's semantics without a GPU. The
     kernel <-> reference equivalence itself is CI-gated by the kernel parity
     suite; a small same-seed GPU spot check ties a CPU-produced sweep to the
-    deployed kernel (see docs/PUBLICATION_VALIDATION.md@30e50c2, item 2).
+    deployed kernel.
     """
     _power_ratio, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, int(bits))
     return _measurements_from_exact_powers(

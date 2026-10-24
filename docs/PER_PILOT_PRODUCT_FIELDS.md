@@ -14,9 +14,8 @@ source_event_key_schema_version = "pilotproxy_namespaced_source_event_key_v1"
 
 Schema v6 keeps every v5 field name. What changed is the value of the frame
 powers: `p_target_u64`, `p_ref_lower_u64` and `p_ref_upper_u64` are the exact
-all-bin sums of `fine_power_u64` (kernel core 3.0.0), and the derived columns
-follow from them. The v5 products of record store the retired row-domain
-powers in the same fields; readers recompute those columns from the stored
+all-bin sums of `fine_power_u64`, and the derived columns follow from them.
+The v5 products of record store row-domain powers in the same fields; readers recompute those columns from the stored
 fine powers (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
 
 The `pilot-proxy-detector` analyzer writes one product for one selected receiver
@@ -40,7 +39,7 @@ of consumed input files.
 | `detector_window_samples` | scalar | `int64` | Receiver-selected CUDA detector window `K` (128 for CHIME; 64 for the current CHORD profiles) |
 | `num_input_streams` | scalar | `int64` | Input feed/polarization streams summed |
 | `sense` | scalar | `int64` | Nyquist-zone sign: `+1` for an odd (upright) zone, `-1` for an even (mirrored) zone |
-| `source_event_key_schema_version` | scalar | `str` | Required namespaced event-identity contract; legacy basename-only products are rejected |
+| `source_event_key_schema_version` | scalar | `str` | Required namespaced event-identity contract; basename-only products are rejected |
 
 The schema does not fix `nfft` to one value. The current software profile and
 tests use 16,384 samples, which is associated with the planned CHIME engine
@@ -83,7 +82,7 @@ integrated spectrum receives the frame.
 ADC/F-engine saturation is recorded per frame because it **cannot be recovered
 afterwards**: the product stores no raw samples (5.8 MB against 8.0 GB for one
 pre-flight channel). `baseband_power_linear == 128` only catches a frame that is
-railed everywhere, so partial saturation was previously invisible. The counts
+railed everywhere, so partial saturation needs these counts. The counts
 cover real and imaginary parts separately and are written for invalid frames too,
 since clipping is a property of the samples rather than of the detection. The
 `0x00` byte is the archive's documented missing-data fill signature (the same
@@ -92,11 +91,9 @@ into `fill_sample_count` rather than recorded as clipping; without the split, a
 frame partially overlapping absent baseband would be permanently misrecorded as
 saturated. Measured
 on real CHIME baseband (freq_id 506): median 795 of 67,108,864 components
-(0.0012%), with the worst frame at 18,948 (0.028%) -- a 24x frame-to-frame spread
-that nothing in the product previously exposed.
+(0.0012%), with the worst frame at 18,948 (0.028%), a 24x frame-to-frame spread.
 
-`null_power_ratio` was stored through schema v2 and is **no longer written**: it
-is exactly `2*target_norm_sq/reference_norm_sum_sq` from two fields above, so
+`null_power_ratio` is **not written**: it is exactly `2*target_norm_sq/reference_norm_sum_sq` from two fields above, so
 storing it added a value that could disagree with its own inputs. The formulas
 below that name it are still correct; compute it rather than reading it.
 

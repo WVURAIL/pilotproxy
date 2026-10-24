@@ -1,12 +1,16 @@
 # Validation gates for the archive run
 
-These are the mandatory gates for the approved historical estimation and
+These are the mandatory gates for the approved archive estimation and
 sufficient-statistic reprocessing run, on either qualified path: the local WSL
 host or a CANFAR GPU session. The coarse positive-excess flag is
 retained as a bootstrap diagnostic; the fine rank/eta decision is inactive and
 no calibrated detection policy is applied.
 
-Note (2026-10-18): kernel core 3.0.0 superseded this frame-power definition (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
+The run of record passed these gates with its preserved detector core 2.3.0
+library (digests in [`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md)) and wrote
+schema-v5 products. The current code binds detector core 4 and writes schema v6
+(see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)); the blocks below check that
+build.
 
 Gate evidence must match one clean source revision, its package-source digest,
 and the exact detector library that will run: the preserved SM89 artifact on
@@ -20,20 +24,15 @@ the actual values belong in the run ledger for the launched path.
 
 ## Ground truth already closed
 
-The 2026-07-29 frame correction and 23-channel parity census established the
-active CHIME frame convention and DC-centered weight bank. The active receiver
-profile and weight manifest resolve that convention. The historical half-band
-bank left the repository; it is
-`weights/legacy_halfband/chime_dtv_weights_k128.bin@b52032c` and was never an
-operational input.
-
-The original supporting gates remain:
+The frame correction and 23-channel parity census established the CHIME frame
+convention and the DC-centered weight bank, which the shipped receiver profile
+and weight manifest encode. The supporting gates are:
 
 1. `tools/framing_audit.py` reports `VERDICT: ALIGNED` for event 68399317,
    `freq_id` 844 when run with four chunks.
 2. The production-geometry NumPy replica recovers the known signal with a mean
-   coarse excess above 1200 percent, while the historical bank remains near the
-   null.
+   coarse excess above 1200 percent, while a bank built for the half-band frame
+   convention stays near the null.
 3. The parity census covers all 23 selected channels. An additional odd-channel
    framing audit is optional.
 4. The shipped CHIME bank selects `K = 128`, one skipped guard cell, and a
@@ -73,20 +72,20 @@ real-file gates exercise that exact artifact. The later build and kernel-test
 commands exercise a disposable SM89 build from the same frozen CUDA source.
 
 ```bash
-KERNEL_LIB=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so
-KERNEL_MANIFEST=$HOME/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.manifest.json
+: "${KERNEL_LIB:?path of the preserved core 4 SM89 library}"
+: "${KERNEL_SHA256:?sha256 of that library}"
+: "${KERNEL_MANIFEST:?path of its preservation manifest}"
+: "${KERNEL_MANIFEST_SHA256:?sha256 of that manifest}"
 printf '%s  %s\n' \
-  f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2 \
-  "$KERNEL_LIB" \
-  d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0 \
-  "$KERNEL_MANIFEST" | sha256sum --check --strict
+  "$KERNEL_SHA256" "$KERNEL_LIB" \
+  "$KERNEL_MANIFEST_SHA256" "$KERNEL_MANIFEST" | sha256sum --check --strict
 
 PYTHONPATH=src python - "$KERNEL_LIB" <<'PY'
 import sys
 from pilot_proxy.kernel import PilotProxyKernel
 
 kernel = PilotProxyKernel(sys.argv[1])
-assert kernel.version.as_string() == "2.3.0"
+assert kernel.version.major == 4
 assert kernel.supports_fine_powers()
 assert kernel.supports_fused_fine()
 print("kernel", kernel.version.as_string(), kernel.get_fine_specs())
@@ -99,7 +98,7 @@ PYTHONPATH=src python -m pytest tests/kernel -q
 Pass criteria:
 
 - the preserved byte digest matches;
-- the library reports core 2.3.0 and the required exact fine capabilities;
+- the library reports detector core 4 and the required exact fine capabilities;
 - the disposable SM89 CUDA reference and fixed-point parity tests exit zero;
 - the kernel test directory has zero failures and zero skips against that
   disposable build; and
@@ -117,7 +116,7 @@ make -C cuda clean && make -C cuda SM="$SM"
 # nvcc is not byte-reproducible: this build IS the artifact. Preserve it
 # outside the checkout, gate that file, and record its digest in the ledger.
 KERNEL_SHA=$(sha256sum cuda/libpilotproxy.so | cut -d' ' -f1)
-KERNEL_LIB="$HOME/pp_run/kernel/libpilotproxy-2.3.0-sm${SM}-${KERNEL_SHA:0:12}.so"
+KERNEL_LIB="$HOME/pp_run/kernel/libpilotproxy-sm${SM}-${KERNEL_SHA:0:12}.so"
 mkdir -p "$(dirname "$KERNEL_LIB")" && cp cuda/libpilotproxy.so "$KERNEL_LIB"
 echo "record in the ledger: $KERNEL_LIB  $KERNEL_SHA"
 
@@ -126,7 +125,7 @@ import sys
 from pilot_proxy.kernel import PilotProxyKernel
 
 kernel = PilotProxyKernel(sys.argv[1])
-assert kernel.version.as_string() == "2.3.0"
+assert kernel.version.major == 4
 assert kernel.supports_fine_powers()
 assert kernel.supports_fused_fine()
 print("kernel", kernel.version.as_string(), kernel.get_fine_specs())
@@ -139,7 +138,7 @@ PYTHONPATH=src python -m pytest tests/kernel -q
 Pass criteria:
 
 - the build used the frozen CUDA source and the default detector configuration;
-- the library reports core 2.3.0 and the required exact fine capabilities;
+- the library reports detector core 4 and the required exact fine capabilities;
 - the SM90 CUDA reference and fixed-point parity tests exit zero;
 - the kernel test directory has zero failures and zero skips against that
   build;
@@ -215,6 +214,6 @@ The approved CANFAR command uses, per shard:
   checkout.
 
 The full synthetic detection frontier, residual-contamination calibration,
-eta selection at the fixed median rank and final detection policy are later work. They are not
-prelaunch gates because this run preserves the sufficient statistics needed to
+eta selection at the fixed median rank and final detection policy are separate
+from this run. They are not prelaunch gates because this run preserves the sufficient statistics needed to
 perform them without reacquiring the archive.

@@ -73,7 +73,7 @@ CHORD_FINE_BIN_WIDTH = CHORD_COARSE_WIDTH / CHORD_DETECTOR_WINDOW
 
 ATSC_PHYSICAL_CHANNELS = list(range(14, 37))
 
-# Independently derived (documented in docs/archive/kotekan_interface_design.md):
+# Independently derived:
 # chord_freq_id = round(pilot_hz / 195312.5) for ATSC physical channels 14-36.
 EXPECTED_CHORD_CHANNEL_IDS = [
     2408, 2439, 2469, 2500, 2531, 2562, 2592, 2623, 2654, 2684, 2715,

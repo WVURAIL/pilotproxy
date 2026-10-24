@@ -1,5 +1,5 @@
 """Transient transport failures are retried, and no exception's own
-formatting can end a run (docs/POST_RUN_DEFERRED.md@30e50c2 items 17 and 18)."""
+formatting can end a run."""
 from __future__ import annotations
 
 import http.client

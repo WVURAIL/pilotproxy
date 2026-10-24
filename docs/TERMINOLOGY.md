@@ -1,7 +1,7 @@
 # Statistical names and compatibility fields
 
-These names describe the current paper calculations. Symbols are local to the
-equations below; legacy serialized names are explicitly identified.
+These names describe the paper calculations. Symbols are local to the
+equations below; serialized names that differ are identified.
 
 | Quantity | Definition | Current implementation |
 |---|---|---|
@@ -32,12 +32,12 @@ Call the measured quantities **power ratios** and the detection quantity the
 **rank-based fine score**. Ideal F models in validation are conditional models,
 not production false-alarm calibrations.
 
-## Native interface migration
+## Native names before core 4
 
-Package 2 introduced the native rename; package 3 removes the remaining
-misleading Python aliases. Core 4.0.0 uses these descriptive names:
+Detector core 4 and package 2.0.0 renamed the native interface. Consumers
+built against an earlier core, such as a Kotekan vendor pin, map as follows:
 
-| Previous interface | Current interface |
+| Before core 4 | Core 4 |
 |---|---|
 | `FStatKernel` | `PilotProxyKernel` |
 | `FStat_*`, `FStatHandle` | `PilotProxy_*`, `PilotProxyHandle` |
@@ -48,24 +48,22 @@ misleading Python aliases. Core 4.0.0 uses these descriptive names:
 | `fstat_ref_*` | `pilotproxy_ref_*` |
 
 Rebuild with `make build-kernel`, update imports and native consumers, and
-refresh kotekan's vendor pin. Old library symbols and Python class names
-are not aliases. The wrapper rejects another core major. Integer arithmetic,
-weights, frame-power schema v6 and threshold comparison are unchanged.
-The `FSTATWGT1` magic bytes still identify the existing weight-file format;
-changing a label does not require rewriting these binary data or their hashes.
-Historical evidence retains the filenames and versions actually used.
+refresh the vendor pin. The earlier names are not aliases, and the wrapper
+rejects another core major. Integer arithmetic, weights, frame-power schema v6
+and the threshold comparison are the same in both. The `FSTATWGT1` magic bytes
+identify the weight-file format, so the binary banks and their hashes are
+unchanged. Frozen evidence keeps the filenames and versions it was made with.
 
-New injection-recovery reports use `power_ratio` in schema v2, and new
-result summaries use `power_ratio_histogram_png` in schema v2. Dated reports
-are unchanged; read their declared schema before consuming those fields.
-Clean-IQ metadata uses `pilotproxy_atsc_clean_iq_v1` in place of the former
-`fstat_atsc_clean_iq_v1` token.
+Injection-recovery reports use `power_ratio` (schema v2), and result summaries
+use `power_ratio_histogram_png` (schema v2). Read a report's declared schema
+before consuming those fields. Clean-IQ metadata uses
+`pilotproxy_atsc_clean_iq_v1`; frozen records may carry `fstat_atsc_clean_iq_v1`.
 
 ## Averaging and coherence
 
 The frame proxy keeps negative excesses. Only the retained **mean** is floored
-at zero; flooring individual frames was a development method and is not the
-paper's estimator. `x_hi = x + 2 se` is a working upper end, not a certified
+at zero; the estimator never floors individual frames. `x_hi = x + 2 se` is a
+working upper end, not a certified
 simultaneous confidence bound.
 
 `gamma` includes spatial phase cancellation in calibrated redundant stacking
@@ -75,7 +73,7 @@ bound. Its family minimum does not qualify a cross-day threshold.
 
 ## Names retained by existing files and callers
 
-| Legacy name | Meaning / current name |
+| Name in files and callers | Meaning or replacement |
 |---|---|
 | `coherent_fraction.json`, `coherent_fraction*` keys | Stack-to-proxy amplitude ratio `gamma` |
 | Removed `COHERENT_FRACTION*` Python imports | Use `STACK_AMPLITUDE_RATIO*` |
@@ -88,13 +86,12 @@ bound. Its family minimum does not qualify a cross-day threshold.
 | `fine_score_z63` | Rank-63 fine score for the declared export geometry |
 | Cache knee rule v1 | Authentication of the saved cache; current decisions use v2 |
 
-Schema-v5 archives are supported through their stored fine spectra; their old
-row-domain powers are not the current frame powers. Other frozen records retain
-their original schemas and meanings. Current readers accept only documented
-versions, not arbitrary old layouts. See [PRODUCT_SCHEMA.md](PRODUCT_SCHEMA.md).
+Schema-v5 archives are read through their stored fine spectra; their stored
+row-domain powers are not the frame powers. Other frozen records keep their
+schemas and meanings. Readers accept only the documented versions; see
+[PRODUCT_SCHEMA.md](PRODUCT_SCHEMA.md).
 
 RFIsher names its fitted damping **variance** `s_NL`; `sigma_nl` denotes the
 physical damping length. Its `_Pres` row stores a residual bias projection
-and must be removed before inverting the fitted Fisher block. Frozen older
-matrices labeled the variance derivative `sigma_NL`; those records retain
-their recorded schema.
+and must be removed before inverting the fitted Fisher block. Frozen matrices
+that label the variance derivative `sigma_NL` keep their recorded schema.

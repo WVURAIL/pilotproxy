@@ -10,9 +10,13 @@ the actual launch values belong in the run ledger for the launched path. Neither
 venue guide can override this chain. Rows below marked local or CANFAR are
 venue-specific; every unmarked row applies identically to both paths.
 
-Note (2026-10-18): kernel core 3.0.0 superseded this frame-power definition (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)).
+The implementation pins below are those of the archive run of record, which
+wrote the schema-v5 products with detector core 2.3.0. The current code writes
+schema v6 with detector core 4 (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md));
+a new run records its own schema, library, profile and manifest pins in its
+ledger.
 
-The run is historical estimation and sufficient-statistic reprocessing. The
+The run is archive estimation and sufficient-statistic reprocessing. The
 coarse positive-excess flag is retained as a bootstrap diagnostic; the fine
 rank/eta decision is inactive and no calibrated detection policy is applied.
 The checked-in profiles, weight manifest, and product contract remain
@@ -41,7 +45,7 @@ justification label.
 | PFB taps | 4 | Locked | fixed by instrument | Receiver profile |
 | Coarse channels | 1024 | Locked | fixed by instrument | Receiver profile |
 | Coarse-channel width and output rate | 390625 Hz | Locked | fixed by instrument | Receiver profile |
-| Frequency-axis order and sense | descending RF, inverted | Locked | fixed by instrument | Verified receiver profile |
+| Frequency-axis order and Nyquist zone | descending RF, zone 2 (mirrored) | Locked | fixed by instrument | Verified receiver profile |
 | Baseband channel center | DFT DC | Locked | fixed by instrument | Verified receiver profile |
 | Archive-adapter detector-window reversal | on | Locked | fixed by instrument | Verified archive frame convention |
 | Input streams | 2048 feed-polarization streams | Locked | fixed by instrument | Archive format |
@@ -106,7 +110,7 @@ Sources: the CHIME profile above,
 
 ## Implementation and product pins
 
-These values reproduce the current method. They are implementation or provenance
+These values reproduce the archive run of record. They are implementation or provenance
 pins, not claims that a scientific choice is optimal.
 
 | Pin | Required value or rule | Authority |
@@ -136,9 +140,9 @@ pins, not claims that a scientific choice is optimal.
 | Spectrum encoding | 0.01 dB per code about the per-frame reference; invalid code -32768 | [`product_contract.py`](../src/pilot_proxy/product_contract.py) |
 | Rail and fill diagnostics | separate per-frame counts; total components `2 * nfft * streams` | [`product_contract.py`](../src/pilot_proxy/product_contract.py) |
 | Per-channel target, references, norms, and adaptation | exact rows in the shipped manifest; channel 14 is the sole adaptive wrap case | [`chime_dtv_weights_k128.bin.manifest.json`](../weights/chime_dtv_weights_k128.bin.manifest.json) |
-| Receiver-profile SHA-256 | `bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15` | Checked-in file digest at the run's source revision. The file later gained the CHIME `chime_freq_id` channel-id map and a corrected frequency-axis note (2026-10-13); no field the detector reads changed |
+| Receiver-profile SHA-256 | `bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15` | Checked-in file digest at the run's source revision; later revisions of the file change no field the detector reads |
 | Weight-bank SHA-256 | `1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259` | Shipped manifest and checked-in file digest |
-| Weight-manifest SHA-256 | `d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7` | Checked-in file digest at the run's source revision. Release 3.0.1 regenerated the manifest from the updated profile (`sinc_hamming` response, `nyquist_zone` 2) with the same weight bank; no field the detector reads changed |
+| Weight-manifest SHA-256 | `d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7` | Checked-in file digest at the run's source revision; the shipped manifest is regenerated from the current profile (`sinc_hamming` response, `nyquist_zone` 2) with the same weight bank, and no field the detector reads changed |
 
 Do not duplicate the 23 per-channel weight rows here. Pin the manifest path and
 digest in the run ledger, then check the resolved first product against it.
@@ -152,11 +156,11 @@ digest in the run ledger, then check the resolved first product against it.
 | Reader | `chime-baseband-packed` | Locked |
 | Analyzer | `pilot-proxy-detector` | Locked |
 | Pilot selection | 506, 521, 537, 552, 568, 583, 598, 614, 629, 644, 660, 675, 690, 706, 721, 736, 752, 767, 783, 798, 813, 829, 844 | Locked |
-| Frozen inventory path and SHA-256 | `~/rail/archive_inputs/chime-pilots-v5/inventory.jsonl`; `b2cfef752a6f2cf88317141a974161439299668a37a5464d710b3800b9a872d8` | Prepared; verify before launch |
+| Frozen inventory path and SHA-256 | `$WORK/archive_inputs/chime-pilots-v5/inventory.jsonl`; `b2cfef752a6f2cf88317141a974161439299668a37a5464d710b3800b9a872d8` | Prepared; verify before launch |
 | Source inventory accounting | 170,377 units and 9,214 events | Verified against the source survey and supplemental resolution |
 | Frozen inventory accounting | 165,682 usable units and 8,983 events; 4,695 exclusions | Approved and generated |
 | Exclusion ledger SHA-256 | `d0ab78db9dec847fb5270fb94e3fc45efd6bbbc71adc376830fb71467693079a` | Locked |
-| Pending-event resolution | 3 events, 69 selected objects absent, no errors or sub-floor objects | Verified by authenticated metadata checks on 2026-08-25 |
+| Pending-event resolution | 3 events, 69 selected objects absent, no errors or sub-floor objects | Verified by authenticated metadata checks |
 | Pending-event resolution SHA-256 | `077915779d234ad9cca1e9b52171e28025a60474f20fad7aff5684f55ce0c4c7` | Locked |
 | Inventory manifest SHA-256 | `5695e1cc9c007cb2c79ad39535cf9ed2fb20848ad00d3cf0215933670d0707e5` | Locked |
 | Resolved `nfft` | 16384 | Must pass pre-flight |
@@ -182,14 +186,14 @@ digest in the run ledger, then check the resolved first product against it.
 | Receiver profile path and SHA-256 | Checked-in CHIME profile and locked digest above | Verify at launch |
 | Weight bank and manifest SHA-256 | Checked-in bank, manifest, and locked digests above | Verify at launch |
 | Detector core version | 2.3.0 | Locked; identical in both paths |
-| Detector library (local) | `~/rail/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so`; SM89; `f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2` | Preserved digest; repeat final-source gates after the source change |
+| Detector library (local) | `$WORK/kernels/pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so`; SM89; `f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2` | Preserved digest; repeat final-source gates after the source change |
 | Detector library (CANFAR) | SM90 artifact built once on the session node from the same frozen CUDA source, then preserved outside the checkout; its SHA-256 is recorded in the run ledger, not pinned here | The preserved SM89 artifact cannot run on this device. `nvcc` is not byte-reproducible, so a rebuild yields a different digest and is a new artifact: preserve the built file, gate that exact file, record its digest, and reuse it for every resume |
 | Terminal product | all 23 per-pilot v5 products; channel subsets are derived only | Locked |
 
 The 23 pilot identifiers are the ATSC 14--36 pilot locations mapped onto the
 verified CHIME grid. No production file or chunk cap is allowed.
 
-Kernel core 2.3.0 is selected for the fresh re-run in both paths. On the local
+The run used kernel core 2.3.0 in both paths. On the local
 path, use the preserved SM89 artifact named above. On the CANFAR path, build the
 SM90 artifact on the session node from the same frozen CUDA source, because the
 preserved SM89 artifact cannot run on that device. In either case complete the
@@ -198,20 +202,19 @@ the exact artifact that will run, record its digest before launch, and use that
 recorded digest for every restart. Rebuilding within an approved run changes the
 pinned byte identity and requires a new approval; a CANFAR rebuild in a later
 session requires re-running the SM90 gates and recording the new digest in the
-run ledger before the run continues. The preserved 2.1.0 binary remains
-historical cohort evidence and is not the production selection.
+run ledger before the run continues.
 
 Source: [`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md).
 
 ## Approved launch decisions
 
 - The frozen inventory excludes the exact 4,695 known-unusable source units.
-  The original inventory and historical quarantine remain unchanged beside it.
+  The full inventory and its quarantine are kept unchanged beside it.
 - Three pending survey events were resolved by authenticated metadata checks.
   All 69 selected objects were absent, so no inventory rows were added.
 - All 23 per-pilot v5 products are the authoritative terminal deliverable.
   Any common-event channel subset is derived after the scan.
-- The historical reprocessing is unblinded. A future frozen epoch is reserved
+- The archive reprocessing is unblinded. A future frozen epoch is reserved
   for blinded validation.
 - Combined rail and fill fields do not block launch because combined products
   are not terminal products.
@@ -267,7 +270,7 @@ identifiers, literature and sensitivity values of each entry are in the
 detector register; the science side's entries and refusal behavior are in
 RFIsher's `docs/decision-register.md`.
 
-The local calibration suite below is a historical report. Its keep/excise
+The local calibration suite below is a report. Its keep/excise
 labels and fallback threshold are never operational exports. Threshold input
 uses the `--thresholds` option or `PP_THRESHOLD_TABLE` environment variable;
 the default table is `<calibration>/tables/thresholds.csv`.
@@ -279,32 +282,32 @@ prepared threshold family.
 
 | Decision | Current value | State | Basis |
 |---|---:|---|---|
-| Report multiplier ladder | 1.0, 1.1, 1.2, 1.4, 2.0, 5.0 | Historical | Sparse display and comparison grid |
-| Null scale probes | lower-half p32, p5, and p0.3 with normal deviates 1, 1.96, and 2.9677 | Historical | Robust report diagnostic inherited from the released residual calculation |
+| Report multiplier ladder | 1.0, 1.1, 1.2, 1.4, 2.0, 5.0 | Report only | Sparse display and comparison grid |
+| Null scale probes | lower-half p32, p5, and p0.3 with normal deviates 1, 1.96, and 2.9677 | Report only | Robust report diagnostic inherited from the released residual calculation |
 | Null-centre agreement | 0.20 dB | Provisional | Archive-specific diagnostic band |
 | Lower-tail support | 20 frames | Provisional | Minimal report guard, not a precision calculation |
-| Detection-floor marker | one-sided Gaussian probability 0.001 | Historical | Produces the derived normal deviate 3.090232 |
-| Kept-tail summary | p99 | Historical | Report diagnostic only |
-| Excision label | 50% masked | Historical | Replaced by continuous masking cost in threshold selection |
-| Light-masking label | 10% masked | Historical | Report label only |
+| Detection-floor marker | one-sided Gaussian probability 0.001 | Report only | Produces the derived normal deviate 3.090232 |
+| Kept-tail summary | p99 | Report only | Report diagnostic only |
+| Excision label | 50% masked | Report only | Threshold selection uses the continuous masking cost instead |
+| Light-masking label | 10% masked | Report only | Report label only |
 | Carrier-dominated split | 3 dB | Provisional | Lies in the archive's empty 1.0--5.3 dB population gap |
-| Missing-threshold fallback | eta = 1.4 | Historical | Reproduces report rows and cannot support an operational disposition |
+| Missing-threshold fallback | eta = 1.4 | Report only | Reproduces report rows and cannot support an operational disposition |
 | Threshold-bracket identification | ratio below 1.10 | Provisional | Ten-percent materiality choice |
-| Era upper-level summary | p90 | Historical | Report summary only |
-| Wide-spectrum centre exclusion | 60 Hz half-width | Historical | Labels the channel-centre instrumental feature rather than a transmitter |
-| Wide-spectrum pilot search | 5 kHz half-width | Historical | Report refinement window around the synthesized pilot |
-| Wide-spectrum peak census | at least 3 dB, at least 3 kHz separation, at most 8 peaks | Historical | Sparse report census rather than a detection policy |
-| Fine-spectrum upper summary | p90 | Historical | Shows intermittent power beside the median trace |
-| Fine-line census | at least 1.5 dB level and prominence, at least 48 Hz separation, at most 6 lines | Historical | Four padded-bin separation avoids counting correlated neighbours twice |
+| Era upper-level summary | p90 | Report only | Report summary only |
+| Wide-spectrum centre exclusion | 60 Hz half-width | Report only | Labels the channel-centre instrumental feature rather than a transmitter |
+| Wide-spectrum pilot search | 5 kHz half-width | Report only | Report refinement window around the synthesized pilot |
+| Wide-spectrum peak census | at least 3 dB, at least 3 kHz separation, at most 8 peaks | Report only | Sparse report census rather than a detection policy |
+| Fine-spectrum upper summary | p90 | Report only | Shows intermittent power beside the median trace |
+| Fine-line census | at least 1.5 dB level and prominence, at least 48 Hz separation, at most 6 lines | Report only | Four padded-bin separation avoids counting correlated neighbours twice |
 
 ## Operational setup before archive launch
 
-| Item | Current state | Required action |
+| Item | Check | Required action |
 |---|---|---|
-| Archive certificate | Present locally, owner-only, expires 2026-09-03 | Renew before launch; at least 72 hours before each expiry, stop after a checkpoint, renew, and resume with the identical command |
-| Local archive environment and client | Environment prepared for the prior source revision | Refresh it and rerun the full suite on the final source; never record secrets in the ledger |
-| Real-data GPU capacity | Prior source passed below the 13,900 MiB limit | Repeat on the final source and require receiver-state fields for every unit |
-| Production-profile resume | Prior source passed with eight unique units, 22 unique frames, and empty staging | Repeat on the final source and require receiver-state fields through resume |
+| Archive certificate | Present locally, owner-only; record its expiry | Renew before launch; at least 72 hours before each expiry, stop after a checkpoint, renew, and resume with the identical command |
+| Local archive environment and client | Prepared for the frozen source revision | Refresh it and rerun the full suite on the final source; never record secrets in the ledger |
+| Real-data GPU capacity | Peak below the 13,900 MiB limit | Repeat on the final source and require receiver-state fields for every unit |
+| Production-profile resume | Resumes to the same unique units and frames, with empty staging | Repeat on the final source and require receiver-state fields through resume |
 
 Do not promote the recorded testbench rank to deployed runtime data. An exported
 pending bundle leaves anchor, zero-based `cfar_rank`, and multiplier unset while
@@ -313,8 +316,7 @@ calibration is pending.
 ## Separate radio transfer study
 
 This study is not an archive-launch gate. It validates estimator transfer
-through the radio path and remains separate from the historical archive
-acquisition.
+through the radio path and is separate from the archive acquisition.
 
 Fill these values after a real receiver capture exists:
 
@@ -367,8 +369,6 @@ explicitly.
 ## Run ledger
 
 Before launch, create a run ledger beside the output and record the items below.
-The September 2026 template is preserved at
-`docs/LOCAL_ARCHIVE_RUN_LEDGER_TEMPLATE.md@30e50c2` for reproducing that run.
 
 - UTC start time and operator;
 - complete command as executed;

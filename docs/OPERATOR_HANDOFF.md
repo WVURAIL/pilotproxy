@@ -2,10 +2,8 @@
 
 This procedure ends at the masked 10-second visibility product. It covers a receiver-specific commissioning threshold; it does not certify BAO safety or select the science-optimal threshold.
 
-The Kotekan implementation merged into `develop` in pull request 1677 on
-October 22, 2026 (merge `6b923e51`). Its commits
-`c81def5518` and `ab37937a` are earlier revisions of that one pull request, not
-separate submissions. The pull request exports `dtv_mask`,
+The Kotekan implementation is in `develop` from pull request 1677 (merge
+`6b923e51`). The pull request exports `dtv_mask`,
 `dtv_powers` and the optional `dtv_fine_support` rank-validity rows, and its
 `DtvRfiMask` stage combines invalid rank support and the permanent-mask
 (reject-all) limit with the detector mask. Use the
@@ -94,7 +92,7 @@ These keys are verified in Kotekan `config/fengine/chord.j2` and `config/fengine
 
 Before acquisition, the site owners must freeze the acceptance limits and responsible reviewer in the release manifest. Begin with recorded masks and `dtv_apply_mask: false`. This mode gives n2k no dependency on the detector outputs, but the detector still holds voltage-ring frames while processing. A slow detector can back-pressure the voltage producer and delay n2k; record-only operation does not guarantee independent progress. Keep the binary, bundle, input population, and configuration fixed during the segment. Record frame/timestamp coverage, packet loss, GPU cadence and headroom, binding state, mask fractions, and synchronized sampled voltage/mask/power products. Recompute sampled decisions from the saved voltages with the exact bundle and require exact mask and coarse-power agreement. Confirm pilot location, reference occupancy, and the held-out operating bound under the stated conditions.
 
-The pull request exports `dtv_mask` (int8, frequency), `dtv_powers` (uint64, frequency × 3 frame powers; since kernel core 3.0.0 the all-bin sums of the stage's fine powers, so a stage vendoring an older core must be re-vendored before its powers match a current replay) and, when `dtv_fine_support_name` is set, `dtv_fine_support` (int32, frequency × 2), recording `(rank_valid, n_bulk)` for every evaluated frame: `(-1, -1)` means unevaluated, `(0, n_bulk)` invalid rank support, and `(1, n_bulk)` valid rank support. It does **not** export full-rate fine scores; sampled-voltage replay can recover them only for sampled frames. An invalid bulk produces mask zero, so a zero mask alone is not proof that the frame passed a valid fine test; read it with the support rows. Logs and packet-loss monitoring are necessary but do not replace that validity check.
+The pull request exports `dtv_mask` (int8, frequency), `dtv_powers` (uint64, frequency × 3 frame powers: the all-bin sums of the stage's fine powers; a stage vendoring a core before 3.0.0 must be re-vendored before its powers match a replay) and, when `dtv_fine_support_name` is set, `dtv_fine_support` (int32, frequency × 2), recording `(rank_valid, n_bulk)` for every evaluated frame: `(-1, -1)` means unevaluated, `(0, n_bulk)` invalid rank support, and `(1, n_bulk)` valid rank support. It does **not** export full-rate fine scores; sampled-voltage replay can recover them only for sampled frames. An invalid bulk produces mask zero, so a zero mask alone is not proof that the frame passed a valid fine test; read it with the support rows. Logs and packet-loss monitoring are necessary but do not replace that validity check.
 
 `DtvRfiMask` folds the detector mask into the aligned RFImask frame. With `fine_support_buf` configured it clears every time bit of a frequency with invalid rank support; `permanent_mask_freq_ids` (the reject-all limit) clears a frequency independently of the detector score, and `require_fine_freq_ids` names the frequencies that must carry an evaluated fine decision. Both correlation and valid-sample counts must consume its output (`dtv_apply_mask: true` in `dtv_chord.j2`). Rank support alone does not establish input health, packet completeness, or physical calibration. The [complete synthetic policy rehearsal](CHANNEL_OPERATING_POLICY.md#complete-synthetic-rehearsal) exercises the portable handoff without approving a live configuration.
 
@@ -121,9 +119,3 @@ Provide synchronized native voltage samples and detector outputs for CH14–36 p
 Ship a small human-readable manifest next to the bundle containing: release ID/date and owners; source/binary/vendor/bundle hashes; receiver profile and input population; rendered configuration and startup bindings; threshold criterion and calibration domain; source-data hashes and split definitions; per-channel thresholds, sample counts, confidence results, and limitations; test/replay/soak/10-second acceptance evidence; logging/data locations; and the verified site restart/rollback procedure. Keep commissioning qualification and conditional BAO results in separate fields. Store an example successful run and a failed or invalid-frame example so the next operator knows what each looks like.
 
 Implementation references: this repository’s `src/pilot_proxy/runtime_bundle.py` and `src/pilot_proxy/fine_decision.py`; Kotekan’s `lib/cuda/cudaPilotProxyDetector.cpp`, `config/fengine/include/dtv_chord.j2`, and `tests/test_pilotproxy_integration.py`. Record the reviewed revisions and evidence paths in the release manifest; paths alone are not a version pin.
-
-## Historical design
-
-The [superseded interface proposal](archive/kotekan_interface_design.md) is
-retained for its derivations and design history. Its default-stream and
-correlator-FIFO descriptions are not the implemented mask path.

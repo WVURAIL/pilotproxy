@@ -1,6 +1,6 @@
 cff-version: 1.2.0
-message: "If you use pilot-proxy in your research, please cite it as below."
-title: "pilot-proxy: Pilot-Informed Local-Reference Power-Ratio Detection of Sub-Noise RFI"
+message: "If you use pilotproxy in your research, please cite it as below."
+title: "pilotproxy: Pilot-Informed Local-Reference Power-Ratio Detection of Sub-Noise RFI"
 version: "3.0.1"
 authors:
   - family-names: "Gormley"

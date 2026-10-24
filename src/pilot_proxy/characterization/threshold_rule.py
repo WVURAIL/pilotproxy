@@ -16,12 +16,12 @@ Test the knee first, then the loosest passing word below it. Both the full-era
 and last-year curves must satisfy the channel's nominal-strength budget
 (default 1; a smaller value incorporates finite-amplitude or transfer checks).
 The ideal calendar cost is ``1 / kappa`` with a 20-year limit. Pass
-``calendar_factor=LEGACY_CALENDAR_FACTOR`` to reproduce the historical duty
-scenario. The recent window keeps the full-era knee and event weights.
+``calendar_factor=LEGACY_CALENDAR_FACTOR`` to reproduce the duty scenario of
+the frozen records. The recent window keeps the full-era knee and event weights.
 
 Serialized ``deployed*`` keys mean assigned candidates, not telescope operation.
-The historical ``coherent_fraction`` and ``coherent_gain`` data filenames and
-JSON keys are retained for reproducibility; see docs/TERMINOLOGY.md.
+The ``coherent_fraction`` and ``coherent_gain`` data filenames and JSON keys
+keep their spelling for reproducibility; see docs/TERMINOLOGY.md.
 """
 from __future__ import annotations
 

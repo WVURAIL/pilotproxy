@@ -34,7 +34,7 @@ status is `not_applicable_pilot_out_of_band`, with zero powers, NaN ratios,
 
 The archive campaign of record (`chime_pilots_rebuild_20260829`, kernel core
 2.3.0) and the channel 37 control (`ch37_control_491_20260924`) are schema v5
-products with detector contract revision 1. In them `p_*_u64` are the retired
+products with detector contract revision 1. In them `p_*_u64` are the
 row-domain powers `sum_m |z[n, m]|^2`. They are never edited and never
 migrated or copied. Every v5 product of record carries `fine_power_u64` for
 every frame, so the current definition is computable on read:
@@ -113,12 +113,11 @@ there.
 
 Resume and combine require the exact schema identity, decision contract,
 geometry, timing identity, weights, and detector provenance. A mismatch is an
-error. Current runtime code contains no aliases, adapters, repair paths, or
-fallback readers for pre-release products.
+error. Runtime code contains no aliases, adapters, repair paths, or fallback
+readers for other products.
 
 The source-event identity version is required and is versioned independently of
-the enclosing product schema, which is at revision 6. It gates the change from
-historical basename-only keys to keys that retain the complete archive or
-campaign namespace. Products without this field cannot be combined or resumed
+the enclosing product schema, which is at revision 6. It requires keys that retain
+the complete archive or campaign namespace rather than basename-only keys. Products without this field cannot be combined or resumed
 because identical basenames in different campaigns are not the same
 acquisition.

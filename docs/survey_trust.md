@@ -12,8 +12,8 @@ Certificate fingerprints cover only the public certificate, never private keys.
 
 `inventory.meta.json` identifies its metadata writer, hashes the inventory it
 actually describes and points to available execution history. Adding metadata
-to an old inventory does not recover its original survey toolchain. Run history
-is not a row-by-row reconstruction of the producer of a legacy inventory.
+to an existing inventory does not recover the survey toolchain that wrote it.
+Run history is not a row-by-row reconstruction of an inventory's producer.
 
 A survey holds the existing exclusive output lock. Before working, it writes
 `.survey.views-stale`; after the final SQLite-to-JSON/text render it removes the
@@ -42,13 +42,13 @@ Resolved rows record `collection_restored`. Multiple possible collections and
 parent traversal are refused. This records a reconstruction, not independent
 archive provenance; source-qualified replies remain preferable.
 
-The read-only legacy adapter reconstructs `baseband_<event>_<freq_id>.h5` only
+The read-only schema-1 adapter reconstructs `baseband_<event>_<freq_id>.h5` only
 for documented schema-1 CHIME raw-baseband rows with matching event-directory
-identity and geometry fields. It accepts the old trailing-directory slash,
-labels the compatibility conversion and preserves the old floating `n_frames`
-value as a legacy estimate. It does not turn that size-derived estimate into
-an observed HDF5 frame count, rewrite old files, or permit unrelated partial rows.
+identity and geometry fields. It accepts a trailing-directory slash, labels the
+compatibility conversion and keeps the floating `n_frames` value as an estimate.
+It does not turn that size-derived estimate into an observed HDF5 frame count,
+rewrite existing files, or permit unrelated partial rows.
 
 The regression suite includes real SIGINT/SIGKILL and concurrent-output tests.
 It uses local archive fakes; passing it does not verify remote CADC availability
-or relabel any historical CANFAR product.
+or relabel any existing CANFAR product.

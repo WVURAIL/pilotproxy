@@ -67,10 +67,10 @@ The plan specifies K=64 or K=128 and exactly 128 windows per stream. Thus the
 detector block has 8192 or 16384 samples. Voltage frames must divide a complete
 block; the supplied capture must contain whole, contiguous blocks. A mask frame
 contains `[F]` int8 values; a power frame contains `[F,3]` little-endian uint64
-values, the frame powers. The replay expects the kernel core 3.0.0 definition,
-the all-bin sums of the exact fine powers (`capture_reference.expected_products`);
-a capture recorded by a stage that vendors an older core carries the retired
-row-domain sums and fails power parity while its masks can still agree. Their FPGA sequence identifies the first voltage sample in the block,
+values, the frame powers. The replay expects the frame powers to be the all-bin
+sums of the exact fine powers (`capture_reference.expected_products`); a capture
+recorded by a stage that vendors a core before 3.0.0 carries row-domain sums and
+fails power parity while its masks can still agree. Their FPGA sequence identifies the first voltage sample in the block,
 and their downsampling is the input downsampling times the block length.
 
 The submitted loader binds physical channels 14–36. Unbound frequencies,

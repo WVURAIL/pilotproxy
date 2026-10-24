@@ -28,7 +28,7 @@ ratios, rank-based detection score, and conditional forecast quantities.
 CHIME archive access requires collaboration credentials. This source tree is
 [WVURAIL/pilotproxy](https://github.com/WVURAIL/pilotproxy); access and data
 boundaries are recorded in [CHIME_DERIVED.md](CHIME_DERIVED.md).
-[PROVENANCE.md](PROVENANCE.md) identifies the historical source snapshots.
+[PROVENANCE.md](PROVENANCE.md) records the snapshot this repository starts from.
 
 ## Install and check
 
@@ -60,9 +60,10 @@ print(kernel.specs.as_descriptive_dict())
 print(kernel.version.as_string())
 ```
 
-`PilotProxyKernel` binds the `PilotProxy_*` C API in `libpilotproxy.so`.
-Package 3 / core 4 removes the old F-statistic interface names. Rebuild the
-library and update callers together; see [migration notes](docs/TERMINOLOGY.md#native-interface-migration).
+`PilotProxyKernel` binds the `PilotProxy_*` C API of detector core 4 in
+`libpilotproxy.so`. Rebuild the library and its callers together;
+[terminology](docs/TERMINOLOGY.md#native-names-before-core-4) maps the names of
+earlier cores.
 
 ## Repository layout
 
@@ -75,21 +76,19 @@ library and update callers together; see [migration notes](docs/TERMINOLOGY.md#n
 | `tests/` | Numerical contracts, archive integrity, and runtime interface tests |
 | `scripts/` | Installation, CI and archive operating scripts |
 | `tools/` | Explicit analysis, validation and maintenance commands |
-| `tools/archive/` | Superseded study drivers retained for reproducing old records |
-| `docs/` | Current contracts and operating guides |
-| `docs/archive/` | Superseded design proposals, kept for reference |
+| `tools/archive/` | Study drivers that reproduce frozen records |
+| `docs/` | Contracts and operating guides |
 | `docs/evidence/`, `docs/runtime_freezes/` | Frozen receipts and provenance; not onboarding instructions |
 
-Development tools are not imported by the detector package. Useful historical
-records stay separate from active instructions. Generated data, figures,
-shared libraries and documentation PDFs belong in output/build directories.
+Development tools are not imported by the detector package. Frozen records stay
+separate from the guides. Generated data, figures, shared libraries and
+documentation PDFs belong in output/build directories.
 
 ## Scientific and compatibility boundaries
 
-Core 3.0.0 defines each frame power as the all-bin sum of its fixed-point fine
-spectrum. Current products use schema v6. The paper's schema-v5 archives remain
-unchanged; current readers reconstruct these powers from their stored fine
-spectra. They do not use the retired row-domain powers.
+Each frame power is the all-bin sum of its fixed-point fine spectrum. Products
+use schema v6. Readers also open the papers' schema-v5 archives and form the
+same powers from their stored fine spectra.
 
 The threshold rule combines the measured shelf proxy with RFIsher's response,
 a measured stack-to-proxy amplitude ratio, and an assumed effective temporal
@@ -97,8 +96,9 @@ gain. Assigned words are conditional candidates. A compiled bundle or a passing
 replay does not establish telescope safety or a cross-day BAO contamination bound.
 
 The primary time comparison is the Overview's ideal calendar year: retaining
-fraction `kappa` costs `1 / kappa` years. The old operating-duty scenario is an
-explicit reproduction option, documented in [the pipeline guide](docs/START_HERE.md).
+fraction `kappa` costs `1 / kappa` years. [The pipeline guide](docs/START_HERE.md)
+documents the operating-duty option that reproduces the frozen records made
+with it.
 
 ## Maintainer checks
 

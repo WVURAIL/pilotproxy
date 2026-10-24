@@ -291,9 +291,9 @@ upper_reference_requested_relative_to_target_hz
 `run_config.json` and `stats.json` copy a compact
 `reference_placement_summary`, including the channels with adaptive placement,
 DC shifts, edge wraps, or a forbidden tone in the skipped guard. In the
-current DC-centered bank, DTV 14 is the only adaptive case.
+shipped DC-centered bank, DTV 14 is the only adaptive case.
 
-The SNR-shelf table uses explicit diagnostic names rather than historical
+The SNR-shelf table uses explicit diagnostic names rather than
 positive-excess aliases:
 
 ```text
@@ -316,9 +316,8 @@ denominator must be explicit.
 
 ## Injection recovery
 
-Three publication-analysis commands operate on the staged files or the
-archive-scale products. Their procedures were written for the 2026-07 manuscript
-and are kept in the history (`docs/PUBLICATION_VALIDATION.md@30e50c2`).
+Three analysis commands operate on the staged files or the archive-scale
+products:
 
 ```text
 pilot-proxy inject-pilot-tone
@@ -337,7 +336,7 @@ The plotting code uses Computer Modern mathtext by default. Set
 PNG; `PILOT_PROXY_FIGURE_FORMATS=png,pdf` adds a vector PDF copy. JPEG output is
 not implemented.
 
-The current SNR-shelf figure uses an `[-90, 0]` dB overview and an
+The SNR-shelf figure uses an `[-90, 0]` dB overview and an
 `[-90, -25]` dB detail panel. Each channel histogram is normalized over its
 finite shelf-SNR samples and by bin width. Frames with `F <= 1` therefore do not
 enter the histogram and must be counted separately.

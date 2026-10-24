@@ -9,8 +9,8 @@ line, where a population of low-scoring frames ends (the usual case), or below
 it, where nearly every frame carries the signal and a population of
 high-scoring frames begins. The knee is the stronger of the two bends, the word
 where the curve stands farthest from the line on either side (rule v2). Rule
-v1, the bend above the line only, reproduces the knees recorded before
-2026-10-19. The rule describes the data it is read
+v1, the bend above the line only, reproduces the knees stored in v1 score
+caches. The rule describes the data it is read
 from. It is not a false-alarm calibration, a residual estimate or an
 observing-time optimum, and it never chooses reject-all; whether a channel is
 assigned a threshold at its knee is the threshold rule's decision

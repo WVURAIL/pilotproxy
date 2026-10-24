@@ -71,8 +71,8 @@ python tools/check_paper_thresholds.py --paper-root ../dtv-mnras
 ```
 
 Success is JSON with `"status": "pass"` and `"channels_checked": 24`. It checks
-the paper's saved sweeps, responses, budgets, threshold words, and current
-calendar-year comparison. It also checks the historical calculation using its
+the paper's saved sweeps, responses, budgets, threshold words, and
+calendar-year comparison. It also checks the frozen calculation with its
 recorded time convention. No data refresh or TeX installation is needed.
 
 These are conditional threshold calculations. Reproducing them does not
@@ -95,6 +95,6 @@ is a marker-to-reference ratio rather than generally an F statistic.
 - To work on receiver integration, use the [operator handoff](OPERATOR_HANDOFF.md).
   Match the vendored core and native API versions before building kotekan.
 
-Keep generated results under `out/` or another output directory. Dated evidence
-and frozen paper inputs identify the original measurements; leave those in
-place when testing newer code.
+Keep generated results under `out/` or another output directory. Frozen
+evidence and paper inputs identify the original measurements; leave them in
+place when testing new code.

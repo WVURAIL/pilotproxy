@@ -5,8 +5,7 @@
 The staged path is the library's staged entry points
 (``PilotProxy_Compute_RowSums_I32`` and ``PilotProxy_Compute_FinePowers_U64``, called by
 ``detect_packed_detector_input``), whose frame powers are the host's exact
-uint64 all-bin sums of the staged fine powers (kernel core 3.0.0:
-``P_r = sum_f S_r[f]``), with the fine decision made in Python by
+uint64 all-bin sums of the staged fine powers (``P_r = sum_f S_r[f]``), with the fine decision made in Python by
 ``fine_decision.fine_mask_decision``.
 kotekan instead calls the fused entry point,
 ``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` (or
@@ -18,7 +17,7 @@ replays CHIME baseband files through both and compares every output word:
 * the fused fine-power tap against the staged fine powers, and the fused
   frame-power tap (the device's all-bin sums) against the host sums of the
   staged fine powers;
-* the legacy fused entry point, without taps, against the same decision;
+* the fused entry point without support outputs or taps, against the same decision;
 * optionally, a boundary probe at the frame's exact required multiplier
   (``fine_required_multiplier_q16``) and one below it, so both mask values are
   exercised on every valid frame;

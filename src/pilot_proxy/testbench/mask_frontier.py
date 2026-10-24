@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Historical floored-residual comparison for the synthetic bench.
+"""Floored-residual comparison for the synthetic bench.
 
 This study is not the paper's signed-mean retained-power estimator. It keeps
 an alternative residual convention to reproduce the validation comparison.
@@ -21,7 +21,7 @@ sets and any gap between them belongs to the residual convention rather than
 to the bookkeeping.
 
 The Q16 boundaries use the shared exact scorer. The residual floor and
-candidate selection below reproduce the historical study:
+candidate selection below reproduce the validation study:
 
 * the per-rank boundary is ``ceil(max_D F2 * 2^16 / F2_rho)`` on exact
   rationals, with ``ALWAYS_MASKED_Q16`` for a rank whose reference numerator

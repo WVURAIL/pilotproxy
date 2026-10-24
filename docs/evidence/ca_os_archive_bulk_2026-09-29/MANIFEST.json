@@ -216,7 +216,7 @@
     "inputs/release/analysis-plan.json": {
       "bytes": 58656,
       "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
-      "sha256": "9611ad5a72323edf1d4d93c03ae942963c081b793ba3847880ea94a4515cb324",
+      "sha256": "fc3152404a977d87441c50c1865ea20d0019bc65d187e4a743b7ff09686b7680",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/analysis-plan.json",
       "source_sha256": "5a8c1f02cb31b2e4be2c4698460b06a24848ff5b34a44d2af9f83fe7fe53739e"
     },
@@ -384,7 +384,7 @@
     "inputs/release/archive/ledger/run.json": {
       "bytes": 7038,
       "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
-      "sha256": "2858e1d071b763eee686ed4d5abf20a632c0fec5f2cc66336b28c09db0cc795a",
+      "sha256": "7b20e777807db9921b73465e2c5747dfbdeda1fa97fbd0b23e8b9cd963a7e11f",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/archive/ledger/run.json",
       "source_sha256": "82dcb6c91e3853702e119ed4e2acaa76603839edbe22bd3aca6710dd28e30a4c"
     },
@@ -398,7 +398,7 @@
     "inputs/release/release-manifest.json": {
       "bytes": 86493,
       "copy": "byte for byte, RFIsher commit IDs re-pinned 2026-10-24",
-      "sha256": "33722e89e2b6ba77e00f761c0bfb6b8e44f17a2a11b00b429ee42f4f8a8045e3",
+      "sha256": "a32a814f45b7f8f4c3995a9d3e4b450a118b71085344c85c8d5d37fc44e78aae",
       "source_path": "/home/djg/rail/results/archive_no_split_2026-09-24_r2/release-manifest.json",
       "source_sha256": "7391023da84d780ec83f91a4c6a44b755095b0038048adf96bc37180aba8ffce"
     },

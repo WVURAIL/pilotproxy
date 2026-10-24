@@ -12,8 +12,8 @@
   "module": "rfisher_results.archive.run",
   "source_digest": "02d92c579a9a6d44ff614c80ec1c032d90cce5e86212a52df1fa353fb9914b16",
   "source_roots": {
-   "RFIsher/src": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-a281112/src",
-   "RFIsher/scripts": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-a281112/scripts",
+   "RFIsher/src": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-f72bf34/src",
+   "RFIsher/scripts": "/home/djg/rail/output/archive-no-split-r2-2026-09-25/RFIsher-f72bf34/scripts",
    "pilot_proxy": "/home/djg/rail/output/refactor-equivalence-2026-09/checkouts/pilot-proxy-m1/src/pilot_proxy",
    "radiofisher": "/home/djg/rail/RadioFisher/radiofisher"
   },

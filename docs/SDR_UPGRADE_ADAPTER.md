@@ -41,7 +41,7 @@ the high nibble and imaginary in the low nibble. Weight scale is 7. Sample
 scale is explicit and fixed by the caller; the adapter does not fit it to
 each frame. Receipts count components that require clipping and save the
 weight norms. Integer row projections use the existing CPU kernel reference.
-The frame powers (`term_power_sums`, exact uint64) are the kernel core 3.0.0
+The frame powers (`term_power_sums`, exact uint64) are the kernel's
 definition: each term's 128 row projections go through the frozen `fxfft256`
 and the fine powers are summed over all 256 bins (receipt schema
 `sdr-upgrade-digital-adapter-v2`; v1 summed `|z|^2` over the rows). The

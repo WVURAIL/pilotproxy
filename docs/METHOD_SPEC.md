@@ -35,8 +35,8 @@ The kernel first forms the exact integer matched-filter row projections
 reference) and detector row `m`, and then the exact fine power spectrum
 `S[n, f]` of each term: the frozen fixed-point 256-point transform
 (`fxfft256_v1`) of each stream's 128 projections, squared and summed over
-streams (see "Time-coherent fine reduction" below). Since kernel core 3.0.0
-the three frame powers are defined from that spectrum:
+streams (see "Time-coherent fine reduction" below). The three frame powers
+are defined from that spectrum:
 
 ```text
 P_target    = sum_f S[target, f]
@@ -161,7 +161,7 @@ P[n]    = sum_b S[n, b]                                      (frame power)
 
 The reduction is coherent in time within a frame and incoherent across
 streams and frames. The frame powers of the previous sections are the all-bin
-sums of the same `S` (kernel core 3.0.0), so the coarse ratio and the fine
+sums of the same `S`, so the coarse ratio and the fine
 statistic come from one spectrum and no second power path exists. The library
 reduces `P[n]` on the device for the fused entry points and the host sums the
 staged `PilotProxy_Compute_FinePowers_U64` output; both equal

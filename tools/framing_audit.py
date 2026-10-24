@@ -15,7 +15,7 @@ against the target lobe center and the nominal ATSC pilot.
 
 Usage:
     python framing_audit.py FILE.h5 [--channel N] [--chunks 4]
-        [--nyquist-zone 2] [--repo /path/to/pilot-proxy] [--png out.png]
+        [--nyquist-zone 2] [--repo /path/to/pilotproxy] [--png out.png]
 
 Exit status: 0 = ALIGNED, 2 = MISMATCH, 3 = no line found (inconclusive).
 """
@@ -45,7 +45,7 @@ def main() -> int:
     ap.add_argument("--nyquist-zone", type=int, default=2,
                     help="Nyquist zone of the capture (CHIME: 2, mirrored)")
     ap.add_argument("--repo", type=Path, default=Path("."),
-                    help="pilot-proxy repo root (default: cwd)")
+                    help="pilotproxy repo root (default: cwd)")
     ap.add_argument("--png", type=Path, default=None)
     args = ap.parse_args()
 

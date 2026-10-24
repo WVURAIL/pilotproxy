@@ -441,7 +441,7 @@ STAGING_DIR="$RUN_ROOT/staging"
 LOG_DIR="$RUN_ROOT/logs"
 RUN_LOG="$LOG_DIR/chime_pilots_local_v5.log"
 WEIGHTS_PATH="$PWD/weights/chime_dtv_weights_k128.bin"
-: "${KERNEL_LIB:?set to the preserved core 3.0.0 library (Preserved detector library)}"
+: "${KERNEL_LIB:?set to the preserved core 4 library (Preserved detector library)}"
 : "${KERNEL_SHA256:?set in Preserved detector library}"
 : "${KERNEL_MANIFEST:?set in Preserved detector library}"
 : "${KERNEL_MANIFEST_SHA256:?set in Preserved detector library}"
@@ -465,9 +465,9 @@ printf '%s  %s\n' \
   d0ab78db9dec847fb5270fb94e3fc45efd6bbbc71adc376830fb71467693079a "$BUNDLE_DIR/exclusions.jsonl" \
   077915779d234ad9cca1e9b52171e28025a60474f20fad7aff5684f55ce0c4c7 "$BUNDLE_DIR/pending_resolution.json" \
   5695e1cc9c007cb2c79ad39535cf9ed2fb20848ad00d3cf0215933670d0707e5 "$BUNDLE_DIR/inventory_manifest.json" \
-  bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15 "$PWD/configs/receiver_profiles/chime_dtv_fengine.json" \
+  fb6aaef8d26a836cb628f0669bd7b24d3b5813776a61bceb03bc6ec002538d65 "$PWD/configs/receiver_profiles/chime_dtv_fengine.json" \
   1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259 "$WEIGHTS_PATH" \
-  d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7 "$WEIGHTS_PATH.manifest.json" \
+  e8b2f5504870b4367081bca52ed042c48077e42dbbb2992bb612ade3f389a6ce "$WEIGHTS_PATH.manifest.json" \
   "$KERNEL_SHA256" "$KERNEL_LIB" \
   "$KERNEL_MANIFEST_SHA256" "$KERNEL_MANIFEST" | sha256sum --check --strict
 if pgrep -af '[p]ilot-proxy chime-scan'; then
@@ -513,7 +513,7 @@ units plus downloads that were prefetched but not represented by the last
 checkpoint. Complete the production-profile rehearsal before launch.
 
 `fine_products=on` retains exact fine powers. It does not enable fine
-detection. It is also the only accepted value: since kernel core 3.0.0 the
+detection. It is also the only accepted value: the
 frame powers are the all-bin sums of the fine powers, so `off` and `auto`
 are refused.
 
@@ -596,7 +596,7 @@ with np.load(sys.argv[1], allow_pickle=False) as product:
     assert all(int(a) + int(b) == int(c)
                for a, b, c in zip(lower[:, 0], upper[:, 0], reference[:, 0]))
     assert fine.dtype == np.uint64 and fine.shape == (frames, 3, 256)
-    # Kernel core 3.0.0: each frame power is the exact all-bin sum of its
+    # Each frame power is the exact all-bin sum of its
     # term's fine powers, checked here in Python integers.
     for term, power in enumerate((target, lower, upper)):
         assert all(sum(int(v) for v in fine[row, term]) == int(power[row, 0])
@@ -736,9 +736,9 @@ printf '%s  %s\n' \
   d0ab78db9dec847fb5270fb94e3fc45efd6bbbc71adc376830fb71467693079a "$BUNDLE_DIR/exclusions.jsonl" \
   077915779d234ad9cca1e9b52171e28025a60474f20fad7aff5684f55ce0c4c7 "$BUNDLE_DIR/pending_resolution.json" \
   5695e1cc9c007cb2c79ad39535cf9ed2fb20848ad00d3cf0215933670d0707e5 "$BUNDLE_DIR/inventory_manifest.json" \
-  bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15 "$PROFILE_PATH" \
+  fb6aaef8d26a836cb628f0669bd7b24d3b5813776a61bceb03bc6ec002538d65 "$PROFILE_PATH" \
   1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259 "$WEIGHTS_PATH" \
-  d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7 "$WEIGHTS_PATH.manifest.json" \
+  e8b2f5504870b4367081bca52ed042c48077e42dbbb2992bb612ade3f389a6ce "$WEIGHTS_PATH.manifest.json" \
   "$EXPECTED_KERNEL_SHA256" "$KERNEL_LIB" \
   "$KERNEL_MANIFEST_SHA256" "$KERNEL_MANIFEST" | \
   sha256sum --check --strict
@@ -762,7 +762,7 @@ python tools/audit_local_archive_run.py \
   --weight-bank-sha256 \
     1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259 \
   --weight-manifest-sha256 \
-    d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7 \
+    e8b2f5504870b4367081bca52ed042c48077e42dbbb2992bb612ade3f389a6ce \
   --expected-inventory-sha256 \
     b2cfef752a6f2cf88317141a974161439299668a37a5464d710b3800b9a872d8 \
   --expected-units 165682 \

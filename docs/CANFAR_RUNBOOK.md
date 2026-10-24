@@ -146,13 +146,13 @@ gates required for the approved local run.
 SM=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n1 | tr -d '. ')
 echo "session arch sm_${SM}"
 
-# S2.1 - on-node library built from the current sources and reporting core 2.5.0
+# S2.1 - on-node library built from the current sources and reporting core 4
 make -C cuda clean && make -C cuda SM="$SM"
 python - <<'PY'
 from pilot_proxy.kernel import PilotProxyKernel
-v = PilotProxyKernel().version.as_string()
-assert v == "2.5.0", f"stale kernel library: {v}"
-print("kernel core", v)
+v = PilotProxyKernel().version
+assert v.major == 4, f"stale kernel library: {v.as_string()}"
+print("kernel core", v.as_string())
 PY
 
 # S2.2 - CUDA regression + exact row-sum parity (integers, no tolerance)
@@ -452,7 +452,7 @@ production settings.
 
    ```bash
    kernel_sha=$(sha256sum cuda/libpilotproxy.so | awk '{print $1}')
-   KERNEL_LIB="$PWD/cuda/libpilotproxy-2.5.0-sm${SM}-${kernel_sha:0:16}.so"
+   KERNEL_LIB="$PWD/cuda/libpilotproxy-sm${SM}-${kernel_sha:0:16}.so"
    cp --no-clobber --preserve=mode,timestamps cuda/libpilotproxy.so "$KERNEL_LIB"
    cmp -s cuda/libpilotproxy.so "$KERNEL_LIB" || exit 1
    export KERNEL_LIB

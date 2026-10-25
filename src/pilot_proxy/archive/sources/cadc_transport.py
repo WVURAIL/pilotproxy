@@ -54,13 +54,10 @@ def expected_errors() -> tuple:
     except ImportError:
         pass
     else:
-        # A truncated transfer surfaces from requests as a raw urllib3
-        # ProtocolError ("Connection broken: IncompleteRead(...)"), outside
-        # RequestException. It is as transient as any other broken connection
-        # and killed both CANFAR shards within one minute on 2026-09-02. A
-        # read that stalls inside the streamed body surfaces the same way as a
-        # raw urllib3 ReadTimeoutError (2026-09-17). Both derive from urllib3's
-        # HTTPError, so accept that family.
+        # Requests can expose urllib3 errors directly while streaming a body.
+        # A truncated transfer raises ProtocolError; an inactive read can raise
+        # ReadTimeoutError. Both can be retried as network failures and derive
+        # from urllib3.HTTPError rather than Requests' RequestException.
         errors.append(Urllib3HTTPError)
     errors.append(http.client.IncompleteRead)
     return tuple(errors)
@@ -146,13 +143,12 @@ def configure_request_timeout(client) -> bool:
 
 
 def describe_exception(exc: BaseException) -> str:
-    """Name and message of an exception, never raising.
+    """Return an exception's name and message without raising another error.
 
-    Some library exceptions' ``__str__`` returns a non-string (cadcutils'
-    HttpException wraps an HTTPError that way), so formatting them raises
-    TypeError. Inside a retry loop that turns a retryable error into the one
-    that ends the run: both CANFAR shards died of it on 2026-09-03. The
-    wrapped exception's own message is preferred to a bare repr.
+    Some library exceptions return a non-string from ``__str__``. For example,
+    cadcutils' HttpException can wrap an HTTPError that way. Normal formatting
+    would then raise TypeError inside the retry handler. Prefer the wrapped
+    exception's message, and fall back to repr when needed.
     """
     name = type(exc).__name__
     for candidate in (exc, getattr(exc, "orig_exception", None)):

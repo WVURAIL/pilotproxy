@@ -1,23 +1,19 @@
 # coding=utf-8
-"""GPU bit-match gate for fxfft256 v1 (run on CUDA hosts, e.g. the A100).
+"""Compare the CUDA fxfft256 v1 transform with frozen outputs.
 
-This is the acceptance test the deployment decision defined: a CUDA
-implementation of the frozen fixed-point FFT must reproduce the golden
-vectors and the Python reference BIT-FOR-BIT --- no tolerances anywhere.
-The device kernel below is the port prototype (one thread per stream,
-serial 256-point transform, the structure documented in
-``cuda/fxfft256_ref.c``); its twiddle table is generated from the frozen
-``TWIDDLE_Q15`` literals at test time, so the source of truth stays
-single. Production integration moves this transform into the
-``pilotproxy_detector`` library after the row-sum stage; this gate proves the
-arithmetic ports exactly before that wiring exists.
+The device prototype runs one serial 256-point transform per stream, following
+``cuda/fxfft256_ref.c``. Its twiddles are generated at test time from the frozen
+``TWIDDLE_Q15`` literals. These tests check the arithmetic independently of
+the production kernel's surrounding packing and reductions.
 
-Gates:
-1. golden vectors: device output == ``tests/data/fxfft256_golden_v1.npz``;
-2. randomized sweep: device == Python reference on 4096 seeded vectors
-   spanning deployed (2^14) and contract (2^20) amplitudes;
-3. exact-integer feed sums: uint64 fine powers accumulated from device
-   spectra equal ``fine_power_fx`` exactly.
+Every comparison requires exact equality:
+
+1. device output against ``tests/data/fxfft256_golden_v1.npz``;
+2. device output against the Python reference on 4096 seeded vectors spanning
+   the deployed (2^14) and contract (2^20) amplitudes;
+3. uint64 feed-power sums from the device spectra against ``fine_power_fx``.
+
+Run these tests on a CUDA host, such as the A100.
 """
 from __future__ import annotations
 

@@ -154,17 +154,17 @@ def predicted_pilot_fine_bin(
     nyquist_zone: Any | None,
     pad_factor: int = 2,
 ) -> int:
-    """Fine (envelope) bin where the pilot line is predicted to land.
+    """Predict the pilot's fine-bin position from the receiver geometry.
 
-    The weights target the coarse detector bin nearest the pilot, so the
-    carrier appears in the window-axis (envelope) spectrum at the grid
-    quantization residual -- not at zero envelope offset. Designating fine
-    bin 0 therefore watches an empty bin and leaves the actual line inside
-    the CFAR null bulk; this predicts the bin from the channel geometry
-    alone. The mirrored (even-zone) mapping is survey-verified: all six strong
-    2018--2026 carriers land within ~30 bins of the prediction, the
-    difference being each station's own carrier offset, which the
-    designated window's half-width absorbs.
+    The weights target the nearest coarse detector bin. Any remaining
+    frequency offset appears in the window-axis spectrum, so the pilot
+    need not lie at fine bin zero. Watching only bin zero could miss the
+    line and leave it in the CFAR background bins.
+
+    The mirrored, even-zone mapping was checked on all six strong
+    2018--2026 carriers. Their positions are within about 30 bins of the
+    prediction. The remaining displacement is each station's carrier
+    offset, covered by the designated window's half-width.
     """
     windows = int(nfft) // int(detector_window_samples)
     fine_bins = int(pad_factor) * windows

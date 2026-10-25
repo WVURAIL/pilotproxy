@@ -224,7 +224,7 @@ def nearest_atsc_physical_channel(
     best = min(candidates, key=lambda ch: abs(physical_channel_to_pilot_hz(ch) - freq))
     delta = abs(physical_channel_to_pilot_hz(best) - freq)
     # A pilot belongs to this receiver channel only when the coarse-channel
-    # centre is at most half one 390.625-kHz F-engine bin away.  A former 3-MHz
+    # center is at most half one 390.625-kHz F-engine bin away.  A former 3-MHz
     # threshold admitted adjacent freq_ids into the same ATSC pilot dataset.
     return int(best) if delta <= float(tolerance_hz) else None
 

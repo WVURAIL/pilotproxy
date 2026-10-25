@@ -83,7 +83,7 @@ def test_a_short_era_that_does_not_return_stays():
     cut, merged = e.boundaries([e.Block(0, 9, 40.0), e.Block(10, 10, 5.0), e.Block(11, 40, 70.0)], upper=20.0)
     assert cut == [1, 2] and merged == []
     cut, _ = e.boundaries([e.Block(0, 9, 40.0), e.Block(10, 30, 5.0), e.Block(31, 40, 40.0)], upper=20.0)
-    assert cut == [1, 2]   # longer than a neighbour: a real off era, not an excursion
+    assert cut == [1, 2]   # longer than a neighbor: a real off era, not an excursion
 
 
 def test_the_control_has_no_boundary(result):

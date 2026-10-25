@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
-"""Decisive pass/fail checks on pilot-proxy-detector chime-scan output.
+"""Check scan products and compare a completed run with a resumed run.
 
-Two modes:
+``check <run_dir>`` verifies schema, array alignment, masks, spectra, timing,
+and the combined stack. ``compare <clean> <resumed>`` checks two runs of the
+same selection: interrupting and resuming must neither lose nor duplicate
+frames, and the spectra and time axis must survive the restart.
 
-  check   <run_dir>            invariants on one scan's products (after a pilot or
-                              the real run): schema, array alignment, mask
-                              discipline, spectra/time sanity, combine stacking.
-
-  compare <clean> <resumed>   equivalence of two runs of the SAME selection -- the
-                              kill/resume test. Confirms a mid-run kill re-consumed
-                              rather than double-counted or dropped, and that the
-                              spectra/time-axis survived the restart.
-
-Reads only the product .npz files (no GPU, no deps beyond numpy). Exits non-zero
-on any failure so it can gate a script. Per-pilot products live in
-<run_dir>/_per_pilot/<freq_id>.npz; combined products in <run_dir>/.
+The checks read NPZ products only and require NumPy, not a GPU. Per-pilot
+files are ``<run_dir>/_per_pilot/<freq_id>.npz``; combined products are in
+``<run_dir>/``. Any failed check returns a nonzero exit status.
 """
 from __future__ import annotations
 

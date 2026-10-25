@@ -1,22 +1,23 @@
-"""Where each channel is assigned a conditional threshold for the science of RFIsher's tolerance table
-(its knee, or the loosest usable threshold below it), or why it is not: sweep
-every keep word, test the upper end of the kept DTV power, and write the
-decisions, the sweeps and one plate per channel. An assigned channel's word is
-then checked against the tolerance on its era's last year (one full seasonal
-cycle) and lowered only if it fails there (the last-year guard).
+"""Assign a conditional threshold to each channel, or record why none passes.
 
-The serialized legacy ``coherence_limit_s`` field is the full-era
-effective-gain-time diagnostic at the final deployed word, or at the knee
-when undeployed. It is not the joint full-era/last-year limit or a physical
-phase lifetime. ``last_year_r_hi`` is evaluated at the original
-``full_era_word``, before any tightening, so it cannot generally be combined
-with the final full-era ``r_hi`` to reconstruct that joint limit.
+Sweep the exact keep words and compare the upper retained-power estimate
+with the science tolerance in RFIsher's table. Test the knee first, then the
+loosest usable word below it. An assigned word must also pass on the era's
+last year, one full seasonal cycle. The last-year guard tightens the word
+only when that window fails. Write the decisions, sweeps, and channel plates.
+
+Two serialized diagnostics refer to different points. ``coherence_limit_s``
+is the full-era effective-gain-time value at the final assigned word, or at
+the knee when no word is assigned. ``last_year_r_hi`` is evaluated at the
+original ``full_era_word``, before tightening. They therefore cannot generally
+be combined into a joint full-era/last-year limit, and neither describes a
+physical phase lifetime.
 
     python tools/threshold_rule.py --scores <score cache dir> --out <dir>
 
-The score cache is the current-era equal-event cache (``ch<N>.json`` and
-``ch<N>.npz``); each names the archive product its pilot excess comes from.
-See pilot_proxy.characterization.threshold_rule for the rule itself.
+The cache contains ``ch<N>.json`` and ``ch<N>.npz`` for the current era with
+equal event weights. Each channel names the archive product supplying its
+pilot excess. See ``pilot_proxy.characterization.threshold_rule`` for the rule.
 """
 from __future__ import annotations
 

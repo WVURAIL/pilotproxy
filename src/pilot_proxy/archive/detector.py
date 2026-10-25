@@ -1,28 +1,24 @@
 # coding=utf-8
-"""CHIME DTV local-reference power-ratio archive analyzer.
+"""Measure the CHIME DTV local-reference power ratio as archive files arrive.
 
-The detector functionality of ``pilot_proxy.chime.runner.run_chime_analysis`` as a
-streaming analyzer. It reimplements no DSP: it wraps
-PilotProxy's own ``pack_chime_block_for_detector`` -> ``detector_fn`` (the CUDA kernel
-via ``detect_packed_detector_input`` by default) -> ``_append_detection_rows``
-maths, so the per-frame product matches the runner by construction.
+This analyzer applies the batch runner's detector operations to a stream of
+frames. It uses the same packing, detector, and row-accumulation helpers as
+``pilot_proxy.chime.runner.run_chime_analysis``:
 
-Data path (per coarse channel / pilot, fanned out one ``<channel>.npz`` each):
+1. The ``chime-baseband-packed`` reader supplies a raw
+   ``uint8 [nfft, n_feeds]`` frame in native offset-binary 4+4-bit format.
+2. The analyzer reshapes it to ``(n_feeds, 1, nfft)`` and calls
+   ``pack_chime_block_for_detector`` with native-offset-binary encoding.
+   This repacks the int4 samples without scaling or requantization.
+3. ``detector_fn(packed=packed.packed, weights=weights, kernel=kernel)``
+   returns the target and reference powers. ``_append_detection_rows`` uses
+   ``dtv_units`` to form the positive-excess mask and dB metrics.
 
-* the ``chime-baseband-packed`` reader yields one raw ``uint8 [nfft, n_feeds]``
-  frame per chunk (native offset-binary 4+4-bit);
-* the analyzer reshapes it to PilotProxy's normalized ``(n_feeds, 1, nfft)`` block and
-  calls ``pack_chime_block_for_detector`` with ``sample_encoding`` =
-  native-offset-binary, which takes the LOSSLESS repack route (no calibration
-  scale or requantization; the native int4 grid passes straight through);
-* ``detector_fn(packed=packed.packed, weights=weights, kernel=kernel)`` yields
-  per-frame target/reference powers; the positive-excess mask + dB metrics come
-  from ``dtv_units`` exactly as ``_append_detection_rows`` computes them.
-
-The CUDA kernel is GPU-only, so the real kernel-level + real-data parity is a
-CANFAR/GPU step. ``detector_fn`` / ``kernel`` / ``weights`` are injectable (via
-``ctx.options``), mirroring ``run_chime_analysis``, so a CPU reference can drive
-a GPU-free plumbing parity test in the same way PilotProxy's own runner test does.
+Each coarse channel writes its own ``<channel>.npz`` product. The default
+backend, ``detect_packed_detector_input``, runs the CUDA kernel and requires a
+GPU. Tests can inject ``detector_fn``, ``kernel``, and ``weights`` through
+``ctx.options`` to check the surrounding data flow with a CPU reference.
+Kernel and real-data parity must still be tested on a GPU.
 """
 from __future__ import annotations
 
@@ -636,14 +632,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         return [[int(fid)] for fid in sel]
 
     def resume(self, path: str, ctx: RunContext) -> bool:
-        """Reload a checkpointed product so a killed run continues instead of
-        restarting from scratch.
+        """Restore a compatible checkpoint so a scan can continue.
 
-        Returns False when there is no prior product (fresh build). Raises
-        SystemExit when a prior product exists but was built with incompatible
-        parameters, so a capped smoke product is never silently "completed"
-        by a full run, and a different channel's product is never resumed into
-        this one.
+        Return False if no product exists. An existing product must match the
+        requested parameters; otherwise raise SystemExit. This prevents a
+        capped test run or a different channel from being resumed as this run.
         """
         p = Path(path)
         if not p.exists():
@@ -1289,14 +1282,12 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._validate_resumed_provenance()
 
     def _ensure_fine_width(self, expected_bins: int) -> None:
-        """Pin the fine-spectrum width for this product.
+        """Keep one fine-spectrum width throughout this product.
 
-        A resumed product's restored width (when nonzero) must equal the
-        width the current configuration would produce; nfft is not part of
-        the detector contract, so a geometry change between epochs would
-        otherwise surface as a shape error at flush. Zero means no frames
-        have fixed the width yet (fresh product or zero-frame checkpoint)
-        and is always safe to adopt.
+        A resumed product must retain its restored width. Since nfft is not
+        part of the detector contract, this check catches a changed geometry
+        before the arrays reach the output writer. A width of zero means no
+        frames have established it yet, so the current width can be adopted.
         """
         expected = int(expected_bins)
         if self._fine_bins == 0:
@@ -1398,12 +1389,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             )
 
     def _check_file_meta(self, meta: Mapping[str, Any]) -> None:
-        """Reject any file whose channel/nfft does not match this product.
+        """Require each file to have this product's channel and FFT length.
 
-        begin() fixes the product identity from the first file; every later file
-        must agree, or we would silently accumulate multiple channels (or a
-        different FFT length) into one product. This turns that into a hard error,
-        which is the real guard against a wrong --select or a filename/freq mismatch.
+        ``begin()`` establishes these values from the first file. Checking
+        every later file prevents a mistaken selection or filename from
+        mixing different geometries into one accumulated product.
         """
         fc = meta.get("f_center_hz")
         if fc is not None:

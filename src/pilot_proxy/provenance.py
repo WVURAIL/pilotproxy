@@ -117,7 +117,7 @@ def sidecar_manifest_path(path: Path | str | None) -> Path | None:
 # release (0.3.0.dev0 -> 1.0.0) changes both tokens without touching detector
 # math, and conversely a tree can move many commits while staying at one
 # version. Thus the label is the weaker of the two, and the source digest is
-# what genuinely identifies an implementation.
+# what identifies the exact implementation.
 #
 # The remaining tokens (kernel version, kernel binary hash, schema tag and K)
 # are geometry: they are what cross-pilot stacking depends on, alongside the

@@ -1,39 +1,27 @@
-"""Boundary to the CHIME/FRB Datatrail CLI.
+"""Discover CHIME/FRB archive holdings through the Datatrail CLI.
 
-datatrail is a SURVEY-ONLY dependency. survey() uses it to discover the archive
-landscape -- which scopes, datasets, and events exist -- and to resolve each
-event's CADC common path. The bulk data path (cadcget / cadcinfo) goes straight
-to CADC and never touches datatrail, so nothing here runs on the scan/fetch
-path.
+A survey needs to know which scopes, datasets, and events exist, and where
+an event's files live at CADC. Datatrail supplies that information. Downloads
+and size checks use CADC directly, so the scan/fetch path does not depend on
+Datatrail.
 
-We talk to datatrail through the CLI's machine-readable mode -- `datatrail ls
---json` and `datatrail ps --json` -- the stable, public contract added upstream
-in datatrail-cli 0.11.0 (CHIMEFRB/datatrail-cli#160). This avoids the two
-fragile couplings a datatrail integration could otherwise take on: scraping the
-CLI's Rich tables (terminal-width-dependent text) or importing
-`dtcli.src.functions` (internal, unversioned). The payloads are plain dicts --
-`ls` prints the `scopes` / `larger_datasets` / `datasets` / `error` dict
-verbatim (exit 1 when `error` is present), and `ps` wraps the files+policies
-pair as `{"dataset", "scope", "files", "policies"}` or an `{"error": ...}`
-envelope with exit 1 -- and every adapter method maps them onto its
-outage-vs-empty contract.
+This adapter uses ``datatrail ls --json`` and ``datatrail ps --json``, the
+public interface introduced in datatrail-cli 0.11.0
+(CHIMEFRB/datatrail-cli#160). The structured output avoids dependence on
+terminal formatting or internal ``dtcli.src.functions`` APIs. ``ls`` returns
+a ``scopes``, ``larger_datasets``, ``datasets``, or ``error`` dictionary.
+``ps`` returns ``{"dataset", "scope", "files", "policies"}`` or an
+``{"error": ...}`` envelope; an error exits with status 1.
 
-Invocation notes, guarding the failure classes that would otherwise bite:
-  * The child is `sys.executable -m dtcli.cli`, never a `datatrail` looked up
-    on PATH, so it uses the active environment.
-  * dtcli's group callback prints an update-available banner to STDOUT before
-    any command when PyPI shows a newer release; _extract_json() parses past
-    any such preamble.
-  * The child inherits the environment plus NO_COLOR=1 / TERM=dumb / PAGER=cat,
-    so captured output is plain text and can never block on a pager.
-  * Every call carries a hard timeout, so a wedged child cannot stall a survey
-    worker forever.
+An unavailable service and an empty dataset have different meanings. Adapter
+methods preserve that distinction so a failed request can be retried without
+recording missing data. A partially decoded response, such as a string in
+place of the files or policies object, also reports ``ok=False``.
 
-One subtlety worth naming: a partial server degradation can surface as an odd
-payload shape (a files or policies half decoded to a bare string). The CLI
-reports those as an error envelope with exit 1, and this adapter maps that to
-ok=False -- an outage, retried, never mistaken for emptiness -- which is the
-contract every caller is written against.
+Each call runs ``sys.executable -m dtcli.cli`` in the active environment.
+``_extract_json()`` skips any update banner before the JSON object. The child
+inherits the environment with ``NO_COLOR=1``, ``TERM=dumb``, and ``PAGER=cat``
+to keep output plain and prevent pager waits. A hard timeout bounds each call.
 """
 from __future__ import annotations
 

@@ -1,11 +1,10 @@
 # coding=utf-8
-"""The health gate names measurements once, and migrates archived files on read.
+"""Read archived health measurements through one vocabulary map.
 
-5fb0e32 renamed the measurements in the writer while the 2020--2026 archive kept
-the old spellings. Rather than let every reader accept either vintage, the gate
-names each measurement in the current vocabulary and resolves the archived
-spelling through one migration map at read time. That map is deletable once the
-archive has been reprocessed; until then these properties keep it honest.
+The writer uses current measurement names, while the 2020--2026 archive
+retains its original spellings. The health gate translates those names when
+reading, giving downstream code one set of fields. These tests check that
+translation until the archive can be reprocessed.
 """
 from __future__ import annotations
 

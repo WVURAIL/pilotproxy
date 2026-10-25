@@ -1,11 +1,13 @@
-"""Bind frozen archive operating words to numerical profiles for review only.
+"""Attach recorded archive thresholds to runtime profiles for review.
 
-This builder does not select thresholds, calibrate physical power, qualify a
-consumer's masking granularity, or authorize activation.
+Use the frozen operating words as inputs; this builder does not select
+new thresholds. If the bundle includes channel 37, bind its recorded
+word as a noise control with status control and require its score
+metadata in the plan. Otherwise leave the candidate unchanged.
 
-When the input bundle has a channel 37 profile, the channel 37 decision's word
-is bound to it as the noise control (status ``control``), the same way, and the
-plan must name its score metadata. Without one the candidate is unchanged.
+The resulting bundle remains unqualified for activation. Physical power
+calibration and the consumer's masking granularity require their own
+checks.
 """
 from __future__ import annotations
 

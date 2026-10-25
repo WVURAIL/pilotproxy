@@ -1,4 +1,4 @@
-"""Standalone CUDA local-reference power ratio DTV pilot detector package."""
+"""Detect DTV pilot tones by comparing target and reference power on a CUDA GPU."""
 
 from ._version import __version__
 

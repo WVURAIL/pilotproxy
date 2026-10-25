@@ -117,8 +117,7 @@ HALF_SCALE = 2.0
 COMPLEX_COMPONENT_COUNT = 2.0
 DEFAULT_EVALUATOR_SEED = 12345
 DEFAULT_NOISE_TRIALS = 3
-DEFAULT_NUM_INPUT_STREAMS = 4  # deployment-standard trial: 4 streams x 128 rows = 512
-# (was 1; a silent 1-stream default cost a debugging night on 2026-07-19)
+DEFAULT_NUM_INPUT_STREAMS = 4  # The standard trial combines 4 streams of 128 rows, giving 512 terms.
 DEFAULT_GNURADIO_PYTHON = "/usr/bin/python3"
 DEFAULT_CLIP_SIGMA = 3.0
 DEFAULT_SNR_SWEEP_MIN_DB = -45.0
@@ -460,16 +459,15 @@ def assert_clean_pilot_lands_on_target(
     nyquist_zone: int,
     minimum_normalized_ratio: float = 8.0,
 ) -> dict[str, Any]:
-    """Fail loudly when the detector statistic cannot see the noise-free pilot.
+    """Check that the configured detector sees the clean pilot before a sweep.
 
-    Every quantity downstream is a ratio of the target term to its references,
-    so a configuration whose clean line excites the wrong bin yields F ~= 1 at
-    every SNR and produces a detection curve made entirely of noise --
-    silently, and with the requested SNR still tracking perfectly. The check
-    is made through the same CPU-float statistic the sweep reports rather than
-    an independent FFT, because the two can disagree about spectral
-    conventions while each looks internally consistent. One clean
-    channelization at startup turns a curve made of noise into an error.
+    If the pilot excites the wrong projection, the target/reference ratio
+    stays near one even as the requested signal grows. The resulting curve
+    would measure noise instead of detection sensitivity.
+
+    Use the same CPU floating statistic as the sweep. An independent FFT can
+    use a different frequency convention and still appear self-consistent.
+    One clean channelization at startup catches that disagreement early.
     """
     rows = _float_streams_for_reference(
         clean_streams,

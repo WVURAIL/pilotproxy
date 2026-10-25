@@ -66,17 +66,14 @@ REFERENCE_PLACEMENT_REASON_NOMINAL = "nominal"
 REFERENCE_PLACEMENT_REASON_EDGE_WRAPPED = "edge_reference_wrapped"
 REFERENCE_PLACEMENT_REASON_DC_SHIFTED = "dc_reference_shifted_away"
 BASEBAND_FRAME_MODE_EXPLICIT = "explicit_profile_frame"
-# ``edge_wrapped`` is a bookkeeping event: the requested reference frequency
-# left the normalized interval [0, 1) and was reduced modulo 1. Because the
-# K-tap projection is periodic in normalized frequency, the wrapped weights
-# are bit-identical to the unwrapped ones; what the flag records is that the
-# reference crossed the baseband-frame ORIGIN (nu = 0). What that origin is
-# physically depends on the receiver profile:
-#   channel_center_normalized = 0.0 -> nu = 0 is the coarse-channel center
-#                                      (the forbidden DC tone);
-#   channel_center_normalized = 0.5 -> nu = 0 is the coarse-channel edge.
-# The physical coarse-channel edge (+-fs/2 from the channel center) is
-# reported separately by the ``*_crosses_channel_edge`` fields below.
+# ``edge_wrapped`` records a reference frequency reduced into [0, 1).
+# The K-tap projection is periodic, so this leaves the weights bit-identical.
+# What crossed the boundary is the baseband coordinate; its physical meaning
+# depends on where the receiver profile places nu = 0:
+#   channel_center_normalized = 0.0: the channel center (the forbidden DC tone);
+#   channel_center_normalized = 0.5: the channel edge.
+# The *_crosses_channel_edge fields separately report crossings of the
+# physical edges at +/-fs/2 from the channel center.
 FRAME_ORIGIN_DESCRIPTION_GENERIC = "the baseband-frame origin (nu = 0)"
 FRAME_ORIGIN_DESCRIPTION_CENTER = (
     "the baseband-frame origin nu = 0 (the coarse-channel center / DC under "

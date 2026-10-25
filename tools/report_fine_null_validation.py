@@ -2,7 +2,7 @@
 """Report independent literal H0 outcomes without changing calibration.
 
 Scientific gate failures are retained in the report and do not raise an
-exception. Missing, altered or incorrectly labelled inputs do raise, since
+exception. Missing, altered or incorrectly labeled inputs do raise, since
 they cannot support a report with the frozen denominator.
 """
 from __future__ import annotations

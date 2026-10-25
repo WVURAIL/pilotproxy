@@ -1,24 +1,24 @@
-"""The current-era exact score cache: the input of the threshold rule.
+"""Cache the exact current-era scores used by the threshold rule.
 
-For each channel of the working thresholds, the current-era frames of its fine
-score export (or, for a channel rescored on a revised geometry, of its exact
-replay) with their exact minimum keep words, the event weights (one unit per
-source event, uniform over its frames) and a bounded grid of candidate words,
-written as ``ch<N>.json`` and ``ch<N>.npz``. Every input is authenticated by
-its sha256. The knee is recomputed from the frames
-(:mod:`pilot_proxy.characterization.knee`) and must equal the recorded knee.
+For each channel, read the current-era frames from its fine score export, or
+from an accepted exact replay when the geometry was revised. Store their
+minimum Q16 keep words, equal-event weights, and a bounded grid of candidate
+words in ``ch<N>.json`` and ``ch<N>.npz``. Each event contributes one unit of
+weight, shared equally among its original frames.
 
-No assigned threshold, accepted mask, or source product is changed. The score
-feature is the integer minimum deployable Q16 word, not measured RFI power.
+Input SHA-256 checks bind the cache to its sources. The knee is recomputed
+from the frames with :mod:`pilot_proxy.characterization.knee` and must match
+the recorded knee. Building the cache does not change an assigned threshold,
+accepted mask, or source product. Its score is a keep word, not RFI power.
 
     pilot-proxy characterize score-cache --working DIR --exports FILE --previous FILE --output DIR
         [--era-list projects/chime_atsc/eras/power_eras_2026-10-04.json]
 
-``--working`` is the working-threshold delivery (``DELIVERY_MANIFEST.json`` and
-``WORKING_THRESHOLDS.json``: each channel's current word and months, score
-geometry and accepted replay), ``--exports`` the record naming each channel's
-fine score export and its metadata, ``--previous`` the power-era threshold
-record (the original score geometry and knee).
+``--working`` supplies ``DELIVERY_MANIFEST.json`` and
+``WORKING_THRESHOLDS.json``: each channel's word, months, score geometry, and
+accepted replay. ``--exports`` names the fine score exports and their metadata.
+``--previous`` supplies the original geometry and knee from the power-era
+threshold record.
 """
 from __future__ import annotations
 

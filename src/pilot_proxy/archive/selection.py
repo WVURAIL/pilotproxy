@@ -1,37 +1,27 @@
-"""
-Shared selection parsing for sources and analyzers -- one public grammar.
+"""Select archive units by frequency channel, event, or both.
 
-Every source interprets `ctx.selection` ("what the user asked to process").
-Two filters share the grammar: freq_ids (per-channel, across events) and
-events (per-event -- e.g. beamforming every freq_id of ONE event into a
-single product). `event` is a column in every archive inventory row, so both
-are selectable; when both are given they are ANDed.
+Every source reads the user's selection from ``ctx.selection``. A channel
+filter selects that frequency across events; an event filter can select all
+frequencies of one acquisition. When both are supplied, a unit must pass both.
 
-Accepted forms (a source passes whatever it received straight to
-`parse_selection`):
+Accepted forms::
 
     None / "all" / "*"             -> no filter (every unit)
     844 / [614, 706] / "614,706"
       / "506-844"                  -> freq_ids
     "events:343434343,353535353"
-      / "event:343434343"          -> events (string prefix form, CLI-friendly)
+      / "event:343434343"          -> events (CLI prefix form)
     {"freq_ids": <any form above>,
-     "events":  [343434343, ...]}  -> both filters, ANDed (the programmatic
-                                      form a `plan_runs` returns)
+     "events": [343434343, ...]}   -> both filters
 
-Two deliberate rules:
+Event selection requires an explicit dictionary key or prefix. Inferring it
+from an integer's size would make the grammar depend on the current range of
+archive identifiers. A unit missing a filtered field does not match: for
+example, a frequency filter excludes a calibration product with no freq_id.
 
-  * An event filter is always EXPLICIT (dict key or `events:` prefix). It is
-    never inferred from the magnitude of a bare integer -- CHIME event IDs
-    happen to be numerically disjoint from freq_ids today, but a selection
-    grammar built on that coincidence would fail silently the day it stops
-    holding.
-  * Filters are exact and ANDed: a unit missing a filtered field does not
-    match it. Asking for freq_ids 614,706 excludes a unit that has no freq_id
-    concept at all (e.g. a per-event calibration product), and vice versa.
-  * Empty strings, empty collections, comma-only values, nested collections,
-    negative channels, and channels outside known instrument geometry are
-    errors. Only an explicit ``all``/``*`` means no filter.
+Empty strings or collections, comma-only values, nested collections, negative
+channels, and channels outside the known geometry are errors. Use ``all`` or
+``*`` to request every unit explicitly.
 """
 from __future__ import annotations
 

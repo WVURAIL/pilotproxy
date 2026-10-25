@@ -1,6 +1,4 @@
-"""The fine-axis anchor of an era: the on-minus-quiet estimator, its fallback,
-its coordinates, its acquisition bootstrap, and the designated set and bulk
-it fixes.
+"""Locate the pilot within a stable era and define the surrounding reference bins.
 
 Definitions implemented, quoted from the dissertation.
 
@@ -159,7 +157,7 @@ def rf_offset_of_bin(bin_index, geometry: Geometry):
     :func:`unwrap_bins` gives ``anchor_offset_bins``, so the two coordinates
     agree at every offset including -128 (wrapping about the real-valued grid
     residual instead would put that one bin a full coarse bin away whenever
-    the residual lies above the nominal bin's centre).
+    the residual lies above the nominal bin's center).
     """
     nominal = int(geometry.nominal_fine_bin)
     fine_hz = unwrap_bins(bin_index, nominal) * FINE_BIN_HZ + fine_hz_of_bin(nominal)
@@ -334,7 +332,7 @@ class AnchorResult:
     anchor_bin: int                     # padded fine bin of the argmax over all bins; -1 when empty
     anchor_fine_hz: float               # its fine-axis offset
     anchor_offset_bins: int             # unwrapped signed offset from the nominal bin (fine-array direction)
-    anchor_rf_offset_hz: float          # RF offset from the nominal pilot, positive towards higher RF
+    anchor_rf_offset_hz: float          # RF offset from the nominal pilot, positive toward higher RF
     anchor_contrast: float              # the contrast curve at the anchor
     runner_up_bin: int                  # best bin outside D(f_a)
     runner_up_contrast: float

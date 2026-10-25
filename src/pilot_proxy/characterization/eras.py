@@ -197,7 +197,7 @@ class EraConfig:
     high_db: float = 1.0                       # proxy-high: monthly median level >= high_db
     low_db: float = 0.5                        # proxy-low: monthly median level <= low_db
     station_shift_bins: float = 3.0            # station change: shift of the monthly location, fine bins
-    window_half_width: int = 30                # nominal acquisition neighbourhood, fine bins
+    window_half_width: int = 30                # nominal acquisition neighborhood, fine bins
     min_peak_cohort: int = 30                  # detected frames needed for the monthly location cohort
     persistence_months: int = 2                # populated months a new state, anchor or map must hold
     one_sided_ambiguous: str = "inherit"       # 'inherit' | 'separate' for leading/trailing ambiguous runs

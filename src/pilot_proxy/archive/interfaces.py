@@ -1,34 +1,22 @@
-"""Interfaces for archive sources, readers, and analyzers.
+"""Define the source, reader, and analyzer roles in an archive run.
 
-The engine itself (pipeline.py) is fixed: for every *unit* in a discovered
-inventory it does
+For each discovered unit, the engine stages a file, reads its frames, passes
+them to an analyzer, deletes the staged copy, and checkpoints the result.
+Three interfaces supply the parts that depend on the telescope or analysis:
 
-    fetch (stage one file)  ->  read (file -> frames)  ->  analyze (frames -> product)
-                            ->  delete the local file   ->  checkpoint
+* ``DataSource`` locates and stages the data. The reference source uses CADC
+  and the CHIME/FRB Datatrail archive.
+* ``Reader`` turns a staged file into arrays and per-unit metadata. It also
+  defines which files belong to an event and how they are named through
+  ``survey_files``, so discovery and reading use the same file layout.
+  The reference reader handles CHIME 4+4-bit baseband HDF5.
+* ``Analyzer`` consumes those arrays in one streaming pass and accumulates a
+  product that can be checkpointed and saved. The averaged power-spectrum
+  analyzer is one example.
 
-Everything telescope- or science-specific lives behind one of three interfaces
-defined here, so adding a new use is implementing a plugin, not editing the
-engine:
-
-  DataSource   WHERE the data is and how to enumerate/stage it.
-               (the reference one is CADC + the CHIME/FRB Datatrail archive)
-
-  Reader       WHAT a staged file looks like: turn a path into an iterable of
-               arrays plus the per-unit metadata the analyzer needs. The reader
-               also owns the ARCHIVE FILE SHAPE -- which files one event
-               contributes and what they are named (survey_files) -- so an
-               archive survey and a later read share one naming definition.
-               (the reference one is CHIME 4+4-bit baseband HDF5)
-
-  Analyzer      the SCIENCE: consume those arrays in a single streaming pass and
-               accumulate a product that can be checkpointed and saved.
-               (the reference one is the averaged power-spectrum analyzer)
-
-A fourth axis, the *instrument* (band/channelization geometry), is data, not
-code -- it is a YAML file under instruments/ and is handled by instruments.py.
-
-Plugins advertise themselves through `describe()` so the `list` / `doctor`
-discovery commands can show a newcomer what exists and what is still a stub.
+Instrument geometry is supplied separately as YAML under ``instruments/``.
+Plugins describe their capabilities through ``describe()`` so ``list`` and
+``doctor`` can report which combinations are available and ready to run.
 """
 from __future__ import annotations
 

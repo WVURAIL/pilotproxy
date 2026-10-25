@@ -1,50 +1,57 @@
-"""Era boundaries at the switch-on and switch-off transitions of each channel's monthly power.
+"""Find sustained changes in each channel's monthly pilot-region power.
 
-Each channel's monthly level (the median over the month's events of each event's
-frame-maximum power in the pilot neighbourhood, the era review's reduction) is
-segmented with Bayesian Blocks for point measures (Scargle et al. 2013, ApJ 764,
-167: the fitness of eq. 41 and the false-positive prior of eq. 21, as astropy
-implements them). A month's error is the counting error of a median of its
-events added in quadrature to the channel's within-era scatter, the robust
-spread of its levels about a 13-month running median, so that season and
-propagation do not split blocks.
+Start with one level per month. For each event, take the median of its
+frame-maximum powers in the pilot neighborhood; then take the median across
+the month's events. Bayesian Blocks segments these levels using the
+point-measure fitness and false-positive prior of Scargle et al. (2013,
+ApJ 764, 167), Eqs. 41 and 21, as implemented by astropy.
 
-1. A change point is a boundary when its step lies above the largest gap in the
-   sorted step sizes over all channels. The data separate switch-on and
-   switch-off from every other level change; no step size is typed in.
-2. An excursion is not a boundary: an era shorter than both its neighbours,
-   across which the level returns to the prior state (the change from the block
-   before it to the block after it falls below the split, among the level
-   changes the scatter makes).
-3. Frequency drift never cuts, since the series is power only. A change across a
-   coverage gap is dated at the first covered month after it.
-4. The current era runs from the last boundary to the last covered month.
+The monthly error combines the counting error of the event median with the
+channel's within-era scatter in quadrature. That scatter is the robust spread
+about a 13-month running median, included so seasonal and propagation changes
+do not split the series into extra blocks.
 
-With ``--line-identity`` the pilot line's identity also cuts, from the per-event
-peak offsets the review carries. In local windows of three covered months on each
-side of a block edge, with h the marker half-width (the detector's
-``DESIGNATED_HALF_WIDTH`` fine bins, 23.84 Hz, one bin of the review's grid), a
-line is steady when the median absolute deviation
-of its monthly offsets is at most h/2 and unsteady above h. The edge is a line
-boundary when (a) both lines are steady and the local median offset moves by
-more than h and the move between the last and first covered months exceeds
-one bin, h/2 (drift, one bin per month, never cuts), or (b) a steady line becomes unsteady or the reverse; in both cases the
-level step at the edge must exceed the channel's calibration: the largest level
-step the same line makes, over the edges where the line does not change. Edges
-of a reversing block (shorter than both neighbours, the level returning within
-the split) never cut, and a reversing block shorter than the window is below
-the method's resolution, so its edges do not calibrate either. A channel whose steady
-offsets take two values only, each in at least two runs, is a two-state line
-whose hand-overs are not boundaries.
+Power boundaries follow four rules:
+
+1. Sort the block-step sizes across channels. The largest gap separates large
+   transitions from other changes; a step above that gap starts an era.
+2. Merge an excursion when its block is shorter than both neighbors and the
+   level returns to its previous state. The levels before and after it must
+   differ by less than the split defined above.
+3. Power alone sets these boundaries, so frequency drift does not cut an era.
+   A change across a coverage gap is dated at the first month after the gap.
+4. The current era extends from the last boundary to the last covered month.
+
+``--line-identity`` also tests changes in the pilot's frequency behavior.
+At each block edge, use the three covered months on either side. Let h be the
+marker half-width, ``DESIGNATED_HALF_WIDTH`` fine bins: 23.84 Hz, or one bin
+of the review's grid. A line is steady when the median absolute deviation of
+its monthly offsets is at most h/2, and unsteady when it exceeds h.
+
+An edge is a line-boundary candidate if either:
+
+* both sides are steady, their local median offsets differ by more than h,
+  and the last-to-first covered-month jump exceeds h/2; or
+* the line changes between steady and unsteady.
+
+The jump condition excludes drift of one fine bin per month. In either case,
+the power step must also exceed the largest step seen at edges where that
+channel's line identity stays the same.
+
+Reversing blocks, defined by the excursion rule above, never create line
+boundaries. A reversing block shorter than the local window also stays out
+of the calibration, because it is below the method's resolution. Finally,
+a channel whose steady offsets take just two values, each in at least two
+runs, is treated as a two-state line; its handovers do not split eras.
 
     pilot-proxy characterize era-boundaries --review DIR --output DIR [--previous ERA_LIST]
     pilot-proxy characterize era-boundaries --levels FILE --output DIR [--previous ERA_LIST]
 
-``--review`` is the era-review delivery (``data/ch<N>.npz``: each event's month,
-level and peak offset, each month's frame count; ``--line-identity`` needs it); ``--levels`` a ``monthly_levels.json``
-written by an earlier run. The output holds ``monthly_levels.json``,
-``blocks.json`` (every block, step, boundary and excursion, and the split) and
-``eras.json``, the era list in the layout of
+``--review`` reads ``data/ch<N>.npz`` from the era review: each event's month,
+level, and peak offset, plus monthly frame counts. Line-identity checks require
+this input. ``--levels`` instead reads an existing ``monthly_levels.json``.
+The outputs are ``monthly_levels.json``, ``blocks.json`` (steps, boundaries,
+excursions, and split), and ``eras.json`` in the format of
 ``projects/chime_atsc/eras/power_eras_2026-10-04.json``.
 """
 from __future__ import annotations
@@ -96,7 +103,7 @@ def monthly_levels(event_month, event_level, months, frame_counts) -> list[dict]
 
 
 def within_era_scatter(t, x) -> float:
-    """Robust spread of the levels about a centred 13-month running median."""
+    """Robust spread of the levels about a centered 13-month running median."""
     t, x = np.asarray(t), np.asarray(x, float)
     residual = [x[i] - np.median(x[np.abs(t - t[i]) <= SCATTER_HALF_WINDOW]) for i in range(len(t))]
     return float(MAD_TO_SIGMA * np.median(np.abs(residual)))
@@ -214,7 +221,7 @@ def _local(lines: dict[int, dict], months: list[int]) -> dict | None:
 
 
 def reversing_blocks(channel_blocks: list[Block], upper: float) -> list[int]:
-    """Blocks shorter than both neighbours across which the level returns within the split."""
+    """Blocks shorter than both neighbors across which the level returns within the split."""
     span = [b.last - b.first + 1 for b in channel_blocks]
     return [j for j in range(1, len(channel_blocks) - 1)
             if span[j] < min(span[j - 1], span[j + 1])

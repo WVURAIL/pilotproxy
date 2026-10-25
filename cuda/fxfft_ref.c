@@ -1,10 +1,10 @@
 /* fxfft --- frozen deterministic fixed-point FFT reference, any supported size.
  *
- * This is the size-parameterized companion to fxfft256_ref.c. That file stays
- * exactly as it is: it is the frozen fxfft256 v1 artifact, it is what the
- * golden vectors were produced against, and it is what kotekan vendors. This
- * file exists because frame sizes of 2**15 and 2**16 put L_F = 2N/K at 512,
- * 1024 and 2048, and the deployed transform has to follow.
+ * Larger frames can require a longer fine transform: L_F = 2N/K reaches
+ * 512, 1024, or 2048 for frame sizes of 2**15 and 2**16. This companion
+ * applies the same specification at those supported lengths.
+ * fxfft256_ref.c remains the unchanged v1 reference used for the golden
+ * vectors and vendored by kotekan.
  *
  * Same specification, length as a parameter:
  *   FX_N-point forward DFT (e^{-2 pi i b m / FX_N}), radix-2 decimation in
@@ -27,8 +27,8 @@
  *   FX_N   256   512  1024  2048
  *   |x| <= 2**20 2**18 2**17 2**16
  * Deployed row sums are bounded by 128 * K <= 2**14, inside all of them. The
- * 2**20 contract of the eight-stage transform is NOT reusable at nine stages;
- * FX_INPUT_ABS_MAX below is derived per size rather than inherited.
+ * eight-stage 2**20 limit would be too large at nine stages, so
+ * FX_INPUT_ABS_MAX is derived separately for each size.
  *
  * Build (plain C, no CUDA needed):  cc -O2 -o fxfft_ref fxfft_ref.c
  * Harness protocol: ./fxfft_ref in.bin out.bin

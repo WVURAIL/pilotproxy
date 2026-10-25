@@ -1,16 +1,11 @@
 # coding=utf-8
-"""A study must not invalidate its own run directory.
+"""Keep a study's identity stable as it creates output files.
 
-``_build_config`` hashes the configuration into ``config_sha256``, and
-``_write_or_validate_config`` refuses any later stage whose digest differs.
-Because git provenance came from ``git status --short``, that digest included
-untracked paths -- and ``--stage prepare`` *creates* the output directory. The
-documented production sequence, with the documented
-``--output-dir results/current_geometry_sensitivity``, therefore died at stage
-two with "output directory is bound to a different config".
-
-Untracked build products are not scientific identity. Modified *tracked* sources
-still are: shards must not be pooled across an edited working tree.
+``_build_config`` hashes the configuration, and ``_write_or_validate_config``
+requires later stages to use the same digest. The prepare stage creates an
+output directory, so untracked files must not change that identity. Modified
+tracked sources still belong in it: shards produced by different code must
+not be pooled as one unchanged study.
 """
 from __future__ import annotations
 

@@ -69,7 +69,7 @@ SAMPLE_RATE_HZ = default_project().instrument.sample_rate_hz
 
 
 def require_current_detector_contract(run_dir: Path) -> None:
-    """Refuse to analyse a run whose detector outputs use another power definition.
+    """Refuse to analyze a run whose detector outputs use another power definition.
 
     ``chime_detector_outputs.npz`` carries no schema token; the run's
     ``run_config.json`` names its detector contract. Revision 2

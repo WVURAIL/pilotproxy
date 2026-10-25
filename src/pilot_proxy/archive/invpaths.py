@@ -1,17 +1,12 @@
 # coding=utf-8
-"""Inventory location policy: one absolute, CWD-independent home.
+"""Resolve named inventories independently of the working directory.
 
-Inventories live under a single root so that surveys and scans agree on
-where things are no matter which directory a command runs from:
+Surveys and scans need to agree on where a named inventory lives. Both use
+``$PILOT_PROXY_INVENTORY_ROOT`` when set, or ``~/datatrawl-inventories`` by
+default. The root must be absolute.
 
-    $PILOT_PROXY_INVENTORY_ROOT    env override
-    ~/datatrawl-inventories        default
-
-Reads and writes resolve by name only through the canonical root. Historical
-``data/<name>`` fallbacks were removed at the current cleanup boundary because they
-made command behavior depend on the current working directory. An explicit
-``--root``/``--inventory`` still wins
-everywhere -- this module only supplies the defaults.
+An explicit ``--root`` or ``--inventory`` takes precedence. This module
+supplies only the defaults for resolution by name.
 """
 from __future__ import annotations
 

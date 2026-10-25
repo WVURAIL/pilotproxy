@@ -1,19 +1,21 @@
 # coding=utf-8
-"""Fail-closed health repair for the completed CHIME per-pilot archive.
+"""Identify unusable archive frames and repair spectra when the samples are known.
 
-The archive products retain enough frame-level information to remove known
-pathological rows from scalar and fine-statistic analyses.  They normally do
-not retain per-frame Fourier spectra.  There is one deliberately narrow
-exception: ``baseband_power_linear == 128`` proves that every decoded complex
-int4 sample in the frame was ``(-8, -8)``.  Such a frame has a reconstructible
-rectangular-FFT spectrum (DC only), so its contribution can be subtracted from
-the two archived integrated spectra.  This module implements that exact repair
-and refuses to claim a spectral repair for any excluded valid frame whose
-samples are not similarly determined.
+The CHIME per-pilot archive retains enough frame-level data to remove
+known pathological rows from scalar and fine-statistic analyses. It
+usually does not retain each frame's Fourier spectrum, so removing a
+frame from an integrated spectrum requires more information.
 
-The native CHIME byte for ``(-8, -8)`` is offset-binary ``0x00``.  Lossless
-repacking for the detector converts the same sample to two's-complement
-``0x88``.  These byte coordinates are never interchangeable in reports.
+One case can be reconstructed exactly: baseband_power_linear == 128
+means every decoded complex int4 sample was (-8, -8). That constant
+frame has only a DC component under the rectangular FFT. We can therefore
+subtract its known contribution from both archived integrated spectra.
+If another excluded valid frame has undetermined samples, report that
+exact spectral correction is unavailable.
+
+Keep the two byte conventions distinct. CHIME stores (-8, -8) as native
+offset-binary 0x00; lossless detector repacking writes two's-complement
+0x88 for the same sample.
 """
 
 from __future__ import annotations
@@ -483,15 +485,16 @@ def _residual_view_key(name: str) -> str:
 
 
 def write_residual_health_view(source: Path, destination: Path) -> Path:
-    """Write the minimal health-filtered NPZ residual-analysis view.
+    """Write the health-filtered columns required by the residual-analysis APIs.
 
-    The released residual APIs accept paths and load the per-frame columns
-    internally.  Passing an original archive product would silently restore
-    rows excluded by the v1 gate.  This deliberately incomplete derived view
-    retains only the coarse-policy/residual columns those APIs consume, slices
-    every frame column by the fail-closed inclusion mask, and records the
-    source hash and gate identity.  It is not a replacement canonical product
-    and intentionally omits the run's superseded fine-decision fields.
+    Those APIs load a path themselves. Giving them the original product
+    would restore rows excluded by the v1 health check, so create a
+    derived view containing only their coarse-policy and residual fields.
+    Slice every frame column by the inclusion mask and record the source
+    hash and health-check identity.
+
+    This view is not a replacement archive product. It omits the run's
+    superseded fine-decision fields.
     """
 
     source_path = Path(source)

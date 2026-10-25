@@ -273,16 +273,15 @@ _BUTTERFLY_GROWTH = 1.0 + 1.41422 + (1.0 / 32768.0)
 
 
 def input_abs_max(n: int) -> int:
-    """Largest input infinity-norm with a proven no-overflow closure at ``n``.
+    """Find a power-of-two input bound that prevents int32 overflow at length n.
 
-    One butterfly maps the working norm ``M`` to at most
-    ``(1 + sqrt(2) + 2**-15) M + 1``. This function applies the looser
-    ``(1 + sqrt(2) + 2**-15) M + M_0`` (``M_0`` the input norm, so the
-    ``+ 1`` is covered for any ``M_0 >= 1``) ``log2(n)`` times and requires
-    the result below ``2**31``, which gives the bound, floored to a power
-    of two. The bound *tightens* as ``n`` grows, so the eight-stage contract
-    (``2**20``) is not reusable at nine stages, which is precisely the
-    failure mode this function exists to prevent.
+    A butterfly takes working norm M to at most
+    (1 + sqrt(2) + 2**-15) M + 1. For an input norm M_0 >= 1, use the
+    looser bound with +M_0 in place of +1. Apply it log2(n) times and
+    require the final value to stay below 2**31.
+
+    Longer transforms need smaller input bounds. In particular, the
+    eight-stage limit 2**20 cannot simply be reused for nine stages.
     """
     stages = n.bit_length() - 1
     norm = 1.0

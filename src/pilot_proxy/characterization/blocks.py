@@ -1,21 +1,20 @@
-"""Calibration/evaluation blocks and the acquisition block bootstrap.
+"""Split calibration and evaluation data by acquisition, then bootstrap acquisitions.
 
-Consecutive 42 ms frames of one acquisition are strongly correlated and the
-archive has diurnal and seasonal structure, so nothing here ever resamples
-or splits frames individually. The unit is the acquisition (the product's
-``frame_unit_index``): a current era is split into a calibration block and an
-evaluation block on whole acquisitions in chronological order, at the
-acquisition that balances the frame counts, so that calibration precedes
-evaluation the way offline calibration precedes online use; and every
-uncertainty is a bootstrap that resamples whole acquisitions with a recorded
-seed.
+Consecutive 42 ms frames from one acquisition are strongly correlated. The
+archive also has daily and seasonal structure. We therefore keep each
+acquisition intact when splitting the data or resampling it for uncertainty.
+The product's ``frame_unit_index`` identifies these groups.
 
-Month support follows the dissertation's section 8.1 aggregation rule: a
-UTC calendar month is populated only with at least 30 valid frames drawn
-from at least 5 distinct acquisitions on at least 3 distinct days (policy
-values; 3/5/10 acquisitions are the registered sensitivity values). Each
-block must satisfy the era's month minimums on its own or the selector
-reports insufficient support instead of thinning the split.
+Within a current era, acquisitions are ordered in time. The split is placed
+at the acquisition that balances the frame counts, so calibration precedes
+evaluation as it would in use. Bootstrap replicates draw whole acquisitions
+with replacement and record their random seed.
+
+Month support follows the dissertation's section 8.1 aggregation rule. A UTC
+month needs at least 30 valid frames from 5 acquisitions on 3 days; the
+registered acquisition-count sensitivities are 3, 5, and 10. Each block must
+meet the era's month requirements on its own. Otherwise the selector reports
+insufficient support.
 """
 from __future__ import annotations
 
@@ -203,7 +202,7 @@ def block_bootstrap(unit_index, selected, statistic: Callable[[np.ndarray], floa
     ``statistic`` receives an integer weight per frame (how many times the
     frame's acquisition was drawn; zero for frames outside the selection) and
     returns a float; the point estimate uses unit weights on the selection.
-    Weighted statistics keep every replicate a single vectorised pass, so a
+    Weighted statistics keep every replicate a single vectorized pass, so a
     1000-replicate bootstrap over 40k frames costs one pass per replicate,
     not a copy of the product.
     """

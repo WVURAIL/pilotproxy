@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""Launch (or reuse) a CUDA GPU session on CANFAR.
+"""Launch or reuse a CANFAR CUDA session with the canfar client (>= 1.4).
 
-Rewritten for the modern ``canfar`` client (>= 1.4). The Science Platform's
-skaha API now requires *registry auth* to pull a session image, so this script
-needs your Harbor CLI secret. Get it from https://images.canfar.net
-(log in -> your name, top right -> User Profile -> "CLI secret"), then export:
+The Science Platform's skaha API needs registry credentials to pull the
+session image. Obtain your Harbor CLI secret at https://images.canfar.net
+under your name, User Profile, then "CLI secret". Supply it through:
 
-    export CANFAR_REGISTRY_USER=<your-cadc-username>  # your CADC / Harbor username
+    export CANFAR_REGISTRY_USER=<your-cadc-username>
     export CANFAR_REGISTRY_SECRET=<your-cli-secret>
 
-(You should already have an active CANFAR auth context from ``cadc-get-cert``
-or ``canfar auth login``; this script does not touch it.)
+An active CANFAR authentication context from ``cadc-get-cert`` or
+``canfar auth login`` is also required. This script uses that context.
 
 Usage:
     python launch_gpu_session.py             # launch or reuse, print connect URL
     python launch_gpu_session.py --status    # show status + URL only
-    python launch_gpu_session.py --destroy   # tear it down when you're done
+    python launch_gpu_session.py --destroy   # tear down the session
     python launch_gpu_session.py --cores 8 --ram 16 --gpu 2 --timeout 60
 """
 import argparse

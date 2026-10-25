@@ -28,7 +28,7 @@ from pilot_proxy.archive.interfaces import RunContext
 # ==========================================================================
 def test_cert_explicit_env_wins(monkeypatch):
     monkeypatch.setenv("CADC_CERT", "/somewhere/explicit.pem")
-    # explicit is honoured even when it doesn't exist (the user's stated intent)
+    # explicit is honored even when it doesn't exist (the user's stated intent)
     monkeypatch.setattr(src.os.path, "exists", lambda p: False)
     assert src._default_cert() == "/somewhere/explicit.pem"
 

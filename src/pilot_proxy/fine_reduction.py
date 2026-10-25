@@ -213,16 +213,16 @@ def frame_powers_from_fine_u64(
     windows_per_stream: int = 128,
     num_weight_terms: int = 3,
 ) -> np.ndarray:
-    """The deployed frame powers ``P[n] = sum_b S[n, b]``, exact uint64.
+    """Sum exact fine powers over bins to obtain the deployed frame powers.
 
-    ``S`` is :func:`pilot_proxy.fxfft.fine_power_fx` of the integer row sums
-    (the frozen fxfft256, summed over streams), so this is the CPU reference
-    for the kernel's frame powers: ``PilotProxy_Compute_FinePowers_U64`` summed
-    over bins on the host, and the fused entry's device-reduced
-    ``d_power_out``. Returns ``uint64[num_weight_terms]``. The sum fits uint64
-    for every deployed geometry (the per-bin bound of ``fxfft`` summed over
-    256 bins stays below ``2**64``); numpy uint64 addition would wrap
-    silently, so the total is checked in Python integers.
+    P[n] = sum_b S[n, b], returned as uint64[num_weight_terms]. S is the
+    frozen fxfft256 output from pilot_proxy.fxfft.fine_power_fx, already
+    summed over streams. This is the CPU reference for the host sum of
+    PilotProxy_Compute_FinePowers_U64 and the fused entry's d_power_out.
+
+    The deployed per-bin bound keeps the 256-bin sum below 2**64. Check
+    the total with Python integers before conversion, because NumPy's
+    uint64 addition would otherwise wrap on overflow.
     """
     from pilot_proxy.fxfft import fine_power_fx
 

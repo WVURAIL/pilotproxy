@@ -1,10 +1,10 @@
 # coding=utf-8
-"""Current per-pilot product and decision-method identities.
+"""Define what each per-pilot product measures and how its mask was formed.
 
-Schema identity, scientific measurement, and rejection policy are separate
-coordinates.  Keeping them explicit prevents a diagnostic fine spectrum or an
-implemented kernel entry point from being mistaken for the active mask used by
-an archive product.
+Keep schema version, scientific measurement, and rejection policy explicit
+and separate. A product may contain a diagnostic fine spectrum without
+using it for its stored mask; the presence of a kernel entry point also
+does not establish which decision was applied.
 """
 
 from __future__ import annotations
@@ -366,16 +366,16 @@ def _selected_fine_terms(product: Mapping[str, Any], rows: Any) -> np.ndarray:
 def frame_powers_from_fine(
     product: Mapping[str, Any], rows: Any = None
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The frame powers ``(p_target, p_ref_lower, p_ref_upper)`` from fine powers.
+    """Derive target, lower-reference, and upper-reference frame powers.
 
-    ``P_r = sum_f fine_power_u64[:, r, f]``, the kernel core 3.0.0 definition,
-    as exact ``uint64`` vectors of shape ``(n,)`` (``n`` frames, or the
-    ``rows`` selection). This is what a v6 product stores in
-    ``p_*_u64[:, 0]``; on a v5 product of record it is the frame power the
-    stored row-domain ``p_*_u64`` are replaced by. The deployed bound keeps
-    every sum far below ``2**64`` (about ``2**56`` at 2048 inputs); numpy
-    would wrap silently, so a float64 shadow sum refuses any sum that could
-    have reached ``2**64`` instead of returning a wrapped value.
+    Sum P_r = fine_power_u64[:, r, :].sum(axis=1), the core 3.0.0
+    definition. Return exact uint64 vectors with one value per selected
+    frame. A v6 product stores these values in p_*_u64[:, 0]; for a v5
+    product, they replace the earlier row-domain power definition.
+
+    The deployed sum is about 2**56 at 2048 inputs, well below 2**64.
+    Because NumPy would silently wrap an overflowing uint64 sum, use
+    a float64 shadow sum to reject any total that could reach 2**64.
     """
     terms = _selected_fine_terms(product, rows)
     count = int(terms.shape[0])

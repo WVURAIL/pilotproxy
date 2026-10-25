@@ -607,15 +607,15 @@ class PilotProxyKernel:
         batch: int,
         fine_powers_ptr: int,
     ):
-        """On-device fine-reduction power stage (fxfft256 v1).
+        """Transform exact row projections into fine powers on the device.
 
-        Composes directly with compute_row_projections_i32: row_projections_ptr is the
-        same device buffer that call filled (term-major, stream-major rows,
-        interleaved re/im int32), and fine_powers_ptr must address
-        batch * num_weight_terms * 256 uint64 on the device (zeroed by the
-        library before accumulation). Exact integers throughout; the
-        transform is the frozen fxfft256 v1 specification. This entry
-        takes no handle. windows_per_stream must be 128.
+        Pass the buffer filled by compute_row_projections_i32: term-major,
+        stream-major rows with interleaved real/imaginary int32 components.
+        fine_powers_ptr must hold batch * num_weight_terms * 256 uint64
+        elements; the library zeros it before accumulation.
+
+        Arithmetic follows the frozen fxfft256 v1 definition. This entry
+        needs no handle, and windows_per_stream must be 128.
         """
         if not getattr(self, "_has_fine_powers_u64", False):
             raise RuntimeError(
@@ -672,21 +672,22 @@ class PilotProxyKernel:
         powers_ptr: int,
         row_projections_tap_ptr: int = 0,
     ):
-        """One launch from packed samples to exact fine powers and frame powers.
+        """Compute exact fine powers and frame powers from packed samples.
 
-        The fused form of the deployed fine path (kernel core 2.2.0): row
-        projections live in shared memory and the frozen fxfft256 v1 fine
-        powers are accumulated in the launch. fine_powers_ptr addresses
-        batch * num_weight_terms * 256 uint64 (zeroed by the library before
-        accumulation) and matches the composed path bit for bit.
-        powers_ptr addresses batch * num_weight_terms uint64 and receives
-        the frame powers ``P_r = sum over the 256 fine bins of S_r[f]``,
-        reduced from the finalized fine sums after the fused launch (kernel
-        core 3.0.0); it equals ``fine.sum(axis=-1)`` on the host exactly.
-        row_projections_tap_ptr, when nonzero, addresses the same device
-        buffer layout compute_row_projections_i32 fills and receives the
-        identical bits; leave it 0 in production so row projections never
-        touch global memory.
+        The fused path, introduced in core 2.2.0, keeps row projections
+        in shared memory and accumulates fxfft256 v1 fine powers in one
+        launch. fine_powers_ptr holds batch * num_weight_terms * 256
+        uint64 elements, zeroed by the library before accumulation. Its
+        output matches the composed path bit for bit.
+
+        powers_ptr holds batch * num_weight_terms uint64 elements. Since
+        core 3.0.0, each is the sum of the 256 finalized fine powers,
+        reduced after the fused launch. It equals fine.sum(axis=-1) on
+        the host exactly.
+
+        An optional row_projections_tap_ptr receives the same layout and
+        bits as compute_row_projections_i32. Leave it zero in production
+        to avoid writing row projections to global memory.
         """
         if not getattr(self, "_has_fused_fine_u64", False):
             raise RuntimeError(

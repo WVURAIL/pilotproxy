@@ -349,19 +349,13 @@ def _unit_accounting(product: Mapping, frame_count: int, freq_id: int,
                        provenance["unit_scope"], unit_event_id))):
         raise ArchiveAcceptanceError("unit event or time provenance is invalid")
     sample_rate = _float_scalar(product, "sample_rate_hz", positive=True)
-    # A unit whose acquisition never recorded a sample interval carries NaN
-    # here, and that is a product state the v5 contract admits rather than a
-    # corruption: the producer's own check (pilot_proxy.product_contract, the
-    # ``allow_nan=True`` unit_delta_time array) constrains only the recorded
-    # entries, and the rest of this package reads the field the same way ---
-    # the score bundle requires finite timing only of the frames a caller
-    # actually selects, and products.reader.Product.frame_time returns
-    # NaN for such frames so that a calendar statistic must state its
-    # denominator. Demanding every unit be timed would refuse the whole
-    # September rebuild over 470 of its 167,728 units. What the cohort does
-    # need is that the intervals that *were* recorded agree with the declared
-    # sample rate, and that a product is not entirely untimed --- an untimed
-    # product has no exposure or time axis for any downstream era split.
+    # Some acquisitions have no recorded sample interval. The v5 contract
+    # represents this with NaN, as allowed by unit_delta_time's allow_nan=True.
+    # Product.frame_time preserves those NaNs, and the score bundle requires
+    # finite timing only for selected frames. Calendar summaries must report
+    # the missing timing in their denominator.
+    # Recorded intervals must agree with the sample rate. At least one unit
+    # must be timed so the product can support exposure and era calculations.
     recorded = np.isfinite(delta)
     if not recorded.any():
         raise ArchiveAcceptanceError("no unit records a sampling interval")

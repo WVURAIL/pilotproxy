@@ -1,30 +1,27 @@
-"""Monthly marker-region spectrograms of every band, from the per-pilot products.
+"""Summarize the marker-region spectrum of each band by UTC month.
 
-For every frame the histograms can use (health selected, finite frame time,
-finite positive Q, any era or none; the ``histogram_eligible`` mask of the
-histogram frame export), it takes the stored per-frame PSD, feeds summed,
-which the products code at 0.01 dB relative to the frame's own median positive
-fine bin across the coarse channel, and keeps the 501 fine bins centred on
-the nominal marker. The median over the frames of each UTC month gives one
-column; a month with no such frame stays empty. The fine axis is converted to
-sky frequency for CHIME's mirrored Nyquist zone 2,
-``sky = coarse centre - m * f_s/nfft`` for signed fine bin ``m``, so a
-positive fine bin is a lower sky frequency, and the rows are stored in
-ascending sky frequency. The saved eras of the characterization release, with
-the cause the dating run recorded for every boundary, are copied beside it as
-exact gzipped bytes.
+Use the histogram export's ``histogram_eligible`` frames: health-selected
+frames with finite times and finite positive Q, from any era or no era.
+Their stored PSDs sum power over feeds and encode it in 0.01 dB steps relative
+to each frame's median positive fine-bin power across the coarse channel.
 
-Every input is checked before a byte is read: each product against the
-sha256 its band's ledger records, each frame export against the digest in the
-histogram release manifest, each ledger and era file against the
-characterization release manifest. The two release manifests are arguments,
-and their sha256 values are recorded in the output manifest.
+Keep the 501 bins centered on the nominal marker and take the median over
+each month's frames. A month with no eligible frames remains empty. For
+CHIME's mirrored second Nyquist zone, signed fine bin m maps to
+``sky = coarse center - m * f_s/nfft``. Thus positive m lowers the sky
+frequency; store the rows in ascending sky frequency.
+
+Copy the release's saved eras and boundary causes alongside the spectra as
+exact gzipped bytes. Before reducing the data, check each product against its
+ledger digest, each frame export against the histogram release manifest,
+and each ledger and era file against the characterization release manifest.
+Record both supplied manifests' SHA-256 values in the output manifest.
 
     pilot-proxy characterize spectrogram --products DIR --frames DIR
         --frames-release-manifest FILE --release DIR --eras-release-manifest FILE --out DIR
 
-The dissertation's renderer (``figure_src/archive_spectrogram.py``) reads the
-output; this module is its reduction.
+The dissertation renderer, ``figure_src/archive_spectrogram.py``, reads this
+reduction.
 """
 from __future__ import annotations
 

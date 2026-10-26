@@ -13,7 +13,7 @@ def frames_fixture(events=12):
     event = np.repeat(np.arange(events), size)
     within = np.concatenate([np.arange(n) for n in size])
     required = np.asarray(1 + 2 * within, dtype=np.uint64)
-    # Asymmetry is intentional: using the wrong sign need not give the same band.
+    # The excess is made asymmetric so that a sign error in the pivot is not hidden by symmetry.
     excess = .2 * event + .1 * within + .004 * event**3
     weight = 1. / (events * size[event])
     return ChannelFrames(99, required, weight, np.ones(len(event), bool), event, excess, 4, 4)
@@ -33,7 +33,9 @@ def direct_moments(frames, words, masks, labels, multiplicity):
                 means.append(np.nan); errors.append(np.nan)
             else:
                 mean = np.dot(multiplicity, a) / denominator
-                # Each sampled copy is one cluster: multiplicity, not its square.
+                # Each sampled copy is its own cluster, so the squared residual is
+                # weighted by the multiplicity. A weight of the multiplicity squared
+                # would merge the copies into one cluster.
                 error = np.sqrt(np.dot(multiplicity, (a - mean * b)**2)) / denominator
                 means.append(mean); errors.append(error)
         result[name] = (np.asarray(means), np.asarray(errors))
@@ -109,8 +111,8 @@ def test_overlapping_and_identical_windows_share_the_same_draw():
 
 def test_zero_kept_events_remain_resampling_units_and_failed_draws_are_not_discarded():
     f = frames_fixture(10)
-    # Only two of ten events can survive the sole threshold. Some draws retain
-    # no events or only one distinct contribution and must yield infinite pivots.
+    # Only two of ten events pass the single threshold word. Some draws keep no
+    # events or only one distinct contribution, and their pivots must be infinite.
     required = np.where(f.event < 2, 1, 9).astype(np.uint64)
     f = replace(f, required=required)
     result = run(f, np.array([1], np.uint64), bootstrap_replicates=399, confidence=.95)
@@ -155,8 +157,8 @@ def test_signed_values_survive_until_final_reporting_transform():
 
 def test_temporal_clusters_preserve_unequal_original_weight_and_match_oracle():
     f = frames_fixture(18)
-    # Unequal numbers of original events in resampling blocks, with original
-    # equal-event weights untouched.
+    # The resampling blocks hold unequal numbers of original events, and the
+    # original equal-event weights are left unchanged.
     labels = np.where(f.event < 9, f.event // 3, 3 + (f.event - 9) // 2)
     result = run(f, cluster_labels=labels, bootstrap_replicates=99, confidence=.7)
     masks = {"full": np.ones(len(f.event), bool)}

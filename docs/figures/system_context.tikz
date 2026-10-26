@@ -13,7 +13,7 @@
   {PilotProxy detector\\ \scriptsize rejection bits, frame powers, rank support};
 \node[wide,below=1.8cm of voltage] (combine)
   {\texttt{DtvRfiMask} (opt-in)\\
-   \scriptsize verify time/frequency alignment; combine rejection and validity};
+   \scriptsize time/frequency alignment check, rejection and validity merge};
 \node[wide,below=of combine] (consumers)
   {Visibility correlator and sample-count consumers\\
    \scriptsize both consume the same combined RFImask};

@@ -181,22 +181,26 @@ def detect_packed_detector_input(
     """Run fixed-point detection and return exact power ratios.
 
     The three frame powers are the all-bin sums of the exact fine power
-    spectra (kernel core 3.0.0): ``P_r = sum_f S_r[f]`` with ``S_r`` the
-    uint64 output of the frozen fxfft256 stage over the device row
-    projections (``PilotProxy_Compute_RowSums_I32`` ->
-    ``PilotProxy_Compute_FinePowers_U64``, summed on the host in uint64). The
-    transform length cancels in the ratio, so ``coarse_power_ratio =
-    2 P_0 / (P_1 + P_2)`` keeps its form; the fused kernel's ``d_power_out``
-    is the same sum formed on the device.
+    spectra (kernel core 3.0.0), ``P_r = sum_f S_r[f]``. Here, ``S_r`` is
+    the uint64 output of the frozen fxfft256 stage. On the device, the row
+    projections are formed by ``PilotProxy_Compute_RowSums_I32`` and
+    transformed by ``PilotProxy_Compute_FinePowers_U64``, and the fine
+    powers are summed on the host in uint64. Since the transform length
+    cancels in the ratio, ``coarse_power_ratio = 2 P_0 / (P_1 + P_2)`` has
+    the same form as the row-domain ratio. In the fused kernel,
+    ``d_power_out`` is the same sum formed on the device.
 
-    The positive-excess mask is norm-corrected: it compares against the H0
-    zero-point ``null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq`` implied by the
-    supplied int4 weights (exactly, in integers), not against ``F > 1``.
+    The positive-excess mask is norm-corrected. It compares the ratio with
+    the H0 zero-point ``null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq``
+    implied by the supplied int4 weights, exactly and in integers. This
+    test reduces to ``F > 1`` only when
+    ``target_norm_sq : reference_norm_sum_sq = 1 : 2``.
 
     Rows must be a multiple of 128 (the frozen window count), because the
     frame powers are defined over whole-stream fine spectra. The row
-    projections are always computed on the device; ``emit_row_projections``
-    only controls whether that device buffer is returned with the result.
+    projections are always computed on the device, and
+    ``emit_row_projections=True`` also returns that device buffer with the
+    result.
     """
     _validate_kernel_inputs(packed=packed, weights=weights, kernel=kernel)
     if not kernel.supports_row_projections() or not kernel.supports_fine_powers():
@@ -230,10 +234,11 @@ def detect_packed_detector_input(
         rows = int(packed.shape[1])
     else:
         raise ValueError("packed must be a 2D or 3D detector matrix array.")
-    # fxfft256 is frozen at 128 windows per stream, and this entry point does
-    # not see the caller's frame size, so it derives the stream count as
-    # rows // 128. Refuse rather than guess when that is not exact: a wrong
-    # stream count would emit quietly meaningless powers.
+    # fxfft256 is frozen at 128 windows per stream. This entry point is not
+    # given the caller's frame size, so the stream count is taken as
+    # rows // 128. A row
+    # count that is not a multiple of 128 raises ValueError, since a wrong
+    # stream count would give meaningless powers that look valid.
     if rows % FINE_WINDOWS_PER_STREAM != 0:
         raise ValueError(
             f"detector rows ({rows}) must be a multiple of the frozen fxfft256 "
@@ -271,7 +276,7 @@ def detect_packed_detector_input(
     finally:
         kernel.destroy(handle)
 
-    # Frame powers: the exact all-bin sum of each term's fine spectrum.
+    # frame power is the exact all-bin sum of each term's fine spectrum
     powers = fine_powers_u64.sum(axis=-1, dtype=np.uint64)
 
     matched_filter_row_projections = None
@@ -411,9 +416,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _sidecar_pilot_hz(input_path: Path) -> tuple[float | None, Path]:
-    """The pilot frequency quantize recorded in the matrix's ``metadata.json``
-    sidecar, or None when the sidecar is absent, unreadable, or lacks a finite
-    ``dtv_pilot_hz``."""
+    """Return the pilot frequency recorded by quantize in the ``metadata.json`` sidecar.
+
+    The value is None when the sidecar is absent or unreadable, or when it
+    has no finite ``dtv_pilot_hz``.
+    """
     sidecar = Path(input_path).parent / "metadata.json"
     try:
         with open(sidecar) as fh:
@@ -438,10 +445,12 @@ def _resolve_pilot_request(
 ) -> tuple[int | None, float | None]:
     """Resolve the pilot identity for a packed detector matrix.
 
-    The sidecar records what quantize actually packed, so it is authoritative:
-    with no flags the pilot comes from the sidecar; an explicit flag must agree
-    with it (a mismatched channel would run the detector against the wrong
-    weight row); with neither a sidecar nor a flag, refuse rather than guess."""
+    The sidecar records what quantize actually packed, so it is
+    authoritative. With no flags, the pilot comes from the sidecar. An
+    explicit flag must agree with the sidecar, since a mismatched channel
+    would run the detector against the wrong weight row. With neither a
+    sidecar nor a flag, the pilot is unknown and SystemExit is raised.
+    """
     try:
         tolerance = float(tolerance_hz)
     except (TypeError, ValueError) as exc:

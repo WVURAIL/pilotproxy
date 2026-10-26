@@ -310,13 +310,13 @@ def _write_product(
 
 
 def fine_powers_with_sums(fine, target, lower, upper) -> np.ndarray:
-    """Fine powers of ``fine``'s spectral shape whose all-bin sums are exact.
+    """Return fine powers with the spectral shape of ``fine`` and exact all-bin sums.
 
-    Since kernel core 3.0.0 a product's frame powers are the all-bin sums of
-    its fine powers, so a fixture that wants given frame powers must carry fine
-    powers that sum to them. Each (frame, term) spectrum is scaled to its
-    wanted total by largest remainders: the shape (and so every fine ratio up
-    to one factor per frame) is kept and the sum is exact. A zero-shape
+    Under kernel core 3.0.0, the frame powers of a product are the all-bin sums
+    of its fine powers, so a fixture with given frame powers must carry fine
+    powers that sum to them. Each (frame, term) spectrum is scaled to its wanted
+    total by the largest-remainder method. The shape, and so every fine ratio up
+    to one factor per frame, is kept, and the sum is exact. A zero-shape
     spectrum with a nonzero total is filled flat.
     """
     fine = np.asarray(fine, dtype=np.int64)
@@ -369,8 +369,8 @@ def test_archive_gate_accepts_a_v6_cohort_and_counts_fine_sum_decisions(tmp_path
 
 
 def test_archive_gate_reads_v5_rejections_from_the_fine_sums(tmp_path):
-    # The v5 fixture stores row-domain powers that reject some frames; the
-    # fine sums decide differently, and the gate counts the fine-sum view.
+    # The v5 fixture stores row-domain powers that reject some frames. The fine
+    # sums give a different decision, and the gate counts the fine-sum view.
     paths = _cohort(tmp_path, revision=5)
     report = validate_archive_products(paths)
     with np.load(paths[0], allow_pickle=False) as product:
@@ -513,7 +513,7 @@ def test_archive_gate_reports_units_without_a_recorded_sample_interval(tmp_path)
     """Accept an unrecorded sample interval while reporting its missing timing.
 
     The v5 contract represents an absent interval as NaN in ``unit_delta_time``.
-    The September 2026 rebuild contains 470 such units among 167,728. The gate
+    The September 2026 rebuild contains 470 such units among 167728. The gate
     must accept this supported state and count it, since those frames cannot
     contribute to calculations that require a frame time.
     """
@@ -535,12 +535,13 @@ def test_archive_gate_reports_units_without_a_recorded_sample_interval(tmp_path)
 
 
 def test_archive_gate_refuses_untimed_products_and_wrong_intervals(tmp_path):
-    """Silence about timing is admissible per unit, never per product.
+    """Refuse a product with no recorded interval or with a wrong interval.
 
+    A missing interval is accepted for a unit and refused for a whole product.
     A product with no recorded interval anywhere has no exposure and no time
     axis for an era split, and a recorded interval that disagrees with
     ``sample_rate_hz`` contradicts the frame-time definition downstream, so both
-    still refuse.
+    are refused.
     """
     paths = _cohort(tmp_path / "untimed")
     with np.load(paths[-1], allow_pickle=False) as product:

@@ -1,7 +1,8 @@
-"""Bounded-state, CPU-only companion to the frozen single-record SDR adapter.
+"""Streaming form of the frozen single-record SDR adapter (CPU only, bounded state).
 
-Transport indices must be explicit. A discontinuity starts a new independently
-trimmed segment: no missing sample is fabricated and no frame spans a gap.
+Each chunk is pushed with its explicit source sample index. A discontinuity
+starts a new segment, which is trimmed on its own. No missing sample is filled
+in, and no frame spans a gap.
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ from pilot_proxy.integration.sdr_upgrade_adapter import (
 )
 
 INPUT_BLOCK_SAMPLES = 8192
-# One FIR support plus the alignment back to a multiple of DOWN input samples.
+# one FIR support plus the alignment back to a multiple of DOWN input samples
 MAX_HISTORY_SAMPLES = (FIR_TAPS - 1 + UP - 1) // UP + DOWN - 1
 FIRST_OUTPUT_INDEX = (FIR_TAPS - 1 + DOWN - 1) // DOWN
 HALF_FILTER = (FIR_TAPS - 1) // 2
@@ -45,18 +46,20 @@ def _index(value: int, name: str) -> int:
 
 
 class StreamingDigitalAdapter:
-    """Preserve the batch adapter's arithmetic across arbitrary input chunks.
+    """Apply the batch adapter's arithmetic to input chunks of any size.
 
-    ``push`` consumes its entire chunk synchronously and returns complete frames.
-    Returned frames belong to the caller; memory retained by this object is
-    bounded independently of recording duration and caller chunk size. Caller
-    chunks and the returned list naturally need memory proportional to their
-    own sizes. ``finish`` returns any complete final frames and a discard receipt.
+    ``push`` processes its whole chunk synchronously and returns the complete
+    frames. The returned frames belong to the caller. The memory held by this
+    object is bounded and does not depend on the recording duration or the
+    chunk size. The caller's chunks and the returned list take memory in
+    proportion to their own sizes. ``finish`` returns any complete final
+    frames and a boundary receipt that records the discarded samples.
 
-    ``gap`` declares a known positive sample loss. ``reset`` declares a new
-    segment with an explicit source index (including when loss is unknown).
-    Both drain valid outputs, discard the incomplete frame, and reset mixer
-    phase, resampler lattice and frame origin. Neither reconstructs continuity.
+    ``gap`` declares a known loss of one or more samples. ``reset`` starts a
+    new segment at an explicit source index and is also used when the size of
+    a loss is unknown. Both drain the valid outputs, discard the incomplete
+    frame, and reset the mixer phase, the resampler lattice, and the frame
+    origin. Continuity across the boundary is not reconstructed.
     """
 
     def __init__(self, config: DigitalAdapterConfig, *, first_input_index: int = 0):
@@ -87,7 +90,7 @@ class StreamingDigitalAdapter:
 
     @property
     def state(self) -> dict:
-        """Expose bounded buffer occupancy and continuity without sample data."""
+        """Return the buffer occupancy and continuity counters, without sample data."""
         return {
             "segment_id": self._segment, "closed": self._closed,
             "segment_start_reason": self._start_reason,
@@ -108,11 +111,13 @@ class StreamingDigitalAdapter:
         }
 
     def push(self, iq: np.ndarray, *, input_start_index: int) -> list[dict]:
-        """Consume a contiguous complex chunk, refusing implicit gaps/overlap.
+        """Process one contiguous complex chunk and return the frames it completes.
 
-        Empty complex chunks at the expected index are valid no-ops. Invalid
-        chunks are rejected before modifying state. Single-threaded ownership
-        is required; this class does not serialize concurrent callers.
+        ``input_start_index`` must equal ``next_input_index``, so a gap or an
+        overlap is refused unless it is declared with ``gap`` or ``reset``. An
+        empty complex chunk at the expected index does nothing. An invalid
+        chunk is rejected before any state is changed. The object must be used
+        from one thread, since concurrent calls are not serialized.
         """
         if self._closed:
             raise RuntimeError("Segment is finished; explicitly reset before push.")
@@ -122,7 +127,7 @@ class StreamingDigitalAdapter:
         x = np.asarray(iq)
         if x.ndim != 1 or not np.iscomplexobj(x):
             raise ValueError("iq must be a one-dimensional complex array.")
-        # Fixed-size validation temporaries, including for very large chunks.
+        # finiteness is checked in blocks so the temporaries stay a fixed size
         for offset in range(0, x.size, INPUT_BLOCK_SAMPLES):
             if not np.all(np.isfinite(x[offset:offset + INPUT_BLOCK_SAMPLES])):
                 raise ValueError("iq must contain only finite samples.")
@@ -155,11 +160,14 @@ class StreamingDigitalAdapter:
         stop = ((self._processed - 1) * UP) // DOWN + 1
         offset = origin * UP // DOWN
         valid = local[self._next_output - offset:stop - offset]
-        # Short initial segments can have no fully supported output at all.
+        # a short initial segment can have no fully supported output
         if stop < self._next_output:
             valid = local[:0]
         frames = self._consume_outputs(valid)
         self._next_output = max(self._next_output, stop)
+        # The mixed inputs still needed by the next output are kept as history.
+        # The history starts on a multiple of DOWN, so origin * UP / DOWN is an
+        # integer and the upfirdn output lattice stays aligned.
         earliest = max(0, (self._next_output * DOWN - (FIR_TAPS - 1) + UP - 1) // UP)
         keep_origin = earliest // DOWN * DOWN
         keep_origin = min(keep_origin, self._processed // DOWN * DOWN)
@@ -216,10 +224,11 @@ class StreamingDigitalAdapter:
         }
 
     def finish(self, *, reason: str = "end_of_record") -> dict:
-        """Drain complete frames, discard unsupported edges/tail, then close.
+        """Drain complete frames, discard the unsupported edge and tail, and close.
 
-        Finishing twice is an error, preventing duplicate boundary receipts.
-        No FIR ring-down padding and no partial detector frame is emitted.
+        A second call raises an error, so that no boundary receipt is written
+        twice. No FIR ring-down padding and no partial detector frame are
+        emitted.
         """
         if self._closed:
             raise RuntimeError("Segment is already finished.")
@@ -245,7 +254,7 @@ class StreamingDigitalAdapter:
         return {"frames": frames, "receipt": receipt}
 
     def gap(self, missing_input_samples: int) -> dict:
-        """Declare a positive known transport loss and begin after the gap."""
+        """Declare a known transport loss of one or more samples and start after it."""
         missing = _index(missing_input_samples, "missing_input_samples")
         if missing == 0:
             raise ValueError("A gap must contain at least one missing input sample.")
@@ -256,11 +265,12 @@ class StreamingDigitalAdapter:
         return boundary
 
     def reset(self, *, first_input_index: int, reason: str) -> dict | None:
-        """Explicitly start a new segment, even if lost sample count is unknown.
+        """Start a new segment at an explicit source index, even after a loss of unknown size.
 
-        The supplied index labels the new source timeline; a reset may rewind
-        that timeline. Segment IDs distinguish it from previous data. Reset
-        does not infer lost samples from the difference between two indices.
+        The supplied index labels the new source timeline, and it may be lower
+        than the previous index. The segment ID distinguishes the new data from
+        previous data. The number of lost samples is never inferred from the
+        difference between two indices.
         """
         origin = _index(first_input_index, "first_input_index")
         if not isinstance(reason, str) or not reason.strip():

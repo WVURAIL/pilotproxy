@@ -1,4 +1,4 @@
-"""Write the code-only cut of this repository: the tree without the CHIME-derived files.
+"""Write the code-only cut of this repository, the tree without the CHIME-derived files.
 
     python tools/make_code_only_cut.py OUTPUT_DIR
 
@@ -7,8 +7,8 @@ ending in "/" withholds a directory). Files come from `git ls-files` in a git ch
 from a directory walk otherwise. OUTPUT_DIR must not exist. Every listed path must exist in
 the source tree, so a stale list fails instead of silently withholding nothing.
 
-The cut keeps CHIME_DERIVED.md itself, so it still says what was withheld; the tests that
-read a withheld file skip.
+The cut keeps CHIME_DERIVED.md itself, so the cut still lists what was withheld. Tests that
+read a withheld file are skipped.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ STAND_INS = {
 
 
 def withheld_paths(text: str) -> list[str]:
-    """The paths of the fenced block that follows the "## Code-only cut" heading."""
+    """Return the paths in the fenced block that follows the "## Code-only cut" heading."""
     lines = text.splitlines()
     try:
         start = next(i for i, line in enumerate(lines) if line.strip() == "## Code-only cut")

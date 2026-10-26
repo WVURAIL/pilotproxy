@@ -1,18 +1,18 @@
 # coding=utf-8
-"""Event-keyed combine: frames align by (event, frame-in-file) identity.
+"""Event-keyed combine, where frames align by (event, frame-in-file) identity.
 
-The archive is ragged (not every channel holds every event), so positional
-frame stacking cannot work at production scale. These tests cover:
+The archive is ragged. Not every channel holds every event, so frames cannot
+be stacked by position at production scale. These tests cover:
 
-  * the alignment core: pass-through parity on fully aligned inputs, reference
-    (lowest-channel) ordering on ragged inputs, partial-event frame drops,
-    the typed empty-intersection error, duplicate-identity refusal, and the
-    refusal of products without event-keyed identity;
-  * the scan layer end-to-end (offline, CPU-stub detector): a ragged
-    inventory combines over the intersection with drops recorded in
+  * the alignment core, with pass-through parity on fully aligned inputs,
+    reference (lowest-channel) ordering on ragged inputs, partial-event frame
+    drops, the typed empty-intersection error, duplicate-identity refusal, and
+    the refusal of products without event-keyed identity
+  * the scan layer end to end (offline, with a CPU-stub detector), where a
+    ragged inventory combines over the intersection with drops recorded in
     stats.json and the frame-identity sidecar, and a disjoint inventory
-    soft-fails the terminal combine while the scan itself succeeds;
-  * `report_products` and the `drop_freq_ids` subset knob.
+    soft-fails the terminal combine while the scan itself succeeds
+  * `report_products` and the `drop_freq_ids` subset option
 """
 from __future__ import annotations
 
@@ -46,12 +46,12 @@ K = 128
 CHAN_MHZ = {844: 470.3125, 829: 476.171875, 752: 506.171875}
 
 
-# -- alignment core -----------------------------------------------------------
+# alignment core
 
 def _mem_product(channel, freq_id, events_frames):
-    """In-memory per-pilot product with just the fields alignment touches.
+    """Return an in-memory per-pilot product with only the fields used by alignment.
 
-    ``events_frames``: sequence of (event, n_frames) in processing order.
+    ``events_frames`` is a sequence of (event, n_frames) in processing order.
     """
     ev, unit_idx, in_unit, values = [], [], [], []
     for u, (event, n) in enumerate(events_frames):
@@ -89,7 +89,7 @@ def test_align_ragged_intersects_in_reference_order():
     aligned, frame_index, info = _align_frames([a, b])
     assert info["n_frames_common"] == 2 and info["n_events_common"] == 2
     assert info["frame_event_key"] == ["200", "300"]  # reference (a) order
-    # b's frames gathered by identity rather than position
+    # the frames of b are gathered by (event, frame) identity
     assert np.array_equal(aligned[1]["coarse_power_ratio"].reshape(-1),
                           b["coarse_power_ratio"].reshape(-1)[[0, 1]])
     assert np.array_equal(aligned[0]["coarse_power_ratio"].reshape(-1),
@@ -120,23 +120,24 @@ def test_align_duplicate_identity_raises_typed_error():
     b = _mem_product(15, 829, [("100", 1)])
     with pytest.raises(CombineDuplicateIdentityError, match="unit_scope"):
         _align_frames([a, b])
-    # still a ValueError, so existing callers that catch broadly keep working
+    # a subclass of ValueError, so callers that catch ValueError still work
     assert issubclass(CombineDuplicateIdentityError, ValueError)
 
 
-# -- scan layer end-to-end (offline) ------------------------------------------
+# scan layer end to end (offline)
 
 def _stub_detector_fn(*, packed, weights, kernel):
-    # Fixed fine spectra (all power in bin 0) and their all-bin sums 10/10/10,
-    # the per-pilot v6 frame powers (plumbing only; no parity claim).
+    # The fine spectra are fixed, with all power in bin 0, and their all-bin
+    # sums (10, 10, 10) are the per-pilot v6 frame powers. The stub tests only
+    # the plumbing, and no parity is claimed.
     return stub_detector_fn(packed=packed, weights=weights, kernel=kernel)
 
 
 def _cpu_detector_options():
-    # three identical weight rows => reference_norm_sum_sq == 2 * target_norm_sq, so
-    # with the stub's p_target=10 / p_ref_sum=20 the positive-excess rule sits
-    # exactly at equality and mask=0 is rule-consistent (validate-products
-    # recomputes the mask from p's and norms and must agree).
+    # With three identical weight rows, reference_norm_sum_sq is 2 * target_norm_sq.
+    # The stub gives p_target=10 and p_ref_sum=20, so the positive-excess rule
+    # is exactly at equality and mask=0 agrees with the rule. validate-products
+    # recomputes the mask from the powers and norms and must agree.
     rng = np.random.default_rng(0)
     row = rng.integers(-120, 121, size=(1, K)).astype(np.int8)
     weights_by_channel = {ch: np.repeat(row, 3, axis=0) for ch in range(10, 41)}
@@ -148,7 +149,7 @@ def _cpu_detector_options():
 
 
 def _ragged_archive(tmp_path, monkeypatch, events_by_channel):
-    """Synth files + inventory + offline fetch for a per-channel event layout."""
+    """Set up synth files, an inventory, and an offline fetch for a per-channel event layout."""
     monkeypatch.chdir(REPO_ROOT)
     data = tmp_path / "data"
     data.mkdir()
@@ -200,7 +201,7 @@ def test_scan_ragged_inventory_combines_intersection(tmp_path, monkeypatch):
     combined = out / "chime_detector_outputs.npz"
     assert combined.exists()
     with np.load(combined) as z:
-        # one common event, NFFT*2 samples -> 2 frames, stacked over 3 pilots
+        # one common event of NFFT*2 samples gives 2 frames, stacked over 3 pilots
         assert z["frame_index"].size == 2
         assert z["coarse_power_ratio"].shape == (2, 3)
     stats = json.loads((out / "stats.json").read_text())
@@ -210,13 +211,13 @@ def test_scan_ragged_inventory_combines_intersection(tmp_path, monkeypatch):
     drops = {p["freq_id"]: p["n_frames_dropped"] for p in align["by_pilot"]}
     assert drops == {844: 2, 829: 2, 752: 0}
     with np.load(out / "chime_frame_identity.npz") as ident:
-        # Full-schema rows key units by the source's logical unit key
-        # (scope/event/name triple), freq_id token stripped per pilot.
+        # Full-schema rows key units by the logical unit key of the source, the
+        # (scope, event, name) triple, with the freq_id token stripped per pilot.
         expected_key = "cadc-datatrail:" + json.dumps(
             ["test.scope", "100", "baseband_100.h5"], separators=(",", ":"))
         assert set(ident["frame_event_key"].tolist()) == {expected_key}
 
-    # report + subset knob over the same work dir
+    # report and subset option over the same work dir
     work = sorted((out / "_per_pilot").glob("*.npz"))
     report = report_products(work)
     assert "intersection of all 3 pilots: 1" in report
@@ -226,8 +227,8 @@ def test_scan_ragged_inventory_combines_intersection(tmp_path, monkeypatch):
         assert z["frame_index"].size == 4  # both events, two pilots
         assert z["coarse_power_ratio"].shape == (4, 2)
 
-    # spectrogram figures must render with event-boundary ticks driven by
-    # the frame-identity sidecar (out2 stitches two events -> one boundary)
+    # spectrogram figures must render with event-boundary ticks taken from the
+    # frame-identity sidecar, where out2 stitches two events with one boundary
     pytest.importorskip("matplotlib")
     from pilot_proxy.chime.plots import _event_boundaries, plot_mask_spectrogram
     change, n_events = _event_boundaries(out2)
@@ -261,11 +262,11 @@ def test_scan_disjoint_inventory_soft_fails_terminal_combine(tmp_path, monkeypat
                             analyzer="pilot-proxy-detector",
                             analyzer_options=_cpu_detector_options(),
                             verbose=False)
-    # the scan itself succeeded: all per-pilot products exist ...
+    # the scan itself succeeded, and all per-pilot products exist
     for ch in (844, 829, 752):
         assert (out / "_per_pilot" / f"{ch}.npz").exists()
     assert result["per_pilot_work_dir"] == out / "_per_pilot"
-    # ... but no combined product was written, and the operator was told why
+    # no combined product was written, and the reason was printed for the operator
     assert not (out / "chime_detector_outputs.npz").exists()
     printed = capsys.readouterr().out
     assert "terminal combine skipped" in printed
@@ -277,9 +278,10 @@ def test_scan_duplicate_identity_soft_fails_terminal_combine(tmp_path, monkeypat
     """A duplicate (event, frame) identity must not fail the whole scan.
 
     Weeks of per-pilot compute must survive a terminal-combine refusal. The
-    duplicate is injected at the combine boundary rather than synthesized from
-    an inventory: the conditions that can produce one are a property of the
-    source keys, and this test is about the scan layer's response to it.
+    duplicate is injected at the combine boundary instead of being synthesized
+    from an inventory. The conditions that can produce a duplicate are a
+    property of the source keys, and this test covers only the response of the
+    scan layer.
     """
     inv = _ragged_archive(tmp_path, monkeypatch, {844: ["100"], 829: ["100"]})
     out = tmp_path / "out"
@@ -296,11 +298,11 @@ def test_scan_duplicate_identity_soft_fails_terminal_combine(tmp_path, monkeypat
                             analyzer="pilot-proxy-detector",
                             analyzer_options=_cpu_detector_options(),
                             verbose=False)
-    # the scan succeeded and every per-pilot product survived ...
+    # the scan succeeded and every per-pilot product survived
     for ch in (844, 829):
         assert (out / "_per_pilot" / f"{ch}.npz").exists()
     assert result["per_pilot_work_dir"] == out / "_per_pilot"
-    # ... but the stack was withheld and flagged as integrity, not routine
+    # the stack was withheld and flagged as a data-integrity signal
     assert not (out / "chime_detector_outputs.npz").exists()
     printed = capsys.readouterr().out
     assert "terminal combine skipped" in printed
@@ -338,9 +340,11 @@ def test_invariants_identical_versions_add_no_note():
 
 
 def test_invariants_allow_release_version_bump_same_geometry():
-    """A mid-survey release bump (0.3.0.dev0 -> 1.0.0) must not split the
-    stack. Pilots finished before the bump carry the old label; pilots
-    finished after carry the new one, and combine sees both in one run."""
+    """A mid-survey release (0.3.0.dev0 to 1.0.0) must not split the stack.
+
+    Pilots finished before the release carry the old label, pilots finished
+    after it carry the new one, and combine sees both in one run.
+    """
     from pilot_proxy.archive.combine import _check_invariants
     a = {"detector_version": np.asarray([_ver("02066f1d", version="0.3.0.dev0")]),
          "nfft": np.asarray([16384])}
@@ -351,7 +355,10 @@ def test_invariants_allow_release_version_bump_same_geometry():
 
 
 def test_combine_provenance_token_policy():
-    """Combine may retain distinct builds; resume is tested as exact elsewhere."""
+    """Combine accepts distinct builds that share the detector geometry.
+
+    Resume requires the exact build and is tested in test_detector_resume.py.
+    """
     from pilot_proxy.provenance import detector_version_geometry
 
     a, b = _ver("aaa111"), _ver("bbb222")

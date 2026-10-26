@@ -34,8 +34,8 @@ def _random_matched_filter_row_projections(rng: np.random.Generator) -> np.ndarr
 
 
 def test_frame_powers_are_the_exact_all_bin_sums_of_the_fixed_point_fine_powers() -> None:
-    # Kernel core 3.0.0: P[n] = sum_b S[n, b] over the frozen fxfft256 powers,
-    # in exact integers. fxfft256 is frozen at 128 windows per stream.
+    # In kernel core 3.0.0, P[n] = sum_b S[n, b] over the frozen fxfft256
+    # powers, in exact integers. fxfft256 is frozen at 128 windows per stream.
     from pilot_proxy.fxfft import fine_power_fx
 
     rng = np.random.default_rng(RNG_SEED)
@@ -45,8 +45,9 @@ def test_frame_powers_are_the_exact_all_bin_sums_of_the_fixed_point_fine_powers(
     assert powers.dtype == np.dtype(np.uint64) and powers.shape == (TERMS,)
     assert [int(p) for p in powers] == [sum(int(v) for v in fine[n]) for n in range(TERMS)]
 
-    # The fixed-point transform does not conserve energy exactly, so the
-    # frame power is not 256 times the row-domain energy; it is close.
+    # The fixed-point transform does not conserve energy exactly, so the frame
+    # power differs from 256 times the row-domain energy by less than 1 part
+    # in 10^4.
     energy = (rows.astype(np.int64) ** 2).sum(axis=(1, 2))
     ratio = powers.astype(np.float64) / (256.0 * energy.astype(np.float64))
     assert np.all(np.abs(ratio - 1.0) < 1e-4)
@@ -70,8 +71,8 @@ def test_fine_reduce_parseval_and_identity() -> None:
     assert result.fine_power.shape == (TERMS, p2)
     assert result.fine_power_ratio.shape == (p2,)
 
-    # A property of the float prototype only: its exact-arithmetic FFT
-    # conserves energy, sum_b S[n, b] == p2 * sum_m |z[n, m]|^2, and
+    # Only the float prototype has this property. Its FFT conserves energy in
+    # exact arithmetic, sum_b S[n, b] == p2 * sum_m |z[n, m]|^2, and
     # coarse_power_by_term is that row energy, computed exactly.
     sums = result.fine_power.astype(np.float64).sum(axis=-1)
     expected = float(p2) * result.coarse_power_by_term.astype(np.float64)
@@ -126,7 +127,7 @@ def test_independent_bin_mask_guard_and_census() -> None:
         guard_fine_bins=1,
     )
     assert mask[0]
-    assert not mask[1]  # padded neighbor: not independent
+    assert not mask[1]  # padded neighbor of bin 0, so not independent
     guard = FINE_PAD_FACTOR
     for b in range(10 - guard, 10 + guard + 1):
         assert not mask[b % p2]

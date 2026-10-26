@@ -1,15 +1,16 @@
 """Cache the exact current-era scores used by the threshold rule.
 
-For each channel, read the current-era frames from its fine score export, or
-from an accepted exact replay when the geometry was revised. Store their
-minimum Q16 keep words, equal-event weights, and a bounded grid of candidate
-words in ``ch<N>.json`` and ``ch<N>.npz``. Each event contributes one unit of
+For each channel, the current-era frames are read from its fine score export,
+or from an accepted exact replay when the geometry was revised. Their minimum
+Q16 keep words, equal-event weights, and a bounded grid of candidate words are
+stored in ``ch<N>.json`` and ``ch<N>.npz``. Each event contributes one unit of
 weight, shared equally among its original frames.
 
 Input SHA-256 checks bind the cache to its sources. The knee is recomputed
-from the frames with :mod:`pilot_proxy.characterization.knee` and must match
-the recorded knee. Building the cache does not change an assigned threshold,
-accepted mask, or source product. Its score is a keep word, not RFI power.
+from the frames with rule v1 of :mod:`pilot_proxy.characterization.knee` and
+must match the recorded knee. Building the cache does not change an assigned
+threshold, accepted mask, or source product. The cached score is a keep word
+and does not measure RFI power.
 
     pilot-proxy characterize score-cache --working DIR --exports FILE --previous FILE --output DIR
         [--era-list projects/chime_atsc/eras/power_eras_2026-10-04.json]
@@ -118,8 +119,8 @@ def candidate_cache(words, rank_supported, always_masked, frame_event_index, cur
     if support_mass:
         index = 0
         for quantile in QUANTILES:
-            # q=0 chooses the minimum supported word; all other boundaries are
-            # nearest weighted-CDF values with exact integer comparisons.
+            # q = 0 takes the minimum supported word. Every other quantile takes the
+            # first word whose weighted CDF reaches it, found by exact integer comparison.
             if quantile:
                 while int(cumulative_mass[index]) * quantile.denominator < quantile.numerator * support_mass:
                     index += 1

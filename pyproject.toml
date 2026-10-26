@@ -92,15 +92,16 @@ markers = [
 
 [tool.ruff]
 target-version = "py310"
-# docs/evidence holds frozen records of what was actually run, absolute paths and
-# all. They are read as evidence, never imported, and editing one to satisfy a
-# linter would alter the record it exists to preserve, so they are not linted.
+# docs/evidence holds frozen records of the runs as they were made, with their
+# absolute paths. They are read as evidence and never imported. Editing one to
+# satisfy a linter would change the record, so they are not linted.
 extend-exclude = ["docs/evidence"]
 
 [tool.ruff.lint]
-# The library is held to pycodestyle errors and warnings and sorted imports;
-# tests, tools and scripts to the correctness checks only. Long lines, one-line
-# compound statements, lambdas bound to names and short names stay allowed.
+# The library is held to the pycodestyle errors and warnings and to sorted
+# imports. Tests, tools and scripts are held to the correctness checks only.
+# Long lines, one-line compound statements, lambdas bound to names, and short
+# names are allowed.
 select = ["E", "F", "W", "I"]
 ignore = ["E501", "E701", "E702", "E731", "E741"]
 

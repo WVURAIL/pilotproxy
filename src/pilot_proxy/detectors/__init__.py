@@ -1,1 +1,1 @@
-"""Detector adapters: each turns a product into the frame table the characterization reads."""
+"""Detector adapters that turn a product into the frame table read by the characterization."""

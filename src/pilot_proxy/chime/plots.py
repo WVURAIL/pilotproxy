@@ -36,11 +36,11 @@ from .products import (
 
 FIGURE_DPI = 300
 
-# Camera-ready export: comma-separated list of Matplotlib formats, e.g.
-# PILOT_PROXY_FIGURE_FORMATS=png,pdf. PNG (300 dpi) stays the default and the
-# canonical product name; extra formats are written alongside with the same
-# stem, so pdf gives vector line art for the manuscript without changing the
-# figure-name contract.
+# PILOT_PROXY_FIGURE_FORMATS is a comma-separated list of Matplotlib formats for
+# camera-ready export, such as PILOT_PROXY_FIGURE_FORMATS=png,pdf. PNG at 300 dpi
+# is the default and gives the product name. Other formats are written next to
+# the PNG with the same stem, so pdf adds vector line art for the manuscript and
+# the figure names stay the same.
 FIGURE_FORMATS_ENV = "PILOT_PROXY_FIGURE_FORMATS"
 DEFAULT_FIGURE_FORMATS = ("png",)
 
@@ -623,7 +623,7 @@ def plot_coarse_power_ratio_survival(run_dir: Path) -> list[Path]:
 
 
 def _load_detector_outputs(run_dir: Path):
-    """The run's detector outputs, once its contract is the current one."""
+    """Load the run's detector outputs after checking that its contract is current."""
     require_current_detector_contract(Path(run_dir))
     return np.load(Path(run_dir) / CHIME_DETECTOR_OUTPUTS_FILENAME)
 
@@ -719,12 +719,15 @@ def plot_baseband_spectrum(run_dir: Path) -> list[Path]:
 
 
 def _event_boundaries(run_dir: Path):
-    """Frame indices where the source event changes, from the combined
-    product's frame-identity sidecar (written by event-keyed combines), plus
-    the event count. None when the sidecar is absent (chime-run products, or
-    combines of identity-less legacy products). On stitched products the
-    frame axis concatenates acquisitions, so 'relative time' is data seconds
-    rather than wall clock; the boundaries make that visible."""
+    """Return the frame indices where the source event changes, and the event count.
+
+    Both are read from the frame-identity sidecar that event-keyed combines
+    write. None is returned when the sidecar is absent, as for chime-run
+    products and for combines of legacy products without frame identity. The
+    frame axis of a stitched product concatenates acquisitions, so its relative
+    time adds up the data seconds of each acquisition. The boundaries mark the
+    jumps in wall-clock time between acquisitions.
+    """
     path = Path(run_dir) / "chime_frame_identity.npz"
     if not path.exists():
         return None
@@ -915,8 +918,7 @@ def clean_known_figures(run_dir: Path) -> None:
 def generate_chime_plots(run_dir: Path) -> list[Path]:
     run = Path(run_dir)
     outputs: list[Path] = []
-    # Without detector products there is nothing to plot; return instead of
-    # failing while trying to load chime_detector_outputs.npz.
+    # a run without chime_detector_outputs.npz has nothing to plot
     if not (run / CHIME_DETECTOR_OUTPUTS_FILENAME).exists():
         return outputs
     outputs.extend(plot_snr_shelf_histogram(run))

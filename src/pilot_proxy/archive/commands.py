@@ -60,10 +60,11 @@ def survey_chime(
     match: str | None = None,
     expand: bool = False,
 ) -> Path:
-    """Build or resume a CHIME archive inventory.
+    """Build or resume a CHIME archive inventory and return its path.
 
-    With ``scopes_only`` the walk stops at discovery: it writes a map of the
-    datasets each scope lists and returns that path instead of an inventory.
+    With ``scopes_only``, the walk stops after discovery. A map of the datasets
+    listed by each scope is written, and the path of that map is returned
+    instead.
     """
     instrument = load_instrument("chime")
     if workers < 1:
@@ -139,8 +140,8 @@ def survey_chime(
         raise SystemExit(f"chime-survey: {exc}") from exc
 
     if scopes_only:
-        # discovery only: the result is a scope map, not a scannable inventory,
-        # so it gets no inventory meta and no completeness check
+        # a scope map cannot be scanned, so it gets no inventory meta and no
+        # completeness check
         print(f"  scope map: {inventory_path}")
         return inventory_path
 

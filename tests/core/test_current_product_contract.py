@@ -19,8 +19,9 @@ from pilot_proxy.product_contract import (
     validate_current_product_identity,
 )
 
-# One frame, four fine bins: the target, lower and upper spectra each sum to
-# one, so P = (1, 1, 1), p_ref_sum = 2, R = 1 and, with norms 1 : 2, Q = 1.
+# The fixture has one frame of four fine bins. The target, lower and upper
+# spectra each sum to one, so P = (1, 1, 1), p_ref_sum = 2 and R = 1, and with
+# norms 1 : 2, Q = 1.
 FIXTURE_FINE = np.asarray(
     [[[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1]]], dtype=np.uint64
 )
@@ -142,7 +143,7 @@ def test_missing_current_field_is_refused(field: str):
 
 def test_alternate_field_name_is_refused():
     product = current_product()
-    # A required measurement under any other name is not that measurement.
+    # a required measurement stored under another name is rejected
     product["fine_terms_u64"] = product.pop("fine_power_u64")
     with pytest.raises(CurrentProductContractError):
         validate_current_product_identity(product)
@@ -274,7 +275,7 @@ def test_sample_count_sum_cannot_wrap() -> None:
         ),
         ("pending", np.zeros((1, 0, 0), dtype=np.uint64), 0, "empty checkpoint"),
         ("unknown", np.zeros((1, 0, 0), dtype=np.uint64), 0, "must be one of"),
-        # The degraded statuses of the retired fine_products=off|auto paths.
+        # degraded statuses of the v5 fine_products=off|auto paths
         ("disabled_by_option", np.zeros((1, 0, 0), dtype=np.uint64), 0, "must be one of"),
         (
             "kernel_library_lacks_matched_filter_row_projections",
@@ -345,7 +346,7 @@ def test_frame_power_must_be_the_exact_sum_of_its_fine_powers(term: int) -> None
 
 def test_frame_power_off_by_one_is_refused_with_consistent_columns() -> None:
     # The stored powers and every column derived from them agree with each
-    # other, but not with the fine powers: still refused.
+    # other and disagree with the fine powers, so the product is refused.
     product = current_product()
     product["p_target_u64"] = np.asarray([[2]], dtype=np.uint64)
     product["coarse_power_ratio"] = np.asarray([[2.0]])
@@ -373,8 +374,8 @@ def test_derived_float_column_must_follow_the_fine_sums(field: str) -> None:
 
 
 def test_product_built_from_coarse_columns_from_fine_is_accepted() -> None:
-    # A wider synthetic frame set: derive every column from random fine powers
-    # with the public function and the validator must accept the result.
+    # Every column of a larger synthetic frame set is derived from random fine
+    # powers with the public function, and the validator must accept the result.
     rng = np.random.default_rng(6)
     frames, bins = 5, 8
     fine = rng.integers(0, 1 << 40, size=(frames, 3, bins), dtype=np.uint64)
@@ -433,8 +434,8 @@ def test_nonempty_product_cannot_contain_an_unused_unit() -> None:
 
 
 def test_frame_powers_from_fine_are_exact_and_select_rows() -> None:
-    # Values near 2**52 per bin: a float64 sum would round, the uint64 sum
-    # (checked against Python integers) does not.
+    # Each bin holds a value near 2**52, so a float64 sum would round. The
+    # uint64 sum is exact and is checked against Python integers.
     fine = np.zeros((3, 3, 8), dtype=np.uint64)
     fine[:, :, :] = (1 << 52) + 1
     fine[1, 0, 3] += np.uint64(7)
@@ -469,8 +470,8 @@ def test_frame_powers_refuse_a_wrapped_sum_and_a_metadata_view() -> None:
     ],
 )
 def test_frame_powers_refuse_a_v5_placeholder_status(status: str) -> None:
-    # A v5 product whose fine stage did not run stores an all-zero
-    # (N, 3, B) placeholder; its sums are not frame powers.
+    # A v5 product whose fine stage did not run stores an all-zero (N, 3, B)
+    # placeholder, and the sums of the placeholder are not frame powers.
     product = {
         "fine_power_u64": np.zeros((2, 3, 4), dtype=np.uint64),
         "fine_status": np.asarray(status),

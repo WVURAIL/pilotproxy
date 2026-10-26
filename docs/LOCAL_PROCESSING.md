@@ -1,19 +1,19 @@
 # Local archive processing
 
-This is the executable procedure for streaming the frozen CHIME inventory
-from CADC and processing it on a local WSL workstation. The shell blocks use
-`$WORK` for the workspace root and `$WORK/pilotproxy` for the checkout; set
-`WORK` to your own root. Scientific and product pins are in
-[`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md), mandatory gates
-are in [`VALIDATION_GATES.md`](VALIDATION_GATES.md), and actual launch values
-go in a run ledger.
-[`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md) documents the separately qualified
-CANFAR path and cannot override this file; neither file overrides the other,
-and the operator launches exactly one path.
+This document gives the executable procedure for streaming the frozen CHIME
+inventory from CADC and processing it on a local WSL workstation. The shell
+blocks use `$WORK` for the workspace root and `$WORK/pilotproxy` for the
+checkout, so set `WORK` to your own root. The scientific and product pins are
+in [`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md), the mandatory
+gates are in [`VALIDATION_GATES.md`](VALIDATION_GATES.md), and the actual
+launch values go in a run ledger.
+[`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md) documents the CANFAR path, which is
+qualified on its own. Neither file overrides the other, and the operator
+launches exactly one path.
 
 The run is archive estimation and sufficient-statistic reprocessing. The
-coarse positive-excess flag is retained as a bootstrap diagnostic; the fine
-rank/eta decision is inactive and no calibrated detection policy is applied.
+coarse positive-excess flag is kept as a bootstrap diagnostic. The fine rank
+and eta decision is inactive, and no calibrated detection policy is applied.
 
 ## Measured machine profile
 
@@ -22,15 +22,15 @@ rank/eta decision is inactive and no calibrated detection policy is applied.
 - WSL memory: 62 GiB plus 16 GiB swap
 - GPU: one RTX 5000 Ada, 16 GiB, compute capability 8.9
 - WSL ext4 free space: measure and record it at launch
-- Frozen input: 165,682 files, 25.64 TiB
+- Frozen input: 165682 files, 25.64 TiB
 
 Keep active staging on WSL ext4. Do not stage through `/mnt/c`, and do not run several detector processes against the single GPU.
 
 ## Where a run writes
 
-Storage on the workstation is by pipeline stage, one producer each:
-`$WORK/datasets/` holds raw inputs, `$WORK/products/` holds everything
-pilotproxy produces, `$WORK/results/` holds RFIsher's results. A scan
+Storage on the workstation is divided by pipeline stage, with one producer for
+each. `$WORK/datasets/` holds raw inputs, `$WORK/products/` holds everything
+pilotproxy produces, and `$WORK/results/` holds the results of RFIsher. A scan
 therefore lives entirely under one directory of `$WORK/products/`, named for
 the run:
 
@@ -102,10 +102,10 @@ sha256sum "$RUNTIME_BUNDLE/SHA256SUMS"
 Record the bundle path, `SHA256SUMS` hash, source revision, package-source hash,
 Python version, and package count. The bundle contains `requirements.lock`, the
 wheelhouse, the exact source archive, direct-source commits, and hashes for
-every payload. It deliberately does not contain the preserved detector library;
-verify that separate binary with the pinned command below.
+every payload. The preserved detector library is kept out of the bundle by
+design, and that binary is verified with the pinned command below.
 
-Test an offline restore before launch, using a fresh path outside the checkout:
+Test an offline restore before launch, using a fresh path that is not in the checkout:
 
 ```bash
 RESTORE_VENV=$WORK/venvs/archive-local-restore
@@ -141,11 +141,12 @@ openssl x509 -in $HOME/.ssl/cadcproxy.pem -noout -dates
 The run is pinned to the already preserved SM89 library. Do not replace or
 rebuild it during this run.
 
-The checkout's `PilotProxyKernel` binds detector core 4 and refuses a library
+`PilotProxyKernel` in the checkout binds detector core 4 and refuses a library
 of any other core major. Preserve one SM89 build of the frozen source with its
-manifest under `$WORK/kernels` and set the four variables below to it; the
-block stops if any is unset. The schema-v5 archive products of record were made
-with the core 2.3.0 library `pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so`
+manifest under `$WORK/kernels`, and set the four variables below to it. The
+block stops if any of them is unset. The schema v5 archive products of record
+were made with the core 2.3.0 library
+`pilotproxy-detector-core-2.3.0-sm89-f6cd8529ca4b.so`
 (sha256 `f6cd8529ca4b4581aaa37a6007a372d5afb4afa8c730d8a4372a8eaf25e807f2`,
 manifest sha256
 `d781d3d4dfbe15dd336b1c89e412a91522376f69a30cfc9543fd52ff6a954cf0`) and their
@@ -174,17 +175,18 @@ print("kernel", kernel.version.as_string(), kernel.get_fine_specs())
 PY
 ```
 
-Run every command in [`VALIDATION_GATES.md`](VALIDATION_GATES.md), including
-the complete test tree, CPU reference, SM89 CUDA test, and zero-skip kernel
-suite. The later detection campaign is not a prerequisite for this acquisition,
-but every archive and GPU gate must pass on the frozen source.
+Run every command in [`VALIDATION_GATES.md`](VALIDATION_GATES.md). These cover
+the complete test tree, the CPU reference, the SM89 CUDA test, and the
+zero-skip kernel suite. The later detection campaign is not required for this
+acquisition, but every archive and GPU gate must pass on the frozen source.
 
 ## One-file GPU gate
 
 The downloaded file has 2048 input streams. Confirm that shape, run one full
-detector chunk with no other GPU compute process active, and record peak VRAM.
-The production run is blocked unless the product validates and peak use stays
-below 13,900 MiB, leaving at least 15 percent of device memory free.
+detector chunk with no other GPU compute process active, and record the peak
+VRAM. The production run is blocked unless the product validates and the peak
+use stays below 13900 MiB, which leaves at least 15 percent of device memory
+free.
 
 ```bash
 : "${SMOKE_INPUT:?local copy of the freq_id 844 smoke file's datatrail pull}"
@@ -289,21 +291,22 @@ Four equal-size archive objects were downloaded through the same `cadcget` path 
 | 2 | 45.397 s | 7.673 MiB/s |
 | 4 | 36.785 s | 9.469 MiB/s |
 
-A reverse `4,2,1` sequence measured 21.001, 24.956, and 14.209 MiB/s. Across
-both sequences, aggregate throughput was 13.053 MiB/s with four workers, 11.737
-MiB/s with two, and 7.154 MiB/s with one. Transfer conditions varied, so four
-workers are the best tested starting value, not a settled optimum. Use four
-download workers and eight staged-file slots for the production-profile
-rehearsal. Analysis remains in frozen inventory order even when transfers finish
-out of order. Eight slots bound frozen-inventory scratch use to about 8.35 GiB.
-Do not raise either value without another bounded measurement.
+A reverse sequence of 4, 2, and 1 workers measured 21.001, 24.956, and
+14.209 MiB/s. Over both sequences, the aggregate throughput was 13.053 MiB/s
+with four workers, 11.737 MiB/s with two, and 7.154 MiB/s with one. Since
+transfer conditions varied, four workers is the best tested starting value, and
+the optimum is not settled. Use four download workers and eight staged-file
+slots for the production-profile rehearsal. Analysis stays in frozen inventory
+order even when transfers finish out of order. Eight slots bound the scratch
+use of the frozen inventory to about 8.35 GiB. Do not raise either value
+without another bounded measurement.
 
 ## Production-profile resume rehearsal
 
 This rehearsal uses the production archive source, full file chunks, ordered
 four-worker prefetch, the preserved library, and fine products. Its short
 checkpoint interval exists only to force an interruption and resume. Keep its
-capped product separate from production.
+capped product apart from production.
 
 ```bash
 BUNDLE_DIR=$WORK/archive_inputs/chime-pilots-v5
@@ -413,9 +416,9 @@ powercfg /change hibernate-timeout-ac 0
 ```
 
 Restore the recorded values after closeout. Do not change battery policy. Keep
-automatic restart risk, planned maintenance, and the current Windows update
-state in the launch decision; a long scan still needs controlled checkpointed
-stops and resumes.
+the risk of automatic restart, planned maintenance, and the current Windows
+update state in the launch decision. A long scan still needs controlled,
+checkpointed stops and resumes.
 
 ## Production command
 
@@ -508,14 +511,14 @@ Keep `--allow-partial` off. The scan records its resolved worker, staging, and
 checkpoint settings in `scan_scope.json` before downloading data.
 
 The 250-unit checkpoint interval reduces repeated whole-product writes about
-fivefold compared with 50. A stop can repeat up to 249 successfully analyzed
-units plus downloads that were prefetched but not represented by the last
-checkpoint. Complete the production-profile rehearsal before launch.
+fivefold when compared to an interval of 50. A stop can repeat up to 249
+successfully analyzed units, plus downloads that were prefetched but not
+represented by the last checkpoint. Complete the production-profile rehearsal
+before launch.
 
-`fine_products=on` retains exact fine powers. It does not enable fine
-detection. It is also the only accepted value: the
-frame powers are the all-bin sums of the fine powers, so `off` and `auto`
-are refused.
+`fine_products=on` stores the exact fine powers and leaves fine detection
+disabled. It is also the only accepted value, since the frame powers are the
+all-bin sums of the fine powers, and `off` and `auto` are refused.
 
 ## Live run checks
 
@@ -537,8 +540,8 @@ python scripts/monitor_local_archive.py \
 ```
 
 The command is read-only and exits nonzero for a missing or duplicate scan,
-less than 100 GiB free, no output/log/staging heartbeat for two hours, low GPU
-headroom, excessive GPU temperature, an unavailable GPU, or a concerning log
+less than 100 GiB free, no output, log, or staging heartbeat for two hours, low
+GPU headroom, excessive GPU temperature, an unavailable GPU, or a concerning log
 pattern. It also requires the CADC certificate to remain mode `0600` with at
 least 72 hours left. Use `--json` for machine-readable output. `watch -n 300`
 may be placed before the command for a continuously visible pane.
@@ -547,7 +550,7 @@ Treat low space, a stale heartbeat, new quarantine activity, a fetch failure,
 an expired certificate, a traceback, or a GPU memory error as a stop condition.
 Wait for a checkpoint when possible, press `Ctrl-C`, and wait for every worker
 to exit. Inspect `df -h`, `nvidia-smi`, the last log lines, the newest
-`_per_pilot/*.npz` timestamp, and staging contents before deciding whether to
+`_per_pilot/*.npz` timestamp, and staging contents before deciding to
 resume. Do not delete staging files while any old worker is alive.
 
 ## First-checkpoint tripwire
@@ -685,15 +688,15 @@ shorter than the remaining run.
 
 ## Runtime expectations
 
-At the slower first-sequence four-worker rate, 25.64 TiB represents about 33
-days of transfer service time if that short benchmark rate remains constant.
-The reverse sequence was much faster, which shows why 33 days is a conservative
-planning projection rather than an ETA. Download and GPU analysis overlap, so
-wall time is governed by the slower stage, with checkpoint pauses, outages, and
-other stalls added. Follow the planned certificate renewal cycle rather than
-allowing expiry to stop the run.
+At the slower four-worker rate of the first sequence, 25.64 TiB is about 33
+days of transfer service time, if that short benchmark rate holds. The reverse
+sequence was much faster, so 33 days is a conservative planning projection and
+should not be read as an ETA. Download and GPU analysis overlap, so the wall
+time is set by the slower stage, with checkpoint pauses, outages, and other
+stalls added. Follow the planned certificate renewal cycle so that an expiry
+never stops the run.
 
-Multiple CPU threads are available for support work, but the current detector is one ordered GPU consumer. Additional GPU batching and append-only checkpoints may improve throughput later; both change deeper execution paths and need separate parity and interruption testing before production use.
+Multiple CPU threads are available for support work, but the detector is one ordered GPU consumer. More GPU batching and append-only checkpoints may improve throughput later. Both change deeper execution paths and need their own parity and interruption tests before production use.
 
 ## After-run acceptance
 

@@ -153,7 +153,8 @@ def test_product_index_maps_event_and_frame_to_row(tmp_path):
     index = receipt.ProductIndex(path)
     assert (index.freq_id, index.row(11, 1), index.row(12, 0), index.row(12, 1)) == (
         FREQ_ID, 1, 2, None)
-    # Frame powers are the sums of the stored fine powers, not the stored p_*.
+    # Frame powers are the sums of the stored fine powers. The stored p_*
+    # columns hold other values here, so a read of p_* fails the test.
     assert index.powers.shape == (3, 3) and index.powers.dtype == np.uint64
     for row in range(3):
         for term in range(3):

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Frozen, CPU-only service-throughput benchmark; no live/USB claims."""
+"""Benchmark the CPU service throughput of the SDR upgrade streaming adapter.
+
+The plan and sources are frozen before the run, and synthetic IQ is processed
+on one pinned CPU. USB transfer and live acquisition are not measured.
+"""
 
 from __future__ import annotations
 
@@ -314,7 +318,7 @@ def run(out):
     config = DigitalAdapterConfig(**plan["config"])
     warmup = one_run(iq[: plan["warmup_samples"]], config, "warmup", result_dir)
     records = []
-    # An individual failure is retained; subsequent predeclared attempts still run.
+    # a failed repeat is kept, and the remaining predeclared repeats still run
     for repeat in range(plan["timed_repeats"]):
         record = one_run(iq, config, f"repeat-{repeat + 1:02d}", result_dir)
         records.append(record)

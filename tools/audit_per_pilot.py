@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Deep integrity audit for current PilotProxy per-pilot products.
+"""Audit the integrity of PilotProxy per-pilot products.
 
-Re-derives every internally checkable quantity from first principles and the
-repository's own contract functions, and verifies provenance hashes against
-the shipped weight bank. Safe on live checkpoints (reads only).
+Every quantity that a product can check against itself is derived again from
+first principles and the repository's contract functions, and the provenance
+hashes are compared with the shipped weight bank. The audit only reads, so it
+can run on live checkpoints.
 
-Usage: python tools/audit_per_pilot.py <dir-with-<freq_id>.npz> [--repo <pilot-proxy checkout>]
+Usage: python tools/audit_per_pilot.py <dir-with-<freq_id>.npz> [--repo <pilotproxy checkout>]
 
-Lives in the repository so every machine audits with the current version
-(git pull is the update mechanism; do not keep local copies).
+The script is kept in the repository so that every machine audits with the current
+version. Each machine updates it with git pull, and no local copies are kept.
 """
 from __future__ import annotations
 
@@ -105,13 +106,13 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     r = lambda k: g(k).reshape(-1)
     scalar = lambda k: g(k).reshape(()).item() if g(k).size == 1 else g(k).reshape(-1)[0]
 
-    # ---- provenance -------------------------------------------------------
-    # Historic cohorts stay auditable: v3 (the pre-flight and any archive
-    # cohort scanned before the railed/fill counts existed), v5 (the archive
-    # of record: kernel core 2.x, detector contract v1, row-domain frame
-    # powers) and the current v6 (kernel core 3.x, detector contract v2,
-    # frame powers = all-bin sums of the fine powers). The railed audit below
-    # applies only where the fields exist.
+    # provenance
+    # Three product schemas are audited. v3 is the pre-flight and any archive
+    # cohort scanned before the railed and fill counts were added. v5 is the
+    # archive of record, with kernel core 2.x, detector contract v1 and
+    # row-domain frame powers. v6 is the current schema, with kernel core 3.x,
+    # detector contract v2 and frame powers equal to the all-bin sums of the
+    # fine powers. The railed and fill checks run only where those fields exist.
     known_schemas = ("pilotproxy_per_pilot_product_v3",
                      PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN,
                      PER_PILOT_PRODUCT_SCHEMA_TOKEN)
@@ -120,15 +121,17 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     current = sv == PER_PILOT_PRODUCT_SCHEMA_TOKEN
     with_counts = sv in (PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN, PER_PILOT_PRODUCT_SCHEMA_TOKEN)
     a.check(sv in known_schemas, f"schema_version={sv}")
-    # Earlier products carry their release's decision contract exactly: the
-    # current one without the frame-power block (v5_decision_contract).
+    # v3 and v5 products carry the exact decision contract of their release,
+    # which is the current contract without the frame-power block
+    # (v5_decision_contract).
     decision = json.loads(str(scalar("decision_contract_json")))
     a.check(decision == (current_decision_contract() if current else v5_decision_contract()),
             "decision_contract_json")
-    # Kernel core major per schema: 2.x for v3/v5 (additive minor bumps share
-    # the detector contract), 3.x for v6 (frame powers from the fine sums). A
-    # major bump must still fail this check loudly. Cohort binary hashes are
-    # pinned in the run ledger, not here.
+    # The kernel core major version is 2 for v3 and v5 and 3 for v6, where the
+    # frame powers come from the fine sums. Minor versions only add features and
+    # share the detector contract, so only the major version is checked, and a
+    # new major version fails this check. The binary hash of each cohort is
+    # pinned in the run ledger.
     kernel_major = "3" if current else "2"
     a.check(re.search(rf"kernel={kernel_major}\.\d+\.\d+", dv) is not None
             and "K=128" in dv and sv in dv,
@@ -151,7 +154,7 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
                 "contract coarse_power_definition")
     a.check(contract.get("fine_reduction", {}).get("pad_factor") == 2, "contract fine pad_factor")
 
-    # ---- geometry / identity ---------------------------------------------
+    # geometry and identity
     ch = int(scalar("physical_channel")); fid = int(scalar("freq_id"))
     nfft = int(scalar("nfft")); K = int(scalar("detector_window_samples"))
     a.check(FREQ_TABLE.get(ch) == fid, f"channel {ch} <-> freq_id {fid} mapping")
@@ -166,14 +169,14 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     a.check(abs(pilot_hz - chime_hz) <= CHIME_HZ_PER_CHANNEL / 2, "pilot inside coarse channel")
     a.check(int(scalar("pilot_in_band")) == 1, "pilot_in_band flag")
 
-    # ---- per-frame arrays: lengths ---------------------------------------
+    # per-frame array lengths
     F = r("coarse_power_ratio").astype(np.float64)
     n = F.size
-    # Schema v3 removed every derived fine column (the float ratio, the CFAR
-    # location/scale/threshold/mode, the null-bulk exceedance fraction, and the
-    # ragged exceedance list). The scan stores only the exact terms and decides
-    # nothing, so those are recomputed in post-processing and are not audited
-    # here as stored fields.
+    # From schema v3 on, no derived fine column is stored (the float ratio, the
+    # CFAR location, scale, threshold and mode, the null-bulk exceedance
+    # fraction and the ragged exceedance list). The scan stores only the exact
+    # terms and makes no decision, so these columns are recomputed in
+    # post-processing and are not audited here.
     per_frame = ["p_target_u64", "p_ref_sum_u64", "valid", "reject_mask",
                  "normalized_coarse_power_ratio_db", "pilot_excess_db", "estimated_data_shelf_snr_db",
                  "baseband_power_linear", "frame_index", "frame_unit_index",
@@ -186,9 +189,9 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
         a.check(r(k).size == n, f"len({k})=={n}")
     a.check(np.array_equal(r("frame_index"), np.arange(n)), "frame_index == arange")
 
-    # ---- railed/fill counts (v5 and v6) -----------------------------------
-    # Counted from raw samples the product does not retain, so a wrong value
-    # is unrepairable; audit the full invariant set, not just presence.
+    # railed and fill counts (v5 and v6)
+    # The counts are taken from raw samples that the product does not keep, so
+    # a wrong value cannot be repaired. Every invariant of the counts is checked.
     if with_counts:
         rc = r("railed_sample_count"); fc = r("fill_sample_count")
         rt = r("railed_sample_total")
@@ -200,7 +203,7 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
         a.check(bool(np.all(rt == np.uint64(expected_total))),
                 f"railed_sample_total == 2*nfft*streams ({expected_total})")
 
-    # ---- exact integer contract ------------------------------------------
+    # exact integer contract
     pt_array = g("p_target_u64"); pr_array = g("p_ref_sum_u64")
     pt = pt_array.reshape(-1); pr = pr_array.reshape(-1)
     a.check(pt.dtype == np.uint64 and pr.dtype == np.uint64, "u64 dtypes")
@@ -225,9 +228,8 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     expected_mask = np.array([bool(vv) and (int(p) * rn > tn * int(q))
                               for vv, p, q in zip(v, pt.tolist(), pr.tolist())])
     a.check(np.array_equal(m, expected_mask), "reject_mask exact integer rule")
-    # v3 stopped storing null_power_ratio because it is exactly recoverable from
-    # the two norms beside it; derive it rather than reading a field that would
-    # only be able to disagree with its own inputs.
+    # From v3 on, null_power_ratio is not stored, since it follows exactly from
+    # the two stored weight norms. It is derived here from those norms.
     null_power_ratio = null_power_ratio_from_weight_norms(tn, rn)
     a.check(np.isfinite(null_power_ratio) and null_power_ratio > 0.0,
             "null_power_ratio derived from weight norms is finite and positive")
@@ -240,24 +242,25 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     a.check(np.all(np.isnan(exc[~v])) if (~v).any() else True, "excess NaN on invalid")
     a.check(int(r("rational_overflow_count").sum()) == 0, "rational_overflow_count == 0")
 
-    # ---- fine products ----------------------------------------------------
+    # fine products
     a.check(str(scalar("fine_status")) == "enabled", "fine_status enabled")
     bins = int(scalar("fine_num_bins"))
     a.check(bins == fine_bin_count(nfft // K) == 256, f"fine_num_bins={bins}")
-    # The exact terms are the whole stored fine surface under v3:
-    # (frames, [target, lower reference, upper reference], fine bins), uint64.
+    # from v3 on, the stored fine surface is the exact terms alone, of shape
+    # (frames, [target, lower reference, upper reference], fine bins), uint64
     ff = g("fine_power_u64")
     a.check(ff.shape == (n, 3, bins), f"fine_power_u64 shape {ff.shape}")
     a.check(ff.dtype == np.uint64, f"fine_power_u64 dtype {ff.dtype}")
-    # The writer guarantees no per-bin positivity (valid only means the coarse
-    # p_ref_sum is non-zero), so audit the frame totals rather than every bin
-    # of every term: a valid frame with zero fine power everywhere is corrupt.
+    # The writer does not guarantee a positive power in each bin, since valid
+    # only means that the coarse p_ref_sum is nonzero. The frame totals are
+    # checked instead, and a valid frame with zero fine power in every bin is
+    # corrupt.
     a.check(bool(np.all(ff[v].sum(axis=(1, 2)) > 0)) if v.any() else True,
             "fine terms carry power on valid frames")
     # The frame powers are the all-bin sums of the fine powers (kernel core
-    # 3.0.0). A v6 product stores exactly those, and every column derived
-    # from them; a v5 product of record stored row-domain powers, which
-    # readers replace by the fine sums, so its deviation is reported only.
+    # 3.0.0). A v6 product stores exactly those sums and every column derived
+    # from them. A v5 product of record stores row-domain powers, which the
+    # readers replace by the fine sums, so its deviation is reported as a note.
     if ff.ndim == 3 and ff.shape == (n, 3, bins) and ff.dtype == np.uint64:
         fine_sums = frame_powers_from_fine(z)
         stored = (pt, r("p_ref_lower_u64"), r("p_ref_upper_u64")) if with_counts else None
@@ -278,9 +281,10 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
                              / (pt.astype(np.float64) / pr.astype(np.float64)) - 1.0)
             a.note(f"v5 coarse ratio from fine sums vs stored row domain: median "
                    f"{float(np.nanmedian(deviation[v])):+.2e}")
-    # The deployed ratio is a post-processing quantity; check it is recoverable
-    # from what is stored rather than expecting a stored column. Bins whose
-    # reference pair sums to zero are legitimately undefined, not corrupt.
+    # The fine ratio used by the detector is computed in post-processing and has
+    # no stored column, so it is recomputed here from the stored terms. A bin
+    # whose two references sum to zero has an undefined ratio, and such a bin
+    # is allowed.
     denom = ff[:, 1, :].astype(np.float64) + ff[:, 2, :].astype(np.float64)
     with np.errstate(divide="ignore", invalid="ignore"):
         fine_ratio = 2.0 * ff[:, 0, :].astype(np.float64) / denom
@@ -290,14 +294,14 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     a.check(str(scalar("decision_contract_json")).strip().startswith("{"),
             "decision_contract_json present for exact replay")
 
-    # ---- integrated spectra ----------------------------------------------
+    # integrated spectra
     sb = r("integrated_spectrum_before_mask").astype(np.float64)
     sa = r("integrated_spectrum_after_mask").astype(np.float64)
     a.check(sb.size == nfft and sa.size == nfft, "spectra length == nfft")
     a.check(np.all(sb >= 0) and np.all(sa >= 0), "spectra nonnegative")
     a.check(np.all(sa <= sb * (1 + 1e-12) + 1e-6), "after <= before elementwise")
 
-    # ---- units ------------------------------------------------------------
+    # units
     uo = r("unit_order"); U = uo.size
     for k in ("unit_time0_ctime", "unit_time0_fpga", "unit_event_id",
               "unit_delta_time", "archive_version", "unit_git_version_tag",
@@ -341,7 +345,7 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
         "ch": ch, "fid": fid, "units": U, "frames": n,
         "valid%": 100.0 * v.mean(), "mask%": 100.0 * m.mean(),
         "medF/null_power_ratio": float(np.median(F[v] / null_power_ratio)) if v.any() else float("nan"),
-        # Recomputed from the stored exact terms; v3 stores no fine decision.
+        # recomputed from the stored exact terms, since v3 and later store no fine decision
         "med_fine_ratio": float(np.nanmedian(fine_ratio[v])) if v.any() else float("nan"),
         "span": (datetime.datetime.fromtimestamp(t0.min(), datetime.timezone.utc).strftime("%Y-%m")
                  + ".." + datetime.datetime.fromtimestamp(t0.max(), datetime.timezone.utc).strftime("%Y-%m")),

@@ -1,23 +1,23 @@
 # coding=utf-8
 """Inject a known pilot tone into real CHIME baseband files.
 
-Injection--recovery on real data is the sensitivity validation for the
-detector: add a complex tone of known amplitude at the pilot frequency to a
-copy of a real baseband file, run the untouched production pipeline over the
-copy, and show recovered pilot excess tracks injected amplitude.
+Injection and recovery on real data is the sensitivity test of the detector.
+A complex tone of known amplitude is added at the pilot frequency to a copy of
+a real baseband file, the unmodified production pipeline is run over the copy,
+and the recovered pilot excess is shown to track the injected amplitude.
 
-The harness works entirely in the file's own integer domain. On-disk baseband
-is offset-binary 4+4-bit uint8 with components spanning exactly [-8, 7]. The
-archive reader and injection path share one format module. Injection decodes
-the integer components, adds the float tone, rounds the *sum*, and clips to
-[-8, 7] --- so a zero-amplitude pass is byte-identical to the source
-unconditionally (including components at -8, which a symmetric +/-7 quantizer
-would corrupt), and every injected delta is exact apart from saturation,
-which is counted and reported.
+The injection is performed in the file's own integer domain. On-disk baseband
+is offset-binary 4+4-bit uint8 with components spanning exactly [-8, 7], and
+the archive reader and the injection share one format module. The integer
+components are decoded, the float tone is added, and the sum is rounded and
+clipped to [-8, 7]. A zero-amplitude pass is therefore byte-identical to the
+source in every case, even for components at -8, which a symmetric +/-7
+quantizer would corrupt. Every injected delta is exact apart from saturation,
+and the clipped samples are counted and reported.
 
-Files are copied wholesale and only the ``baseband`` dataset is rewritten in
-place, so sibling datasets, attributes, and the ``*_<freq_id>.h5`` naming the
-local source keys on are preserved; the injected tree drops straight into
+Files are copied whole, and only the ``baseband`` dataset is rewritten in
+place. Sibling datasets, attributes and the ``*_<freq_id>.h5`` names that the
+local source keys on are kept, so the injected tree can be passed directly to
 ``pilot-proxy chime-scan --source local``.
 """
 from __future__ import annotations
@@ -36,8 +36,8 @@ from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
 BASEBAND_DATASET = "baseband"
 COMPONENT_MIN = -8
 COMPONENT_MAX = 7
-# Keep the tone comfortably inside the coarse channel; the detector's own
-# capture-loss bounds (docs/METHOD_SPEC.md) are derived for in-band pilots.
+# The tone frequency is limited to |f_bb| <= 0.45 fs, since the capture-loss
+# bounds of the detector (docs/METHOD_SPEC.md) are derived for in-band pilots.
 MAX_ABS_NORMALIZED_FREQUENCY = 0.45
 INJECTION_MANIFEST_FILENAME = "injection_manifest.json"
 
@@ -117,11 +117,12 @@ def inject_tone_into_baseband_file(
 ) -> dict[str, Any]:
     """Copy ``source_path`` to ``output_path`` with an injected pilot tone.
 
-    The tone is ``amplitude_lsb * exp(j*(2*pi*f_bb*n/FS + phi_feed))`` with an
-    independent seeded phase per feed (the detector combines feed powers
-    incoherently, so inter-feed phase is irrelevant to recovered F; random
-    phases avoid asserting a geometry the analysis never uses). Returns the
-    per-file manifest entry, including the exact clip count.
+    The tone is ``amplitude_lsb * exp(j*(2*pi*f_bb*n/FS + phi_feed))``, with an
+    independent seeded phase phi_feed on each feed. Feed powers are added
+    incoherently by the detector, so the inter-feed phase has no effect on the
+    recovered F, and random phases avoid assuming an array geometry that the
+    analysis never uses. Returns the manifest entry for the file, with the
+    exact clip count.
     """
     import h5py
 
@@ -178,8 +179,8 @@ def inject_tone_into_baseband_file(
         ) * n + phases[np.newaxis, :]
         tone_re = float(amplitude_lsb) * np.cos(angle)
         tone_im = float(amplitude_lsb) * np.sin(angle)
-        # Round the SUM (integer + tone), the physical quantizer model; for
-        # a = 0 this reduces to the original integers exactly.
+        # The sum (integer + tone) is rounded, as in a physical quantizer, so
+        # for a = 0 the original integers are returned exactly.
         new_re = np.round(real + tone_re).astype(np.int64)
         new_im = np.round(imag + tone_im).astype(np.int64)
         clipped = (
@@ -212,7 +213,7 @@ def inject_tone_into_baseband_file(
 
 
 def verify_injection_preserves_siblings(source_path: Path, output_path: Path) -> None:
-    """Assert every dataset/attribute except ``baseband`` is unchanged."""
+    """Raise RuntimeError if any dataset or attribute other than ``baseband`` changed."""
     import h5py
 
     def _tree(handle) -> tuple[dict[str, np.ndarray], dict[str, dict[str, Any]]]:
@@ -258,7 +259,7 @@ def inject_directory(
     pilot_frequency_hz: float | None = None,
     physical_channel: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Inject every file, preserving names; write the manifest sidecar."""
+    """Inject the tone into each file under its own name and write the manifest."""
     fmt = _format_module()
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -278,7 +279,7 @@ def inject_directory(
                 output_dir / source.name,
                 baseband_frequency_hz=f_bb,
                 amplitude_lsb=amplitude_lsb,
-                # Distinct per-file phases without per-file arguments.
+                # distinct phases for each file from one seed
                 phase_seed=int(phase_seed) + index,
             )
         )

@@ -2,24 +2,25 @@
 """GPU gates for the on-device fine-power stage (kernel core 2.1.0) and the
 frame-power identity built on it (kernel core 3.0.0).
 
-The library's ``PilotProxy_Compute_FinePowers_U64`` must reproduce the frozen
-Python reference (``fine_power_fx``) bit-for-bit --- exact uint64
-equality, no tolerances. Three gates plus a rate-margin report:
+The library function ``PilotProxy_Compute_FinePowers_U64`` must reproduce the
+frozen Python reference ``fine_power_fx`` bit for bit, with exact uint64
+equality and no tolerance. Three gates and a rate-margin report are run.
 
-1. pure stage: seeded row-projection buffers uploaded directly, library
-   output == reference, including a non-block-multiple stream count and
-   batch;
-2. chained: packed int4 frames -> device row projections
-   (``PilotProxy_Compute_RowSums_I32``) -> fine powers from the SAME device
-   buffer, compared against the reference applied to the host readback ---
-   the deployed composition with no host round-trip in between --- and the
-   kernel core 3.0.0 frame-power identity on top: the fused entry's
-   ``d_power_out`` == the host sum over bins of this staged output;
-3. geometry probe: ``PilotProxy_GetFineSpecs`` returns the frozen 128/2/256.
+1. Seeded row-projection buffers are uploaded directly, and the output of the
+   pure stage must equal the reference. The cases cover a stream count that is
+   not a multiple of the block size and a batch of three frames.
+2. Packed int4 frames are passed through the device row projections
+   (``PilotProxy_Compute_RowSums_I32``), and the fine powers are computed from
+   the same device buffer. They are compared with the reference applied to the
+   host readback. This is the deployed composition, with no host round trip
+   between the two stages. The fused entry is then run on the same handle,
+   and its ``d_power_out`` must equal the host sum over bins of the staged
+   output (the frame-power identity of kernel core 3.0.0).
+3. ``PilotProxy_GetFineSpecs`` must return the frozen geometry of 128 windows
+   per stream, a pad factor of 2, and 256 fine bins.
 
-The timing report (printed rather than asserted) is the first rate-margin
-datapoint for the fine stage: ms per 2048-stream frame against the
-~41.9 ms CHIME frame cadence.
+The rate-margin report is printed only. It gives the time of the fine stage per
+2048-stream frame (ms) and its margin against the 41.9 ms CHIME frame cadence.
 """
 from __future__ import annotations
 
@@ -118,14 +119,14 @@ def test_device_chain_matched_filter_row_projections_to_fine_powers():
         kernel.compute_row_projections_i32(
             handle, weights.ctypes.data, d_matched_filter_row_projections.data.ptr
         )
-        # fine powers straight from the device row-projection buffer: the
-        # deployed composition, no host round-trip
+        # fine powers from the device row-projection buffer with no host
+        # round trip, as deployed
         kernel.compute_fine_powers_u64(
             int(d_matched_filter_row_projections.data.ptr), streams, WINDOWS, 1,
             int(d_fine.data.ptr)
         )
-        # the fused entry on the same handle: its frame powers must be the
-        # bin sums of this staged output (kernel core 3.0.0)
+        # fused entry on the same handle, whose frame powers must be the bin
+        # sums of the staged output (kernel core 3.0.0)
         kernel.compute_fused_fine_u64(
             handle, weights.ctypes.data,
             int(d_fine_fused.data.ptr), int(d_powers.data.ptr), 0,
@@ -166,7 +167,7 @@ def test_fine_powers_rate_margin_report():
             int(d_rs.data.ptr), streams, WINDOWS, 1, int(d_out.data.ptr)
         )
 
-    once()  # warmup + JIT/caches
+    once()  # warm-up launch for the JIT and caches
     cp.cuda.Device().synchronize()
     n = 50
     t0 = time.perf_counter()

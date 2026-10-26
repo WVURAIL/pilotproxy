@@ -1,20 +1,23 @@
 # Scientific provenance snapshots
 
-This tree is an explicit exception to the repository's normal generated-output
-policy. It contains small, dated evidence snapshots needed to reproduce or
-audit manuscript and dissertation claims. A file's presence here does not make
-it an active runtime product or a current software contract.
+This tree is an explicit exception to the generated-output policy of the
+repository. It holds small, dated evidence snapshots that are needed to
+reproduce or audit the claims of the manuscripts and the dissertation. The
+files here are records, and none of them is an active runtime product or a
+current software contract.
 
 Each dated directory must state:
 
-- what claim or decision the snapshot supports;
-- which files are committed and how they were produced;
-- which inputs or larger result bundles remain external; and
-- whether the evidence is complete, provisional, or historical.
+- the claim or decision the snapshot supports
+- the files that are committed and how they were produced
+- the inputs or larger result bundles that stay external
+- the status of the evidence (complete, provisional, or historical)
 
-Do not overwrite a dated snapshot with a rerun. Add a new dated directory and
-link the superseding record from both READMEs. Large raw captures, ordinary
-scan products, and rebuildable intermediate arrays remain outside git; retain
-their hashes and archive locations in the corresponding snapshot instead.
+A dated snapshot is never overwritten with a rerun. The rerun goes in a new
+dated directory, and both READMEs link to the record that supersedes the old
+one. Large raw captures, ordinary scan products, and rebuildable intermediate
+arrays stay out of git, and their hashes and archive locations are kept in the
+snapshot they belong to.
 
-One earlier snapshot was removed on 2026-10-07. It is kept only in the private provenance repository (see `PROVENANCE.md`).
+One earlier snapshot was removed on 2026-10-07. It is kept only in the private
+provenance repository (see `PROVENANCE.md`).

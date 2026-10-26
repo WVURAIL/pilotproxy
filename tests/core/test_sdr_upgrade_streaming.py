@@ -78,7 +78,7 @@ def test_explicit_gap_discards_partial_frame_and_matches_two_independent_records
     assert {r["segment_id"] for r in first} == {0}
     assert {r["segment_id"] for r in second} == {1}
     assert all(r["ratio_status"] == "undefined_both_zero" for r in second)
-    assert np.all(second[0]["resampled_frame"] == 0)  # No pre-gap tone leaks in.
+    assert np.all(second[0]["resampled_frame"] == 0)  # no pre-gap tone leaks into the new segment
 
 
 def test_reset_does_not_stitch_two_subframe_segments_and_restart_is_explicit():
@@ -143,9 +143,9 @@ def test_empty_chunks_noop_and_invalid_boundary_does_not_lose_data():
 
 
 def test_half_step_rounding_caveat_is_exposed_and_chunk_independent():
-    # Place one non-saturated component exactly at a batch half-step. Batch
-    # and streaming may straddle this tie by an ulp; do not assert universal
-    # packed equality for this deliberately adversarial arithmetic boundary.
+    # One non-saturated component is placed exactly at a batch half-step.
+    # Batch and streaming results may fall on either side of this tie by one
+    # ulp, so packed equality is checked only between two streaming partitions.
     rng = np.random.default_rng(99173)
     x = rng.normal(size=100_000) + 1j * rng.normal(size=100_000)
     reference = adapt_record(x, DigitalAdapterConfig(INPUT_RATE_HZ, 23_456.7, 0, 1.))
@@ -165,7 +165,7 @@ def test_longer_stream_state_is_bounded_and_output_arrays_are_owned_by_caller():
     for block in range(129):
         values = np.full(INPUT_BLOCK_SAMPLES, complex(block % 4, -1))
         out = s.push(values, input_start_index=block * INPUT_BLOCK_SAMPLES)
-        values[:] = 900 + 900j  # No retained alias to caller input.
+        values[:] = 900 + 900j  # the adapter keeps no alias to the caller's input
         for frame in out:
             counts += 1
             if saved is None:

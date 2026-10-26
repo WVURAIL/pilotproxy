@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Check current threshold code against a companion paper's frozen sweeps.
+"""Check the threshold code against the frozen sweeps of a companion paper.
 
-Read-only on the manuscript and its records. No raw baseband or GPU is needed.
-This checks calculation correspondence, not physical threshold qualification.
+The manuscript and its records are only read, and no raw baseband data or GPU
+is needed. The code is checked to reproduce the paper's saved calculations and
+ideal-year assignments. The check does not cover physical qualification of the
+thresholds.
 """
 from __future__ import annotations
 
@@ -23,8 +25,8 @@ def check(paper_root: Path) -> dict:
     record_path = data / "decisions.json"
     record = json.loads(record_path.read_text())
     inputs = record["inputs"]
-    # The manuscript deliberately preserves the old duty-based JSON and builds
-    # its primary calendar comparison separately. Audit that view as well.
+    # The manuscript keeps the duty-based JSON of the earlier rule and builds its
+    # primary calendar comparison in calendar_forecast. Both views are checked.
     sys.path.insert(0, str(paper_root.resolve()))
     try:
         manuscript = importlib.import_module("make_numbers")

@@ -1,9 +1,9 @@
 #include "pilotproxy_detector.h"
 #include "pilotproxy_reference.h"
 
-/* Compile-only smoke test: the public header and the reference header must
- * be consumable from plain C11, and every prototype must be the one the
- * kernel core 3.0.0 ABI declares. Nothing here runs. */
+/* Compile-only smoke test. The public header and the reference header must
+ * compile as plain C11, and each call below must match the prototype that
+ * the headers declare. Nothing here runs. */
 void test_pilotproxy_c_header(void)
 {
     int detector_window_samples = 0;

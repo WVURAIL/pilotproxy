@@ -393,9 +393,10 @@ def test_chime_weight_generation_post_coordinate_uses_detector_coordinate() -> N
     )
     by_channel = {int(row["physical_channel"]): row for row in layouts}
 
-    # Explicit baseband frame (2026-07-29): detector coordinate uses the
-    # profile's true (inverted) sense, so the ch14 offset is +3059 Hz and the
-    # edge-wrap exemplar is ch14 itself (lower reference wraps below DC).
+    # Under the explicit baseband frame of 2026-07-29, the detector coordinate
+    # uses the profile's true (inverted) sense. The ch14 offset is therefore
+    # +3059 Hz, and ch14 is also the edge-wrap case, with its lower reference
+    # wrapped below DC.
     assert by_channel[PHYSICAL_CHANNEL_14]["target_offset_hz"] == pytest.approx(
         -REFERENCE_FINE_OFFSET_HZ
     )
@@ -421,9 +422,9 @@ def test_chime_weight_generation_raw_coordinate_uses_native_inverted_coordinate(
     )
     by_channel = {int(row["physical_channel"]): row for row in layouts}
 
-    # Raw (native inverted) coordinate is the exact mirror of the detector
-    # coordinate under the explicit frame: ch14 offset -3059 Hz, upper
-    # reference wraps.
+    # The raw (native inverted) coordinate is the exact mirror of the detector
+    # coordinate under the explicit frame, so the ch14 offset is -3059 Hz and
+    # its upper reference wraps.
     assert by_channel[PHYSICAL_CHANNEL_14]["target_offset_hz"] == pytest.approx(
         REFERENCE_FINE_OFFSET_HZ
     )

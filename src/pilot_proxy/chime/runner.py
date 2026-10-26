@@ -96,7 +96,10 @@ class WeightBankLike(Protocol):
 
 
 def _exact_detection_u64(value: object, *, field: str) -> int:
-    """Accept exact backend uint64-domain values without coercive casts."""
+    """Return a backend value as an exact int in the uint64 range.
+
+    Booleans, floats and values outside [0, 2^64) raise ValueError.
+    """
     if isinstance(value, (bool, np.bool_)):
         raise ValueError(f"detector field {field!r} must not be boolean")
     try:
@@ -383,7 +386,11 @@ def _weights_for_channel(
 
 
 def _manifest_receiver_nyquist_zone(manifest: Mapping[str, Any]) -> int | None:
-    """The embedded receiver profile's Nyquist zone (or its old word), if any."""
+    """Return the Nyquist zone of the embedded receiver profile, or None.
+
+    The zone is read from ``nyquist_zone`` or from the older ``spectral_sense``
+    word.
+    """
     receiver_profile = manifest.get("receiver_profile")
     if not isinstance(receiver_profile, Mapping):
         return None
@@ -600,11 +607,12 @@ def _reference_placement_summary(
 def _detection_fine_powers(
     detection: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """The block's fine powers and their exact all-bin sums ``(S, P0, P1, P2)``.
+    """Return the block's fine powers and their exact all-bin sums ``(S, P0, P1, P2)``.
 
-    The frame powers are the all-bin sums of the fine powers (kernel core
-    3.0.0), so a detector result whose fine powers are missing, malformed or
-    do not sum to its reported powers is refused rather than published.
+    Under kernel core 3.0.0 the frame powers are the all-bin sums of the fine
+    powers. A detector result whose fine powers are missing or malformed, or
+    do not sum to its reported powers, raises ValueError, and the run stops
+    before any product is written.
     """
     fine = detection.get("fine_powers_u64")
     if fine is None:
@@ -724,7 +732,7 @@ def _append_detection_rows(
 
 
 def _coarse_center_hz(dataset, receiver_profile) -> float:
-    """Coarse-channel center frequency for a dataset."""
+    """Return the coarse-channel center frequency (Hz) of a dataset."""
     if dataset.coarse_channel_center_hz is not None:
         return float(dataset.coarse_channel_center_hz)
     selection = receiver_frequency_to_channel(
@@ -893,10 +901,11 @@ def run_chime_analysis(
             weight_bank=weight_bank,
             weights_by_channel=weights_by_channel,
         )
-        # Exact integer squared norms of the three weight terms; these set the
-        # H0 zero-point null_power_ratio = 2*nt/(nl+nu) that the norm-corrected mask (and the
-        # corrected pilot excess) divide out. Computed from the weights actually
-        # used, so caller-supplied test weights are handled identically.
+        # The exact integer squared norms nt, nl and nu of the three weight
+        # terms set the H0 zero point null_power_ratio = 2*nt/(nl+nu), which is
+        # divided out of the norm-corrected mask and the corrected pilot excess.
+        # The norms are computed from the weights in use, so caller-supplied
+        # test weights are treated the same way as bank weights.
         _nt, _nl, _nu = weight_term_norms_sq(weights)
         target_norm_sq_by_pilot[pilot_index] = int(_nt)
         reference_norm_sum_sq_by_pilot[pilot_index] = int(_nl + _nu)
@@ -999,9 +1008,9 @@ def run_chime_analysis(
         quantization_by_pilot.append(first_quantization or {})
 
     valid = ((valid != 0) & (p_ref_sum_u64 != 0)).astype(np.uint8)
-    # _append_detection_rows derives the declared norm-corrected rule from the
-    # exact stored frame powers rather than trusting a backend mask bit. Fold in
-    # the final validity here, including the weights-validity policy.
+    # The norm-corrected mask rule is evaluated in _append_detection_rows from
+    # the exact stored frame powers, so no backend mask bit is used. The final
+    # validity, with the weight-validity policy, is applied to the mask here.
     mask = ((valid != 0) & (mask != 0)).astype(np.uint8)
 
     input_manifest_path = write_input_manifest(

@@ -11,15 +11,15 @@ from pilot_proxy.config.project import default_project
 
 _PROJECT = default_project()
 
-# ATSC 1.0 UHF physical channels are 6 MHz wide, and the 8-VSB pilot sits
+# ATSC 1.0 UHF physical channels are 6 MHz wide, and the 8-VSB pilot is
 # 309.441 kHz above the lower channel edge. Both values are read from the
 # project's interference template (projects/chime_atsc/interference_template.yaml).
 ATSC_CHANNEL_WIDTH_HZ = _PROJECT.interference.band_width_hz
 ATSC_PILOT_OFFSET_HZ = _PROJECT.interference.marker.offset_hz
 ATSC_UHF_MIN_PHYSICAL_CHANNEL = 14
 ATSC_UHF_MAX_PHYSICAL_CHANNEL = 69
-# UHF channel 14 starts at 470 MHz (the plan's lower edge of band "14"); higher
-# UHF channels advance in 6 MHz steps.
+# UHF channel 14 starts at 470 MHz (the plan's lower edge of band "14"), and
+# higher UHF channels advance in 6 MHz steps.
 ATSC_UHF_CHANNEL_14_LOWER_EDGE_HZ = _PROJECT.frequency_plan.band(
     str(ATSC_UHF_MIN_PHYSICAL_CHANNEL)
 ).low_hz

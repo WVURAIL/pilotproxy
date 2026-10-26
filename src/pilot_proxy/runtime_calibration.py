@@ -1,13 +1,13 @@
-"""Describe the geometry and trial population used to measure fine scores.
+"""Score profiles and trial populations for fine-score measurements.
 
-A score profile identifies the receiver, weights, producer, and fine
-geometry for a frozen fine_decision_v1 detector. Its population lists
-the minimum keeping Q16 word for each trial. Capture replay writes and
-checks these records.
+A score profile records the receiver, weights, producer, and fine
+geometry of a frozen fine_decision_v1 detector. Its population lists the
+minimum keeping Q16 word of each trial. These records are written and
+checked by capture replay.
 
-Validation establishes consistency of the declared identities and
-evidence; it does not measure their physical truth. The operating
-threshold is selected separately by
+Validation confirms that the declared identities and evidence are
+consistent with each other. Their physical accuracy is not covered here,
+and the operating threshold is selected by
 :mod:`pilot_proxy.characterization.threshold_rule`.
 """
 
@@ -76,7 +76,8 @@ def sha256(path):
 
 
 def _read(path):
-    # Reject duplicate keys and NaN/Infinity rather than quietly changing identity.
+    # Duplicate keys and NaN/Infinity are rejected. The json module accepts
+    # both without an error, and either changes the identity of the record.
     def pairs(items):
         result = {}
         for key, value in items:
@@ -105,7 +106,12 @@ def _bound_file(reference, base, bindings):
 
 
 def validate_score_profile(profile):
-    """Validate the expressible submitted geometry; choose no target or rank."""
+    """Validate a score profile and return the size of its bulk reference mask.
+
+    The profile must match the submitted fine geometry (128 windows of 64 or
+    128 samples, 256 fine bins). The anchor, designated width and CFAR rank
+    are checked as declared and are not chosen here.
+    """
     _require(
         profile.get("schema_version") == PROFILE_SCHEMA, "Unknown score profile schema"
     )

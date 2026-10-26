@@ -1,11 +1,11 @@
-"""Signed, descriptive same-frame capture comparisons (no physical truth model)."""
+"""Signed comparisons of capture powers on the same frames, with no physical truth model."""
 from __future__ import annotations
 
 import numpy as np
 
 
 def signed_proxy(powers, target_norm: int, reference_norm: int, shelf: float):
-    """Normalize exact [frame, term, ...] powers; zero references stay missing."""
+    """Return the signed proxy of exact [frame, term, ...] powers, or NaN where the reference sum is zero."""
     p = np.asarray(powers)
     if p.dtype != np.uint64 or p.ndim < 2 or p.shape[1] != 3:
         raise ValueError("powers must be uint64 [frame, 3, ...]")
@@ -18,7 +18,11 @@ def signed_proxy(powers, target_norm: int, reference_norm: int, shelf: float):
 
 
 def exact_frame_join(left, right):
-    """Join unique increasing FPGA origins, never row numbers or nearest time."""
+    """Return the row indices of the FPGA frame origins shared by two strictly increasing vectors.
+
+    Frames are matched on the exact origin, so a dropped frame in one capture
+    cannot shift the pairing of the frames after it.
+    """
     a, b = np.asarray(left), np.asarray(right)
     for v in (a, b):
         if (v.ndim != 1 or v.dtype.kind not in 'iu' or np.any(v < 0)
@@ -30,7 +34,7 @@ def exact_frame_join(left, right):
 
 
 def event_weights(events):
-    """Equal original event mass, equal original frame mass within each event."""
+    """Return frame weights that give each event equal mass and share it equally among its frames."""
     e = np.asarray(events)
     if e.ndim != 1:
         raise ValueError("events must be one dimensional")
@@ -41,11 +45,13 @@ def event_weights(events):
 
 
 def fit_training_transfer(x, ratio, events, live_floor=0.5, auto=None, control=None):
-    """Per-input weighted linear fit, using only the supplied training frames.
+    """Fit a weighted line per input, using only the supplied training frames.
 
-    The response is fractional change from a training-fixed cross-frequency
-    power ratio. It is not isolated DTV power. Inputs are diagnostic coordinates,
-    not independent validation replicates.
+    The response is the fractional change of a cross-frequency power ratio from
+    its baseline on the training frames. Any power in the target and reference
+    terms moves this ratio, so the response does not isolate the DTV power. The
+    inputs are diagnostic coordinates and are not independent validation
+    replicates.
     """
     x, ratio = np.asarray(x, float), np.asarray(ratio, float)
     if x.shape != ratio.shape or x.ndim != 2:
@@ -73,18 +79,23 @@ def fit_training_transfer(x, ratio, events, live_floor=0.5, auto=None, control=N
 
 
 def transfer_residuals(model, x, ratio):
-    """Apply a frozen training model; no holdout-dependent input selection."""
+    """Return the response, the prediction of a frozen training model, and their residual.
+
+    The live inputs are those of the training fit, so no input is selected on
+    the holdout frames.
+    """
     y = np.asarray(ratio, float) / model['baseline'] - 1
     prediction = model['y0'] + model['slope'] * (np.asarray(x) - model['x0'])
     return y, prediction, y - prediction
 
 
 def lag_moments(values, origins, keep, max_lag=8, frame_samples=16384):
-    """Per-coordinate signed moments and within-capture centered covariance.
+    """Return the signed lag moments, centered covariances, and pair counts of one capture.
 
-    Pair endpoints must both be kept and separated by exactly lag*frame_samples.
-    The mean is computed on kept rows of this capture. Neither sample moments
-    nor the biased finite-record covariance are a long-timescale noise model.
+    Both frames of a pair must be kept and spaced exactly
+    ``lag * frame_samples`` samples apart. The mean is taken over the kept rows of
+    this capture. The sample moments and the biased finite-record covariance
+    describe this capture only and are not a long-timescale noise model.
     """
     v = np.asarray(values)
     t = np.asarray(origins)
@@ -112,7 +123,10 @@ def lag_moments(values, origins, keep, max_lag=8, frame_samples=16384):
 
 
 def coherent_cross_moment(values, keep):
-    """Off-diagonal real cross moment; retain negative results without a sqrt."""
+    """Return the off-diagonal real cross moment of the kept rows.
+
+    A negative result is kept as it is, and no square root is taken.
+    """
     v = np.asarray(values)[np.asarray(keep, bool)]
     n = len(v)
     if n < 2:

@@ -1,5 +1,8 @@
 # coding=utf-8
-"""Opt-in invariants for the large attached 23-product dissertation archive."""
+"""Health and provenance tests of the large attached 23-product dissertation archive.
+
+The tests are skipped unless PILOT_PROXY_ATTACHED_PRODUCTS is set.
+"""
 
 from __future__ import annotations
 

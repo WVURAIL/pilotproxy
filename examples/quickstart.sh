@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Standalone CUDA + GNU Radio release sanity check. Run it inside the repo's
-# virtual environment (README: Environment); defaults assume that active
-# interpreter and auto-detect the GPU arch. Override as needed:
+# Standalone CUDA and GNU Radio release check. It runs in the virtual
+# environment of the repository (README: Installation and checks). The defaults
+# use the active interpreter and the GPU architecture detected by cuda/Makefile,
+# and these variables override them:
 #   SM                    GPU compute capability (default: auto-detected by cuda/Makefile)
-#   CUDA_PYTHON           interpreter with cupy + this package installed (default: active python3)
+#   CUDA_PYTHON           interpreter with cupy and this package installed (default: active python3)
 #   GNURADIO_PYTHON       interpreter with GNU Radio (for the ATSC generator)
 #   CUDA_LD_LIBRARY_PATH  extra CUDA/driver lib path if needed (WSL: /usr/lib/wsl/lib)
-# This assumes a CUDA-capable environment; it is NOT a CPU-only smoke test.
+# The script needs a CUDA-capable GPU. The CPU-only checks are in the README.
 SM="${SM:-}"
 CUDA_PYTHON="${CUDA_PYTHON:-python3}"
 GNURADIO_PYTHON="${GNURADIO_PYTHON:-/usr/bin/python3}"

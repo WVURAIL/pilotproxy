@@ -1,4 +1,4 @@
-"""Regressions for survey ownership, deadlines, and CADC transfer integrity."""
+"""Regression tests for survey ownership, deadlines, and CADC transfer integrity."""
 from __future__ import annotations
 
 import json
@@ -187,8 +187,9 @@ def test_survey_waits_for_active_probes_before_returning_error(
     thread.start()
     assert second_started.wait(5)
     assert first_failed.wait(5)
-    # The exception has occurred, but survey still owns its output and joins
-    # the other archive probe before returning it to the caller.
+    # The exception has been raised, and survey still owns its output. The
+    # other archive probe is joined before the output is handed back to the
+    # caller.
     assert thread.is_alive()
     release_second.set()
     thread.join(5)
@@ -210,7 +211,7 @@ def test_outage_deadline_counts_network_time_and_caps_backoff(
 
     def common_path(scope, event, **kwargs):
         calls.append(kwargs["deadline"])
-        clock[0] += 8.0  # time spent inside the network call counts
+        clock[0] += 8.0  # time spent in the network call counts
         return None, False
 
     def sleep(seconds):

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Finite RX-only file-backed live handoff; no TX payload or RF inference."""
+"""Prepare or run a finite RX-only, file-backed live handoff to the CPU host.
+
+No TX payload is sent. The study does not cover RF calibration or RF arrival
+times.
+"""
 from __future__ import annotations
 
 import argparse
@@ -72,7 +76,11 @@ def frame_record(frame):
 
 
 def committed_line(stream):
-    """A partial JSON line is unpublished; reread it after its newline arrives."""
+    """Return the next published JSON record, or None for a partial line.
+
+    A line is published by its newline, so a partial line is reread after the
+    newline arrives.
+    """
     offset = stream.tell()
     raw = stream.readline(65537)
     if len(raw) > 65536:
@@ -84,7 +92,7 @@ def committed_line(stream):
 
 
 def accepted_span(row, schedule, expected_offset):
-    """Validate exact native committed data coordinates before handing off IQ."""
+    """Validate the exact native coordinates of a committed chunk before its IQ is handed off."""
     count = row["accepted_samples_from_chunk"]
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
         raise ValueError("invalid accepted chunk count")
@@ -106,7 +114,10 @@ def accepted_span(row, schedule, expected_offset):
 
 
 def published_bytes(path, sample_offset, count):
-    """Return None for a short span; after newline publication this is corruption."""
+    """Return the bytes of a committed span, or None when the file is short.
+
+    A short span after its newline is published means the file is corrupt.
+    """
     with Path(path).open("rb") as f:
         f.seek(sample_offset * 8)
         raw = f.read(count * 8)
@@ -180,7 +191,7 @@ def verify_plan(out):
 
 
 class WorkerIdentity:
-    """Observe the native child through pidfd; never open or query radio hardware."""
+    """Observe the native capture worker through a pidfd without opening or querying the radio."""
     def __init__(self, helper_pid, executable):
         self.helper_pid, self.executable = helper_pid, Path(executable).resolve()
         self.pid = self.fd = self.first_exit_observed_ns = None
@@ -216,7 +227,7 @@ class WorkerIdentity:
 
 
 class CaptureSupervisor:
-    """Always stop/reap owned processes, including setup faults and user signals."""
+    """Run the capture helper and always reap its processes, stopping them first after a fault or a user signal."""
     def __init__(self, folder, executable):
         self.folder, self.executable = Path(folder), executable
         self.stop = threading.Event()
@@ -259,8 +270,10 @@ class CaptureSupervisor:
                     self.process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     self.forced = True
-                    # The qualified helper normally stops/reaps its native child
-                    # within five seconds. Exceptional fallback must not orphan it.
+                    # The qualified helper normally stops and reaps its native
+                    # child in at most five seconds. When the helper hangs, the
+                    # child is sent SIGTERM through its pidfd, and SIGKILL after
+                    # five more seconds, so that it is not orphaned.
                     if self.identity is not None:
                         self.identity.observe()
                         if self.identity.fd is not None:
@@ -288,7 +301,11 @@ class CaptureSupervisor:
 
 
 def _live_attempt(folder, plan, supervisor):
-    """Capture helper owns native cleanup; consumer can abort it via SIGTERM."""
+    """Consume one live capture through the streaming adapter.
+
+    The capture helper owns the native cleanup, and the consumer can abort it
+    with SIGTERM.
+    """
     folder = Path(folder)
     adapter = StreamingDigitalAdapter(CONFIG)
     fifo = queue.Queue(maxsize=QUEUE_CHUNKS)
@@ -300,8 +317,9 @@ def _live_attempt(folder, plan, supervisor):
                 "final_publication_visible_monotonic_ns": None,
                 "first_complete_file_size_observed_monotonic_ns": None}
     pending_hash = hashlib.sha256()
-    # Preserve the qualified worker's unrestricted I/O scheduling. Pin only this
-    # consumer and its subsequently created publication reader to one logical CPU.
+    # Only this consumer and the publication reader started after it are pinned
+    # to one logical CPU. The qualified worker keeps its unrestricted I/O
+    # scheduling.
     process, identity = supervisor.process, supervisor.identity
     original_affinity = sorted(os.sched_getaffinity(0))
     cpu = max(original_affinity)
@@ -490,8 +508,9 @@ def offline_parity(folder, plan):
         stream_frames.extend(adapter.push(data[begin:begin+BLOCK], input_start_index=origin+begin))
     ending = adapter.finish()
     stream_frames.extend(ending["frames"])
-    # Finite records have at most95 outputs; keeping this offline evidence is
-    # bounded by the fixed four-second design, independent of live queue state.
+    # A finite record has at most 95 frames, so the memory held for this
+    # offline check is bounded by the fixed four-second design and does not
+    # depend on the live queue state.
     batch = adapt_record(data, CONFIG)
     differences, parity, batch_packed = [], True, True
     count_match = len(frames) == len(stream_frames) == batch["metadata"]["frame_count"]

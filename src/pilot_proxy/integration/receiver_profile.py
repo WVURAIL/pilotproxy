@@ -121,7 +121,7 @@ _CHANNELIZER_FIELDS = frozenset(
     }
 )
 _FREQUENCY_AXIS_FIELDS = frozenset({"order"})
-# One of the two is required: nyquist_zone, or the old key it replaced.
+# nyquist_zone or the older spectral_sense key is required (if both are given, they must agree)
 _FREQUENCY_AXIS_ZONE_FIELDS = frozenset({"nyquist_zone", OLD_FREQUENCY_AXIS_KEY})
 _FRAMING_FIELDS = frozenset({"frame_size_samples"})
 _INPUT_STREAM_FIELDS = frozenset(
@@ -242,7 +242,7 @@ def _normalized_unit_interval(value: float, field_name: str) -> float:
 
 @dataclass(frozen=True)
 class ChannelizerProfile:
-    """Authoritative channelizer implementation parameters."""
+    """Channelizer type, PFB FFT size, tap count, and filter response."""
 
     type: str
     fft_size: int
@@ -841,8 +841,8 @@ def default_reference_receiver_profile(
         input_stream_unit="input_stream",
         stream_map_required=stream_count > 1,
         combine_default=COMBINE_MODE_COMBINED_STREAMS,
-        # The reference testbench mixes the band down by its lower edge before
-        # the real ADC, so the samples occupy the first Nyquist zone.
+        # In the reference testbench, the band is mixed down by its lower edge
+        # before the real ADC, so the samples occupy the first Nyquist zone.
         nyquist_zone=DEFAULT_NYQUIST_ZONE,
         frequency_order=FREQUENCY_ORDER_ASCENDING_RF,
         channelizer=ChannelizerProfile(
@@ -902,11 +902,11 @@ def receiver_profile_hash(profile: ReceiverProfile | dict[str, Any]) -> str:
 def receiver_profile_hash_matches(
     profile: ReceiverProfile | dict[str, Any], digest: object
 ) -> bool:
-    """Return whether ``digest`` binds this profile.
+    """Return True when ``digest`` binds this profile.
 
-    Manifests and bundles written before ``nyquist_zone`` replaced
-    ``spectral_sense`` hashed the frequency axis as that key's word; their
-    digest is accepted as well as the current one.
+    Manifests and bundles written with the older ``spectral_sense`` key hashed
+    the frequency axis as that key's word ("normal" or "inverted"). Their
+    digest is also accepted.
     """
     resolved = _canonical_profile(profile)
     canonical = resolved.to_dict()
@@ -926,7 +926,11 @@ def receiver_frequency_to_channel(
     rf_hz: float,
     profile: ReceiverProfile,
 ) -> ChannelSelection:
-    """Map an RF frequency to the nearest receiver coarse channel."""
+    """Map an RF frequency to the nearest receiver coarse channel.
+
+    In a mirrored Nyquist zone, the sign of the offset from the channel
+    center is flipped and the detector windows must be time reversed.
+    """
     rf = _require_float(rf_hz, "rf_hz")
     if not profile.band_lower_hz <= rf <= profile.band_upper_hz:
         raise ValueError(

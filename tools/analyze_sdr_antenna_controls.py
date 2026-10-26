@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Descriptive fixed-geometry analysis of complete antenna-control captures."""
+"""Summarize the power ratios of complete antenna-control captures.
+
+Each capture is passed through the SDR upgrade adapter with a fixed geometry.
+The natural and packed ratios, the frame term powers and the projection
+covariance are written as descriptive records, and no F-law test is applied.
+"""
 from __future__ import annotations
 
 import argparse
@@ -38,7 +43,7 @@ def write_json(path, value):
 
 
 def moments(values):
-    """Keep every observation in counts; finite-only summaries are explicit."""
+    """Return counts of all observations and summaries of the finite ones."""
     values = np.asarray(values, dtype=float)
     finite = values[np.isfinite(values)]
     return {'total_count': int(values.size), 'finite_count': int(finite.size),

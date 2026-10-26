@@ -1,18 +1,17 @@
 # coding=utf-8
 """Measure the CHIME DTV local-reference power ratio as archive files arrive.
 
-This analyzer applies the batch runner's detector operations to a stream of
-frames. It uses the same packing, detector, and row-accumulation helpers as
-``pilot_proxy.chime.runner.run_chime_analysis``:
-
-1. The ``chime-baseband-packed`` reader supplies a raw
-   ``uint8 [nfft, n_feeds]`` frame in native offset-binary 4+4-bit format.
-2. The analyzer reshapes it to ``(n_feeds, 1, nfft)`` and calls
-   ``pack_chime_block_for_detector`` with native-offset-binary encoding.
-   This repacks the int4 samples without scaling or requantization.
-3. ``detector_fn(packed=packed.packed, weights=weights, kernel=kernel)``
-   returns the target and reference powers. ``_append_detection_rows`` uses
-   ``dtv_units`` to form the positive-excess mask and dB metrics.
+This analyzer applies the detector operations of the batch runner to a stream
+of frames, with the same packing, detector, and row-accumulation helpers as
+``pilot_proxy.chime.runner.run_chime_analysis``. First, a raw
+``uint8 [nfft, n_feeds]`` frame in the native offset-binary 4+4-bit format is
+supplied by the ``chime-baseband-packed`` reader. The frame is then reshaped to
+``(n_feeds, 1, nfft)`` and passed to ``pack_chime_block_for_detector`` with
+native offset-binary encoding, which repacks the int4 samples without scaling
+or requantization. Finally, the target and reference powers are returned by
+``detector_fn(packed=packed.packed, weights=weights, kernel=kernel)``, and
+``_append_detection_rows`` forms the positive-excess mask and dB metrics with
+``dtv_units``.
 
 Each coarse channel writes its own ``<channel>.npz`` product. The default
 backend, ``detect_packed_detector_input``, runs the CUDA kernel and requires a
@@ -123,7 +122,7 @@ _FINE_MODE_CODES = {
 
 
 def _exact_backend_u64(value: object, *, field: str) -> int:
-    """Accept an exact backend integer without float/bool truncation or wrap."""
+    """Return a backend value as an exact in-range uint64, refusing floats and booleans."""
     if isinstance(value, (bool, np.bool_)):
         raise ValueError(
             f"detector analyzer: backend field {field!r} must be an exact "
@@ -142,26 +141,27 @@ def _exact_backend_u64(value: object, *, field: str) -> int:
         )
     return int(result)
 
-# Native CHIME baseband packing: one uint8 per complex sample, high nibble = real,
-# low nibble = imag, each a 4-bit offset-binary value (stored = signed + 8). This
-# matches ``baseband_format.unpack_4bit`` and stays array-module generic so
-# the integrated-spectrum FFT runs on cupy (GPU) in production and numpy in tests
+# Native CHIME baseband packing has one uint8 per complex sample, with the real
+# part in the high nibble and the imaginary part in the low nibble. Each is a
+# 4-bit offset-binary value (stored = signed + 8). The unpacking matches
+# ``baseband_format.unpack_4bit`` and is written for any array module, so the
+# integrated-spectrum FFT runs on CuPy (GPU) in production and on NumPy in tests
 # with identical arithmetic.
 _INT4_OFFSET = np.float32(8.0)
 
 
 def _unpack_4bit_xp(xp, packed):
-    """offset-binary uint8 [..] -> complex64 [..], on numpy or cupy (`xp`)."""
+    """Unpack offset-binary uint8 to complex64 with `xp` (NumPy or CuPy)."""
     real = (packed >> 4).astype(xp.float32) - _INT4_OFFSET
     imag = (packed & np.uint8(0x0F)).astype(xp.float32) - _INT4_OFFSET
     return (real + 1j * imag).astype(xp.complex64)
 
 
-# Rails per packed byte, indexed by the uint8 value. A nibble of 0 or 15 is
-# signed -8 or +7, the ends of the int4 range. The 0x00 byte is excluded: it is
-# also the archive's missing-data fill signature, so its components are tallied
-# as fill rather than clipping (a genuinely doubly-negative-railed sample is
-# indistinguishable from fill and lands in the fill count).
+# Number of railed components in each packed byte, indexed by the uint8 value.
+# A nibble of 0 or 15 is signed -8 or +7, the ends of the int4 range. The 0x00
+# byte is set to zero, since it is also the missing-data fill value of the
+# archive and its components are counted as fill. A real sample railed at -8 in
+# both parts cannot be distinguished from fill and is counted as fill.
 _PACKED_BYTE = np.arange(256, dtype=np.uint16)
 _RAILS_PER_BYTE = (
     np.isin(_PACKED_BYTE >> 4, (0, 15)).astype(np.uint8)
@@ -171,20 +171,19 @@ _RAILS_PER_BYTE[0] = 0
 
 
 def railed_component_count(packed: np.ndarray) -> tuple[int, int]:
-    """Count components on the int4 rails, and components in 0x00 fill bytes.
+    """Return (railed, fill), the counts of railed and 0x00 fill components.
 
     A nibble of 0 or 15 is signed -8 or +7, the ends of the int4 range, so a
-    sample there has been clipped by the ADC or the F-engine requantizer rather
-    than measured -- unless the whole byte is 0x00, the archive's missing-data
-    fill signature, which is returned as the separate fill count. Real and
-    imaginary parts are counted separately, giving a shared denominator of
-    ``2 * packed.size``.
+    component there was clipped by the ADC or the F-engine requantizer. A byte
+    of 0x00 is the missing-data fill value of the archive, and its components
+    are returned in the fill count. Each real and each imaginary part is
+    counted, so both counts share the denominator ``2 * packed.size``.
 
-    This has to be recorded while the frame is in hand: the product stores no
-    raw samples (5.8 MB against 8.0 GB for one channel of the pre-flight), so a
-    scan that does not count rails as it goes cannot recover them afterwards.
-    ``baseband_power_linear == 128`` only catches a frame that is railed
-    everywhere; partial saturation is invisible without this.
+    The count must be taken while the frame is in memory. The product stores no
+    raw samples (5.8 MB against 8.0 GB for one channel of the pre-flight), so
+    the rails cannot be counted after the scan. ``baseband_power_linear == 128``
+    detects only a frame that is railed everywhere, and partial saturation is
+    found only by this count.
     """
     packed = np.asarray(packed, dtype=np.uint8).reshape(-1)
     fill = 2 * int(np.count_nonzero(packed == 0))
@@ -193,17 +192,17 @@ def railed_component_count(packed: np.ndarray) -> tuple[int, int]:
 
 
 def _to_host(a) -> np.ndarray:
-    """Bring an accumulator to host numpy (cupy ndarray -> .get(); numpy -> asarray)."""
+    """Copy an accumulator to host NumPy (``.get()`` for CuPy)."""
     get = getattr(a, "get", None)
     return np.asarray(get() if callable(get) else a)
 
 
 def _callable_accepts_keyword(function: Any, keyword: str) -> bool:
-    """Return whether a callable explicitly accepts a keyword argument.
+    """Return True if a callable accepts a keyword by name or ``**kwargs``.
 
-    Feature discovery must happen before invocation.  Catching ``TypeError``
-    around the detector call can misclassify a real implementation defect as a
-    missing optional feature and can execute the detector twice.
+    The signature is checked before the call. Catching ``TypeError`` around the
+    detector call could mistake a real defect for a missing optional feature,
+    and could run the detector twice.
     """
     try:
         parameters = inspect.signature(function).parameters.values()
@@ -216,14 +215,14 @@ def _callable_accepts_keyword(function: Any, keyword: str) -> bool:
 
 
 def _detector_fft_backend():
-    """Return cupy only when its CUDA runtime is actually usable.
+    """Return CuPy when its CUDA runtime works, and NumPy otherwise.
 
-    Some CANFAR / CI images have CuPy importable through system-site packages even
-    when the visible node has no compatible CUDA driver.  ``accel.import_cupy()``
-    can therefore return the module, but the first allocation later fails with a
-    CUDA runtime error.  The detector's integrated-spectrum FFT is only a
-    reporting-side accumulator and already has a NumPy path, so fail closed to
-    NumPy unless a tiny runtime probe succeeds.
+    On some CANFAR and CI images, CuPy can be imported through system-site
+    packages even when the node has no compatible CUDA driver.
+    ``accel.import_cupy()`` then returns the module, and the first allocation
+    fails with a CUDA runtime error. The integrated-spectrum FFT is a reporting
+    accumulator with a NumPy path, so NumPy is used unless a one-element
+    allocation on the GPU succeeds.
     """
     try:
         cp = accel.import_cupy()
@@ -237,8 +236,7 @@ def _detector_fft_backend():
         if callable(get_count) and int(get_count()) <= 0:
             return np
         probe = cp.zeros(1, dtype=cp.float32)
-        # Touch the array so lazy runtime failures surface during backend
-        # selection instead of later, after the analyzer has committed to cupy.
+        # a lazy runtime failure is raised here, before the analyzer depends on CuPy
         if hasattr(probe, "sum"):
             probe.sum()
         return cp
@@ -480,7 +478,7 @@ def _validated_resume_axes(
 
 
 class PilotProxyDetectorAnalyzer(Analyzer):
-    """Per-pilot CHIME local-reference power-ratio detector, parity with PilotProxy's batch runner."""
+    """Per-pilot CHIME local-reference power-ratio detector matching the batch runner."""
 
     requires_in_order = True
 
@@ -489,7 +487,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         kind="analyzer",
         summary="CHIME DTV local-reference power-ratio detector (PilotProxy parity; per-channel "
                 "fixed-point pilot detection + positive-excess mask).",
-        status=EXPERIMENTAL,  # a registry value, kept as it is; the local run of record supplied the real-data parity
+        status=EXPERIMENTAL,  # registry value, kept as is (the local run of record gave real-data parity)
         instruments=("chime", "kko", "gbo", "hco"),
         produces="<channel>.npz (chime_detector_outputs schema)",
         requires=("h5py", "pilot-proxy", "GPU+libpilotproxy.so (CUDA kernel)"),
@@ -538,12 +536,12 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         # accumulators
         self._p_target: list[int] = []
         self._p_ref_sum: list[int] = []
-        # Kept separately: the sum alone hides an asymmetric reference.
+        # kept apart, since the sum hides an asymmetric reference
         self._p_ref_lower: list[int] = []
         self._p_ref_upper: list[int] = []
         self._coarse_power_ratio: list[float] = []
-        # Fine products: mandatory for an in-band pilot (product schema v6),
-        # because the frame powers are their exact all-bin sums.
+        # Fine products are required for an in-band pilot (product schema v6),
+        # since the frame powers are their exact sums over all bins.
         self._fine_status: str = "not_configured"
         self._fine_bins: int = 0
         self._fine_p_fa: float = float(CFAR_DEFAULT_P_FA)
@@ -551,8 +549,8 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._fine_designated: list[int] = [0]
         self._fine_designated_resumed: bool = False
         self._fine_census: list[int] = []
-        # Exact uint64 [3, FINE_BINS] terms from the frozen fxfft256 --
-        # the deployed fine statistic's numerators and denominators.
+        # exact uint64 [3, FINE_BINS] terms from the frozen fxfft256, the
+        # numerators and denominators of the deployed fine statistic
         self._fine_power_u64: list[np.ndarray] = []
         self._normalized_coarse_power_ratio_db: list[float] = []
         self._pilot_excess_db: list[float] = []
@@ -568,22 +566,24 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._n_frames = 0
         self._keys: set = set()
         self._unit_order: list[str] = []  # consumption order, for alignment keys
-        # integrated power spectra (sum over valid frames of |FFT|^2 summed over
-        # feeds); rectangular window. Allocated in begin() once nfft + xp are known
-        # (None here so resume() can seed them before begin() moves them onto xp).
+        # The integrated power spectra are the sum over valid frames of |FFT|^2
+        # summed over feeds, with a rectangular window. They are allocated in
+        # begin() once nfft and xp are known, and are None here so that resume()
+        # can seed them before begin() moves them onto xp.
         self._xp = np  # replaced in begin() with cupy when a GPU is present
-        # Per-frame PSD, feeds summed, encoded on arrival: int16 dB codes
-        # plus that frame's own reference level. Holding float64 here cost
+        # The per-frame PSD, summed over feeds, is encoded on arrival as int16
+        # dB codes and the reference level of that frame. A float64 copy took
         # 4.6 GB on the largest channel.
         self._psd_codes: list[np.ndarray] = []
         self._psd_ref: list[float] = []
-        self._spec_before = None  # xp.float64[nfft]; valid frames
-        self._spec_after = None   # xp.float64[nfft]; valid AND kept (not rejected)
-        # per-frame unit tags -> absolute time: t[f] = unit_time0_ctime[u]
-        #   + frame_in_unit[f] * nfft * unit_delta_time[u],  u = frame_unit_index[f]
+        self._spec_before = None  # xp.float64[nfft], valid frames
+        self._spec_after = None   # xp.float64[nfft], valid frames that were kept
+        # per-frame unit tags give the absolute time
+        #   t[f] = unit_time0_ctime[u] + frame_in_unit[f] * nfft * unit_delta_time[u],
+        #   where u = frame_unit_index[f]
         self._frame_unit_index: list[int] = []
         self._frame_in_unit: list[int] = []
-        # per-unit (per-file) time axis + provenance, aligned to _unit_order
+        # per-unit (per-file) time axis and provenance, aligned to _unit_order
         self._unit_time0_ctime: list[float] = []
         self._unit_time0_fpga: list[int] = []
         self._unit_event_id: list[int] = []
@@ -592,13 +592,13 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._unit_git_version_tag: list[str] = []
         self._unit_input_map_sha256: list[str] = []
         self._unit_collection_server: list[str] = []
-        # Acquisition scope from the source; local inputs declare "local".
+        # acquisition scope from the source ("local" for local inputs)
         self._unit_scope: list[str] = []
-    # -- selection / fan-out (per CHIME coarse channel / freq_id) -----------
+    # selection and fan-out, one run per CHIME coarse channel (freq_id)
     def resolve_selection(self, ctx: RunContext, spec: Any) -> Any:
-        # --select is CHIME freq_id (coarse-channel indices), the namespace the
-        # CADC inventory and filenames key on. One freq_id is one pilot; the
-        # product is labeled with the ATSC channel that pilot falls in.
+        # --select takes CHIME freq_id values (coarse-channel indices), since the
+        # CADC inventory and file names are keyed on freq_id. One freq_id is one
+        # pilot, and the product is labeled with the ATSC channel of that pilot.
         if spec is None:
             return None
         if isinstance(spec, (list, tuple)):
@@ -634,9 +634,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
     def resume(self, path: str, ctx: RunContext) -> bool:
         """Restore a compatible checkpoint so a scan can continue.
 
-        Return False if no product exists. An existing product must match the
-        requested parameters; otherwise raise SystemExit. This prevents a
-        capped test run or a different channel from being resumed as this run.
+        Returns False if no product exists. An existing product must match the
+        requested parameters, or SystemExit is raised. This prevents a capped
+        test run or a different channel from being resumed as this run.
         """
         p = Path(path)
         if not p.exists():
@@ -654,7 +654,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         _validate_resume_product(data, path)
         saved_unit_order, saved_unit_keys = _validated_resume_axes(data, path)
 
-        # -- compatibility guards (refuse; never silently overwrite/complete) --
+        # compatibility checks (a mismatch exits, and nothing is overwritten)
         saved_schema = str(data["schema_version"].item())
         if saved_schema != PER_PILOT_PRODUCT_SCHEMA_TOKEN:
             raise SystemExit(
@@ -684,7 +684,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 f"different channel's product into this one."
             )
 
-        # -- restore identity / calibration (begin() re-derives, must agree) ---
+        # identity and calibration (begin() derives them again, and both must agree)
         self._freq_id = saved_fid
         self._physical_channel = int(data["physical_channel"][0])
         self._pilot_in_band = bool(int(data["pilot_in_band"][0]))
@@ -748,7 +748,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             "reference_placement": saved_reference,
         }
 
-        # -- restore the per-frame accumulator, in stored order ----------------
+        # per-frame accumulators, in stored order
         def _col(name: str) -> np.ndarray:
             return np.asarray(data[name]).reshape(-1)
         self._p_target = [int(x) for x in _col("p_target_u64")]
@@ -763,8 +763,8 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             float(x) for x in _col("normalized_pilot_excess")
         ]
         self._reject_mask = [int(x) for x in _col("reject_mask")]
-        # Restore the current fine-diagnostic arrays; current checkpoints carry
-        # these fields even when there are zero frames.
+        # fine-diagnostic arrays, which current checkpoints carry even with zero
+        # frames
         self._fine_status = str(np.asarray(data["fine_status"]).reshape(()).item())
         _fine_u64 = np.asarray(data["fine_power_u64"], dtype=np.uint64)
         # validate_current_product_identity has already required the v6 shapes:
@@ -786,9 +786,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._fine_p_fa = float(np.asarray(data["fine_p_fa"]))
         self._fine_guard = int(np.asarray(data["fine_guard_fine_bins"]))
         self._fine_designated = [int(x) for x in _col("fine_designated_bins")]
-        # The resumed designation is part of the product's decision history;
-        # begin() must not replace it with a freshly predicted default, or the
-        # resumed-provenance contract check would refuse its own checkpoint.
+        # The resumed designation is part of the decision history of the
+        # product. If begin() replaced it with a new predicted default, the
+        # resumed-provenance contract check would refuse the checkpoint.
         self._fine_designated_resumed = True
         self._fine_census = [
             int(x) for x in _col("fine_census_excluded_bins")
@@ -802,8 +802,8 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._frame_in_unit = [int(x) for x in _col("frame_in_unit")]
         self._n_frames = len(self._p_target)
         self._overflow = int(data["rational_overflow_count"])
-        # integrated spectra: restore on host (1-D float64); begin() moves them onto
-        # the FFT backend (cupy/numpy) and resumes accumulation there.
+        # integrated spectra are restored on the host (1-D float64), and begin()
+        # moves them onto the FFT backend (CuPy or NumPy) to continue the sums
         self._spec_before = np.asarray(
             data["integrated_spectrum_before_mask"], dtype=np.float64
         ).reshape(-1)
@@ -811,10 +811,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             data["integrated_spectrum_after_mask"], dtype=np.float64
         ).reshape(-1)
 
-        # -- restore processed keys + consumption order ------------------------
+        # processed keys and consumption order
         self._keys = saved_unit_keys
         self._unit_order = saved_unit_order
-        # -- restore the per-unit time axis (aligned to unit_order) ------------
+        # per-unit time axis, aligned to unit_order
         self._unit_time0_ctime = [float(x) for x in _col("unit_time0_ctime")]
         self._unit_time0_fpga = [int(x) for x in _col("unit_time0_fpga")]
         self._unit_event_id = [int(x) for x in _col("unit_event_id")]
@@ -825,7 +825,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._unit_collection_server = [str(x) for x in _col("unit_collection_server")]
         self._unit_scope = [str(x) for x in _col("unit_scope")]
 
-        # let begin() verify the new input's identity matches what we restored
+        # begin() checks the identity of the new input against these values
         self._resumed_identity = (
             self._freq_id, int(self._nfft), self._sample_rate_hz,
             int(self._K), self._nyquist_zone,
@@ -848,10 +848,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         detector_fn: Any = None,
         kernel: Any = None,
     ) -> dict[str, str]:
-        # Since product schema v6 the frame powers are the all-bin sums of the
-        # fine powers, so fine products cannot be switched off or degraded:
-        # the option survives only so existing launch scripts that state
-        # fine_products=on keep working, and anything else is refused.
+        # In product schema v6, the frame powers are the all-bin sums of the
+        # fine powers, so fine products cannot be switched off. The option is
+        # kept so that launch scripts that set fine_products=on keep working,
+        # and any other value is refused.
         requested = str(opts.get("fine_products", "on")).lower()
         if requested != "on":
             raise ValueError(
@@ -866,8 +866,8 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         if detector_fn is None:
             detector_fn = detect_packed_detector_input
         if detector_fn is not detect_packed_detector_input:
-            # An injected backend proves its fine powers frame by frame: the
-            # analyzer refuses any frame without them.
+            # an injected backend must return fine powers for every frame, and
+            # the analyzer refuses a frame without them
             return {"requested": requested, "resolved": FINE_STATUS_ENABLED}
 
         if kernel is None:
@@ -915,7 +915,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 and not weights_path.exists()
             ):
                 problems.append(f"detector weight bank not found: {weights_path}")
-        except Exception as exc:  # noqa: BLE001 - preflight should report rather than crash.
+        except Exception as exc:  # noqa: BLE001 - preflight reports the error and continues.
             problems.append(f"detector preflight failed: {type(exc).__name__}: {exc}")
         try:
             fine_retention = self.fine_retention_scope(ctx)
@@ -932,7 +932,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             )
         return (not problems), problems
 
-    # -- lifecycle ----------------------------------------------------------
+    # lifecycle
     def begin(self, ctx: RunContext, first_meta: Mapping[str, Any]) -> None:
         inst = ctx.instrument
         opts = dict(ctx.options or {})
@@ -948,14 +948,14 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             if metadata_sample_rate_hz > 0.0
             else float(SAMPLE_RATE_HZ)
         )
-        # Only the zone's parity matters to the detector; keep its
-        # representative so a resumed product (which stores +1/-1) matches.
+        # Only the parity of the zone affects the detector. Its representative
+        # zone is kept so that a resumed product, which stores +1 or -1, matches.
         sense = int(nyquist_sign(int(getattr(inst, "nyquist_zone", 1) or 1)))
         self._nyquist_zone = (
             MIRRORED_NYQUIST_ZONE if sense == -1 else DEFAULT_NYQUIST_ZONE
         )
 
-        # pilot / channel geometry from the channel-center frequency
+        # pilot and channel geometry from the channel center frequency
         f_center_hz = float(first_meta["f_center_hz"])
         self._coarse_center_hz = f_center_hz
         meta_streams = first_meta.get("num_input_streams")
@@ -969,10 +969,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                     f"match new input ({self._num_input_streams} != {meta_count})."
                 )
             self._num_input_streams = meta_count
-        # The detector also emits explicit invalid rows for selected receiver
-        # channels whose nearest ATSC pilot lies outside this coarse bin.  Its
-        # 3-MHz lookup is label-only; HDF5 discovery uses the strict half-bin
-        # default and therefore never groups neighboring freq_ids.
+        # The detector also writes invalid rows for a selected receiver channel
+        # whose nearest ATSC pilot is not in this coarse bin. The 3 MHz lookup
+        # here only sets the label. HDF5 discovery uses the strict half-bin
+        # default, so neighboring freq_ids are never grouped.
         physical_channel = nearest_atsc_physical_channel(
             f_center_hz, tolerance_hz=3.0e6
         )
@@ -985,10 +985,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         self._f0_hz = float(getattr(inst, "f0_mhz", 800.0)) * 1e6
         self._freq_id = chime_freq_id_from_hz(f_center_hz, self._f0_hz)
         self._pilot_rf_hz = float(physical_channel_to_pilot_hz(self._physical_channel))
-        # Validate the *first* file against the requested freq_id. begin() fixes
-        # the product identity here, and the per-file guard only protects later
-        # files against this. A mislabeled filename or wrong inventory record would
-        # otherwise silently redefine the product's freq_id.
+        # The first file is checked against the requested freq_id. begin() fixes
+        # the product identity here, and the per-file check covers only the
+        # later files. Without this check, a mislabeled file name or a wrong
+        # inventory record would change the freq_id of the product without
+        # warning.
         sel = list(getattr(ctx, "selection", None) or [])
         if sel:
             requested = int(sel[0])
@@ -999,11 +1000,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                     f"{self._freq_id}. Refusing to build a {self._freq_id} product "
                     f"under a {requested} request; check the file naming and inventory."
                 )
-        # In-band test: the detector's weights target the pilot bin *inside* this
-        # coarse channel. If the pilot is more than fs/2 from center it lives in a
-        # different coarse channel (a wrong --select freq_id), so the detection is
-        # meaningless. Flag it; consume_file then emits an explicitly invalid
-        # product (mask=0, valid=0) instead of fabricating detections.
+        # In-band test. The detector weights are placed on the pilot bin in this
+        # coarse channel. A pilot more than fs/2 from the center is in a
+        # different coarse channel (a wrong --select freq_id), and no detection
+        # is possible. The channel is flagged, and consume_file then writes an
+        # invalid product (mask=0, valid=0) with no detections.
         _coarse_width = self._sample_rate_hz
         _expected_offset = self._pilot_rf_hz - f_center_hz
         self._pilot_in_band = abs(_expected_offset) < (_coarse_width / 2.0)
@@ -1019,7 +1020,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 stacklevel=2,
             )
 
-        # detector backend: injectable, mirroring run_chime_analysis
+        # detector backend, injectable as in run_chime_analysis
         self._fine_p_fa = float(opts.get("fine_p_fa", CFAR_DEFAULT_P_FA))
         self._fine_guard = int(
             opts.get("fine_guard_fine_bins", CFAR_DEFAULT_GUARD_FINE_BINS)
@@ -1031,7 +1032,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             ]
         elif not getattr(self, "_fine_designated_resumed", False):
             self._fine_designated = [0]
-        # resumed without an explicit option: keep the checkpoint's designation
+        # a resume without an explicit option keeps the checkpoint's designation
         self._fine_designated_half_width = int(
             opts.get("fine_designated_half_width_bins",
                      DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS)
@@ -1075,12 +1076,12 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         if int(self._nfft) % int(self._K) != 0:
             raise ValueError("detector analyzer: nfft must be divisible by kernel K")
 
-        # Default designated bins: the *predicted* pilot line, not fine bin 0.
-        # The carrier lands at the coarse-grid quantization residual in the
-        # envelope spectrum, so a bin-0 designation watches an empty bin and
-        # leaves the line in the CFAR null bulk. An explicit
-        # fine_designated_bins option always wins; the out-of-band case keeps
-        # [0] because the product is emitted all-invalid anyway.
+        # The default designated bins are centered on the predicted pilot line.
+        # The carrier falls at the coarse-grid quantization residual in the
+        # envelope spectrum, so a designation at fine bin 0 would watch an empty
+        # bin and leave the line in the CFAR null bulk. An explicit
+        # fine_designated_bins option is always used when given. The
+        # out-of-band case keeps [0], since that product is written all-invalid.
         if (not self._fine_designated_from_opts
                 and not getattr(self, "_fine_designated_resumed", False)
                 and self._pilot_in_band):
@@ -1125,9 +1126,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 )
         self._weights = np.ascontiguousarray(weights)
         # Exact integer squared norms of the three weight terms. null_power_ratio =
-        # 2*nt/(nl+nu) is the flat-floor H0 zero-point of F that int4 weight
-        # quantization shifts away from 1; the mask rule and the corrected
-        # pilot excess divide it out (see detector_contract).
+        # 2*nt/(nl+nu) is the flat-floor H0 zero point of F, which int4 weight
+        # quantization shifts away from 1. The mask rule and the corrected pilot
+        # excess divide it out (see detector_contract).
         _nt, _nl, _nu = weight_term_norms_sq(self._weights)
         self._target_norm_sq = int(_nt)
         self._reference_norm_sum_sq = int(_nl + _nu)
@@ -1143,7 +1144,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             else WEIGHT_COORDINATE_RAW_INPUT
         )
         if bank is not None:
-            # Reuse the standalone runner's manifest/runtime coordinate validation.
+            # same manifest and runtime coordinate validation as the standalone runner
             from pilot_proxy.chime.runner import (
                 _reference_placement_summary,
                 _weight_coordinate_metadata,
@@ -1183,7 +1184,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                     np.ascontiguousarray(_coeffs).tobytes()
                 ).hexdigest()
             except (OSError, ValueError):
-                # Never fail a scan over a provenance convenience field.
+                # a provenance convenience field never fails a scan
                 self._weight_coefficients_sha256 = ""
             manifest_path = sidecar_manifest_path(bank.path)
             self._weight_manifest_sha256 = file_sha256(manifest_path) or ""
@@ -1205,10 +1206,12 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         )
         self._max_chunks_per_file = opts.get("max_chunks_per_file", None)
 
-        # Detector contract, so the combine step can emit run_config/stats that
-        # validate-products accepts. Built from the kernel specs + Nyquist zone
-        # the same way run_chime_analysis builds it; the weight coordinate system
-        # defaults to raw-input and is overridable via options.
+        # The detector contract is stored so that the combine step can write a
+        # run_config and stats that validate-products accepts. It is built from
+        # the kernel specs and the Nyquist zone, as in run_chime_analysis. The
+        # weight coordinate system comes from the weight manifest when a bank is
+        # loaded, and otherwise from the options, with a default set by the
+        # Nyquist zone.
         specs = getattr(self._kernel, "specs", None)
         spec_dict: dict = {}
         ser = getattr(specs, "as_descriptive_dict", None)
@@ -1241,11 +1244,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 f"the current detector ({exc})."
             ) from exc
 
-        # If this run resumed a prior product, the identity begin() just derived
-        # from the first NEW file must match the restored one. Otherwise new
-        # frames would be appended under a different channel/kernel geometry (or
-        # dB calibration) than the existing ones, silently corrupting the
-        # product. Refuse rather than mix.
+        # For a resumed product, the identity that begin() derived from the
+        # first new file must match the restored identity. Otherwise new frames
+        # would be appended under a different channel or kernel geometry, or a
+        # different dB calibration, and the product would be corrupted without
+        # warning.
         prev = getattr(self, "_resumed_identity", None)
         if prev is not None:
             now = (
@@ -1264,30 +1267,31 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                     f"--output-dir to rebuild. restored={prev} new={now}"
                 )
 
-        # -- integrated-spectrum backend + accumulators ------------------------
-        # cupy when a GPU runtime is present (keeps the per-frame FFT inside the
-        # download-idle GPU time on CANFAR); numpy otherwise and in tests, with
-        # identical arithmetic. A fresh run allocates zeros; a resumed run has
-        # had host spectra restored by resume(), so move them onto the backend.
+        # integrated-spectrum backend and accumulators
+        # CuPy is used when a GPU runtime is present, which keeps the per-frame
+        # FFT in the GPU time left idle by downloads on CANFAR. NumPy is used
+        # otherwise and in tests, with identical arithmetic. A fresh run
+        # allocates zeros. For a resumed run, the host spectra restored by
+        # resume() are moved onto the backend.
         self._xp = _detector_fft_backend()
         if self._spec_before is None:
             self._spec_before = self._xp.zeros(int(self._nfft), dtype=self._xp.float64)
             self._spec_after = self._xp.zeros(int(self._nfft), dtype=self._xp.float64)
-        else:  # resumed: arrays restored on host -> move onto the backend
+        else:  # resumed run, host arrays are moved onto the backend
             self._spec_before = self._xp.asarray(self._spec_before)
             self._spec_after = self._xp.asarray(self._spec_after)
 
-        # -- provenance: which weights + implementation produced this product --
+        # provenance of the weights and implementation that produced this product
         self._refresh_provenance(opts)
         self._validate_resumed_provenance()
 
     def _ensure_fine_width(self, expected_bins: int) -> None:
         """Keep one fine-spectrum width throughout this product.
 
-        A resumed product must retain its restored width. Since nfft is not
-        part of the detector contract, this check catches a changed geometry
-        before the arrays reach the output writer. A width of zero means no
-        frames have established it yet, so the current width can be adopted.
+        A resumed product must keep its restored width. Since nfft is not part
+        of the detector contract, this check detects a changed geometry before
+        the arrays reach the output writer. A width of zero means no frame has
+        set the width yet, and the current width is used.
         """
         expected = int(expected_bins)
         if self._fine_bins == 0:
@@ -1358,11 +1362,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             "mask_rule": NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
             "target_norm_sq": int(self._target_norm_sq),
             "reference_norm_sum_sq": int(self._reference_norm_sum_sq),
-            # Compare the enriched contract (including the fine_reduction
-            # block) exactly as save() persists it: _refresh_provenance() has
-            # just rebuilt _detector_contract_json for the current
-            # configuration, and the saved side was json.loads'd from the
-            # same serialization at resume().
+            # The contract with its fine_reduction block is compared as save()
+            # writes it. _refresh_provenance() has rebuilt
+            # _detector_contract_json for the current configuration, and the
+            # saved contract was decoded with json.loads from the same
+            # serialization in resume().
             "detector_contract": json.loads(self._detector_contract_json),
             "weight_bank_sha256": self._weight_bank_sha256,
             "weight_manifest_sha256": self._weight_manifest_sha256,
@@ -1372,11 +1376,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             key for key in current
             if saved.get(key) != current.get(key)
         ]
-        # Resume is stricter than cross-pilot combine: appending frames mutates
-        # one product, so it requires the exact Python implementation identity
-        # (the source= tree hash embedded in detector_version).  Allowing a
-        # geometry-equivalent source change here would mix implementations and
-        # then relabel every prior frame with only the newest build stamp.
+        # Resume is stricter than the cross-pilot combine. Appending frames
+        # changes one product, so the exact Python implementation identity (the
+        # source= tree hash in detector_version) is required. A source change
+        # with the same geometry would mix implementations in one product and
+        # label every earlier frame with the newest build stamp.
         if mismatches:
             details = "; ".join(
                 f"{key}: saved={saved.get(key)!r} current={current.get(key)!r}"
@@ -1511,11 +1515,12 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             raise RuntimeError("detector analyzer: begin() was not called")
         self._check_file_meta(meta)
         n = 0
-        # this file's position in the per-unit time axis (the unit row is appended
-        # at the tail below, so len(_unit_order) is this unit's index); frame_in_unit
-        # is the chunk's 0-based *time* position in the file. The packed reader yields
-        # contiguous full nfft chunks, so chunk position == time position, giving each
-        # frame an absolute time without storing one timestamp per frame.
+        # unit_idx is the position of this file on the per-unit time axis. The
+        # unit row is appended at the end of this method, so len(_unit_order) is
+        # the index of this unit. frame_in_unit is the 0-based time position of
+        # the chunk in the file. The packed reader yields contiguous full nfft
+        # chunks, so the chunk position equals the time position, and each frame
+        # has an absolute time without a stored timestamp per frame.
         unit_idx = len(self._unit_order)
         chunk_in_unit = 0
         for chunk in arrays:
@@ -1525,7 +1530,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 break
             arr = np.asarray(chunk)
             if arr.ndim != 2 or arr.shape[0] != self._nfft:
-                continue  # ragged/partial frame -> skip
+                continue  # skip a ragged or partial frame
             if arr.dtype != np.uint8:
                 raise ValueError(
                     "detector analyzer requires raw uint8 chunks from the "
@@ -1544,9 +1549,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                     f"{chunk_streams} != {self._num_input_streams}."
                 )
             if not self._pilot_in_band:
-                # No in-band pilot in this coarse channel: emit an explicitly
-                # invalid frame (reject_mask=0, valid=0, zero powers) and skip the
-                # kernel, so the product cannot be read as a real detection.
+                # With no in-band pilot in this coarse channel, an invalid frame
+                # (reject_mask=0, valid=0, zero powers) is written and the kernel
+                # is skipped, so the product cannot be read as a real detection.
                 # valid=0 keeps the frame out of both integrated spectra.
                 self._p_target.append(0)
                 self._p_ref_sum.append(0)
@@ -1570,7 +1575,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 n += 1
                 chunk_in_unit += 1
                 continue
-            # reader yields native uint8 [nfft, n_feeds]; the detector expects (streams, 1, time)
+            # native uint8 [nfft, n_feeds] from the reader, as (streams, 1, time) for the detector
             native_block = np.ascontiguousarray(arr.T)[:, np.newaxis, :]
             packed = pack_chime_block_for_detector(
                 native_block,
@@ -1587,8 +1592,8 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 fine_bin_count(int(self._nfft) // int(self._K))
             )
             if self._detector_fn_accepts_matched_filter_row_projections:
-                # The rows are only the host fallback for a backend that
-                # returns no fine powers; the device chain returns both.
+                # The row projections are the host fallback for a backend that
+                # returns no fine powers. The device chain returns both.
                 detection = self._detector_fn(
                     packed=packed.packed,
                     weights=self._weights,
@@ -1614,10 +1619,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             baseband_power = np.asarray(packed.baseband_power_linear, dtype=np.float64)
             results = detection["results"]
             # The integrated spectrum (one FFT per nfft chunk) and the absolute-time
-            # axis (one time per chunk) both assume one detector result per chunk --
-            # which is exactly what the packed reader + frames_in_chunk=1 produce.
-            # Guard it so a future packer change can't silently misalign the spectrum
-            # / time axis against the per-frame arrays.
+            # axis (one time per chunk) both assume one detector result per chunk,
+            # as produced by the packed reader with frames_in_chunk=1. This check
+            # keeps a later packer change from misaligning the spectrum and time
+            # axis with the per-frame arrays.
             if len(results) != 1:
                 raise ValueError(
                     "detector analyzer: integrated-spectrum + time axis assume one "
@@ -1663,9 +1668,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
 
             # The exact fine terms are the measurement, and the frame powers
             # are their all-bin sums (product schema v6). The float
-            # reduction and its CFAR are recomputable from these and neither
-            # was bit-equal to the deployed statistic, so the scan does not
-            # spend a transform on them.
+            # reduction and its CFAR can be recomputed from these terms, and
+            # neither was bit-equal to the deployed statistic, so the scan
+            # spends no transform on them.
             self._append_exact_fine_powers(detection)
             fine_sums = tuple(
                 sum(int(value) for value in self._fine_power_u64[-1][term])
@@ -1719,10 +1724,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                     ))
                 )
                 self._normalized_pilot_excess.append(normalized_excess)
-                # The backend mask is not authoritative product identity.
-                # Reconstruct the declared host-exact policy from the stored
-                # uint64 frame powers and weight norms; this same bit controls the
-                # after-mask integrated spectrum below.
+                # The mask bit is recomputed on the host with the declared
+                # exact policy, from the stored uint64 frame powers and weight
+                # norms, and the backend mask is not used. The same bit
+                # controls the after-mask integrated spectrum below.
                 self._reject_mask.append(
                     normalized_positive_excess(
                         num,
@@ -1744,12 +1749,13 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 self._frame_unit_index.append(unit_idx)
                 self._frame_in_unit.append(chunk_in_unit)
                 n += 1
-            # Integrated power spectrum: one FFT (rectangular window) of this chunk's
-            # raw samples, |.|^2 summed over feeds, accumulated for valid frames only.
-            # spec_before = every valid frame; spec_after = valid AND kept (not
-            # rejected), so (before - after) is the spectrum the mask removed. Runs on
-            # the kernel's GPU (cupy) in production and numpy in tests with identical
-            # arithmetic; skipped for invalid frames (which enter neither spectrum).
+            # The integrated power spectrum is one FFT (rectangular window) of the
+            # raw samples of this chunk, with |.|^2 summed over feeds and
+            # accumulated for valid frames only. spec_before holds every valid
+            # frame and spec_after holds the valid frames that were kept, so
+            # (before - after) is the spectrum removed by the mask. The FFT runs on
+            # the kernel's GPU (CuPy) in production and on NumPy in tests, with
+            # identical arithmetic. Invalid frames enter neither spectrum.
             if not self._valid[-1]:
                 self._append_psd_frame(None)
             if self._valid[-1]:
@@ -1773,10 +1779,10 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         if key is not None:
             self._keys.add(key)
             self._unit_order.append(str(key))
-            # per-unit absolute-time axis + provenance, aligned 1:1 with _unit_order.
-            # The reader's probe surfaces these from the file root attrs (NaN/0/""
-            # when absent), so a missing attr degrades to an unusable-but-not-fatal
-            # time rather than crashing the run.
+            # The per-unit absolute-time axis and provenance are aligned 1:1 with
+            # _unit_order. The reader's probe takes them from the root attributes
+            # of the file (NaN, 0, or "" when absent), so a missing attribute
+            # gives an unusable time and the run continues.
             ev = meta.get("event_id")
             self._unit_time0_ctime.append(float(meta.get("time0_ctime", float("nan"))))
             self._unit_time0_fpga.append(int(meta.get("time0_fpga_count") or 0))
@@ -1790,13 +1796,13 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         return n
 
     def _append_exact_fine_powers(self, detection: Mapping[str, Any]) -> None:
-        """Retain the exact uint64 fine terms for this frame.
+        """Store the exact uint64 fine terms for this frame.
 
-        Prefers the device stage (the deployed implementation). Falls back to
-        the frozen CPU reference over the backend's integer row projections,
-        which the kernel contract requires to be bit-identical. A backend that
-        returns neither has no frame powers under product schema v6 and is
-        refused.
+        The device stage (the deployed implementation) is used when present.
+        Otherwise, the frozen CPU reference is applied to the backend's integer
+        row projections, which the kernel contract requires to be
+        bit-identical. A backend that returns neither has no frame powers under
+        product schema v6, and the frame is refused.
         """
         exact = detection.get("fine_powers_u64")
         if exact is not None:
@@ -1836,10 +1842,11 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         )
 
     def _append_psd_frame(self, psd: np.ndarray | None) -> None:
-        """Encode one frame of PSD to int16 dB about its own reference.
+        """Encode one frame of PSD as int16 dB codes relative to its own reference.
 
-        ``psd`` is None for a frame that never reached the transform; it stores
-        the invalid sentinel, which sits outside the clipped code range and so
+        The reference is the median of the finite, positive PSD values. ``psd``
+        is None for a frame that never reached the transform. Such a frame
+        stores the invalid code, which is below the clipped code range and
         cannot be read back as a measured level.
         """
         width = int(self._nfft)
@@ -1891,7 +1898,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         atomic_savez_compressed(
             Path(path),
-            # --- chime_detector_outputs schema (single pilot) ---
+            # chime_detector_outputs schema (single pilot)
             schema_name=np.asarray(PER_PILOT_PRODUCT_SCHEMA_NAME),
             schema_revision=np.asarray(PER_PILOT_PRODUCT_SCHEMA_REVISION, dtype=np.int64),
             source_event_key_schema_version=np.asarray(
@@ -1909,11 +1916,12 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             p_ref_lower_u64=col_u(self._p_ref_lower, np.uint64),
             p_ref_upper_u64=col_u(self._p_ref_upper, np.uint64),
             coarse_power_ratio=col_f(self._coarse_power_ratio),
-            # --- current fine-diagnostic per-frame products ---
-            # Exact deployed-statistic terms: [frames, 3, FINE_BINS] uint64.
-            # Everything downstream of the transform -- ratio, CFAR, null
-            # bulk, any future eta or Q16 threshold -- is exactly
-            # recomputable from these; nothing recovers them afterwards.
+            # current fine-diagnostic per-frame products
+            # Exact terms of the deployed statistic, [frames, 3, FINE_BINS]
+            # uint64. Every quantity after the transform (the ratio, the CFAR,
+            # the null bulk, and any later eta or Q16 threshold) can be
+            # recomputed exactly from these terms, and the terms cannot be
+            # recovered after the scan.
             fine_power_u64=fine_power_u64,
             fine_pad_factor=np.asarray(int(FINE_PAD_FACTOR), dtype=np.int64),
             fine_num_bins=np.asarray(int(self._fine_bins), dtype=np.int64),
@@ -1930,16 +1938,17 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             normalized_pilot_excess=col_f(self._normalized_pilot_excess),
             reject_mask=col_u(self._reject_mask, np.uint8),
             valid=col_u(self._valid, np.uint8),
-            # --- per-frame power + integrated spectra (rectangular window) ---
+            # per-frame power and integrated spectra (rectangular window)
             baseband_power_linear=col_f(self._baseband_power),
-            # ADC/F-engine saturation and 0x00 fill, counted while the frame
-            # was in hand; unrecoverable afterwards because no raw samples are
-            # stored. Both share the railed_sample_total denominator.
+            # ADC or F-engine saturation and 0x00 fill, counted while the
+            # frame was in memory. No raw samples are stored, so these counts
+            # cannot be recovered later. Both use the railed_sample_total
+            # denominator.
             railed_sample_count=col_u(self._railed_count, np.uint64),
             fill_sample_count=col_u(self._fill_count, np.uint64),
             railed_sample_total=col_u(self._railed_total, np.uint64),
-            # Per-frame PSD, feeds summed, int16 dB about psd_db_reference.
-            # Decode: psd_db_reference * 10 ** (codes / 1000.0).
+            # per-frame PSD summed over feeds, in int16 dB codes relative to
+            # psd_db_reference, decoded as psd_db_reference * 10 ** (codes / 1000.0)
             psd_frame_db_i16=(
                 np.stack(self._psd_codes).astype(np.int16)
                 if self._psd_codes
@@ -1958,7 +1967,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 _to_host(self._spec_after) if self._spec_after is not None
                 else np.zeros(int(self._nfft), dtype=np.float64)
             ),
-            # --- per-frame -> per-unit time tags (see unit_* axis below) ---
+            # per-frame tags into the per-unit time axis (unit_* below)
             frame_unit_index=np.asarray(self._frame_unit_index, dtype=np.int32),
             frame_in_unit=np.asarray(self._frame_in_unit, dtype=np.int32),
             rational_overflow_count=np.asarray(self._overflow, dtype=np.uint64),
@@ -1980,9 +1989,9 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 [source_event_key(k, self._freq_id) for k in self._unit_order],
                 dtype=str,
             ),
-            # --- per-unit absolute-time axis (aligned to unit_order) -----------
+            # per-unit absolute-time axis, aligned to unit_order
             # per-frame time = unit_time0_ctime[u] + frame_in_unit[f]*nfft
-            #                  * unit_delta_time[u],  u = frame_unit_index[f]
+            #                  * unit_delta_time[u], where u = frame_unit_index[f]
             unit_time0_ctime=np.asarray(self._unit_time0_ctime, dtype=np.float64),
             unit_time0_fpga=np.asarray(self._unit_time0_fpga, dtype=np.uint64),
             unit_event_id=np.asarray(self._unit_event_id, dtype=np.int64),
@@ -2020,14 +2029,14 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             pilot_capture_efficiency=np.asarray(
                 self._pilot_capture_efficiency, dtype=np.float64
             ),
-            # --- run provenance: which weights + build + mask rule produced this --
+            # run provenance of the weights, build, and mask rule
             target_norm_sq=np.asarray([self._target_norm_sq], dtype=np.int64),
             reference_norm_sum_sq=np.asarray([self._reference_norm_sum_sq], dtype=np.int64),
             weights_hash=np.asarray(self._weights_hash),
             weight_bank_sha256=np.asarray(self._weight_bank_sha256),
             weight_manifest_sha256=np.asarray(self._weight_manifest_sha256),
-            # Digest of the coefficients alone: unchanged by header edits
-            # such as a profile rename, so two banks compare on the numbers.
+            # digest of the coefficients only, which a header edit such as a
+            # profile rename does not change, so two banks compare on their numbers
             weight_coefficients_sha256=np.asarray(
                 self._weight_coefficients_sha256
             ),

@@ -19,14 +19,14 @@ def test_scores_preserve_zeros_invalid_support_and_exact_overflow(anchor):
     bulk = anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1)
     designated = list(anchors.designated_set(anchor))
     powers = np.ones((9, 3, 256), dtype=np.uint64)
-    powers[1, 0, designated] = 0                         # A genuine zero score.
-    powers[2, 0, bulk] = 0                              # Positive / zero.
-    powers[3, 0] = 0                                    # Zero / zero is non-firing.
-    powers[4, 1:, np.flatnonzero(bulk)[62:]] = 0           # Only 62 references remain.
-    powers[5, 1:, designated] = 0                        # No designated references.
-    powers[6, 0, designated] = np.iinfo(np.uint64).max    # Boundary exceeds uint64.
-    powers[7, 0, designated] = 900                       # Health-excluded row.
-    powers[8] = np.iinfo(np.uint64).max                  # Reference addition overflows uint64.
+    powers[1, 0, designated] = 0                         # zero designated power gives a zero score
+    powers[2, 0, bulk] = 0                              # positive over zero
+    powers[3, 0] = 0                                    # zero over zero does not fire
+    powers[4, 1:, np.flatnonzero(bulk)[62:]] = 0           # only 62 references remain
+    powers[5, 1:, designated] = 0                        # no designated references
+    powers[6, 0, designated] = np.iinfo(np.uint64).max    # boundary exceeds uint64
+    powers[7, 0, designated] = 900                       # health-excluded row
+    powers[8] = np.iinfo(np.uint64).max                  # reference sum overflows uint64
     selected = np.ones(9, dtype=bool)
     selected[7] = False
     result = export.final_score_arrays(powers, selected, anchor_bin=anchor, bulk_mask=bulk)
@@ -48,7 +48,7 @@ def test_scores_preserve_zeros_invalid_support_and_exact_overflow(anchor):
         assert result["fine_always_masked"][row] == expected_always
         if not expected_always:
             assert int(result["fine_required_multiplier_q16"][row]) == reference.multiplier_q16
-    # Existing bench zero-reference and zero-rank semantics remain the same.
+    # The export gives the same zero-reference and zero-rank results as the bench float scores.
     bench = float_scores(powers, construct_geometry(anchor))
     np.testing.assert_allclose(result["fine_score_z63"][selected], bench["response"][selected, 1], equal_nan=True)
 
@@ -87,7 +87,8 @@ def _source_export(tmp_path, monkeypatch):
     product = _control_product(tmp_path, monkeypatch)
     with np.load(product, allow_pickle=False) as saved:
         fields = {key: saved[key] for key in saved.files}
-    # Retain untimed rows and a health failure; neither becomes a histogram sample.
+    # Untimed rows and a health failure are kept in the product, and none of them
+    # becomes a histogram sample.
     fields["unit_delta_time"][0] = np.nan
     fields["baseband_power_linear"][12] = 128
     np.savez(product, **fields)
@@ -183,8 +184,8 @@ def test_saved_selector_anchor_is_used_without_refitting(tmp_path, monkeypatch):
 
 
 def test_guarded_geometry_uses_the_median_of_its_own_bulk():
-    """h and g are parameters; the rank is the median of the bulk they leave, and a line
-    3 to 5 bins outside the markers leaves the guarded scores unchanged."""
+    """The half width h and the guard g are parameters, and the rank is the median of the
+    bulk they leave. A line 3 to 5 bins past the markers leaves the guarded scores unchanged."""
     anchor, width, guard = 64, 2, 5
     default = anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1)
     guarded = anchors.bulk_mask(anchor, pad_factor=2, guard_fine_bins=1, designated_half_width=width,

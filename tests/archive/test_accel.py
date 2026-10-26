@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Tests for archive CuPy resolution.
+Tests for CuPy resolution in the archive pipeline.
 
-The interesting logic is pure and offline: parsing a CUDA version out of
-nvidia-smi/nvcc text, naming the matching wheel, and falling back cleanly when
-CuPy is absent. The CPU path (numpy) and the "no cupy -> actionable error" path
-are exercised here; the actual install is not (that needs a CUDA image).
+These tests run offline. They cover the CUDA major version parsed from
+nvidia-smi, nvcc, and version.json text, the name of the matching CuPy wheel,
+the numpy path on the CPU, and the error that points to setup_env.sh when CuPy
+is absent. The install itself is not covered, since it needs a CUDA image.
 
-Run:  PYTHONPATH=src python tests/test_accel.py
+Run:  PYTHONPATH=src python -m pytest tests/archive/test_accel.py
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def test_get_array_module_cpu_is_numpy():
 def test_gpu_path_matches_cupy_availability():
     cp = accel.import_cupy()
     if cp is None:
-        # no cupy in this env: the scan path must fail cleanly, not ImportError
+        # without cupy the scan path exits with SystemExit and names setup_env.sh
         raised = False
         try:
             accel.get_array_module(True)
@@ -55,7 +55,7 @@ def test_gpu_path_matches_cupy_availability():
             raised = True
             assert "setup_env.sh" in str(exc)
         assert raised, "get_array_module(True) should SystemExit when cupy is absent"
-        # and ensure_cupy without install should raise an actionable RuntimeError
+        # ensure_cupy(install=False) raises a RuntimeError that names setup_env.sh
         try:
             accel.ensure_cupy(install=False)
         except RuntimeError as exc:
@@ -63,7 +63,7 @@ def test_gpu_path_matches_cupy_availability():
         else:
             raise AssertionError("ensure_cupy(install=False) should raise when cupy is absent")
     else:
-        # cupy present (e.g. a CUDA image): use it, and ensure_cupy is a no-op return
+        # cupy present, as on a CUDA image, so both calls return the cupy module
         assert accel.get_array_module(True) is cp
         assert accel.ensure_cupy(install=False) is cp
 

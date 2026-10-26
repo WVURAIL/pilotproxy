@@ -2,10 +2,10 @@
 """Read CHIME/outrigger baseband HDF5 as native packed bytes.
 
 The complex reader unpacks each chunk to complex64. The local-reference
-power-ratio detector instead needs the original 4-bit nibbles so they can be
-re-packed *losslessly* into the kernel's two's-complement int4 layout (via
-``pack_chime_block_for_detector``) with no float requantization. This reader is
-the same layout but yields raw ``uint8 [nfft, n_feeds]`` blocks.
+power-ratio detector instead needs the original 4-bit nibbles, so that they can
+be repacked without loss into the two's-complement int4 layout of the kernel
+(with ``pack_chime_block_for_detector``) and with no float requantization. This
+reader reads the same layout and yields raw ``uint8 [nfft, n_feeds]`` blocks.
 """
 from __future__ import annotations
 
@@ -56,16 +56,16 @@ def _dataset_content_sha256(dataset: h5py.Dataset) -> str:
 
 
 def _iter_packed_chunks(path: str, nfft: int) -> Iterator:
-    """Yield raw uint8 [nfft, n_feeds] blocks (final partial frame dropped).
+    """Yield raw uint8 [nfft, n_feeds] blocks, dropping the final partial frame.
 
     A file too short for one complete transform at this nfft raises
-    UnreadableUnitError (via unreadable_file). Raised while the reader
-    streams, that type is the engine's one quarantinable iteration error:
-    the unit lands in the quarantine ledger and a rerun resumes without it,
-    whereas letting the analyzer see zero frames turns the same bytes into
-    an unquarantinable run-level ValueError. The check lives here, on the
-    same nfft the framing uses, so the reject and framing criteria cannot
-    diverge the way a probe-time gate at the format default could.
+    UnreadableUnitError through unreadable_file(). When it is raised while the
+    reader streams, it is the only iteration error that the engine quarantines.
+    The unit is written to the quarantine ledger, and a rerun resumes without
+    it. If the analyzer saw zero frames instead, the same bytes would raise a
+    run-level ValueError that cannot be quarantined. The check is made here,
+    at the nfft used for framing, so the reject and framing criteria always
+    agree. A probe-time check at the format default cannot guarantee this.
     """
     with unreadable_file(), h5py.File(path, "r") as h:
         bb = h["baseband"]
@@ -95,8 +95,8 @@ class ChimeBasebandPackedReader(Reader):
     )
 
     def probe(self, path: str) -> Mapping[str, object]:
-        # Classify open/schema failures as an unreadable unit (quarantine)
-        # instead of crashing the scan, matching the 'chime-baseband' reader.
+        # open and schema failures mark the unit unreadable (quarantine) and
+        # the scan continues, as in the 'chime-baseband' reader
         with unreadable_file():
             return self._probe(path)
 
@@ -107,11 +107,12 @@ class ChimeBasebandPackedReader(Reader):
                       "f_center_mhz": f_center_hz / 1e6,
                       "fs_hz": fmt.FS,
                       "nfft": fmt.NFFT}
-        # Absolute-time axis + provenance from the file's root attrs, surfaced so
-        # the detector can stamp a per-unit time and derive a per-frame time as
-        # time0_ctime + frame_in_unit*nfft*delta_time. A real CHIME baseband file
-        # carries the full set; missing attrs degrade to NaN / 0 / None / ""
-        # rather than failing the probe.
+        # The absolute-time axis and provenance are read from the root
+        # attributes of the file. The detector uses them to stamp a per-unit
+        # time and to derive a per-frame time as
+        # time0_ctime + frame_in_unit*nfft*delta_time. A real CHIME baseband
+        # file carries the full set, and a missing attribute is returned as
+        # NaN, 0, None, or "" so that the probe does not fail.
         with h5py.File(path, "r") as h:
             a = h.attrs
             baseband = h["baseband"]
@@ -122,18 +123,19 @@ class ChimeBasebandPackedReader(Reader):
                 )
             meta["num_input_streams"] = int(baseband.shape[1])
             # A file too short to yield one complete transform is a property of
-            # the staged bytes, not an analyzer fault, so reject it here where
-            # unreadable_file() turns it into UnreadableUnitError and the engine
-            # quarantines it WITHOUT interrupting the run. The framing length is
-            # ctx.instrument.nfft and the engine calls probe without a ctx, so
-            # this gate can only use the format default fmt.NFFT: every shipped
-            # instrument frames at that value, and an instrument configured
-            # below it would see files quarantined here that could still frame
-            # (none exists; the gate is deliberately conservative for the
-            # unattended multi-week scan). _iter_packed_chunks enforces the
-            # per-run length again at the exact nfft it frames with, so an
-            # instrument nfft above the default quarantines at iteration time
-            # (a resumable stop) instead of aborting the run from the analyzer.
+            # the staged bytes, so it is rejected here. unreadable_file() turns
+            # the error into UnreadableUnitError, and the engine quarantines the
+            # file while the run continues. The framing length is
+            # ctx.instrument.nfft, and the engine calls probe without a ctx, so
+            # this check can use only the format default fmt.NFFT. Every
+            # shipped instrument frames at that value. An instrument configured
+            # below it would have files quarantined here that could still be
+            # framed. No such instrument exists, and the check is kept strict
+            # for the unattended multi-week scan. _iter_packed_chunks checks the
+            # per-run length again at the exact nfft used for framing, so for
+            # an instrument nfft above the default the file is quarantined at
+            # iteration time (a resumable stop) and the run is not aborted by
+            # the analyzer.
             if int(baseband.shape[0]) < int(fmt.NFFT):
                 raise ValueError(
                     "CHIME packed baseband is shorter than one transform: "

@@ -1,4 +1,8 @@
-"""Mutation tests for capture identity guards; no measured-value adjustment."""
+"""Mutation tests for the identity checks of the capture transfer tool.
+
+Each altered input map, control array or checkpoint must be rejected. No
+measured value is adjusted.
+"""
 import importlib.util
 from pathlib import Path
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Frozen engineering audit of inverted native coordinates; no sensitivity fit.
+"""Audit the inverted native coordinates of the fine detector against a frozen plan.
 
-The synthetic native analogue is the complex conjugate of an already normalized
-time stream. The existing adapter reverses samples within each K window once.
-This tests a declared digital convention, not a measurement of the instrument's
-analogue phase response. No thresholds, probabilities, or policy are fitted.
+The synthetic native stream is the complex conjugate of a normalized time
+stream, and the adapter reverses the samples of each K window once. The audit
+tests this declared digital convention on the float, packed, CPU and GPU paths.
+The analog phase response of the instrument is not measured, and no
+sensitivity, thresholds, probabilities or policy are fitted.
 """
 
 from __future__ import annotations
@@ -64,7 +65,7 @@ def write(path, value):
 
 
 def raw_adapt(normal_rows):
-    """Conjugate the physical time samples, then invoke per-K reversal once."""
+    """Conjugate the physical time samples and apply the per-K reversal once."""
     rows = np.asarray(normal_rows)
     if rows.ndim != 2 or rows.shape[1] != K:
         raise ValueError("normalized rows must be two-dimensional with K=128")
@@ -79,7 +80,7 @@ def projection_powers(rows, weights, streams):
     )
     transformed = np.fft.fft(z, n=FINE, axis=-1)
     fine = np.sum(abs(transformed) ** 2, axis=1, dtype=np.float64)
-    # Frame powers: the all-bin sums of the fine powers (kernel core 3.0.0).
+    # frame power is the sum of the fine powers over all bins (kernel core 3.0.0)
     coarse = np.sum(fine, axis=-1, dtype=np.float64)
     return z, fine, coarse
 
@@ -110,11 +111,12 @@ def assert_float_mapping(normal_rows, adapted_rows, weights, streams):
 
 
 def native_pack(normal_rows, *, streams, channel, coarse_channel):
-    """Exercise the actual native-offset-binary block adapter before the kernel.
+    """Pack the rows with the native offset-binary block adapter used ahead of the kernel.
 
-    The generator's symmetric int4 quantizer covers -7..7. This byte conversion
-    is lossless; it does not claim native -8 clipping matches that quantizer.
-    Separate byte-domain tests cover every signed nibble, including -8.
+    The generator's symmetric int4 quantizer covers -7..7, and the byte
+    conversion is lossless. Native clipping at -8 is not claimed to match that
+    quantizer. The byte-domain unit tests cover every signed nibble, -8 among
+    them.
     """
     raw_packed = quantize_complex_numpy(
         np.conjugate(normal_rows), 4, DEFAULT_INPUT_SCALE
@@ -189,8 +191,8 @@ def allocate_seeds(root, cache, engineering, combinations):
     plans = [cache / "plan.json", cache.parent / "preparation/plan.json"]
     plans.extend(sorted(engineering.glob("engineering-preflight-v*/plan.json")))
     plans.extend(sorted(engineering.glob("engineering-preflight-v*/report.json")))
-    # Conservative enclosing interval contains all documented preflight draws,
-    # including warmups that some report formats do not enumerate individually.
+    # conservative interval around all documented preflight draws, since some
+    # report formats do not list each warmup draw
     prior_engineering_interval = (2026090917000000, 2026090917000000 + 10_000_000)
     for path in plans:
         value = json.loads(path.read_text())
@@ -328,7 +330,7 @@ def main():
             np.testing.assert_array_equal(integer_cpu, integer_gpu)
             np.testing.assert_array_equal(fine_cpu, fine_gpu)
             np.testing.assert_array_equal(coarse_cpu, coarse_gpu)
-            # Descriptive comparison only: no invariant is presumed after quantization.
+            # descriptive only, since no mirror invariant is expected after quantization
             normal_packed = quantize_complex_numpy(normal, 4, DEFAULT_INPUT_SCALE)
             normal_integer = matched_filter_row_projections_cpu_reference_packed(normal_packed, packed_weights, 4)
             normal_fine = fine_power_fx(normal_integer, num_streams=streams)

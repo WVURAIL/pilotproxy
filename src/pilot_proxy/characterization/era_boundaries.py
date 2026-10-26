@@ -1,32 +1,34 @@
 """Find sustained changes in each channel's monthly pilot-region power.
 
-Start with one level per month. For each event, take the median of its
-frame-maximum powers in the pilot neighborhood; then take the median across
-the month's events. Bayesian Blocks segments these levels using the
-point-measure fitness and false-positive prior of Scargle et al. (2013,
-ApJ 764, 167), Eqs. 41 and 21, as implemented by astropy.
+Each month is given one level. For each event, the median of its frame-maximum
+powers in the pilot neighborhood is taken, and the month's level is the median
+of these values over the month's events. The levels are segmented by Bayesian
+Blocks with the point-measure fitness and false-positive prior of Scargle et
+al. (2013, ApJ 764, 167), equations 41 and 21, in the form used by astropy.
 
-The monthly error combines the counting error of the event median with the
-channel's within-era scatter in quadrature. That scatter is the robust spread
-about a 13-month running median, included so seasonal and propagation changes
-do not split the series into extra blocks.
+The monthly error is the counting error of the event median added in
+quadrature to the channel's scatter in each era. That scatter is the robust
+spread of the levels about a 13-month running median. It is added so that
+seasonal and propagation changes do not split the series into extra blocks.
 
 Power boundaries follow four rules:
 
-1. Sort the block-step sizes across channels. The largest gap separates large
-   transitions from other changes; a step above that gap starts an era.
-2. Merge an excursion when its block is shorter than both neighbors and the
-   level returns to its previous state. The levels before and after it must
-   differ by less than the split defined above.
+1. The block-step sizes of every channel are sorted together. The largest gap
+   in this list is the split between large transitions and other changes, and
+   a step above that gap starts an era.
+2. An excursion is merged away when its block is shorter than both neighbors
+   and the level returns to its previous state. The levels before and after it
+   must differ by less than the split.
 3. Power alone sets these boundaries, so frequency drift does not cut an era.
    A change across a coverage gap is dated at the first month after the gap.
 4. The current era extends from the last boundary to the last covered month.
 
-``--line-identity`` also tests changes in the pilot's frequency behavior.
-At each block edge, use the three covered months on either side. Let h be the
-marker half-width, ``DESIGNATED_HALF_WIDTH`` fine bins: 23.84 Hz, or one bin
-of the review's grid. A line is steady when the median absolute deviation of
-its monthly offsets is at most h/2, and unsteady when it exceeds h.
+With ``--line-identity``, changes in the pilot's frequency behavior are also
+tested. At each block edge, the line is judged on the three covered months on
+either side. The marker half-width, denoted h, is ``DESIGNATED_HALF_WIDTH``
+fine bins, which is 23.84 Hz or one bin of the review's grid. A line is steady
+when the median absolute deviation of its monthly offsets is at most h/2, and
+unsteady when it exceeds h.
 
 An edge is a line-boundary candidate if either:
 
@@ -39,10 +41,10 @@ the power step must also exceed the largest step seen at edges where that
 channel's line identity stays the same.
 
 Reversing blocks, defined by the excursion rule above, never create line
-boundaries. A reversing block shorter than the local window also stays out
-of the calibration, because it is below the method's resolution. Finally,
-a channel whose steady offsets take just two values, each in at least two
-runs, is treated as a two-state line; its handovers do not split eras.
+boundaries. A reversing block shorter than the local window is also kept out
+of the calibration, because it is below the method's resolution. Finally, a
+channel whose steady offsets take just two values, each in at least two runs,
+is treated as a two-state line, and its handovers do not split eras.
 
     pilot-proxy characterize era-boundaries --review DIR --output DIR [--previous ERA_LIST]
     pilot-proxy characterize era-boundaries --levels FILE --output DIR [--previous ERA_LIST]
@@ -52,7 +54,9 @@ level, and peak offset, plus monthly frame counts. Line-identity checks require
 this input. ``--levels`` instead reads an existing ``monthly_levels.json``.
 The outputs are ``monthly_levels.json``, ``blocks.json`` (steps, boundaries,
 excursions, and split), and ``eras.json`` in the format of
-``projects/chime_atsc/eras/power_eras_2026-10-04.json``.
+``projects/chime_atsc/eras/power_eras_2026-10-04.json``. With
+``--line-identity``, the monthly line offsets are also written to
+``monthly_lines.json``.
 """
 from __future__ import annotations
 
@@ -73,8 +77,8 @@ MEDIAN_ERROR = 1.2533     # sqrt(pi / 2): error of a median per error of a mean
 CHANNELS = tuple(range(14, 38))
 SCHEMA = "robust-power-era-threshold-cohorts-v1"
 LOCAL_MONTHS = 3          # covered months on each side of a block edge the line is judged in
-FINE_BIN_HZ = 390625 / 128 / 256  # the detector's fine bin, 11.92 Hz (products.reader.FINE_BIN_HZ; pinned by a test, kept so this file stands alone)
-MARKER_HALF_WIDTH_FINE_BINS = 2   # the detector's marker half-width h (narrowband_marker.anchors.DESIGNATED_HALF_WIDTH; pinned by a test)
+FINE_BIN_HZ = 390625 / 128 / 256  # the detector's fine bin, 11.92 Hz (a copy of products.reader.FINE_BIN_HZ, pinned by a test, so this file needs no package import)
+MARKER_HALF_WIDTH_FINE_BINS = 2   # the detector's marker half-width h (narrowband_marker.anchors.DESIGNATED_HALF_WIDTH, pinned by a test)
 MARKER_HALF_WIDTH_HZ = MARKER_HALF_WIDTH_FINE_BINS * FINE_BIN_HZ   # 23.84 Hz: the detector's fine bins are half the review's
 
 
@@ -87,7 +91,7 @@ def month_name(index: int) -> str:
 
 
 def monthly_levels(event_month, event_level, months, frame_counts) -> list[dict]:
-    """One row per month with at least one event: its level, events, frames and event spread."""
+    """Return one row per month with at least one event, giving its level, event count, frame count, and event spread."""
     event_month, event_level = np.asarray(event_month), np.asarray(event_level, float)
     frames = dict(zip(map(int, months), map(int, frame_counts)))
     rows = []
@@ -123,7 +127,7 @@ def errors(rows: list[dict]) -> tuple[np.ndarray, float]:
 
 def bayesian_blocks(x, sigma, p0: float = P0) -> list[int]:
     """Start index of every block of the optimal partition of point measures x with errors sigma
-    (Scargle et al. 2013, sec. 2 and eq. 41; ncp_prior from eq. 21)."""
+    (Scargle et al. 2013, section 2 and equation 41, with ncp_prior from equation 21)."""
     x, sigma = np.asarray(x, float), np.asarray(sigma, float)
     n = len(x)
     ncp_prior = 4 - np.log(73.53 * p0 * (n ** -0.478))
@@ -221,7 +225,7 @@ def _local(lines: dict[int, dict], months: list[int]) -> dict | None:
 
 
 def reversing_blocks(channel_blocks: list[Block], upper: float) -> list[int]:
-    """Blocks shorter than both neighbors across which the level returns within the split."""
+    """Indices of the blocks shorter than both neighbors where the levels on either side differ by less than the split."""
     span = [b.last - b.first + 1 for b in channel_blocks]
     return [j for j in range(1, len(channel_blocks) - 1)
             if span[j] < min(span[j - 1], span[j + 1])
@@ -229,7 +233,7 @@ def reversing_blocks(channel_blocks: list[Block], upper: float) -> list[int]:
 
 
 def two_state_line(lines: dict[int, dict], h: float) -> bool:
-    """True when the steady monthly offsets take exactly two values (within h/2) and each value occurs in at least two runs."""
+    """True when the steady monthly offsets take exactly two values (to a tolerance of h/2) and each value occurs in at least two runs."""
     months = sorted(m for m, r in lines.items() if r["mad_bins"] <= h / 2)
     if len(months) < 4:
         return False
@@ -267,7 +271,7 @@ def line_edges(channel_blocks: list[Block], lines: dict[int, dict], h: float) ->
             unsteady_a, unsteady_b = before["mad_bins"] > h, after["mad_bins"] > h
             move = abs(after["median_bins"] - before["median_bins"])
             if steady_a and steady_b and move > h:
-                # drift moves at most one fine bin (h/2) between covered months; anything larger in one step is a jump
+                # drift moves at most one fine bin (h/2) between covered months, so a larger single step is a jump
                 change = "jump" if edge_move is not None and edge_move > h / 2 else "drift"
             elif (steady_a and unsteady_b) or (unsteady_a and steady_b):
                 change = "steadiness"
@@ -331,7 +335,7 @@ def era_boundaries(levels: dict[int, list[dict]], p0: float = P0, lines: dict[in
 
 
 def era_list(result: dict, provenance: dict, previous: dict | None = None) -> dict:
-    """The era list, in the layout of the 2026-10-04 list; status is relative to ``previous`` when given."""
+    """Return the era list in the layout of the 2026-10-04 list, with each status relative to ``previous`` when it is given."""
     before = {r["channel"]: r["current_months"][0] for r in previous["channels"]} if previous else {}
     rows = []
     for r in result["channels"]:
@@ -353,8 +357,11 @@ def _sha(path: Path) -> str:
 
 
 def levels_from_review(review: Path, with_lines: bool = False):
-    """Each channel's monthly levels from the era review and the sha256 of every file read; with ``with_lines``,
-    also each channel's monthly line offsets (the review's per-event peak offsets, in fine bins)."""
+    """Each channel's monthly levels from the era review and the sha256 of every file read.
+
+    With ``with_lines``, each channel's monthly line offsets (the review's
+    per-event peak offsets, in fine bins) and the marker half-width in review
+    bins are also returned."""
     levels, lines, read, bin_hz = {}, {}, {}, None
     for ch in CHANNELS:
         path = Path(review) / "data" / f"ch{ch}.npz"

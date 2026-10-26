@@ -1,16 +1,16 @@
 # coding=utf-8
-"""fxfft256 v1: the frozen deterministic fixed-point FFT for the deployed
+"""fxfft256 v1, the frozen deterministic fixed-point FFT of the deployed
 fine reduction.
 
-This module is the *verification reference* for the fine detection path's
-window-axis FFT (``docs/DESIGN_DECISIONS.md``, "The deployed decision is
-the fine designated-set CFAR in the kernel"). The CUDA deployment must
-reproduce these outputs bit-for-bit; ``tests/core/test_fxfft256.py`` holds
-the golden-vector gate. The offline analyzer's float pipeline
-(``fine_reduction.py``) is unchanged; this reference exists so the deployed
-device FFT has a frozen, platform-independent definition that a port is
-compared against, rather than a library FFT that cannot bit-match across
-implementations.
+This module is the verification reference for the window-axis FFT of the
+fine detection path (``docs/DESIGN_DECISIONS.md``, "The deployed decision
+is the fine designated-set CFAR in the kernel"). The CUDA deployment must
+reproduce these outputs bit for bit, and ``tests/core/test_fxfft256.py``
+holds the golden-vector gate. In the offline analyzer, the float pipeline
+(``fine_reduction.py``) is a different code path. A library FFT cannot
+bit-match across implementations, so this reference gives the deployed
+device FFT a frozen, platform-independent definition to compare a port
+against.
 
 Frozen specification (fxfft256 v1)
 ----------------------------------
@@ -18,38 +18,40 @@ Frozen specification (fxfft256 v1)
 * Transform: N = 256 forward DFT, ``sum_m x[m] e^{-2 pi i b m / 256}``
   (numpy sign convention), radix-2 decimation-in-time, bit-reversed load,
   natural-order output, in the exact butterfly order given below.
-* Input: 128 complex int32 window sums (one stream's ``z[m]``,
-  m = 0..127), zero-padded to 256. Contract: ``|re|, |im| <= 2**20``.
-  Deployed row sums obey ``|.| <= K * 128 = 2**14`` (K = 128 samples,
-  int4 x int4 product components bounded by 128), giving 6 bits of
-  spare contract headroom.
+* Input: 128 complex int32 window sums (``z[m]`` of one stream,
+  m = 0..127), zero-padded to 256. Its contract is
+  ``|re|, |im| <= 2**20``. Deployed row sums obey
+  ``|.| <= K * 128 = 2**14`` (K = 128 samples, int4 x int4 product
+  components bounded by 128), which leaves 6 bits of spare contract
+  headroom.
 * Twiddles: ``W[k] = (C[k], S[k])``, k = 0..127, representing
-  ``e^{-2 pi i k / 256}`` in Q15:
-  ``C[k] = nearest(32768 cos(2 pi k / 256))``,
+  ``e^{-2 pi i k / 256}`` in Q15, with
+  ``C[k] = nearest(32768 cos(2 pi k / 256))`` and
   ``S[k] = nearest(-32768 sin(2 pi k / 256))``. The table below is the
-  frozen source of truth (no runtime libm); the generator cross-check
-  lives in the test suite. No value sits at a rounding tie. ``C[0] =
-  32768`` and ``S[64] = -32768`` are stored in int32; multiplication by
-  ``+-32768`` is exact under the rounding rule.
-* Butterfly: ``t = round15(W[k] * b)``; ``(a, b) -> (a + t, a - t)`` in
-  int32. Complex product components before rounding are exact int64.
+  frozen source of truth, and no runtime libm is used. A generator
+  cross-check is in the test suite. No value sits at a rounding tie.
+  ``C[0] = 32768`` and ``S[64] = -32768`` are stored in int32, and
+  multiplication by ``+-32768`` is exact under the rounding rule.
+* Butterfly: ``t = round15(W[k] * b)`` and ``(a, b) -> (a + t, a - t)``
+  in int32. Before rounding, the complex product components are exact
+  int64.
 * Rounding: ``round15(v) = floor((v + 16384) / 32768)`` per component,
   implemented as an arithmetic right shift by 15 after adding ``2**14``.
-* Scaling: none. No-overflow proof: one butterfly maps the working
-  infinity-norm ``M`` to at most ``(1 + sqrt(2) + 2**-15) M + 1``; eight
-  stages from ``M <= 2**20`` stay below ``2**30.2 < 2**31 - 1``. The
-  compile-time check in ``cuda/config.h`` and :func:`input_abs_max` use a
-  looser form that adds one input norm per stage, which gives
-  ``2**30.94`` and still closes. The
-  implementation enforces the input contract and raises on any stage
-  exceeding int32 rather than wrapping.
+* Scaling: none. For the no-overflow proof, one butterfly maps the
+  working infinity-norm ``M`` to at most ``(1 + sqrt(2) + 2**-15) M + 1``,
+  and eight stages from ``M <= 2**20`` stay below ``2**30.2 < 2**31 - 1``.
+  The compile-time check in ``cuda/config.h`` and :func:`input_abs_max`
+  use a looser form that adds one input norm per stage. This form gives
+  ``2**30.94`` and still closes. In the implementation, the input
+  contract is enforced and any stage that exceeds int32 raises an error,
+  so values never wrap.
 
-Downstream exactness: ``|X|**2`` and its sums over streams are computed
-in exact (u)int64 (outputs are < 2**26 in magnitude for deployed inputs,
-so squared sums over 2048 streams stay < 2**63). After the rounded FFT,
-the deployed fine statistic is therefore deterministic integer arithmetic
-end to end; the only departure from real-valued mathematics is the FFT
-rounding itself, quantified in ``tools/fxfft_report.py``.
+The squared magnitudes ``|X|**2`` and their sums over streams are computed
+in exact (u)int64. For deployed inputs the outputs are below 2**26 in
+magnitude, so squared sums over 2048 streams stay below 2**63. After the
+rounded FFT, the deployed fine statistic is therefore deterministic
+integer arithmetic end to end. Only the FFT rounding departs from
+real-valued mathematics, and it is quantified in ``tools/fxfft_report.py``.
 """
 from __future__ import annotations
 
@@ -67,8 +69,8 @@ ROUND_CONST = 1 << 14
 INPUT_ABS_MAX = 1 << 20
 INT32_MAX = (1 << 31) - 1
 
-# Frozen Q15 twiddle table: W[k] = (C[k], S[k]) ~ e^{-2 pi i k/256}.
-# The source of truth is this literal table rather than runtime trigonometry.
+# Frozen Q15 twiddle table, W[k] = (C[k], S[k]) ~ e^{-2 pi i k/256}. This
+# literal table is the source of truth, and no runtime trigonometry is used.
 TWIDDLE_Q15 = (
     (32768, 0), (32758, -804), (32729, -1608), (32679, -2411),
     (32610, -3212), (32522, -4011), (32413, -4808), (32286, -5602),
@@ -110,15 +112,16 @@ _BITREV_IDX = np.asarray(_BITREV, dtype=np.int64)
 
 
 def twiddle_table_sha256() -> str:
-    """Hash of the frozen table literal (recorded in golden metadata)."""
+    """Return the SHA256 of the frozen table literal (recorded in the golden metadata)."""
     import hashlib
 
     return hashlib.sha256(str(list(TWIDDLE_Q15)).encode()).hexdigest()
 
 
 def _max_component_magnitude(a: np.ndarray) -> int:
-    # Check in the original integer dtype: casting uint64 may wrap, and
-    # fixed-width abs cannot represent the magnitude of INT64_MIN.
+    # The extremes are read in the original integer dtype and compared as
+    # Python ints, since a cast of uint64 can wrap and a fixed-width abs
+    # cannot represent the magnitude of INT64_MIN.
     return max(-int(a.min(initial=0)), int(a.max(initial=0)))
 
 
@@ -139,12 +142,12 @@ def _validate_input(a: np.ndarray) -> np.ndarray:
 
 
 def fxfft256(x: Any, *, return_stage_maxima: bool = False):
-    """Frozen fixed-point 256-point FFT of 128-sample int rows.
+    """Return the frozen fixed-point 256-point FFT of 128-sample integer rows.
 
-    ``x``: integer array ``[..., 128, 2]`` (re, im). Returns int32
+    ``x`` is an integer array ``[..., 128, 2]`` (re, im). Returns int32
     ``[..., 256, 2]`` in natural bin order (numpy ``fft`` convention).
-    With ``return_stage_maxima=True`` also returns the per-stage maximum
-    absolute working value (headroom audit).
+    With ``return_stage_maxima=True``, the per-stage maximum absolute
+    working value is also returned for the headroom audit.
     """
     a = _validate_input(np.asarray(x))
     lead = a.shape[:-2]
@@ -187,24 +190,20 @@ def fxfft256(x: Any, *, return_stage_maxima: bool = False):
     return result
 
 
-# ---------------------------------------------------------------------------
-# Transform family: one master twiddle table, every size by decimation
-# ---------------------------------------------------------------------------
+# Transform family from one master twiddle table by decimation
 #
-# A radix-2 DIT of length n needs W_n[k] = e^{-2 pi i k / n} for k < n/2 only.
-# Because W_n[k] = W_M[k * M / n] whenever n divides M, and the Q15 rounding is
-# applied to the same real value either way, the length-n table is an *exact*
-# decimation of a length-M master: identical integers rather than an
-# approximation.
-# One master therefore serves the whole family, and the tie analysis and
-# exact-rounding argument are established once on it and inherited by every
-# member.
+# A radix-2 DIT of length n needs W_n[k] = e^{-2 pi i k / n} only for k < n/2.
+# Since W_n[k] = W_M[k * M / n] whenever n divides M, and the Q15 rounding is
+# applied to the same real value in both cases, the length-n table is an exact
+# decimation of a length-M master and holds identical integers. One master
+# therefore serves the whole family. The tie analysis and the exact-rounding
+# argument are made once on the master and hold for every member.
 #
 # MASTER_N is the largest transform the master serves. The deployed range needs
-# L_F = 2 * N / K: with K = 128 on a CHIME-class raster and K = 64 on a
-# CHORD-class one, frame sizes 2**13..2**16 give L_F in {256 .. 2048}. Raising
-# MASTER_N is a one-constant change; the per-size no-overflow bound below is
-# what actually limits usable sizes.
+# L_F = 2 * N / K. With K = 128 on a CHIME-class raster and K = 64 on a
+# CHORD-class raster, frame sizes 2**13 to 2**16 give L_F from 256 to 2048.
+# Raising MASTER_N changes one constant, and the usable sizes are limited by
+# the per-size no-overflow bound below.
 
 MASTER_N = 2048
 MASTER_TWIDDLE_SHA256 = (
@@ -213,12 +212,12 @@ MASTER_TWIDDLE_SHA256 = (
 
 
 def _generate_twiddle_half(n: int) -> tuple[tuple[int, int], ...]:
-    """W_n[k] in Q15 for k < n/2, by exact nearest rounding.
+    """Return W_n[k] in Q15 for k < n/2, by exact nearest rounding.
 
-    Used to build the master once at import. No entry sits at a rounding tie
-    (the closest approach across the master is 5.8e-4, ~2.6e8 times the double
-    epsilon at that scale), so every IEEE-754 libm produces the same integers;
-    the hash check below turns that from an argument into an assertion.
+    The master is built with this function once at import. No entry sits at
+    a rounding tie. The closest approach over the master is 5.8e-4, about
+    2.6e8 times the double epsilon at that scale, so every IEEE-754 libm
+    produces the same integers. The hash check below asserts this at import.
     """
     import math
 
@@ -233,17 +232,18 @@ MASTER_TWIDDLE_Q15 = _generate_twiddle_half(MASTER_N)
 
 
 def master_twiddle_sha256() -> str:
-    """Hash of the master table (the family's single frozen artifact)."""
+    """Return the SHA256 of the master table, the single frozen artifact of the family."""
     import hashlib
 
     return hashlib.sha256(str(list(MASTER_TWIDDLE_Q15)).encode()).hexdigest()
 
 
 def twiddle_table(n: int) -> tuple[tuple[int, int], ...]:
-    """Q15 twiddles for a length-``n`` radix-2 DIT: ``n // 2`` entries.
+    """Return the ``n // 2`` Q15 twiddles of a length-``n`` radix-2 DIT.
 
-    Returned by decimating the master with stride ``MASTER_N // n``; the
-    values are bit-identical to generating length ``n`` directly.
+    The table is decimated from the master with stride ``MASTER_N // n``,
+    and its values are bit-identical to a table generated at length ``n``
+    directly.
     """
     if n < 2 or (n & (n - 1)) != 0:
         raise ValueError(f"transform length must be a power of two >= 2; got {n}")
@@ -256,9 +256,10 @@ def twiddle_table(n: int) -> tuple[tuple[int, int], ...]:
     return tuple(MASTER_TWIDDLE_Q15[k * stride] for k in range(n // 2))
 
 
-# The frozen fxfft256 v1 literal must be exactly what the family produces at
-# n = 256. This is the join between the frozen artifact and the general
-# construction; if it ever fails, the fault is in the family rather than the literal table.
+# The frozen fxfft256 v1 literal must equal the table the family produces at
+# n = 256. This check joins the frozen artifact to the general construction.
+# The literal table is the source of truth, so a failure here is a fault in
+# the family.
 if master_twiddle_sha256() != MASTER_TWIDDLE_SHA256:
     raise RuntimeError(
         "master twiddle table does not match its frozen hash; the host libm "
@@ -273,15 +274,15 @@ _BUTTERFLY_GROWTH = 1.0 + 1.41422 + (1.0 / 32768.0)
 
 
 def input_abs_max(n: int) -> int:
-    """Find a power-of-two input bound that prevents int32 overflow at length n.
+    """Return a power-of-two input bound that prevents int32 overflow at length n.
 
-    A butterfly takes working norm M to at most
-    (1 + sqrt(2) + 2**-15) M + 1. For an input norm M_0 >= 1, use the
-    looser bound with +M_0 in place of +1. Apply it log2(n) times and
-    require the final value to stay below 2**31.
+    A butterfly takes the working norm M to at most
+    (1 + sqrt(2) + 2**-15) M + 1. For an input norm M_0 >= 1, the looser
+    bound with +M_0 in place of +1 is used. This bound is applied log2(n)
+    times, and the final value must stay below 2**31.
 
-    Longer transforms need smaller input bounds. In particular, the
-    eight-stage limit 2**20 cannot simply be reused for nine stages.
+    Longer transforms need smaller input bounds, so the eight-stage limit
+    2**20 does not hold for nine stages.
     """
     stages = n.bit_length() - 1
     norm = 1.0
@@ -291,15 +292,16 @@ def input_abs_max(n: int) -> int:
 
 
 def fxfft(x: Any, *, n_out: int = N, return_stage_maxima: bool = False):
-    """Frozen fixed-point FFT generalized over the transform length.
+    """Return the frozen fixed-point FFT for a general transform length.
 
-    Same specification as :func:`fxfft256` (bit-reversed load, radix-2 DIT,
-    Q15 twiddles from the master table, ``round15`` per butterfly, no
-    scaling), with the length as a parameter. ``x`` is an integer array
-    ``[..., n_out // 2, 2]``; the pad factor is fixed at two.
+    The specification is that of :func:`fxfft256` (bit-reversed load,
+    radix-2 DIT, Q15 twiddles from the master table, ``round15`` per
+    butterfly, no scaling), with the length as a parameter. ``x`` is an
+    integer array ``[..., n_out // 2, 2]``, so the pad factor is fixed at
+    two.
 
-    At ``n_out = 256`` this is bit-identical to :func:`fxfft256`, which the
-    test suite asserts.
+    At ``n_out = 256`` the result is bit-identical to :func:`fxfft256`, and
+    the test suite asserts this.
     """
     if n_out < 2 or (n_out & (n_out - 1)) != 0:
         raise ValueError(f"n_out must be a power of two; got {n_out}")
@@ -363,10 +365,10 @@ def fxfft(x: Any, *, n_out: int = N, return_stage_maxima: bool = False):
 
 
 def fxfft256_scalar(x_in) -> list[tuple[int, int]]:
-    """Pure-scalar reference (mirrors ``cuda/fxfft256_ref.c`` structure).
+    """Pure-scalar reference with the structure of ``cuda/fxfft256_ref.c``.
 
-    ``x_in``: sequence of 128 ``(re, im)`` integer pairs. Returns a list of
-    256 ``(re, im)`` pairs. Bit-identical to :func:`fxfft256`.
+    ``x_in`` is a sequence of 128 ``(re, im)`` integer pairs. Returns a list
+    of 256 ``(re, im)`` pairs, bit-identical to :func:`fxfft256`.
     """
     xs = [(int(r), int(i)) for r, i in x_in]
     if len(xs) != N_IN:
@@ -398,12 +400,13 @@ def fine_power_fx(
     windows_per_stream: int = N_IN,
     num_weight_terms: int = 3,
 ) -> np.ndarray:
-    """Exact-integer fine power spectra via the frozen FFT.
+    """Return exact-integer fine power spectra from the frozen FFT.
 
-    ``matched_filter_row_projections``: integer array ``[terms, streams * windows, 2]`` (the
-    kernel's stream-major row-sum layout, as in ``fine_reduction``).
-    Returns uint64 ``S[terms, 256]`` = sum over streams of ``|X|**2`` ---
-    exact integers, the deployed fine-statistic numerators/denominators.
+    ``matched_filter_row_projections`` is an integer array
+    ``[terms, streams * windows, 2]`` in the stream-major row-sum layout of
+    the kernel, as in ``fine_reduction``. Returns uint64 ``S[terms, 256]``,
+    the sum over streams of ``|X|**2``. These exact integers are the
+    numerators and denominators of the deployed fine statistic.
     """
     if int(windows_per_stream) != N_IN:
         raise ValueError("fxfft256 is frozen at 128 windows per stream.")

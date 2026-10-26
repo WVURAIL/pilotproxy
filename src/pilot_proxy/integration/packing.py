@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Canonical adapter from receiver streams to packed detector rows."""
+"""Adapter from receiver streams to packed detector rows."""
 
 from __future__ import annotations
 
@@ -65,11 +65,14 @@ def estimate_complex_scale(
     bits_per_component: int,
     clip_sigma: float,
 ) -> float:
-    """Estimate the shared complex quantization scale used by all adapters.
+    """Estimate the complex quantization scale shared by all adapters.
 
-    The detector quantizes real and imaginary components onto the same signed
-    integer grid.  Prefer the real-component spread, then fall back to the
-    imaginary and magnitude spreads for degenerate synthetic inputs.
+    The real and imaginary components are quantized onto the same signed
+    integer grid. The scale maps a component clip_sigma standard deviations
+    from zero to the largest code, 2^(b-1) - 1 for b = bits_per_component.
+    The standard deviation of the real components is used first. For
+    degenerate synthetic inputs, the standard deviation of the imaginary
+    components, and then of the magnitudes, is used instead.
     """
     arr = np.asarray(values)
     sigma = float(np.std(arr.real))
@@ -223,8 +226,13 @@ def pack_channelized_streams_for_detector(
 ) -> PackedDetectorInput:
     """Pack feed/channel/time streams into detector rows.
 
-    Combined mode returns one detector row matrix per batch. Per-stream
-    diagnostic mode returns a separate row matrix for each input stream.
+    Each block of frame_size_samples starts block_step_samples after the
+    previous one (one frame by default). The block is cut into windows of
+    detector_window_samples, the windows are time reversed in a mirrored
+    Nyquist zone, and the rows of each stream are quantized with that
+    stream's scale. Combined mode returns one detector row matrix per block.
+    Per-stream diagnostic mode returns one row matrix for each input stream
+    of each block.
     """
     frame_size_samples = _positive_integer(frame_size_samples, "frame_size_samples")
     detector_window_samples = _positive_integer(detector_window_samples, "detector_window_samples")

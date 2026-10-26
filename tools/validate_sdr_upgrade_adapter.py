@@ -41,7 +41,11 @@ def write_json(path, value):
 
 
 def tone_power_comparison(power, term):
-    """Report a conservative finite comparison when another term is zero."""
+    """Return a finite lower bound on the desired-to-other power ratio.
+
+    The denominator is the largest other-term power with a floor of one squared
+    projection code, so the bound stays finite when the other terms are zero.
+    """
     other = float(max(power[i] for i in range(3) if i != term))
     return {
         "largest_other_term_power": other,
@@ -52,7 +56,14 @@ def tone_power_comparison(power, term):
 
 
 def independent_projection_check(result):
-    """Independently decode signed nibbles and sum real integer products."""
+    """Recompute every complex projection from the packed nibbles and compare.
+
+    In each packed byte, the real part is the high nibble and the imaginary
+    part the low nibble, each a signed 4-bit value. Each projection is computed
+    as the sum over K of x times conj(w) with Python integers, independently of
+    the adapter's projection and unpack helpers, and is compared exactly with
+    projections_i32.
+    """
     x = result["packed_frames"].astype(np.uint8)
     w = result["packed_weights"].astype(np.uint8)
     xr = (x >> 4).astype(np.int64)
@@ -149,8 +160,8 @@ def main(argv=None):
         checks.append({"name": f"alias_rejection_{int(offset)}_hz", "pass": power < 1e-8,
                        "output_power_for_unit_input_power": power})
 
-    # Scale is fixed here as an engineering configuration, with clipping counted.
-    # It is not estimated or optimized on these evaluation frames.
+    # The sample scale of 500 is an engineering setting fixed before the
+    # ambient record is processed, and clipping is counted.
     config = DigitalAdapterConfig(INPUT_RATE_HZ, 100000., 0, 500.)
     iq = np.fromfile(accepted, dtype="<c8")
     result = adapt_record(iq, config)

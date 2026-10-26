@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Calibrate a declared-model band margin, then evaluate it on fresh datasets.
 
-This does not qualify archive dependence or physical contamination. The old
-bootstrap diagnostic and production guard remain available and unchanged.
+The margin holds only under the declared models. This tool does not cover
+archive dependence or physical contamination, and it does not change the
+bootstrap diagnostic or the production guard.
 """
 from __future__ import annotations
 
@@ -34,10 +35,11 @@ SOURCES = ("src/pilot_proxy/characterization/confidence_band.py",
 
 
 def tolerance_rank(n, content, error_probability):
-    """Smallest one-based rank k with P[Binomial(n, content) >= k] <= alpha.
+    """Return the smallest one-based rank k with P[Binomial(n, content) >= k] <= alpha.
 
-    The k-th calibration order statistic then upper-bounds the content
-    quantile with confidence at least 1-alpha (ties are conservative).
+    Here alpha is error_probability. The k-th calibration order statistic then
+    bounds the content quantile from above with confidence at least 1 - alpha,
+    and ties make the bound conservative.
     """
     if isinstance(n, bool) or not isinstance(n, (int, np.integer)) or n < 1:
         raise ValueError("n must be a positive integer")

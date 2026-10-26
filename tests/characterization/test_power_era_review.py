@@ -1,4 +1,4 @@
-"""The working-cohort policy that forms the era list; no archive or accepted input is changed."""
+"""The working-cohort policy that forms the era list without changing an archive or an accepted input."""
 from __future__ import annotations
 
 import copy
@@ -190,8 +190,8 @@ def test_real_detector_step_drives_only_current_span_refinement():
 
 def test_pending_latest_state_inside_confirmation_union_is_not_hidden():
     # The first new level is confirmed. A further level at the archive edge
-    # still needs confirmation, even when a tied passing edge includes it as
-    # the one allowed outlier in the preceding candidate's confirmation union.
+    # still needs confirmation, even when a tied passing edge counts it as the
+    # one allowed outlier in the confirmation union of the previous candidate.
     detected = synthetic([0]*12+[6]*5+[12])
     assert len(detected['boundaries']) == 1
     assert any(p['new_first_month'] == '2022-06' for p in detected['pending_changes'])

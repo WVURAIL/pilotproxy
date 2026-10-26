@@ -1,12 +1,12 @@
 """
-Reader: CHIME / outrigger baseband HDF5 (offset-binary 4+4-bit).
+Reader for CHIME and outrigger baseband HDF5 files (offset-binary 4+4-bit).
 
-The concrete reader the bundled example runs on. It owns the on-disk format
-knowledge via `_baseband_format` (see that module for the exact dataset and
-attribute layout) and yields the [nfft, n_feeds] complex64 frames an analyzer
-consumes. CHIME and its outriggers (KKO/GBO/HCO) share this product, so this one reader
-serves them all. A different file format needs a different reader, not a change
-here -- see docs/ADDING_A_READER.md (this file is a worked example).
+The bundled example runs on this reader. The on-disk format is held in
+`baseband_format`, which gives the exact dataset and attribute layout, and the
+reader yields the [nfft, n_feeds] complex64 frames that an analyzer consumes.
+CHIME and its outriggers (KKO, GBO and HCO) share this product, so one reader
+serves all four. A different file format needs its own reader, and this file
+is the worked example in docs/ADDING_A_READER.md.
 """
 from __future__ import annotations
 
@@ -24,17 +24,17 @@ from pilot_proxy.archive.names import baseband_filename
 from . import baseband_format as fmt
 from .unreadable import unreadable_file
 
-# A truncated baseband object can still be valid HDF5, but archive objects this
-# small cannot contain even a useful fraction of the native payload. The floor
-# belongs to this format, not to the generic CADC source: other readers may
-# legitimately describe much smaller products.
+# A truncated baseband object can still be valid HDF5, but an archive object
+# smaller than 1 MiB cannot hold a useful fraction of the native payload. The
+# floor is set by this format and is kept out of the generic CADC source, since
+# other readers may describe much smaller products.
 MINIMUM_ARCHIVE_BYTES = 1 << 20
 
 
 class ChimeBasebandReader(Reader):
-    # Schema 2 renames the file-size-derived ``n_frames`` column: an HDF5
-    # object's total archive size includes container overhead (and may include
-    # compression), so it is useful planning metadata but not an exact count.
+    # In survey schema 2 the frame count derived from the file size is named
+    # n_frames_estimate. The archive size of an HDF5 object counts the container
+    # overhead and may reflect compression, so the count is for planning only.
     survey_schema = 2
     minimum_archive_bytes = MINIMUM_ARCHIVE_BYTES
 
@@ -65,21 +65,20 @@ class ChimeBasebandReader(Reader):
         with unreadable_file():
             yield from fmt.iter_frames(path, nfft=nfft)
 
-    # -- archive file shape ------------------------------------------------
-    # Baseband: one HDF5 per freq_id per event. `selection` is the survey's
-    # resolved freq_id list (see CadcDatatrailSource.survey), which is exactly
-    # how this product is selected.
+    # archive file shape
+    # A baseband event has one HDF5 file per freq_id, so the survey's resolved
+    # freq_id list `selection` (see CadcDatatrailSource.survey) gives the files.
     def survey_files(self, event, common_path, selection,
                      ctx: RunContext) -> Iterable[tuple]:
         for ch in (selection or ()):
             yield baseband_filename(event, ch), {"freq_id": int(ch)}
 
     def annotate_row(self, row: dict, instrument) -> None:
-        """Geometry annotation plus an explicitly approximate frame count.
+        """Add the channel frequency and an approximate frame count to a row.
 
         The packed payload is one byte per feed per sample, but ``size_bytes``
-        is the size of the entire HDF5 object. Report a whole-frame planning
-        estimate rather than presenting a fractional value as an exact count.
+        is the size of the whole HDF5 object. The frame count is therefore
+        reported as a planning estimate in whole frames.
         """
         if instrument is None or row.get("freq_id") is None:
             return

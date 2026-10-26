@@ -159,7 +159,7 @@ def _fake_kernel(detector_window_samples: int):
 
 
 def _fake_detector(**kwargs):
-    """Powers 30 + block against 12 + 8, spread over the 256 fine bins."""
+    """Return 256-bin fine powers that sum to 30 + block (target), 12 and 8 (references)."""
     packed = kwargs["packed"]
     batch = int(packed.shape[0])
     fine = np.zeros((batch, 3, 256), dtype=np.uint64)
@@ -175,8 +175,9 @@ def _fake_detector(**kwargs):
         "results": [
             {
                 "block_index": index,
-                # Deliberately inconsistent: the runner must publish the
-                # exact decision derived from powers/norms, not this bit.
+                # This bit disagrees with the powers on purpose. The runner
+                # must publish the exact decision derived from the powers and
+                # norms and ignore this bit.
                 "mask": 0,
                 "p_target_u64": 30 + index,
                 "p_ref_lower_u64": 12,
@@ -322,8 +323,9 @@ def test_chime_runner_small_writes_expected_shapes(tmp_path) -> None:
     expected_output_shape = (SMALL_RUN_NUM_FRAMES, 1)
     assert detector["p_target_u64"].shape == expected_output_shape
     assert detector["p_ref_sum_u64"].shape == expected_output_shape
-    # Kernel core 3.0.0: the run stores the fine powers whose all-bin sums
-    # are the frame powers, and the reference split.
+    # In kernel core 3.0.0, the fine powers are stored with the run, and their
+    # all-bin sums are the frame powers. The reference power is stored as its
+    # lower and upper parts.
     fine = detector["fine_power_u64"]
     assert fine.dtype == np.uint64
     assert fine.shape == (*expected_output_shape, 3, 256)

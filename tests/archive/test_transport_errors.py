@@ -14,7 +14,7 @@ def test_truncated_transfers_are_expected_errors():
     errors = cadc_transport.expected_errors()
     assert http.client.IncompleteRead in errors
     # Raw urllib3 failures escape requests when the streamed body breaks
-    # (truncation) or stalls (read timeout); both must be retryable.
+    # (truncation) or stalls (read timeout). Both must be retryable.
     assert issubclass(urllib3.exceptions.ProtocolError, errors)
     assert issubclass(urllib3.exceptions.ReadTimeoutError, errors)
     assert OSError in errors

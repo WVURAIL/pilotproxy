@@ -1,20 +1,21 @@
 # coding=utf-8
-"""Current per-pilot product contents for the PilotProxy analyzer.
+"""Contents of the current per-pilot product of the PilotProxy analyzer.
 
-The product folds three derived-from-the-same-pass products into one ``.npz`` so
-the week-long CANFAR run never needs a second pass:
+Three products derived from the same pass are stored in one ``.npz``, so the
+week-long CANFAR run never needs a second pass:
 
-  * two integrated power spectra (rectangular-window |FFT|^2 summed over feeds),
-    one over every valid frame and one over kept (not-rejected) frames, so their
-    difference is the spectrum the positive-excess mask removed;
-  * a per-unit absolute-time axis (time0_ctime / delta_time / fpga / event_id,
-    surfaced by the reader from the file root attrs) plus per-frame unit tags, so
-    each frame's wall time is t = time0 + frame_in_unit*nfft*delta_time without a
-    timestamp per frame;
-  * run provenance (weights_hash / detector_version / mask_rule).
+  * two integrated power spectra (rectangular-window |FFT|^2 summed over
+    feeds), one over every valid frame and one over the kept frames, so their
+    difference is the spectrum removed by the positive-excess mask
+  * a per-unit absolute-time axis (time0_ctime, delta_time, fpga, and
+    event_id, read by the reader from the root attrs of the file) and per-frame
+    unit tags, so the wall time of each frame is
+    t = time0 + frame_in_unit*nfft*delta_time with no timestamp stored per frame
+  * run provenance (weights_hash, detector_version, and mask_rule)
 
-The spectrum FFT is xp-generic (cupy on a GPU node, numpy here); these tests pin
-the numpy path against an independent FFT, which is the same arithmetic.
+The spectrum FFT runs on either array module, cupy on a GPU node and numpy
+here. These tests check the numpy path against an independent FFT, which
+performs the same arithmetic.
 """
 from __future__ import annotations
 
@@ -44,7 +45,7 @@ from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader  # noqa:
 NFFT = 16384
 K = 128
 N_FEEDS = 4
-F_CENTER_MHZ = 470.3125   # -> freq_id 844, ATSC ch14 pilot in band
+F_CENTER_MHZ = 470.3125   # freq_id 844, with the ATSC ch14 pilot in band
 FREQ_ID = 844
 
 # CHIME baseband root attrs (values from a real freq_id 844 file)
@@ -58,8 +59,11 @@ COLLECTION_SERVER = "host-a"
 
 
 def _detector_fn_factory(reject):
-    """CPU stand-in. `reject(frame_index)` -> bool drives the per-frame mask; all
-    frames are valid (p_ref_sum > 0) so they enter the integrated spectra."""
+    """Return a CPU stand-in detector whose per-frame mask is set by `reject`.
+
+    `reject(frame_index)` returns a bool for each frame. All frames are valid
+    (p_ref_sum > 0), so they enter the integrated spectra.
+    """
     state = {"i": 0}
 
     def _fn(*, packed, weights, kernel):
@@ -74,8 +78,9 @@ def _detector_fn_factory(reject):
             results.append({
                 "block_index": b,
                 "mask": int(should_reject),
-                # Canonical reject bits are derived from powers + exact norms,
-                # so make this stand-in unambiguously high or low.
+                # The canonical reject bits are derived from the powers and the
+                # exact norms, so the target power of this stand-in is set far
+                # above or far below the reference.
                 "p_target_u64": target,
                 "p_ref_sum_u64": 100,
                 "p_ref_lower_u64": 50,
@@ -138,11 +143,11 @@ def _expected_spectrum(reader, path, ctx, keep=lambda i: True):
     return acc
 
 
-# -- integrated spectra -------------------------------------------------------
+# integrated spectra
 
 def test_integrated_spectrum_matches_independent_fft_and_peaks_at_tone(tmp_path):
     bin_k = 64
-    f_tone = bin_k * fmt.FS / NFFT            # exactly on bin 64 -> no leakage
+    f_tone = bin_k * fmt.FS / NFFT            # exactly on bin 64, so no leakage
     synth = tmp_path / "tone.h5"
     fmt.make_synth_file(str(synth), n_time=NFFT * 3, n_feeds=N_FEEDS,
                         f_center_mhz=F_CENTER_MHZ, f_tone_bb=f_tone,
@@ -158,15 +163,15 @@ def test_integrated_spectrum_matches_independent_fft_and_peaks_at_tone(tmp_path)
     after = np.asarray(got["integrated_spectrum_after_mask"], dtype=np.float64)
     assert before.shape == after.shape == (NFFT,)
 
-    # cuFFT (GPU) and numpy's FFT are both single precision (complex64 in ->
-    # complex64 out) but use different algorithms, so they agree to ~1e-6 relative,
-    # not float64. Use a tolerance that admits that backend difference while still
-    # catching real logic bugs (orders of magnitude off); argmax and the
-    # before/after structural checks pin correctness independently.
+    # cuFFT on the GPU and the numpy FFT are both single precision (complex64 in
+    # and out) with different algorithms, so they agree to about 1e-6 relative.
+    # The tolerance admits this backend difference and still catches logic
+    # errors, which are orders of magnitude off. The argmax and the before and
+    # after checks test correctness independently.
     expected = _expected_spectrum(reader, synth, ctx)
     scale = float(before.max())
     assert np.allclose(before, expected, rtol=1e-4, atol=1e-3 * scale)
-    # nothing rejected -> after == before (same backend, identical accumulation)
+    # nothing rejected, so after equals before (same backend, identical accumulation)
     assert np.array_equal(before, after)
     # the injected tone dominates the integrated spectrum at its bin
     assert int(np.argmax(before)) == bin_k
@@ -174,7 +179,7 @@ def test_integrated_spectrum_matches_independent_fft_and_peaks_at_tone(tmp_path)
 
 def test_spectrum_after_mask_drops_rejected_frames(tmp_path):
     synth = tmp_path / "two.h5"
-    # 2 frames, distinct tones so the rejected frame's spectrum is identifiable
+    # two frames, so the spectrum of the rejected frame can be checked alone
     fmt.make_synth_file(str(synth), n_time=NFFT * 2, n_feeds=N_FEEDS,
                         f_center_mhz=F_CENTER_MHZ, f_tone_bb=64 * fmt.FS / NFFT,
                         tone_amp=7.0, noise_std=0.5, seed=5)
@@ -191,9 +196,10 @@ def test_spectrum_after_mask_drops_rejected_frames(tmp_path):
     reject = np.asarray(got["reject_mask"]).reshape(-1)
     assert list(reject) == [1, 0]                      # frame 0 rejected, frame 1 kept
 
-    # before = both frames; after = kept frame only; difference = rejected frame.
-    # Loose rtol/atol for the cuFFT-vs-numpy single-precision FFT difference (see the
-    # matched-FFT test); the structural reject=[1,0] split is the real check.
+    # before holds both frames, after holds the kept frame, and their difference
+    # is the rejected frame. The loose rtol and atol admit the single-precision
+    # difference between cuFFT and numpy (see the matched-FFT test), and the
+    # reject=[1,0] split is the main check.
     scale = float(before.max())
     tol = dict(rtol=1e-4, atol=1e-3 * scale)
     assert np.allclose(before, _expected_spectrum(reader, synth, ctx), **tol)
@@ -203,8 +209,8 @@ def test_spectrum_after_mask_drops_rejected_frames(tmp_path):
 
 
 def test_out_of_band_channel_has_zero_spectra(tmp_path):
-    # freq_id 400 (643.75 MHz) -> nearest ATSC pilot is out of band -> all-invalid;
-    # no valid frames -> both spectra stay zero.
+    # the nearest ATSC pilot to freq_id 400 (643.75 MHz) is out of band, so all
+    # frames are invalid and both spectra stay zero
     synth = tmp_path / "oob.h5"
     fmt.make_synth_file(str(synth), n_time=NFFT * 2, n_feeds=N_FEEDS,
                         f_center_mhz=643.75, f_tone_bb=1500.0, seed=3)
@@ -227,7 +233,7 @@ def test_out_of_band_channel_has_zero_spectra(tmp_path):
     assert not np.any(np.asarray(got["integrated_spectrum_after_mask"]))
 
 
-# -- per-unit time axis + per-frame derivation --------------------------------
+# per-unit time axis and per-frame derivation
 
 def test_time_axis_from_root_attrs_and_frame_derivation(tmp_path):
     synth = tmp_path / "timed.h5"
@@ -253,7 +259,7 @@ def test_time_axis_from_root_attrs_and_frame_derivation(tmp_path):
     assert len(str(got["unit_input_map_sha256"][0])) == 64
     assert str(got["unit_scope"][0]) == "local"
 
-    # per-frame tags: one unit, contiguous chunk positions
+    # per-frame tags for one unit at contiguous chunk positions
     n = int(got["frame_index"].shape[0])
     assert n == 4
     assert list(np.asarray(got["frame_unit_index"]).reshape(-1)) == [0, 0, 0, 0]
@@ -314,12 +320,12 @@ def test_two_units_have_distinct_time0_and_reset_frame_in_unit(tmp_path):
 
     assert list(np.asarray(got["unit_event_id"])) == [111, 222]
     assert float(got["unit_time0_ctime"][1]) == pytest.approx(CTIME + 100.0, abs=0)
-    # frame tags: unit 0 (2 frames) then unit 1 (3 frames); frame_in_unit resets
+    # frame tags for unit 0 (2 frames) then unit 1 (3 frames), with frame_in_unit reset
     assert list(np.asarray(got["frame_unit_index"]).reshape(-1)) == [0, 0, 1, 1, 1]
     assert list(np.asarray(got["frame_in_unit"]).reshape(-1)) == [0, 1, 0, 1, 2]
 
 
-# -- provenance + rename ------------------------------------------------------
+# provenance and rename
 
 def test_current_product_provenance_and_reject_mask(tmp_path):
     synth = tmp_path / "prov.h5"
@@ -332,7 +338,7 @@ def test_current_product_provenance_and_reject_mask(tmp_path):
     a.save(str(out))
     got = np.load(out)
 
-    # rename propagated: the per-channel product uses reject_mask rather than mask
+    # the per-channel product names the mask reject_mask
     assert "reject_mask" in got.files
     assert "mask" not in got.files
     # The scan stores the exact terms and nothing derived from them.

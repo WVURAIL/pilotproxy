@@ -2,11 +2,12 @@
 # coding=utf-8
 """Run the staged current-geometry synthetic sensitivity experiment.
 
-This is a resumable, shard-oriented experiment, not a one-command source of a
-publication number.  The production sequence is::
+The experiment is resumable and is run in shards. A publication number
+requires every stage of the production sequence::
 
-    # Generate/audit the deterministic GNU Radio waveform with the existing
-    # testbench first, then cache its reference-PFB output for every profile.
+    # Generate and audit the deterministic GNU Radio waveform with the
+    # existing testbench first, then cache its reference-PFB output for every
+    # profile.
     python3 tools/current_geometry_sensitivity.py --mode production \
         --stage prepare --input-iq generated/atsc/atsc_8vsb_complex64.cfile
 
@@ -21,19 +22,20 @@ publication number.  The production sequence is::
     # H1 shards are independent files and can be resumed safely.
     python3 tools/current_geometry_sensitivity.py --mode production \
         --stage sweep --seed 7 --trials 1500 --input-iq ...
-    # A stratified audit traverses literal 2048-stream packed frames and the
-    # selected CUDA artifact; it is required before precision review.
+    # A stratified audit passes literal 2048-stream packed frames through the
+    # selected CUDA artifact. This audit is required before precision review.
     python3 tools/current_geometry_sensitivity.py --mode production \
         --stage audit --gpu --input-iq ...
     python3 tools/current_geometry_sensitivity.py --mode production \
         --stage report --input-iq ...
 
-``--mode smoke --stage smoke`` runs the same code at reduced stream/trial
-count and marks the result as code validation, not current-geometry evidence.
-Production defaults use all physical channels 14--36, the circularly wrapped
-channel-14 weight profile, centered and half-fine-bin offsets, modeled
-2048-stream sums, empirical Pfa calibration, and a grid intended to bracket Pd
-crossings. The accelerated backend and literal audit are labeled separately.
+``--mode smoke --stage smoke`` runs the same code at a reduced stream and
+trial count and marks the result as code validation only. Production defaults
+use all physical channels 14 to 36, the circularly wrapped channel-14 weight
+profile, centered and half-fine-bin offsets, modeled 2048-stream sums,
+empirical Pfa calibration, and an SNR grid chosen to bracket the Pd crossings.
+Results of the accelerated backend and of the literal audit carry distinct
+labels.
 """
 from __future__ import annotations
 
@@ -676,15 +678,16 @@ def _study_config(
     }
     identity_payload = dict(config)
     identity_payload.pop("created_utc", None)
-    # Untracked paths are build products, not scientific identity. The study's
-    # own output directory is created by --stage prepare, so binding identity to
-    # the untracked list makes every later stage refuse its own run directory.
-    # Modified *tracked* sources still bind, so shards cannot be pooled across
-    # an edited working tree.
+    # Untracked paths are build products and are removed from the study
+    # identity. The study's own output directory is created by --stage prepare,
+    # so an identity bound to the untracked list would make every later stage
+    # refuse its own run directory. Modified tracked sources are still bound,
+    # so shards are never pooled across an edit to the working tree.
     identity_payload["software"] = _identity_software(config["software"])
-    # Device name and whether this particular command executed CUDA are shard
-    # provenance, not scientific-study identity.  The selected library hash is
-    # retained above, so mixed machines cannot silently mix kernel artifacts.
+    # The device name and the record of CUDA execution by this command are
+    # shard provenance and are removed from the study identity. The hash of the
+    # selected library stays in the identity, so shards made on different
+    # machines with different kernel artifacts are never pooled.
     identity_payload.pop("gpu_execution_at_config_creation", None)
     config["config_sha256"] = _sha256_bytes(_canonical_json_bytes(identity_payload))
     return config
@@ -802,12 +805,12 @@ def _channelize_one(
         response=response,
         spec=ReferenceChannelizerSpec(),
     )
-    # The checked-in current weights live in the
-    # post_nyquist_zone_normalized coordinate.  The reference rFFT output is
-    # already in that centered coordinate; applying the archive lower-edge
-    # conversion or the CHIME raw-input reversal here would move the pilot away
-    # from the manifest target.  ``_prepare_one_cache`` gates the resulting
-    # line against the geometry-predicted fine anchor.
+    # The checked-in weights are expressed in the post_nyquist_zone_normalized
+    # coordinate, and the reference rFFT output is already in that centered
+    # coordinate. The archive lower-edge conversion and the CHIME raw-input
+    # reversal are therefore not applied here, since either would move the
+    # pilot away from the manifest target. ``_prepare_one_cache`` checks the
+    # resulting line against the geometry-predicted fine anchor.
     return np.ascontiguousarray(selected[0])
 
 
@@ -1288,9 +1291,14 @@ def _aggregate_sufficient_pool(
 ) -> dict[str, Any]:
     """Draw current-geometry sums from empirical per-stream sufficient vectors.
 
-    This is a multivariate multiplier-CLT approximation. The same multiplier
-    vector is used for every fine bin and every stage, retaining the empirical
-    cross-bin and cross-ablation covariance learned from the common-noise pool.
+    The sums are drawn with a multivariate multiplier-CLT approximation. Each
+    trial sum is N times the pool mean plus sqrt(N / (n - 1)) times a weighted
+    sum of the centered pool vectors with standard Gaussian weights, where N is
+    the target stream count and n is the pool size. The same multiplier vector
+    is used for every fine bin and every stage, thus keeping the empirical
+    cross-bin and cross-ablation covariance of the common-noise pool. Negative
+    sums are clipped to zero, and the fixed-point stage is rounded to uint64
+    before the exact decision.
     """
     stage_order = list(FLOAT_RESPONSE_STAGES)
     pool_streams = int(args.sufficient_pool_streams)

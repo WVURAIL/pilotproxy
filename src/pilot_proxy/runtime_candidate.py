@@ -1,13 +1,12 @@
 """Attach recorded archive thresholds to runtime profiles for review.
 
-Use the frozen operating words as inputs; this builder does not select
-new thresholds. If the bundle includes channel 37, bind its recorded
-word as a noise control with status control and require its score
-metadata in the plan. Otherwise leave the candidate unchanged.
+The frozen operating words are taken as inputs, and no new threshold is
+selected. When the bundle has a channel 37 profile, its recorded word is
+bound as a noise control with status control, and the plan must name its
+score metadata. Otherwise, the candidate is left unchanged.
 
-The resulting bundle remains unqualified for activation. Physical power
-calibration and the consumer's masking granularity require their own
-checks.
+The resulting bundle stays unqualified for activation. Physical power
+calibration and the consumer's masking granularity need their own checks.
 """
 from __future__ import annotations
 
@@ -40,7 +39,7 @@ _REQUIRE = runtime_calibration._require
 
 
 def _current_coordinate_names(contract):
-    """The contract with coordinate names written by earlier releases renamed."""
+    """Return the contract with coordinate names from earlier releases renamed."""
     out = dict(contract)
     for key, rename in (("weight_coordinate_system", OLD_WEIGHT_COORDINATE_NAMES),
                         ("input_coordinate_system", OLD_INPUT_COORDINATE_NAMES)):
@@ -86,7 +85,7 @@ def _metadata_geometry(meta, channel):
              and all(type(b) is int for b in designated)
              and sorted(designated) == sorted((anchor + i) % 256 for i in range(-width, width + 1)),
              "Designated bins are not the runtime's contiguous anchor-centered set")
-    # optional bulk guard band beyond the designated set (anchors.bulk_mask marker_guard_bins)
+    # optional guard bins on each side of the designated set (anchors.bulk_mask marker_guard_bins)
     guard = runtime_calibration._integer(g.get("marker_guard_bins", 0), "marker_guard_bins", 0, 127 - width)
     exclusion = max(width + guard, 2)
     _REQUIRE(rank < len(bins) and not any((anchor + i) % 256 in bins
@@ -102,7 +101,13 @@ def _metadata_geometry(meta, channel):
 
 
 def _decision_population_replay(score_path, meta, decision):
-    """Reproduce the saved decision's selection without recomputing its forecast."""
+    """Reproduce the saved decision's selection without recomputing its forecast.
+
+    Every event must carry equal probability mass, split equally over its
+    frames. A frame is kept when it has rank support and its required Q16 word
+    is at most the deployed word. The kept frames, kept events and kept mass
+    fraction kappa are then compared with the decision record.
+    """
     with np.load(score_path, allow_pickle=False) as z:
         required, supported = z["required_q16"], z["supported"]
         event, weight = z["frame_event_index"], z["probability_weight"]
@@ -189,7 +194,7 @@ def _product_proof(meta, profile, contract, weight_bytes, base, bindings):
 
 
 def build_archive_candidate(plan_path, output_dir):
-    """Verify every input before writing a new, explicitly unqualified bundle."""
+    """Verify every input, then write a new bundle marked unqualified for activation."""
     plan_path = Path(plan_path).resolve()
     output = Path(output_dir).resolve()
     _REQUIRE(not output.exists(), "Output directory already exists")

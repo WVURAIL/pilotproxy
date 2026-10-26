@@ -22,7 +22,7 @@ _SPEC.loader.exec_module(v5_fixture)
 FRAMES = 120
 BASE = 1000                     # every exact term; T = 2 S_0 / (S_1 + S_2) = 1 on a flat null
 NOMINAL = 62                    # channel 36's grid residual, +739.7 Hz, the worked example's f_a
-PEDESTAL_BIN = 129              # odd: not an independent null-bulk bin, far from every line
+PEDESTAL_BIN = 129              # odd bin, not in the independent null bulk and far from every line
 
 
 def _product(tmp_path, *, on_lines=(), static_lines=(), late_on_lines=()) -> Path:
@@ -32,7 +32,7 @@ def _product(tmp_path, *, on_lines=(), static_lines=(), late_on_lines=()) -> Pat
     (the fixture's exact decision flags 60 of its 120 frames), ``static_lines``
     in every frame, ``late_on_lines`` only in coarse-detected frames of the
     last six of the twelve acquisitions. The health gate reads a per-frame
-    baseband power the threshold fixture lacks; an in-range value is added.
+    baseband power the threshold fixture lacks, so an in-range value is added.
     """
     path = v5_fixture._write_product(tmp_path / "506.npz", 36)
     v5_fixture._replace(path, baseband_power_linear=np.full((FRAMES, 1), 4.0))
@@ -49,12 +49,13 @@ def _product(tmp_path, *, on_lines=(), static_lines=(), late_on_lines=()) -> Pat
         fine[rejected, 0, b] = int(level * BASE)
     for b, level in late_on_lines:
         fine[rejected & (units >= 6), 0, b] = int(level * BASE)
-    # The coarse flag is decided by the frame powers, the all-bin sums of these
-    # fine powers (kernel core 3.0.0). A reference pedestal, equal in every
-    # frame, at an odd bin (outside the independent null bulk and every line)
-    # puts the decision between the quiet frames' target sum and the on
-    # frames' larger one, so the flag is exactly the coarse-detected set
-    # above; the pedestal's contrast between cohorts is zero.
+    # The coarse flag is decided by the frame powers, which are the all-bin sums
+    # of these fine powers (kernel core 3.0.0). A reference pedestal is added at
+    # an odd bin that is not in the independent null bulk or on any line, with the
+    # same value in every frame. It places the decision between the target sum
+    # of the quiet frames and the larger sum of the on frames, so the flag is
+    # exactly the coarse-detected set above. The contrast of the pedestal
+    # between cohorts is zero.
     quiet_target = int(fine[~rejected, 0].sum(axis=1).max())
     reference_sum = (quiet_target + 2 * BASE) * nrs // nt
     fine[:, 1, PEDESTAL_BIN] += np.uint64((reference_sum - 2 * FINE_BINS * BASE) // 2)
@@ -82,8 +83,8 @@ def test_on_minus_quiet_anchor_cancels_static_structure(tmp_path):
     assert r.designated_bins == (63, 64, 65, 66, 67)
     assert r.bulk_size == 126 and not r.bulk[list(r.designated_bins)].any()
     assert r.anchor_fine_hz == pytest.approx(65 * FINE_BIN_HZ)
-    # under sense -1 three bins above nominal is a small negative RF offset from the pilot: the nominal bin
-    # sits 0.566 Hz below the grid residual, so bin 65 is -(3 * 11.92 - 0.566) Hz = -35.20 Hz
+    # under sense -1, three bins above nominal is a small negative RF offset from the pilot. The nominal bin
+    # is 0.566 Hz below the grid residual, so bin 65 is -(3 * 11.92 - 0.566) Hz = -35.20 Hz
     assert r.anchor_rf_offset_hz == pytest.approx(-(3 * FINE_BIN_HZ) + (g.grid_residual_hz - NOMINAL * FINE_BIN_HZ), abs=1e-9)
     assert -3 * FINE_BIN_HZ - FINE_BIN_HZ / 2 < r.anchor_rf_offset_hz < -3 * FINE_BIN_HZ + FINE_BIN_HZ / 2
     assert r.boot_status == "skipped" and r.boot_replicates == 0 and np.isnan(r.boot_offset_bins_q16)
@@ -106,7 +107,7 @@ def test_rf_conversion_sign_follows_the_receiver_sense():
 
 
 def test_alias_flag_when_a_stronger_on_line_sits_outside_the_window(tmp_path):
-    # channel 33's situation: the strongest transmitter-state feature aliases far from the nominal lobe
+    # the channel 33 case, where the strongest transmitter-state feature aliases far from the nominal lobe
     path = _product(tmp_path, on_lines=[(65, 5.0), (200, 20.0)])
     with Product(path) as p:
         r = anchors.anchor(p, p.selected, replicates=0)
@@ -120,7 +121,7 @@ def test_alias_flag_when_a_stronger_on_line_sits_outside_the_window(tmp_path):
 
 
 def test_fallback_to_the_plain_median_without_a_quiet_cohort(tmp_path):
-    # an era whose frames are (almost) all coarse-detected: the text's channel-36 case,
+    # an era with nearly all frames coarse-detected, the channel-36 case of the text,
     # "the marked fallback median estimator rather than an on-minus-off difference"
     path = _product(tmp_path, on_lines=[(65, 5.0)], static_lines=[(64, 3.0), (200, 50.0)])
     early = np.arange(FRAMES) < 12
@@ -129,16 +130,16 @@ def test_fallback_to_the_plain_median_without_a_quiet_cohort(tmp_path):
         r = anchors.anchor(p, mostly_on, replicates=0)
     assert r.frames_masked == 66 and r.frames_on == 60 and 0 < r.frames_quiet < 30
     assert r.method == "median_fallback" and r.fallback_cohort == "on" and r.is_fallback
-    assert r.anchor_bin == 200 and r.anchor_contrast == 50.0        # the plain median: the strongest line
+    assert r.anchor_bin == 200 and r.anchor_contrast == 50.0        # the plain median picks the strongest line
     assert r.median_on[65] == 5.0 and r.median_quiet[65] == 1.0 and r.median_on[64] == 3.0
-    # too few coarse-detected frames: the plain median over all masked frames
+    # with too few coarse-detected frames, the plain median is taken over all masked frames
     with Product(path) as p:
         mostly_quiet = p.selected & (~p.rejected | early)
         r = anchors.anchor(p, mostly_quiet, replicates=0)
     assert r.frames_masked == 66 and 0 < r.frames_on < 30 and r.frames_quiet == 60
     assert r.method == "median_fallback" and r.fallback_cohort == "all"
     assert r.anchor_bin == 200 and r.contrast[64] == 3.0 and r.contrast[65] == 1.0
-    # the minimum is a parameter: with 60 quiet frames but a 61-frame minimum the fallback applies
+    # the minimum is a parameter, so 60 quiet frames under a 61-frame minimum take the fallback
     with Product(path) as p:
         r = anchors.anchor(p, p.selected, replicates=0, min_cohort_frames=61)
     assert r.method == "median_fallback" and r.fallback_cohort == "all" and r.anchor_bin == 200
@@ -156,7 +157,7 @@ def test_bulk_mask_parity_guard_and_census():
     for anchor_bin, mask in ((64, even), (65, odd)):
         assert not mask[list(anchors.designated_set(anchor_bin))].any()
         assert not mask[1::2].any()                       # alternate (even) bins only
-    # a census-excluded independent bin leaves the bulk; an odd one was never in it
+    # a census-excluded independent bin leaves the bulk, and an odd one was never in it
     assert anchors.bulk_mask(64, pad_factor=2, guard_fine_bins=1, census_excluded_bins=[10]).sum() == 124
     assert anchors.bulk_mask(64, pad_factor=2, guard_fine_bins=1, census_excluded_bins=[11]).sum() == 125
     # a guard narrower than the lobe still leaves D out (the bundle refuses otherwise)
@@ -185,11 +186,11 @@ def test_sorted_cohort_median_matches_blocks_weighted_quantile():
     rng = np.random.default_rng(11)
     n, bins = 50, 7
     values = np.round(rng.normal(size=(n, bins)), 1)        # rounding makes ties common
-    rows = np.arange(10, 10 + n)                              # the cohort sits inside a longer frame axis
+    rows = np.arange(10, 10 + n)                              # the cohort is a slice of a longer frame axis
     cohort = anchors.SortedCohort(values, rows)
     for trial in range(30):
         weights = np.zeros(200, dtype=np.int64)
-        weights[rows] = rng.integers(0, 4, size=n)            # zeros: acquisitions not drawn
+        weights[rows] = rng.integers(0, 4, size=n)            # zero weight for acquisitions not drawn
         if trial == 0:
             weights[rows] = 1                                 # the point estimate
         got = cohort.weighted_median(weights)
@@ -214,33 +215,33 @@ def test_bootstrap_is_deterministic_and_reports_the_mass_at_the_mode(tmp_path):
     np.testing.assert_array_equal(a.boot_samples, b.boot_samples)
     assert anchors.anchor_row(a) == anchors.anchor_row(b)
     assert c.boot_seed == 6 and c.anchor_bin == a.anchor_bin
-    # a line present in every acquisition is recovered by every replicate: zero-width interval, unit mass
+    # a line in every acquisition is recovered by every replicate, giving a zero-width interval and unit mass
     assert a.boot_mode_bin == 65 and a.boot_mode_mass == 1.0 and a.boot_mass_at_anchor == 1.0
     for name in ("q025", "q16", "q84", "q975"):
         assert getattr(a, f"boot_offset_bins_{name}") == 3.0
         assert getattr(a, f"boot_rf_hz_{name}") == pytest.approx(a.anchor_rf_offset_hz)
-    # too few acquisitions for the block bootstrap: the point estimate stands, the interval is blank
+    # with too few acquisitions for the block bootstrap, the point estimate is kept and the interval is blank
     assert few.boot_status == "insufficient_blocks" and few.anchor_bin == 65 and np.isnan(few.boot_mode_mass)
     assert few.boot_mode_bin == -1 and few.boot_samples.size == 0
-    # a second mask is a second era: the same function, its own label and cohorts
+    # a second mask is a second era, with the same function and its own label and cohorts
     assert half.label == "early" and half.frames_masked == 60 and half.method == "on_minus_quiet"
     assert half.anchor_bin == 65 and anchors.anchor_shift_bins(half, a) == 0
 
 
 def test_bootstrap_interval_moves_when_acquisitions_disagree(tmp_path):
-    # the lobe at 65 in every coarse-detected frame; a stronger line at 67 only in the last six acquisitions,
-    # so 67 wins a replicate exactly when those acquisitions carry more than half the drawn on frames
+    # the lobe is at 65 in every coarse-detected frame, and a stronger line is at 67 in the last six acquisitions
+    # only, so 67 wins a replicate exactly when those acquisitions carry more than half the drawn on frames
     path = _product(tmp_path, on_lines=[(65, 5.0)], late_on_lines=[(67, 8.0)])
     with Product(path) as p:
         r = anchors.anchor(p, p.selected, replicates=300)
         rf65, rf67 = (float(anchors.rf_offset_of_bin(b, p.geometry)) for b in (65, 67))
-    assert r.method == "on_minus_quiet" and r.anchor_bin == 65     # the six/six split: the lower median at 67 is null
+    assert r.method == "on_minus_quiet" and r.anchor_bin == 65     # with a six/six split, the lower median at 67 is null
     assert r.boot_offset_bins_q025 <= r.boot_offset_bins_q16 <= r.boot_offset_bins_q84 <= r.boot_offset_bins_q975
     assert r.boot_offset_bins_q025 == 3.0 and r.boot_offset_bins_q975 == 5.0
     assert set(np.unique(r.boot_samples)) == {3.0, 5.0}
     assert 0.0 < r.boot_mass_at_anchor < 1.0 and r.boot_mode_bin in (65, 67)
     assert r.boot_mode_mass == max(r.boot_mass_at_anchor, 1.0 - r.boot_mass_at_anchor)
-    # RF percentiles are ordered in RF: under sense -1 the higher bin is the lower RF offset
+    # RF percentiles are ordered in RF, and under sense -1 the higher bin is the lower RF offset
     assert r.boot_rf_hz_q025 == pytest.approx(rf67) and r.boot_rf_hz_q975 == pytest.approx(rf65)
     assert rf67 < rf65 < 0
 
@@ -320,16 +321,16 @@ def test_fine_and_psd_axes_agree_on_the_rf_offset_of_a_tone(tmp_path):
         assert abs(anchors.rf_offset_of_bin(fine_bin, g) - d) <= FINE_BIN_HZ / 2 + 1e-9
         psd_bin = (receiver / PSD_BIN_HZ) % NFFT
         assert g.psd_rf_offset_hz(np.array([psd_bin]))[0] == pytest.approx(d, abs=1e-6)
-    # the station itself: the nominal bin converts to +0.566 Hz, the grid residual above the bin center
+    # for the station itself, the nominal bin converts to +0.566 Hz, the grid residual above the bin center
     assert anchors.rf_offset_of_bin(NOMINAL, g) == pytest.approx(g.grid_residual_hz - NOMINAL * FINE_BIN_HZ)
 
 
 def test_rf_offset_shares_one_wrap_with_the_bin_offset(tmp_path):
-    """Offsets -128 and -127 are one fine bin apart in RF, not a coarse bin (the wrap is about the nominal bin)."""
+    """Offsets -128 and -127 are one fine bin apart in RF, since the wrap is about the nominal bin."""
     path = v5_fixture._write_product(tmp_path / "506.npz", 36)
     with Product(path) as p:
         g = p.geometry
-    assert g.grid_residual_hz > NOMINAL * FINE_BIN_HZ       # residual above the bin center: the case that used to jump
+    assert g.grid_residual_hz > NOMINAL * FINE_BIN_HZ       # residual above the bin center, where a misplaced wrap jumps a coarse bin
     bins = np.array([(NOMINAL + k) % FINE_BINS for k in (-128, -127, 0, 127)])
     offsets = anchors.unwrap_bins(bins, NOMINAL)
     assert offsets.tolist() == [-128, -127, 0, 127]
@@ -341,7 +342,7 @@ def test_rf_offset_shares_one_wrap_with_the_bin_offset(tmp_path):
 @pytest.mark.parametrize("anchor", [64, 65])
 def test_marker_guard_band_keeps_a_line_outside_the_markers_out_of_the_bulk(anchor):
     """A line 3 to 5 bins outside the markers (as on channels 22 and 28) enters the
-    default bulk; a 5-bin guard band keeps it out, so the rank ignores it."""
+    default bulk. A 5-bin guard band keeps it out, so the rank ignores it."""
     from pilot_proxy.detectors.narrowband_marker.scores import required_eta_q16_by_rank
 
     width = anchors.DESIGNATED_HALF_WIDTH

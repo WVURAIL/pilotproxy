@@ -16,9 +16,7 @@ from .paths import DEFAULT_LIB_PATH
 FINE_WINDOWS_PER_STREAM = 128
 
 
-# =============================================================================
-# Data Classes
-# =============================================================================
+# Data classes
 
 
 @dataclass
@@ -37,7 +35,7 @@ class KernelSpecs:
 
     @property
     def num_weight_terms(self) -> int:
-        """Number of detector weight terms, currently target/lower/upper."""
+        """Number of detector weight terms (target, lower, and upper)."""
         return int(self.N)
 
     @property
@@ -96,8 +94,9 @@ class KernelFeatures:
         }
 
 
-# Bind only the core major with the PilotProxy C API. Older libraries use a
-# different symbol namespace and must be rebuilt with their consumers.
+# Only the core major version is bound to the PilotProxy C API. Older
+# libraries use a different symbol namespace and must be rebuilt together with
+# their consumers.
 REQUIRED_CORE_MAJOR = 4
 
 
@@ -117,13 +116,11 @@ class KernelVersion:
         return f"{major}.{minor}.{patch}"
 
 
-# =============================================================================
-# Kernel Interface
-# =============================================================================
+# Kernel interface
 
 
 def _has_symbol(lib: ctypes.CDLL, name: str) -> bool:
-    # Missing exports raise AttributeError; reject null function pointers too.
+    # a missing export raises AttributeError, and a null function pointer is also rejected
     try:
         fn = getattr(lib, name)
         return bool(ctypes.cast(fn, ctypes.c_void_p).value)
@@ -253,8 +250,8 @@ class PilotProxyKernel:
 
         if not _has_symbol(self._lib, "PilotProxy_Create"):
             raise RuntimeError("Kernel library does not expose PilotProxy_Create.")
-        # Kernel core 3.0.0: the handle takes the packed input only; every
-        # output buffer is passed to the compute entry that writes it.
+        # In kernel core 3.0.0, the handle takes only the packed input, and
+        # each output buffer is passed to the compute entry that writes it.
         self._lib.PilotProxy_Create.argtypes = [
             ctypes.c_void_p,  # device packed input pointer
             ctypes.c_int,     # detector_rows_per_block
@@ -297,7 +294,7 @@ class PilotProxyKernel:
                 ctypes.c_void_p,  # device row-sum input pointer
                 ctypes.c_int,     # num_weight_terms
                 ctypes.c_int,     # num_streams
-                ctypes.c_int,     # windows_per_stream (frozen: 128)
+                ctypes.c_int,     # windows_per_stream (frozen at 128)
                 ctypes.c_int,     # batch
                 ctypes.c_void_p,  # device uint64 fine-power output pointer
             ]
@@ -495,8 +492,8 @@ class PilotProxyKernel:
     def create_raw(self, M: int, in_ptr: int):
         """Create a handle from a raw device input pointer.
 
-        Kernel core 3.0.0 handles own no output buffer: every output is passed
-        to the compute entry that writes it.
+        A kernel core 3.0.0 handle owns no output buffer, and each output is
+        passed to the compute entry that writes it.
         """
         rows = _checked_c_int(
             M,
@@ -561,8 +558,8 @@ class PilotProxyKernel:
 
         row_projections_ptr must address a device buffer of
         batch * num_weight_terms * detector_rows_per_block * 2 int32
-        elements; layout per the PilotProxy_Compute_RowSums_I32 contract
-        (term-major, stream-major rows, interleaved re/im).
+        elements. The layout follows the PilotProxy_Compute_RowSums_I32
+        contract (term-major, stream-major rows, interleaved re/im).
         """
         if not getattr(self, "_has_matched_filter_row_projections_i32", False):
             raise RuntimeError(
@@ -582,7 +579,7 @@ class PilotProxyKernel:
         return True
 
     def get_fine_specs(self) -> dict[str, int]:
-        """Frozen fine-reduction geometry compiled into the library."""
+        """Return the frozen fine-reduction geometry compiled into the library."""
         if not getattr(self, "_has_get_fine_specs", False):
             raise RuntimeError(
                 "Kernel library does not expose PilotProxy_GetFineSpecs."
@@ -609,12 +606,13 @@ class PilotProxyKernel:
     ):
         """Transform exact row projections into fine powers on the device.
 
-        Pass the buffer filled by compute_row_projections_i32: term-major,
-        stream-major rows with interleaved real/imaginary int32 components.
-        fine_powers_ptr must hold batch * num_weight_terms * 256 uint64
-        elements; the library zeros it before accumulation.
+        row_projections_ptr is the buffer filled by
+        compute_row_projections_i32, with term-major, stream-major rows and
+        interleaved real and imaginary int32 components. fine_powers_ptr
+        must hold batch * num_weight_terms * 256 uint64 elements, and the
+        library zeros it before accumulation.
 
-        Arithmetic follows the frozen fxfft256 v1 definition. This entry
+        The arithmetic follows the frozen fxfft256 v1 definition. This entry
         needs no handle, and windows_per_stream must be 128.
         """
         if not getattr(self, "_has_fine_powers_u64", False):
@@ -674,20 +672,20 @@ class PilotProxyKernel:
     ):
         """Compute exact fine powers and frame powers from packed samples.
 
-        The fused path, introduced in core 2.2.0, keeps row projections
-        in shared memory and accumulates fxfft256 v1 fine powers in one
-        launch. fine_powers_ptr holds batch * num_weight_terms * 256
-        uint64 elements, zeroed by the library before accumulation. Its
-        output matches the composed path bit for bit.
+        In the fused path (core 2.2.0), the row projections are kept in
+        shared memory and the fxfft256 v1 fine powers are accumulated in one
+        launch. fine_powers_ptr holds batch * num_weight_terms * 256 uint64
+        elements, which the library zeros before accumulation. The output
+        matches the composed path bit for bit.
 
-        powers_ptr holds batch * num_weight_terms uint64 elements. Since
-        core 3.0.0, each is the sum of the 256 finalized fine powers,
-        reduced after the fused launch. It equals fine.sum(axis=-1) on
-        the host exactly.
+        powers_ptr holds batch * num_weight_terms uint64 elements. In core
+        3.0.0 and later, each element is the sum of the 256 finalized fine
+        powers, reduced after the fused launch, and it equals
+        fine.sum(axis=-1) on the host exactly.
 
         An optional row_projections_tap_ptr receives the same layout and
-        bits as compute_row_projections_i32. Leave it zero in production
-        to avoid writing row projections to global memory.
+        bits as compute_row_projections_i32. It is zero in production, so no
+        row projections are written to global memory.
         """
         if not getattr(self, "_has_fused_fine_u64", False):
             raise RuntimeError(
@@ -715,7 +713,7 @@ class PilotProxyKernel:
         cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, powers_ptr=0,
         row_projections_tap_ptr=0,
     ):
-        """Fine decision v1 mask with optional frame-power and row-projection taps."""
+        """Compute the fine decision v1 mask with optional frame-power and row-projection taps."""
         self._compute_fused_fine_mask_u64(
             handle, weights_ptr, anchor_bin, designated_half_width, bulk_mask_words,
             cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, powers_ptr,
@@ -723,7 +721,7 @@ class PilotProxyKernel:
         )
 
     def supports_fused_fine_mask_with_support(self) -> bool:
-        """Return whether the additive full-rate rank-support outputs exist."""
+        """Return True when the additive full-rate rank-support outputs exist."""
         if not getattr(self, "_has_fused_fine_mask_with_support_u64", False):
             return False
         if getattr(self, "_has_supports_fused_fine_mask_with_support", False):
@@ -735,11 +733,12 @@ class PilotProxyKernel:
         cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, rank_valid_ptr,
         n_bulk_ptr, powers_ptr=0, row_projections_tap_ptr=0,
     ):
-        """Write mask bits and rank_valid and n_bulk int32[batch].
+        """Write the mask bits and the int32[batch] rank_valid and n_bulk outputs.
 
-        Rank validity is separate from input-health or calibration qualification.
-        All device output regions must be distinct. Required support outputs
-        receive (0, count) for insufficient rank support and (1, count) otherwise.
+        Rank validity does not cover input-health or calibration
+        qualification. All device output regions must be distinct. For
+        insufficient rank support, (0, count) is written to the required
+        support outputs, and (1, count) is written otherwise.
         """
         support = (
             _checked_uint64(rank_valid_ptr, field="rank_valid_ptr", positive=True),
@@ -767,23 +766,26 @@ class PilotProxyKernel:
         *,
         support: tuple[int, int] | None = None,
     ):
-        """Deployed form: packed samples and bundle constants in, one
-        mask bit per aligned frame out (kernel core 2.3.0).
+        """Run the deployed fused form of the fine decision (kernel core 2.3.0).
 
-        The fused datapath plus the frozen fine decision v1 epilogue
-        (bit-identical to ``pilot_proxy.fine_decision.fine_mask_decision``
-        over the same exact fine powers). ``bulk_mask_words`` is the
-        4-word packed 256-bit bulk mask (``fine_decision.pack_bulk_mask``).
-        ``mask_ptr`` must address ``batch`` int32 on the device (zeroed
-        by the library; doubles as the completion counter during the
-        launch). ``fine_powers_ptr`` is the required exact accumulator.
-        ``powers_ptr``, when nonzero, receives the frame powers
+        Packed samples and bundle constants go in, and one mask bit per
+        aligned frame comes out. The fused datapath is followed by the
+        frozen fine decision v1 epilogue, which is bit-identical to
+        ``pilot_proxy.fine_decision.fine_mask_decision`` over the same exact
+        fine powers. ``bulk_mask_words`` is the 4-word packed 256-bit bulk
+        mask (``fine_decision.pack_bulk_mask``). ``mask_ptr`` must address
+        ``batch`` int32 on the device. The library zeros this buffer and
+        also uses it as the completion counter during the launch.
+        ``fine_powers_ptr`` is the required exact accumulator.
+
+        When nonzero, ``powers_ptr`` receives the frame powers
         ``P_r = sum over the 256 fine bins of S_r[f]`` (batch *
-        num_weight_terms uint64, the same values ``compute_fused_fine_u64``
-        writes; kernel core 3.0.0) and ``row_projections_tap_ptr`` the exact
-        row projections; both are 0 in production. The decision never reads
-        the frame powers. anchor/width/rank/multiplier are runtime bundle
-        data.
+        num_weight_terms uint64, kernel core 3.0.0). These are the same
+        values that ``compute_fused_fine_u64`` writes. When nonzero,
+        ``row_projections_tap_ptr`` receives the exact row projections.
+        Both are 0 in production, and the frame powers are never read by
+        the decision. The anchor, width, rank, and multiplier are taken from
+        the runtime bundle.
         """
         symbol = "PilotProxy_Compute_FusedFineMaskWithSupport_U64" if support is not None else "PilotProxy_Compute_FusedFineMask_U64"
         feature = "_has_fused_fine_mask_with_support_u64" if support is not None else "_has_fused_fine_mask_u64"

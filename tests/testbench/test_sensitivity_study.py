@@ -137,8 +137,9 @@ def test_crossing_requires_an_observed_adjacent_bracket() -> None:
 
 
 def test_paired_bootstrap_reports_fixed_minus_float_loss() -> None:
-    # Deterministic toy curves with clear brackets.  Fixed responses are shifted
-    # one grid point toward higher SNR relative to float responses.
+    # Each deterministic curve crosses the target Pd between two adjacent SNR
+    # points. The fixed responses are shifted one grid point toward higher SNR
+    # than the float responses.
     snrs = [-3.0, -2.0, -1.0, 0.0]
     n = 80
     float_null = np.linspace(0.8, 1.2, n)

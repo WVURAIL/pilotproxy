@@ -1,18 +1,19 @@
 # PilotProxy
 
-PilotProxy detects the narrow ATSC 1.0 television pilot and uses its measured
-excess power to estimate the broadband DTV shelf. It provides the fixed-point
-GPU detector, archive reduction, threshold assignment, and runtime-bundle
-compiler used by the DTV papers.
+PilotProxy detects the narrow pilot of ATSC 1.0 digital television (DTV) and
+uses its measured excess power to estimate the broadband DTV shelf. It provides
+the fixed-point GPU detector, archive reduction, threshold assignment, and
+runtime-bundle compiler used by the DTV papers.
 
-**New here? Follow [the first-run walkthrough](docs/FIRST_RUN.md)** to install
-the code and reproduce a saved paper calculation without telescope access.
-Then read [the pipeline guide](docs/START_HERE.md). For equations, code
-locations, and verification tests, use [the paper/code map](docs/PAPER_CODE_MAP.md).
-The [terminology reference](docs/TERMINOLOGY.md) distinguishes the measured power
-ratios, rank-based detection score, and conditional forecast quantities.
+The [first-run walkthrough](docs/FIRST_RUN.md) describes how to install the
+code and reproduce a saved paper calculation without telescope access. It is
+followed by the [pipeline guide](docs/START_HERE.md). The equations, their code
+locations, and their verification tests are listed in
+[the paper/code map](docs/PAPER_CODE_MAP.md), and the
+[terminology reference](docs/TERMINOLOGY.md) defines the measured power ratios,
+the rank-based detection score, and the conditional forecast quantities.
 
-## Choose a workflow
+## Workflows
 
 | Goal | Entry point |
 |---|---|
@@ -25,12 +26,12 @@ ratios, rank-based detection score, and conditional forecast quantities.
 | Commission the kotekan integration | [Operator handoff](docs/OPERATOR_HANDOFF.md) |
 | Find an analysis or development utility | [Tools catalog](tools/README.md) |
 
-CHIME archive access requires collaboration credentials. This source tree is
-[WVURAIL/pilotproxy](https://github.com/WVURAIL/pilotproxy); access and data
-boundaries are recorded in [CHIME_DERIVED.md](CHIME_DERIVED.md).
+Access to the CHIME archive requires collaboration credentials. This source
+tree is [WVURAIL/pilotproxy](https://github.com/WVURAIL/pilotproxy), and its
+access and data boundaries are recorded in [CHIME_DERIVED.md](CHIME_DERIVED.md).
 [PROVENANCE.md](PROVENANCE.md) records the snapshot this repository starts from.
 
-## Install and check
+## Installation and checks
 
 Use a virtual environment with Python 3.10 or newer, then run from the checkout:
 
@@ -50,7 +51,7 @@ make test-gpu DETECTOR_WINDOW_SAMPLES=128
 
 The detector window is 128 samples for CHIME and 64 for CHORD. Each stream
 contains 128 windows per detector block. Receiver geometry, packing, and sample
-order are specified by a receiver profile, not inferred from the library name.
+order are specified by a receiver profile. The library name carries none of them.
 
 ```python
 from pilot_proxy.kernel import PilotProxyKernel
@@ -61,9 +62,9 @@ print(kernel.version.as_string())
 ```
 
 `PilotProxyKernel` binds the `PilotProxy_*` C API of detector core 4 in
-`libpilotproxy.so`. Rebuild the library and its callers together;
-[terminology](docs/TERMINOLOGY.md#native-names-before-core-4) maps the names of
-earlier cores.
+`libpilotproxy.so`. The library and its callers must be rebuilt together. The names
+of earlier cores are mapped in
+[the terminology reference](docs/TERMINOLOGY.md#native-names-before-core-4).
 
 ## Repository layout
 
@@ -78,11 +79,11 @@ earlier cores.
 | `tools/` | Explicit analysis, validation and maintenance commands |
 | `tools/archive/` | Study drivers that reproduce frozen records |
 | `docs/` | Contracts and operating guides |
-| `docs/evidence/`, `docs/runtime_freezes/` | Frozen receipts and provenance; not onboarding instructions |
+| `docs/evidence/`, `docs/runtime_freezes/` | Frozen receipts and provenance records |
 
-Development tools are not imported by the detector package. Frozen records stay
-separate from the guides. Generated data, figures, shared libraries and
-documentation PDFs belong in output/build directories.
+The detector package imports no development tool, and the frozen records are
+kept apart from the guides. Generated data, figures, shared libraries, and
+documentation PDFs are written to output and build directories.
 
 ## Scientific and compatibility boundaries
 
@@ -90,15 +91,17 @@ Each frame power is the all-bin sum of its fixed-point fine spectrum. Products
 use schema v6. Readers also open the papers' schema-v5 archives and form the
 same powers from their stored fine spectra.
 
-The threshold rule combines the measured shelf proxy with RFIsher's response,
+The threshold rule is formed from the measured shelf proxy, RFIsher's response,
 a measured stack-to-proxy amplitude ratio, and an assumed effective temporal
-gain. Assigned words are conditional candidates. A compiled bundle or a passing
-replay does not establish telescope safety or a cross-day BAO contamination bound.
+gain. Assigned words are conditional candidates. This package does not cover
+telescope safety or a cross-day baryon acoustic oscillation (BAO) contamination
+bound, and neither follows from a compiled bundle or a passing replay.
 
-The primary time comparison is the Overview's ideal calendar year: retaining
-fraction `kappa` costs `1 / kappa` years. [The pipeline guide](docs/START_HERE.md)
-documents the operating-duty option that reproduces the frozen records made
-with it.
+By default, the threshold rule counts time in the ideal calendar years of the
+CHIME Overview, where retaining a fraction `kappa` of the data costs `1 / kappa`
+years.
+[The pipeline guide](docs/START_HERE.md) documents the operating-duty option
+that reproduces the frozen records made with it.
 
 ## Maintainer checks
 
@@ -108,15 +111,15 @@ make test-python
 make docs-specs-check
 ```
 
-On a CUDA host also run `make test-gpu`. [Test coverage](docs/TEST_COVERAGE.md)
-explains the wider release checks. Preserve frozen inputs and records when
-changing source; new runs must record their own source and build identities.
-Do not regenerate dated evidence just to make a refactor pass.
+On a CUDA host, `make test-gpu` is also run. [Test coverage](docs/TEST_COVERAGE.md)
+describes the wider release checks. Frozen inputs and records stay unchanged when
+the source changes, and new runs record their own source and build identities.
+Dated evidence is never regenerated to make a refactor pass.
 
 ## Citation
 
 Use [CITATION.cff](CITATION.cff), the version from `pilot-proxy --version`, and
-the actual source/build identifiers of a run. See [CHANGELOG.md](CHANGELOG.md)
+the actual source and build identities of a run. See [CHANGELOG.md](CHANGELOG.md)
 for interface changes and [the survey trust contract](docs/survey_trust.md)
 for provenance and recovery rules.
 
@@ -124,9 +127,9 @@ for provenance and recovery rules.
 
 Plots and diagrams use the WVU colors from the
 [Beamer template](https://github.com/WVURAIL/wvu_beamer_template), with a standalone
-copy in `src/pilot_proxy/wvu_palette.py`. Update it with the template's
-`tools/export_plot_palette.py`. Blue denotes measurements; old gold provides
-contrast for model curves and small labels. Additional series use WVU accents
-and distinct markers or line styles where needed. Grayscale masks keep their
-binary meaning. Journal requirements take precedence; this palette does not
-change the numerical calculations or frozen records.
+copy in `src/pilot_proxy/wvu_palette.py`. The copy is updated with the template's
+`tools/export_plot_palette.py`. Blue marks measurements, and old gold marks model
+curves and small labels. Further series use the WVU accent colors with distinct
+markers or line styles where needed. Grayscale masks keep their binary meaning.
+Journal requirements take precedence over this palette, which changes no
+numerical calculation or frozen record.

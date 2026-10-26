@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Safely expose PilotProxy to a different Python interpreter."""
+"""Expose only the pilot_proxy package to a different Python interpreter."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _invocation_path(command: str | os.PathLike[str]) -> Path:
 
 
 def is_secondary_interpreter(command: str | os.PathLike[str] | None) -> bool:
-    """Return whether ``command`` names a different Python executable."""
+    """Return True when ``command`` names a different Python executable."""
     if command is None:
         return False
     # Do not use realpath/Path.resolve here: venv/bin/python commonly symlinks
@@ -43,9 +43,10 @@ def _create_package_entry(shim_root: Path, package_root: Path) -> Path:
             entry,
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
         )
-        # A source checkout stores runtime data beside ``src`` rather than
-        # under the import package. A copied fallback must look like an
-        # installed wheel so pilot_proxy.paths remains fully functional.
+        # A source checkout stores runtime data beside ``src``, and the copy
+        # has no ``src`` beside it. The data is therefore copied into the
+        # ``_resources`` layout of an installed wheel, where pilot_proxy.paths
+        # looks for it.
         resource_root = entry / "_resources"
         if not resource_root.is_dir():
             shutil.copytree(DATA_ROOT / "configs", resource_root / "configs")
@@ -62,12 +63,13 @@ def _create_package_entry(shim_root: Path, package_root: Path) -> Path:
 def package_only_pythonpath(
     command: str | os.PathLike[str] | None,
 ) -> Iterator[Path | None]:
-    """Provide a temporary import root containing only pilot_proxy.
+    """Yield a temporary import root that holds only pilot_proxy.
 
-    Use this bridge when launching a different Python interpreter. Keep
-    the primary interpreter's site-packages out of its search path so
+    The root is used when a different Python interpreter is launched. The
+    primary interpreter's site-packages are kept out of its search path, so
     NumPy, GNU Radio, and other dependencies come from the secondary
-    environment. Keep the temporary directory for the context's duration.
+    environment. The directory exists for the duration of the context. When
+    ``command`` is None or names the current interpreter, None is yielded.
     """
     if not is_secondary_interpreter(command):
         yield None

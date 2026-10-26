@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Normalize CHIME frame blocks into the locked detector input contract."""
+"""Pack CHIME frame blocks into the fixed complex int4 input format of the detector."""
 
 from __future__ import annotations
 

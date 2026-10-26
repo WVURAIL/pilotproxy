@@ -1,4 +1,8 @@
-"""Fail-closed campaign plumbing tests; no GPU and no scientific draws."""
+"""Tests that the fine-detector campaign driver fails closed on bad inputs.
+
+The plans, shards, bindings, and markers are synthetic. No GPU is needed and
+no scientific draws are made.
+"""
 
 from copy import deepcopy
 import hashlib

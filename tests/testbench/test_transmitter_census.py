@@ -1,9 +1,10 @@
 # coding=utf-8
-"""Transmitter-census case study: association, dispersion, correlation.
+"""Tests of association, dispersion, and correlation in the transmitter census.
 
-Synthetic fixture encodes the physical expectation the analysis is built to
-test: primaries hold tight offsets (disciplined exciters), non-primaries
-scatter wide, and channels with more translators show larger spread.
+The synthetic fixture follows the physical expectation that the analysis is
+built to test. Primary stations hold tight pilot offsets because their
+exciters are disciplined, non-primary stations scatter widely, and channels
+with more translators show a larger spread.
 """
 from __future__ import annotations
 
@@ -37,7 +38,11 @@ def _write_csv(path: Path, rows: list[dict]) -> Path:
 
 
 def _fixture(tmp_path, rng=None):
-    """14 channels; channel c has c-13 translators; primary tight, tx wide."""
+    """Write a census and a line list for channels 14 to 27.
+
+    Channel c has c - 14 translators. Primary offsets are drawn with an 8 Hz
+    standard deviation, and the offsets of translator k with 150(1 + k) Hz.
+    """
     rng = rng or np.random.default_rng(7)
     census, lines = [], []
     for ch in range(14, 28):
@@ -47,7 +52,7 @@ def _fixture(tmp_path, rng=None):
         lines.append({"rf_channel": ch,
                       "offset_hz": float(rng.normal(0, 8)),
                       "snr_db": 30.0})
-        for k in range(ch - 14):  # ch14 has none: anchors the low end
+        for k in range(ch - 14):  # ch14 has no translators and anchors the low end
             census.append({"rf_channel": ch, "callsign": f"K{ch}T{k}",
                            "service_class": "translator", "erp_kw": 1.0,
                            "distance_km": 120.0 + 10 * k})
@@ -90,7 +95,7 @@ def test_scored_census_ranks_by_detectability_then_distance(tmp_path):
     census = load_census(path)
     order = [t.callsign for t in
              sorted(census, key=lambda t: (-t.detectability, t.distance_km))]
-    assert order == ["A", "C", "B"]  # scored first; unscored by distance
+    assert order == ["A", "C", "B"]  # scored rows first, then unscored by distance
 
 
 def test_association_tiers_and_unassociated(tmp_path):
@@ -109,7 +114,7 @@ def test_association_tiers_and_unassociated(tmp_path):
     by_rank = {r["line_rank"]: r for r in recs}
     assert by_rank[0]["tier"] == "dominant" and by_rank[0]["callsign"] == "KPRI"
     assert by_rank[1]["service_class"] == "non_primary"
-    assert by_rank[2]["tier"] == "unassociated"  # more lines than census: a finding
+    assert by_rank[2]["tier"] == "unassociated"  # more lines than census entries, so the third line is reported as unassociated
 
 
 def test_dominant_secondary_pools_the_rest(tmp_path):
@@ -148,12 +153,12 @@ def test_end_to_end_recovers_class_and_correlation(tmp_path):
     assert rc == 0
     summary = json.loads((out / "summary.json").read_text())
     by = summary["by_class"]
-    # the constructed physics: primaries tight, translators wide
+    # primary offsets are tight and translator offsets wide
     assert by["primary"]["mad_hz"] < 40.0 < by["non_primary"]["mad_hz"]
-    # more translators -> larger spread, by construction. The all-channels
-    # statistic sees the full constructed relation; the qualifying statistic
-    # (pre-registered n>=3 rule) drops the 1- and 2-line anchor channels and
-    # is correspondingly weaker but still positive.
+    # Channels with more translators have a larger spread by construction. The
+    # all-channels statistic covers the full relation. The qualifying statistic
+    # (pre-registered n >= 3 rule) drops channels 14 and 15, which have 1 and 2
+    # lines, and is weaker but still positive.
     assert summary["spearman_rho_all_channels"] > 0.6
     assert summary["n_channels_qualifying"] == 12
     assert summary["spearman_rho"] > 0.4
@@ -181,17 +186,18 @@ def test_snr_threshold_filters_before_analysis(tmp_path):
     assert summary["by_class"]["primary"]["n"] == 14
 
 
-# -- line extraction from scan products ---------------------------------------
+# Line extraction from scan products
 
 def _fake_spectrum_product(dirpath, ch, freq_id, spikes, sense=1, nfft=4096,
                            pilot_minus_center_hz=0.0, kwin=128):
-    """Per-pilot npz with just the spectrum keys the extractor reads.
+    """Write a per-pilot npz with only the spectrum keys the extractor reads.
 
-    Encodes REAL product semantics: fs = 390625 Hz, bin_enbw_hz = fs/K (the
-    DETECTOR bin rather than the spectrum spacing), detector_window_samples = K,
-    spectrum spacing = fs/nfft. ``spikes``: [(offset_hz, snr_db), ...] about
-    the nominal pilot; the pilot can sit off-center so the full
-    center/sense/spacing mapping is exercised.
+    The keys follow the conventions of the production scan products. The
+    sample rate is fs = 390625 Hz, detector_window_samples = K, and
+    bin_enbw_hz = fs/K is the detector bin width. The spectrum bin spacing is
+    fs/nfft. ``spikes`` is a list of (offset_hz, snr_db) pairs about the
+    nominal pilot. The pilot can be placed off center, so that the full center,
+    sense, and spacing mapping is exercised.
     """
     fs = 390625.0
     spacing = fs / nfft
@@ -216,9 +222,12 @@ def _fake_spectrum_product(dirpath, ch, freq_id, spikes, sense=1, nfft=4096,
 
 
 def test_extract_matches_real_product_convention(tmp_path):
-    """Regression pinned to production numbers: ch26 (freq_id 660) has
-    sense=-1 and pilot 121941 Hz above center; the dominant carrier observed
-    at spectrum bin 11270 of 16384 must decode to about -16 Hz offset."""
+    """Decode a carrier with the production numbers of channel 26.
+
+    Channel 26 (freq_id 660) has sense = -1 and its pilot 121941 Hz above the
+    center frequency. The dominant carrier, observed at spectrum bin 11270 of
+    16384, must decode to an offset less than one spectrum bin from -16 Hz.
+    """
     from pilot_proxy.testbench.transmitter_census import extract_lines_from_run
     fs, nfft = 390625.0, 16384
     spacing = fs / nfft
@@ -241,9 +250,9 @@ def test_extract_matches_real_product_convention(tmp_path):
 
 def test_extract_never_calls_the_dc_spur_a_carrier(tmp_path):
     from pilot_proxy.testbench.transmitter_census import extract_lines_from_run
-    # pilot 18.7 kHz from center (the ch25 geometry): a huge DC spike sits
-    # inside the search window but must be guarded out; the true pilot line
-    # next to it must survive
+    # In the ch25 geometry, the pilot is 18.7 kHz from center, so a large DC
+    # spike falls in the search window. The spike must be guarded out, and the
+    # pilot line 18.7 kHz away must be kept.
     _fake_spectrum_product(tmp_path, 25, 675,
                            [(0.0, 20)], sense=-1,
                            pilot_minus_center_hz=-18_684.0)
@@ -260,9 +269,11 @@ def test_extract_never_calls_the_dc_spur_a_carrier(tmp_path):
 
 
 def test_prominence_rejects_sidelobe_skirt_keeps_isolated_line(tmp_path):
-    """A 40 dB carrier's leakage skirt (smoothly decaying, with few-dB
-    ripples) must yield exactly one line; an isolated 12 dB carrier away
-    from the skirt must survive."""
+    """A 40 dB carrier and its leakage skirt must give exactly one line.
+
+    The skirt decays smoothly with ripples of a few dB. An isolated 12 dB
+    carrier 8 kHz from the main carrier must also be kept.
+    """
     from pilot_proxy.testbench.transmitter_census import extract_lines_from_run
     fs, nfft, kwin = 390625.0, 4096, 128
     spacing = fs / nfft
@@ -271,8 +282,8 @@ def test_prominence_rejects_sidelobe_skirt_keeps_isolated_line(tmp_path):
     c = int(round(pilot_off / spacing)) % nfft   # carrier bin (sense=+1)
     spec[c] = 1e4                                # 40 dB carrier
     spec[c - 1] = spec[c + 1] = 10 ** 3.6        # leakage shoulder (36 dB)
-    for k in range(2, 60, 2):                    # skirt: ripple maxima every
-        for side in (-1, 1):                     # 2 bins, ~3 dB over valleys
+    for k in range(2, 60, 2):                    # skirt ripple maxima every
+        for side in (-1, 1):                     # 2 bins, 3 dB above the valleys
             skirt_db = 34.0 - 0.5 * k
             if skirt_db <= 3:
                 break
@@ -291,7 +302,7 @@ def test_prominence_rejects_sidelobe_skirt_keeps_isolated_line(tmp_path):
              detector_window_samples=np.asarray([kwin]))
     lines = extract_lines_from_run(tmp_path)
     offs = sorted(l.offset_hz for l in lines)
-    assert len(offs) == 2, offs                  # carrier + isolated only
+    assert len(offs) == 2, offs                  # main and isolated carriers only
     assert abs(offs[0] - 0.0) < spacing
     assert abs(offs[1] - 8000.0) < spacing
 
@@ -325,9 +336,9 @@ def test_extract_lines_window_threshold_separation(tmp_path):
     _fake_spectrum_product(tmp_path, 22, 660, pilot_minus_center_hz=70_000.0,
                            spikes=[
         (0.0, 30),          # kept
-        (50_000.0, 25),     # outside +/-30 kHz window
+        (50_000.0, 25),     # not in the +/-30 kHz search window
         (2000.0, 3),        # below 6 dB floor threshold
-        (500.0, 20), (540.0, 14),   # within 100 Hz: weaker one thinned
+        (500.0, 20), (540.0, 14),   # closer than 100 Hz, so the weaker line is thinned
     ])
     lines = extract_lines_from_run(tmp_path)
     offs = sorted(l.offset_hz for l in lines)
@@ -370,9 +381,11 @@ def test_lines_sources_are_mutually_exclusive(tmp_path):
 
 @requires_matplotlib
 def test_min_channel_lines_gates_figure_b_statistic(tmp_path):
-    """The pre-registered n>=3 rule: single-line channels are excluded from
-    the qualifying Spearman but still reported in the all-channels variant
-    and counted as excluded."""
+    """Single-line channels are excluded by the pre-registered n >= 3 rule.
+
+    Such channels are dropped from the qualifying Spearman correlation, kept
+    in the all-channels statistic, and counted in n_channels_excluded.
+    """
     census_rows = []
     (tmp_path / "work").mkdir()
     # three qualifying channels (3 lines each), one single-line channel

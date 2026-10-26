@@ -525,8 +525,8 @@ def test_calibrated_fine_block_validates_when_consistent(tmp_path, anchor) -> No
     profiles["profiles"][0]["fine_calibration"] = block
     _rewrite_profiles(outputs, profiles)
     report = validate_runtime_weight_bundle(bundle_dir=output_dir)
-    # only the sha256sums entry fails (profiles were rewritten in place);
-    # the fine_calibration block itself must contribute no errors
+    # the profiles were rewritten in place, so only the sha256sums entry fails
+    # and the fine_calibration block adds no errors
     checks = {e["check"] for e in report["errors"]}
     assert not any("fine_calibration" in c for c in checks), checks
 
@@ -593,7 +593,7 @@ def test_calibrated_fine_block_rejects_inconsistencies(tmp_path) -> None:
     base = {
         "status": "calibrated",
         "decision_version": "fine_decision_v1",
-        "anchor_bin": 62,  # anchor INSIDE a mask that never excluded it
+        "anchor_bin": 62,  # the anchor is in the bulk mask, since only bin 200 was designated
         "designated_half_width": 2,
         "bulk_mask_words_hex": [f"0x{w:016x}" for w in words],
         "cfar_rank": 5000,  # deeper than the bulk population

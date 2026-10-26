@@ -146,7 +146,7 @@ def load_project(directory: Path | str) -> Project:
 
 
 def default_project_dir() -> Path:
-    """The repository's project profile (or its copy inside an installed wheel)."""
+    """The repository's project profile, or its copy in an installed wheel."""
     return paths.DATA_ROOT / "projects" / DEFAULT_PROJECT_NAME
 
 

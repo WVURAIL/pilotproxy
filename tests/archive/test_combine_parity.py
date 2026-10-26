@@ -1,12 +1,14 @@
 # coding=utf-8
 """The combine step reproduces PilotProxy's multi-pilot detector products exactly.
 
-Two synthetic channels are processed two ways: (1) PilotProxy's ``run_chime_analysis``
-over both pilots at once (the reference), and (2) the archive detector analyzer
-per pilot followed by ``combine_detector_products`` (the candidate). The combined
-``chime_detector_outputs`` / ``chime_spectrogram_cache`` / ``chime_reductions_10s``
-must match the single-process run byte-for-byte (same writers, same stacked
-arrays). GPU-free via the same CPU-reference ``detector_fn`` pattern.
+Two synthetic channels are processed two ways. The reference is one
+``run_chime_analysis`` pass over both pilots. The candidate is the archive
+detector analyzer run per pilot, followed by ``combine_detector_products``.
+The combined ``chime_detector_outputs``, ``chime_spectrogram_cache``, and
+``chime_reductions_10s`` products must match the single-process run exactly,
+since both use the same writers and stack the same arrays. No GPU is needed,
+because the CPU-reference ``detector_fn`` of the other archive tests is
+injected.
 """
 from __future__ import annotations
 
@@ -37,15 +39,16 @@ NFFT = 16384
 K = 128
 N_FRAMES = 2
 N_FEEDS = 4
-CHANNELS = {14: 470.3125, 15: 476.3125}  # ATSC channel -> coarse-center (MHz)
+CHANNELS = {14: 470.3125, 15: 476.3125}  # ATSC channel to coarse-channel center (MHz)
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
 
 
 def _assert_npz_equal(ref_path, got_path):
     a = np.load(ref_path)
     b = np.load(got_path)
-    # chime-run stores the fine powers of its frame powers; a combine leaves
-    # them in the per-pilot products (checked against the runner below).
+    # chime-run stores the fine powers that are summed into its frame powers. A
+    # combine leaves them in the per-pilot products, which are compared with the
+    # runner output below.
     only_runner = {"fine_power_u64"} if ref_path.name == "chime_detector_outputs.npz" else set()
     assert set(a.files) - only_runner == set(b.files), (set(a.files) ^ set(b.files))
     for key in b.files:
@@ -71,7 +74,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
         p = input_dir / f"baseband_evt_{FREQ_IDS[ch]}.h5"
         fmt.make_synth_file(str(p), n_time=NFFT * N_FRAMES, n_feeds=N_FEEDS,
                             f_center_mhz=mhz, f_tone_bb=1200.0 + 10 * ch, seed=ch)
-        with h5py.File(p, "a") as h:   # timed inputs -> combined sample_rate = 1/delta_time
+        with h5py.File(p, "a") as h:   # timed inputs, so the combined sample_rate is 1/delta_time
             h.attrs["delta_time"] = 1.0 / fmt.FS
             h.attrs["time0_ctime"] = 1.0e9
         files[ch] = p
@@ -85,7 +88,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
     profile_path = tmp_path / "receiver_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict()), encoding="utf-8")
 
-    # reference: one runner pass over both pilots
+    # reference is one runner pass over both pilots
     ref_dir = tmp_path / "ref"
     run_chime_analysis(
         input_dir=input_dir, output_dir=ref_dir, receiver_profile_path=profile_path,
@@ -95,7 +98,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
         weights_by_channel=weights_by_channel,
     )
 
-    # candidate: analyzer per pilot, then combine
+    # candidate is the analyzer per pilot, followed by a combine
     inst = load_instrument("chime")
     reader = ChimeBasebandPackedReader()
     per_pilot = []
@@ -105,7 +108,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
             "weights": weights_by_channel[ch],
         })
         meta = dict(reader.probe(str(files[ch])))
-        meta["unit_key"] = str(files[ch])  # real path -> shared event after freq_id strip
+        meta["unit_key"] = str(files[ch])  # real path, so the event is shared once freq_id is stripped
         meta["scope"] = "local"
         red = PilotProxyDetectorAnalyzer()
         red.begin(ctx, meta)
@@ -127,8 +130,9 @@ def test_combine_matches_multipilot_runner(tmp_path):
     )
     np.testing.assert_array_equal(runner_fine, per_pilot_fine)
 
-    # F4: the new integrated_spectra stack matches each per-pilot product's spectra,
-    # in the combined product's (sorted) channel order, with the freq axis metadata.
+    # The integrated_spectra stack holds the spectra of each per-pilot product in
+    # the sorted channel order of the combined product, with the frequency-axis
+    # metadata.
     spec = np.load(out_dir / "chime_integrated_spectra.npz")
     assert spec["integrated_spectrum_before_mask"].shape == (len(CHANNELS), NFFT)
     per_by_ch = {int(np.load(p)["physical_channel"][0]): np.load(p) for p in per_pilot}
@@ -144,14 +148,14 @@ def test_combine_matches_multipilot_runner(tmp_path):
     assert float(spec["sample_rate_hz"]) == pytest.approx(fmt.FS)
     assert list(np.asarray(spec["freq_id"])) == [FREQ_IDS[ch] for ch in sorted(CHANNELS)]
 
-    # F3: validate-products must accept the combined scan output unchanged.
+    # validate-products must accept the combined scan output unchanged
     from pilot_proxy.chime.validate_products import validate_products
     report = validate_products(run_dir=out_dir)
     assert report["valid"], report["errors"]
 
-    # prep for the deferred 6 MHz mask-expansion: each pilot's coarse-channel
-    # freq_id is recorded in stats.json, in the same physical_channel order the
-    # detector products are stacked (ch14 -> 844, ch15 -> 829).
+    # The coarse-channel freq_id of each pilot is recorded in stats.json, in the
+    # physical_channel order of the stacked detector products (844 for ch14 and
+    # 829 for ch15). This record is kept for the deferred 6 MHz mask expansion.
     stats = json.loads((out_dir / "stats.json").read_text(encoding="utf-8"))
     assert stats["freq_id_by_pilot"] == [FREQ_IDS[ch] for ch in sorted(CHANNELS)]
     input_manifest = json.loads(

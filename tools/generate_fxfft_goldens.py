@@ -2,25 +2,29 @@
 # coding=utf-8
 """Generate the frozen golden-vector suite for fxfft256 v1.
 
-Deterministic by construction (fixed seeds, frozen spec): rerunning this
-script must reproduce ``tests/data/fxfft256_golden_v1.npz`` byte-for-byte
-in its arrays. The stored *outputs* are produced by the Python reference;
-the test suite bit-compares both the Python and C implementations against
-this file, so a regression in either implementation cannot self-confirm.
+The suite is deterministic, with fixed seeds and a frozen specification.
+Rerunning this script must reproduce the arrays of
+``tests/data/fxfft256_golden_v1.npz`` byte for byte. The stored outputs are
+produced by the Python reference. Both the Python and C implementations are
+compared bit for bit with this file by the test suite, so a regression in
+either implementation cannot confirm itself.
 
-Families:
+The vector families are:
 
-* ``zero``, ``impulse``, ``dc`` --- exactness anchors (no-rounding paths).
-* ``phasor`` --- coherent lines at the survey-measured pilot offsets of
-  the first three scanned channels (+739 Hz / +1287 Hz / +1216 Hz for
-  ch36 / ch35 / ch34), a half-bin scalloping case, and a low bin.
-* ``phasor_noise`` --- lines embedded in Gaussian row-sum noise.
-* ``noise_h0`` --- noise-only frames at three amplitude scales.
-* ``int4_dot`` --- exact integer dot products of int4 samples against an
-  int4 weight row: the deployed row-sum arithmetic and dynamic range.
-* ``stress`` --- deployed-maximum (2**14) and contract-maximum (2**20)
-  patterns exercising the no-overflow headroom analysis.
-* ``random`` --- seeded uniform vectors at both bounds.
+* ``zero``, ``impulse``, and ``dc``: exactness anchors on paths with no
+  rounding.
+* ``phasor``: coherent lines at the survey-measured pilot offsets of the
+  first three scanned channels (+739 Hz, +1287 Hz, and +1216 Hz for ch36,
+  ch35, and ch34), a half-bin scalloping case, a low bin, and a line with a
+  nonzero phase.
+* ``phasor_noise``: lines in Gaussian row-sum noise.
+* ``noise_h0``: noise-only frames at three amplitude scales.
+* ``int4_dot``: exact integer dot products of int4 samples with an int4
+  weight row, which have the arithmetic and dynamic range of the deployed
+  row sums.
+* ``stress``: patterns at the deployed maximum (2**14) and the contract
+  maximum (2**20) for the no-overflow headroom analysis.
+* ``random``: seeded uniform vectors at both bounds.
 """
 from __future__ import annotations
 
@@ -97,7 +101,7 @@ def main() -> None:
         s = rng.integers(-8, 8, size=(128, 128, 2))  # windows x K samples
         wr, wi = w[:, 0], w[:, 1]
         sr, si = s[..., 0], s[..., 1]
-        # z[m] = sum_k s[m,k] * conj(w[k]) — exact integer dot per window
+        # z[m] = sum_k s[m,k] * conj(w[k]), an exact integer dot per window
         zr = (sr * wr + si * wi).sum(axis=1)
         zi = (si * wr - sr * wi).sum(axis=1)
         add("int4_dot", np.stack([zr, zi], axis=-1))

@@ -350,14 +350,14 @@ def test_selected_weight_coefficients_identity_binds_shape_dtype_and_bytes() -> 
 def test_wilson_interval_closed_form() -> None:
     from pilot_proxy.testbench.evaluate_snr import wilson_interval
 
-    # n=0 -> undefined
+    # undefined for n = 0
     lo, hi = wilson_interval(0, 0)
     assert lo != lo and hi != hi  # NaN
-    # symmetric midpoint case, n=100, k=50: lo/hi ~ 0.404 / 0.596
+    # symmetric midpoint case, n = 100 and k = 50, with lo/hi about 0.404 / 0.596
     lo, hi = wilson_interval(50, 100)
     assert lo == pytest.approx(0.40383, abs=2e-4)
     assert hi == pytest.approx(0.59617, abs=2e-4)
-    # edge rates stay inside [0, 1] and are non-degenerate
+    # edge rates stay in [0, 1] and are non-degenerate
     lo, hi = wilson_interval(0, 10)
     assert lo == 0.0 and 0.0 < hi < 0.35
     lo, hi = wilson_interval(10, 10)
@@ -559,8 +559,8 @@ def test_cpu_reference_measurements_match_exact_integers() -> None:
     from pilot_proxy.testbench.evaluate_snr import _cpu_reference_measurements
 
     rng = np.random.default_rng(42)
-    # One whole 128-window stream: the kernel's frame powers are the all-bin
-    # sums of the fxfft256 fine powers (kernel core 3.0.0).
+    # The packed input is one whole 128-window stream. In kernel core 3.0.0
+    # the frame powers are the all-bin sums of the fxfft256 fine powers.
     packed = rng.integers(-128, 128, size=(128, 128), dtype=np.int16).astype(np.int8)
     weights = rng.integers(-128, 128, size=(3, 128), dtype=np.int16).astype(np.int8)
 
@@ -572,7 +572,8 @@ def test_cpu_reference_measurements_match_exact_integers() -> None:
     assert sums.dtype == np.dtype(np.uint64)
     assert out["p_target_u64"] == int(sums[0])
     assert out["p_ref_sum_u64"] == int(sums[1]) + int(sums[2])
-    # The kernel's semantics, by the independent exact chain.
+    # The fine powers are recomputed by the independent exact chain, and each
+    # frame power must equal their all-bin sum.
     from pilot_proxy.detector_reference import (
         matched_filter_row_projections_cpu_reference_packed,
     )
@@ -640,7 +641,7 @@ def test_cpu_reference_threshold_mask_is_exact_at_the_boundary() -> None:
                  pilot_capture_efficiency=1.0, dtv_bandwidth_hz=6.0e6)
     weights = np.ones((3, 4), dtype=np.int8)
 
-    # Direct rational-half rule: mask iff p_t * den > num * p_ref, strictly.
+    # The rational-half rule sets the mask iff p_t * den > num * p_ref (strict).
     def _mask(p_t, p_ref, num, den):
         out = _measurements_from_powers(
             diagnostic_float=1.0, p_target=p_t,
@@ -651,7 +652,7 @@ def test_cpu_reference_threshold_mask_is_exact_at_the_boundary() -> None:
             overflow=0, **calib)
         return out["mask"]
 
-    assert _mask(50, 90, 5, 9) == 0   # 50*9 == 5*90: equality is no excess
+    assert _mask(50, 90, 5, 9) == 0   # 50*9 == 5*90, and equality is no excess
     assert _mask(51, 90, 5, 9) == 1
     assert _mask(10, 0, 5, 9) == 0    # invalid reference floor
 
@@ -669,9 +670,12 @@ def test_cpu_reference_threshold_mask_is_exact_at_the_boundary() -> None:
 
 @pytest.mark.cuda
 def test_kernel_measurements_equal_the_cpu_reference_exactly() -> None:
-    """The CUDA backend reads the device frame powers (core 3.0.0: the
-    all-bin sums of the device fine powers) and forms the diagnostic and the
-    rational-half mask on the host; every field equals the CPU reference."""
+    """Every field of the CUDA backend equals the CPU reference.
+
+    In core 3.0.0, the device frame powers read by the CUDA backend are the
+    all-bin sums of the device fine powers. The diagnostic and the
+    rational-half mask are then formed on the host.
+    """
     import numpy as np
 
     cp = pytest.importorskip("cupy")
@@ -722,15 +726,15 @@ def test_waveform_audit_calibration_flag_parses() -> None:
 
 
 def test_defaults_are_the_matched_clean_pilot_configuration() -> None:
-    """The parser defaults must be the combination the clean pilot satisfies.
+    """The parser defaults are the combination the clean pilot satisfies.
 
-    The archive phase convention's half-rate factor displaces the channelized
-    pilot by half a coarse channel relative to the shipped weight layouts, so
-    with it applied the detector measures noise at every SNR regardless of
-    Nyquist zone, with the requested SNR still tracking perfectly. Measured on
-    channel 14: clean normalized ratio 121 with these defaults against 1.1
-    for every other combination, and the startup guard enforces whichever
-    combination is configured.
+    The half-rate factor of the archive phase convention displaces the
+    channelized pilot by half a coarse channel from the shipped weight
+    layouts. With the convention applied, the detector measures noise at every
+    SNR in either Nyquist zone, and the requested SNR still tracks perfectly.
+    On channel 14, the clean normalized ratio is found to be 121 with these
+    defaults and 1.1 for every other combination. The startup guard enforces
+    whichever combination is configured.
     """
     args = evaluate_snr.build_parser().parse_args(["--input-iq", "x.cfile"])
     assert args.nyquist_zone == 1
@@ -763,11 +767,12 @@ def _guard_layout(window: int, target_bin: int) -> dict:
 
 
 def test_clean_pilot_guard_accepts_a_line_the_statistic_sees() -> None:
-    """A line the coarse statistic resolves onto its target term must pass.
+    """A line that the coarse statistic resolves onto its target term passes.
 
-    The weight rows are ``exp(-2j*pi*f*n)`` and the statistic correlates
-    against their conjugates, so the passing tone is the one at ``-f`` -- the
-    statistic, not an independent FFT, is the arbiter of "on target".
+    The weight rows are ``exp(-2j*pi*f*n)``, and the statistic correlates
+    against their conjugates, so the passing tone is the one at ``-f``. "On
+    target" is judged by the statistic itself, since an independent FFT can use
+    a different frequency convention.
     """
     window, windows, target_bin = 128, 8, 1
     layout = _guard_layout(window, target_bin)
@@ -792,7 +797,7 @@ def test_clean_pilot_guard_accepts_a_line_the_statistic_sees() -> None:
 
 
 def test_clean_pilot_guard_rejects_a_mirrored_line() -> None:
-    """A line in the conjugate bin must be an error, not a curve made of noise."""
+    """A line in the conjugate bin stops the run with an error before any noise is swept."""
     window, windows, target_bin = 128, 8, 1
     layout = _guard_layout(window, target_bin)
     weights = evaluate_snr._ideal_float_weights_from_layout(
@@ -817,10 +822,11 @@ def test_clean_pilot_guard_rejects_a_mirrored_line() -> None:
 def test_default_configuration_passes_the_clean_pilot_guard() -> None:
     """The full synthesis chain at the parser defaults satisfies the guard.
 
-    Pins the matched quadrant end-to-end: a clean channel-14 pilot tone
-    channelized with the defaults passes, and applying the archive phase
-    convention -- whose half-rate factor displaces the pilot by half a coarse
-    channel -- must fail the guard rather than sweep noise.
+    This test pins the matched quadrant end to end. A clean channel-14 pilot
+    tone channelized with the defaults passes the guard. With the archive
+    phase convention applied, its half-rate factor displaces the pilot by half
+    a coarse channel, and the run is stopped by the guard before any noise is
+    swept.
     """
     args = evaluate_snr.build_parser().parse_args(
         [

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Create a complete synthetic policy example, never a telescope release.
+"""Create a complete, synthetic operating-policy example for a command rehearsal.
 
-The decisions are synthetic threshold-rule output for three channels: channel
-14 not deployed, channel 29 deployed at Q16=65536, and the channel 37 control
-band, which a DTV policy leaves out. The bundle is exported on the CHIME
-receiver profile, and channel 29's profile is marked as carrying its word.
+The decisions are synthetic threshold-rule output for three channels. Channel
+14 is not deployed, channel 29 is deployed at Q16=65536, and the channel 37
+control band is reported with no DTV assignment. The bundle is exported on the
+CHIME receiver profile, and the profile of channel 29 is given the deployed
+word as its CFAR multiplier.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ def file_ref(path):
 
 
 def synthetic_decisions():
-    """Threshold-rule rows for the example: one channel per outcome and the control band."""
+    """Return threshold-rule rows for one channel of each outcome and for the control band."""
     return {"inputs": {"note": "synthetic example; no score cache or tolerance table was read"}, "channels": [
         {"channel": 14, "outcome": "not useful", "reason": "above tolerance", "deployed_at": None,
          "deployed_word": None, "knee_word": 70000},
@@ -49,7 +50,7 @@ def synthetic_decisions():
 
 
 def make_example(output_dir):
-    """Write new, self-contained inputs and the policy plan that compiles them."""
+    """Write new, self-contained inputs and their policy plan, and return the plan path."""
     out = Path(output_dir).resolve()
     out.mkdir(parents=True, exist_ok=False)
     receiver_path = out / "receiver_profile.json"

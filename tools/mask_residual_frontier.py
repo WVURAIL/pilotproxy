@@ -1,39 +1,41 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""The mask-versus-residual frontier from synthetic truth, at the production geometry.
+"""Compute the mask-versus-residual frontier from synthetic truth at the production geometry.
 
-Chapter 6 (``sec:detection:synthetic``, ``fig:detection:frontier``) asks for
-the frontier of ``eq:detection:frontier`` drawn against a contamination whose
-value is *known*: one unsmoothed curve per rank ``rho`` in the (surviving
-injected contamination, masked fraction) plane with ``eta`` labeling points
-along each curve, at several duty cycles, with trial-bootstrap intervals; a
-second panel setting what the histogram cumulative sums of
-``eq:detection:histogram`` claim survives beside what was actually injected
-into the frames the mask kept; and the before-and-after frame-averaged fine
-spectra at a loud and a sub-noise shelf.
+Chapter 6 (``sec:detection:synthetic``, ``fig:detection:frontier``) shows the
+frontier of ``eq:detection:frontier`` drawn against a contamination of known
+value. In panel (a), one unsmoothed curve per rank ``rho`` is drawn in the
+(surviving injected contamination, masked fraction) plane at several duty
+cycles, with ``eta`` labeling points along each curve and with
+trial-bootstrap intervals. Panel (b) compares the residual reported by the
+histogram cumulative sums of ``eq:detection:histogram`` with the
+contamination actually injected into the frames the mask kept. Panel (c)
+shows the frame-averaged fine spectra before and after masking for a loud and
+a sub-noise shelf.
 
-The second panel is the point of the exercise.  Every residual the archive
-analysis reports is a prefix sum over a residual-score histogram whose
-per-frame entries are estimates.  On the archive the truth is unknown, so the
-estimator has never been checked against one.  Here the bench decides frame by
-frame whether a shelf was injected and at what level, so the same prefix sums
-can be totaled over the same kept frames for the claim and for the truth.
+Panel (b) is the purpose of this study. Every residual reported by the
+archive analysis is a prefix sum over a residual-score histogram, and each
+per-frame entry of that histogram is an estimate. On the archive the truth is
+unknown, so the estimator has not been tested against it. On the bench, the
+presence and level of the injected shelf are set frame by frame, so the same
+prefix sums can be totaled over the same kept frames for the claim and for the
+truth.
 
-Nothing in the masking path is re-derived for the bench.  The per-rank Q16
-boundary, the keep rule, the empirical candidate staircase, the retained-frame
-floor and the shelf-or-floor residual convention are transcribed in
+The masking path is not re-derived for the bench. The per-rank Q16 boundary,
+the keep rule, the empirical candidate staircase, the retained-frame floor and
+the shelf-or-floor residual convention are transcribed in
 ``pilot_proxy.testbench.mask_frontier`` from the detector's score and
 characterization modules (``pilot_proxy.detectors.narrowband_marker.scores``,
-``pilot_proxy.characterization.surface`` and ``.nulls``); a frontier drawn with a
-different rule would validate nothing.  The waveform, reference-PFB
-normalization, weight profile, designated set and bulk mask come from
-``tools/current_geometry_sensitivity.py`` so that these frames are the frames
-the crossing and representation-loss results were measured on.
+``pilot_proxy.characterization.surface`` and ``.nulls``). A frontier drawn
+with a different rule would not test the archive estimator. The waveform,
+reference-PFB normalization, weight profile, designated set and bulk mask are
+taken from ``tools/current_geometry_sensitivity.py``, so these frames are the
+same frames used for the crossing and representation-loss results.
 
 The transmitter is switched on and off across frames at a declared duty cycle,
-so the off frames are a null population whose membership is known rather than
-inferred.  A second, disjoint off population supplies the channel floor the
-archive way: the 90th percentile of its finite shelf estimates.
+so the off frames form a null population of known membership. A second,
+disjoint off population sets the channel floor as in the archive analysis, at
+the 90th percentile of its finite shelf estimates.
 
 Stages::
 
@@ -56,22 +58,23 @@ Stages::
         --output-dir <new dir>
 
 ``--stage rederive`` re-expresses stored frames under the core 3.0.0 frame
-power, ``P_r = sum_f fine_power_u64[:, r, f]``: it writes ``frame_powers_u64``
+power, ``P_r = sum_f fine_power_u64[:, r, f]``. It writes ``frame_powers_u64``
 and recomputes ``normalized_excess`` and ``shelf_estimate_db`` from those sums
-with the same per-frame functions the generator uses, copying every other
-member and ``signal_cache/`` unchanged. ``study_config.json`` is carried over
-with the current schema version and a ``rederived_from`` record of the stored
-identity, and every shard's ``config_sha256`` names the new identity. Before it writes
-anything it recomputes each shard's stored excess and shelf from the shard's
-own stored frame powers (``coarse_marginals_u64``, the earlier core's row-domain
-sums, or ``frame_powers_u64``) and refuses unless both reproduce bit for bit.
-The source is only read; the output directory must not already hold frames.
-The ``report`` and ``figure`` stages then run on the output directory; the
-report accepts a stored study whose identity differs from the recomputed one
-only in the ``software`` block or in input paths with unchanged digests.
+with the same per-frame functions used by the generator. Every other member
+and ``signal_cache/`` are copied unchanged. ``study_config.json`` is carried
+over with the current schema version and a ``rederived_from`` record of the
+stored identity, and every shard's ``config_sha256`` names the new identity.
+Before anything is written, each shard's stored excess and shelf are
+recomputed from the shard's own stored frame powers (``coarse_marginals_u64``,
+the row-domain sums of the earlier core, or ``frame_powers_u64``), and the
+stage stops unless both are reproduced bit for bit. The source is only read,
+and the output directory must not already hold frames. The ``report`` and
+``figure`` stages then run on the output directory. The report accepts a
+stored study whose identity differs from the recomputed one only in the
+``software`` block or in input paths with unchanged digests.
 
 ``--num-streams`` below 2048 requires ``--allow-reduced-geometry`` and stamps
-every product as reduced; a reduced run is code validation, not evidence.
+every product as reduced. A reduced run is used for code validation only.
 """
 from __future__ import annotations
 
@@ -163,7 +166,7 @@ DEFAULT_FRAMES_FLOOR = 1000
 DEFAULT_BOOTSTRAP = 2000
 DEFAULT_SEED = 20260907
 
-# The bench decides these labels rather than reading them off a spectrum.
+# regime labels for the plates, set from the declared shelf levels
 LOUD_LABEL = "loud"
 SUBNOISE_LABEL = "sub-noise"
 
@@ -177,7 +180,7 @@ def _label(value: float) -> str:
 
 
 def _shelf_offset_db(args: argparse.Namespace) -> float:
-    """The deterministic pilot-excess to data-shelf offset of this geometry."""
+    """Return the deterministic pilot-excess to data-shelf offset of this geometry (dB)."""
     return (
         float(args.pilot_below_data_db)
         - spreading_loss_db_from_bin_enbw_hz(
@@ -188,13 +191,13 @@ def _shelf_offset_db(args: argparse.Namespace) -> float:
 
 
 class DeviceFrameSource:
-    """2048-stream packed frames built on the device, exact powers off it.
+    """Pack 2048-stream frames on the device and return their exact powers to the host.
 
-    The packing is the deployed one: ``round`` to the signed 4+4 grid at the
-    declared input scale, clipped, real in the high nibble.  ``--stage audit``
-    checks the device packing against ``quantize_complex_numpy`` and the device
-    fine powers against the exact CPU reference on real frames rather than
-    asserting the port.
+    The packing matches the deployed packing. Each component is rounded to the
+    signed 4+4 grid at the declared input scale and clipped, and the real part
+    is placed in the high nibble. ``--stage audit`` tests the port on real
+    frames. It compares the device packing with ``quantize_complex_numpy`` and
+    the device fine powers with the exact CPU reference.
     """
 
     def __init__(self, args, profile, signal_rows, *, gpu):
@@ -260,7 +263,7 @@ class DeviceFrameSource:
         return host_fine, host_powers, clipped
 
     def host_packed(self, *, seed: int, amplitude: float) -> np.ndarray:
-        """The same frame packed on the host, for the audit."""
+        """Return the same frame packed on the host for the audit."""
         cp = self.cp
         rows = self.streams * WINDOWS
         generator = cp.random.default_rng(int(seed) % (1 << 63))
@@ -341,8 +344,8 @@ def _run_generate(args, profile, gpu) -> int:
             boundaries = required_multipliers_by_rank(
                 powers, designated=profile.designated, bulk_mask=profile.bulk_mask
             )
-            # 0 is not a deployable boundary; it is this product's
-            # always-masked sentinel, so the stored column stays uint64.
+            # A boundary of 0 cannot be deployed, so 0 is used as the
+            # always-masked sentinel and the stored column stays uint64.
             required[index] = np.asarray(
                 [0 if value == ALWAYS_MASKED_Q16 else value for value in boundaries],
                 dtype=np.uint64,
@@ -441,7 +444,7 @@ def _run_audit(args, profile, gpu) -> int:
             cpu_fine = cgs._fixed_fine_powers_by_stream(
                 projections.astype(np.int32), num_streams=int(args.num_streams)
             ).sum(axis=0, dtype=np.uint64)
-            # Frame powers: the all-bin sums of the fine powers (core 3.0.0).
+            # frame powers are the all-bin sums of the fine powers (core 3.0.0)
             cpu_frame_powers = tuple(
                 sum(int(value) for value in cpu_fine[term]) for term in range(3)
             )
@@ -511,7 +514,7 @@ _STORED_FRAME_POWERS = {
 def _excess_and_shelf(
     powers: np.ndarray, meta: Mapping[str, Any]
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The generator's per-frame excess and shelf for stored frame powers."""
+    """Return the generator's per-frame excess and shelf for stored frame powers."""
     count = int(powers.shape[0])
     excess = np.zeros(count, dtype=np.float64)
     shelf = np.zeros(count, dtype=np.float64)
@@ -542,7 +545,7 @@ def _config_digest(payload: Mapping[str, Any]) -> str:
 def rederived_study_config(
     config: Mapping[str, Any], *, source_file_sha256: str
 ) -> dict[str, Any]:
-    """The stored study's configuration under the current frame-power schema."""
+    """Return the stored study's configuration under the current frame-power schema."""
     payload = {key: value for key, value in config.items() if key != "config_sha256"}
     payload["schema_version"] = MASK_FRONTIER_SCHEMA
     payload["rederived_from"] = {
@@ -561,10 +564,10 @@ def rederive_shard(
     """Re-express one stored shard under the fine-sum frame power.
 
     Returns the re-derived members (the generator's field set) and a summary
-    row; nothing is written. Refuses (``SystemExit``) unless the shard's
+    row, and writes nothing. ``SystemExit`` is raised unless the shard's
     stored excess and shelf are reproduced bit for bit from its own stored
-    frame powers, so the re-derivation uses exactly the arithmetic that
-    produced the record.
+    frame powers. This check confirms that the re-derivation uses the same
+    arithmetic that produced the record.
     """
     with np.load(source, allow_pickle=False) as archive:
         members = {name: np.asarray(archive[name]) for name in archive.files}
@@ -736,7 +739,7 @@ def _run_rederive(args: argparse.Namespace) -> int:
 
 
 def _required_column(required: np.ndarray, rho: int) -> list[int]:
-    """One-based rank ``rho`` with the stored zero sentinel expanded."""
+    """Return the column of one-based rank ``rho`` with the stored zero sentinel expanded."""
     column = required[:, int(rho) - 1]
     return [
         ALWAYS_MASKED_Q16 if int(value) == 0 else int(value) for value in column
@@ -848,10 +851,10 @@ _INPUT_IDENTITY_FIELDS = (
 
 
 def _study_identity(config: Mapping[str, Any]) -> dict[str, Any]:
-    """What makes two configurations the same study: everything but provenance.
+    """Return the fields that define a study, which are all fields but provenance.
 
     The ``software`` block and the input paths record where a study was
-    generated; the inputs are identified by their digests.
+    generated. The inputs are matched by their digests.
     """
     inputs = dict(config.get("inputs") or {})
     return {
@@ -866,12 +869,13 @@ def _study_identity(config: Mapping[str, Any]) -> dict[str, Any]:
 def _study_config(
     args: argparse.Namespace, profile, *, accept_stored_study: bool = False
 ) -> dict[str, Any]:
-    """The immutable identity of one frontier study.
+    """Return the immutable identity of one frontier study.
 
     With ``accept_stored_study`` (the report stage), a stored configuration
     whose digest differs is still accepted when :func:`_study_identity` is
-    unchanged, so a stored study can be re-reported on another machine; the
-    stored configuration, and its ``config_sha256``, are returned.
+    unchanged, and the stored configuration and its ``config_sha256`` are
+    returned. This allows for a stored study to be reported again on another
+    machine.
     """
     if args.input_iq is None or not Path(args.input_iq).is_file():
         raise SystemExit("--input-iq must name an existing waveform")
@@ -1079,7 +1083,8 @@ def _frontier_for_rank(
             if point["r_injected"] > 0.0
             else float("inf")
         )
-    # The bookkeeping identity: the prefix sums against the frame list.
+    # The prefix sums are checked against direct means over the kept frames
+    # at a stride of len(points) // 20 along the curve.
     audited = 0
     worst = 0.0
     for point in points[:: max(1, len(points) // 20)]:
@@ -1100,13 +1105,14 @@ def _frontier_for_rank(
 def _unmasked_reference(
     population: Mapping[str, Any], *, floor_linear: float
 ) -> dict[str, Any]:
-    """Keep everything: what the claim and the truth say with no mask at all.
+    """Return the claimed and injected residuals with every frame kept.
 
-    ``transfer_closure`` is the estimator's own accuracy on the injected
-    frames alone, with no floor and no mask: the mean linear shelf the frames
-    report divided by the linear shelf the bench injected.  It is a property
-    of the pilot-excess-to-shelf transfer, not of the masking, and separating
-    it from the frontier is what lets the frontier's gap be read as masking.
+    ``transfer_closure`` is the accuracy of the estimator on the injected
+    frames alone, with no floor and no mask. It is the mean linear shelf
+    reported by the frames divided by the linear shelf injected by the bench.
+    This ratio depends only on the pilot-excess-to-shelf transfer. Because it
+    is reported apart from the frontier, the remaining gap between claim and
+    truth on the frontier can be attributed to the masking.
     """
     shelf = np.asarray(population["shelf"], dtype=np.float64)
     truth = np.asarray(population["injected"], dtype=np.float64)
@@ -1140,12 +1146,14 @@ def _unmasked_reference(
 
 
 def _spectra(population: Mapping[str, Any], *, required, eta_q16: int) -> dict[str, Any]:
-    """The three normalizations of the frame-averaged fine target spectrum.
+    """Return three normalizations of the frame-averaged fine target spectrum.
 
-    ``all`` is the all-frame mean, ``keep_given_keep`` is what a kept frame
-    looks like, and ``keep_contribution`` is what survives into the
-    integration.  What the mask removes is ``all - keep_contribution``, taken
-    in linear power; decibels are the last operation.
+    Each is divided by the median reference power. ``all_mean`` is the mean
+    over all frames, ``keep_given_keep`` is the mean over the kept frames, and
+    ``keep_contribution`` is the sum over the kept frames divided by the number
+    of all frames, which is the part that survives into the integration. The
+    power removed by the mask is ``all_mean - keep_contribution``, taken in
+    linear power, and conversion to decibels is the last operation.
     """
     keep = kept_at(np.asarray(required, dtype=object), int(eta_q16))
     fine = np.asarray(population["fine"], dtype=np.float64)
@@ -1206,8 +1214,9 @@ def _run_report(args, profile) -> int:
             _shard_path(args.output_dir, f"on_{_label(float(shelf))}")
         )
 
-    # One composed population size serves every duty cycle, so the curves are
-    # comparable: the largest N both banks can supply at every declared duty.
+    # One composed population size is used for every duty cycle so that the
+    # curves can be compared. It is the largest N that both banks can supply
+    # at every declared duty cycle.
     duties = [float(value) for value in args.duty_cycle]
     composed = int(
         min(
@@ -1291,10 +1300,10 @@ def _run_report(args, profile) -> int:
                             },
                         }
                     )
-                # One summary row per (configuration, rho) at the least mask
-                # that holds the claim inside a tolerance the claim itself
-                # sets: the unmasked injected mean, which is the contamination
-                # the mask exists to remove.
+                # One summary row is written per (configuration, rho) at the
+                # least mask that holds the claim at or below a tolerance. The
+                # tolerance is a half or a tenth of the unmasked injected mean,
+                # which is the contamination the mask is meant to remove.
                 target = float(population["injected"].mean())
                 for name, tolerance in (
                     ("half_unmasked_truth", 0.5 * target),
@@ -1345,8 +1354,8 @@ def _run_report(args, profile) -> int:
     _write_csv(args.output_dir / "frontier_points.csv", frontier_rows)
     _write_csv(args.output_dir / "operating_points.csv", summary_rows)
 
-    # The plates: one loud and one sub-noise shelf at the median rank, at the
-    # candidate that masks closest to the injected duty cycle.
+    # The plates show one loud and one sub-noise shelf at the median rank, at
+    # the candidate whose masked fraction is closest to the injected duty cycle.
     plate_rho = int(args.rho[len(args.rho) // 2])
     plates: dict[str, Any] = {}
     duty_for_plates = float(args.duty_cycle[-1])
@@ -1381,7 +1390,8 @@ def _run_report(args, profile) -> int:
             "frames": spectra["frames"],
         }
 
-    # The verdict: does the claim reproduce the truth, and where does it fail?
+    # The verdict compares the claim with the truth at every point with
+    # surviving injection and records the worst under-booked point.
     with_truth = [
         row for row in frontier_rows if float(row["r_injected"]) > 0.0
     ]
@@ -1512,7 +1522,7 @@ def _run_report(args, profile) -> int:
 
 
 def _step(x: Sequence[float], y: Sequence[float]) -> tuple[np.ndarray, np.ndarray]:
-    """The empirical staircase, retained without smoothing."""
+    """Return the empirical staircase, sorted by ``y`` and not smoothed."""
     xs = np.asarray(x, dtype=float)
     ys = np.asarray(y, dtype=float)
     order = np.argsort(ys)
@@ -1548,8 +1558,8 @@ def _run_figure(args: argparse.Namespace) -> int:
     reduced = bool(report["reduced_geometry"])
     streams = int(report["num_streams"])
 
-    # Panel (a) is drawn at the shelf the mask can only partly reach: the
-    # loudest level the detector does not simply remove outright.
+    # By default, panel (a) is drawn at the second-lowest shelf, which the
+    # mask only partly reaches. Louder shelves are removed outright.
     panel_a_shelf = (
         float(args.panel_shelf_db)
         if args.panel_shelf_db is not None
@@ -1621,7 +1631,7 @@ def _run_figure(args: argparse.Namespace) -> int:
         if column == 0:
             axis.legend(fontsize=6.5, loc="upper right", framealpha=0.85)
 
-    # Panel (b): what the cumulative sums claim against what was injected.
+    # panel (b), the claimed residual against the injected residual
     axis = figure.add_subplot(grid[1, : max(1, len(duties) - 1)])
     ratio_axis = figure.add_subplot(grid[1, len(duties) - 1])
     markers = {duty: marker for duty, marker in zip(duties, ("o", "s", "^", "v"))}
@@ -1672,7 +1682,7 @@ def _run_figure(args: argparse.Namespace) -> int:
     ratio_axis.set_title("(b) over-booking factor", fontsize=9)
     ratio_axis.grid(True, which="both", alpha=0.25, lw=0.4)
 
-    # Panel (c): the plates, one loud and one sub-noise shelf.
+    # panel (c), the plates for one loud and one sub-noise shelf
     plates = report["plates"]
     ordered = sorted(plates.values(), key=lambda p: -float(p["shelf_snr_db"]))
     anchor = int(report["populations"][OFF_LABEL]["anchor_bin"])

@@ -19,7 +19,7 @@ STARTS = {14: "2018-12", 15: "2018-12", 16: "2018-12", 17: "2018-12", 18: "2018-
 
 
 def same(a, b):
-    """Equal up to the last few bits of a float: numpy's sums differ by CPU (AVX-512 runners vs AVX2)."""
+    """Equal up to the last few bits of a float, since numpy's sums differ between AVX-512 and AVX2 runners."""
     if isinstance(a, float) and isinstance(b, float):
         return a == pytest.approx(b, rel=1e-12, abs=1e-12)
     if isinstance(a, dict) and isinstance(b, dict):
@@ -83,7 +83,7 @@ def test_a_short_era_that_does_not_return_stays():
     cut, merged = e.boundaries([e.Block(0, 9, 40.0), e.Block(10, 10, 5.0), e.Block(11, 40, 70.0)], upper=20.0)
     assert cut == [1, 2] and merged == []
     cut, _ = e.boundaries([e.Block(0, 9, 40.0), e.Block(10, 30, 5.0), e.Block(31, 40, 40.0)], upper=20.0)
-    assert cut == [1, 2]   # longer than a neighbor: a real off era, not an excursion
+    assert cut == [1, 2]   # longer than a neighbor, so the off era is kept and not merged as an excursion
 
 
 def test_the_control_has_no_boundary(result):
@@ -134,14 +134,14 @@ def test_the_tool_writes_the_era_list(tmp_path, capsys):
     assert "ch37: 2018-12 .. 2026-08  boundaries -" in capsys.readouterr().out
 
 
-# ---- the line-identity option --------------------------------------------------------------------------------------
+# Line-identity option
 
 def _lines(offsets_by_month: dict[int, float], mad: float = 0.0) -> dict[int, dict]:
     return {m: dict(median_bins=v, mad_bins=mad, events=40) for m, v in offsets_by_month.items()}
 
 
 def _blocks(spec):
-    """[(first, last, level), ...] -> Block list."""
+    """Block list from [(first, last, level), ...] tuples."""
     return [e.Block(a, b, lvl) for a, b, lvl in spec]
 
 

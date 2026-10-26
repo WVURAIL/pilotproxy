@@ -57,7 +57,7 @@ def populated_product(path: Path, channel: int, *, frames: int = 384, units: int
                     - 10 * np.log10(float(values["dtv_bandwidth_hz"]) / float(values["bin_enbw_hz"]))
                     - 10 * np.log10(float(values["pilot_capture_efficiency"])))
     # The frame powers are the all-bin sums of the fine powers (kernel core
-    # 3.0.0): keep the fine shape and scale it to these levels exactly.
+    # 3.0.0). The fine shape is kept and scaled to these levels exactly.
     changes["fine_power_u64"] = fine_powers_with_sums(
         fine, target, values["p_ref_lower_u64"], values["p_ref_upper_u64"])
     changes.update(p_target_u64=target, coarse_power_ratio=2.0 * target / reference,
@@ -92,7 +92,7 @@ def project_copy(tmp: Path) -> Path:
 
 def characterize(tmp: Path, *, products: Path | None = None, project_dir: Path | None = None,
                  out: str = "out") -> tuple[dict, Path]:
-    """Write the release of the fixture products in-process; returns the summary and ``<out>/characterization``."""
+    """Write the release of the fixture products in-process and return the summary and ``<out>/characterization``."""
     products = products or products_dir(tmp)
     result = run.characterize_archive(products, tmp / out, project_dir=project_dir or default_project_dir(),
                                       era_config=RELAXED_ERAS, generated=GENERATED)

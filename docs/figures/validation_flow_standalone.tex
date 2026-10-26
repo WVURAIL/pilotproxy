@@ -1,6 +1,6 @@
-% Standalone wrapper for rendering the shared validation-flow diagram to
-% an image (svg for README.md). The Data Sheet and User Guide \input the
-% .tikz fragment directly; this wrapper exists only for the rendered copy.
+% Standalone wrapper that renders the shared validation-flow diagram to an svg
+% image for docs/USAGE.md. The Data Sheet and User Guide \input the .tikz
+% fragment directly, and this wrapper is used only for the rendered copy.
 %   pdflatex validation_flow_standalone.tex
 %   pdftocairo -svg validation_flow_standalone.pdf validation_flow.svg
 \documentclass[tikz,border=6pt]{standalone}
@@ -8,8 +8,8 @@
 \input{wvu_palette.tex}
 \colorlet{PilotProxyBlue}{wvu-blue}
 \colorlet{LightGray}{wvu-not-quite-white}
-% \linewidth has no meaning in a standalone tikz page; give the blocks a
-% concrete width equivalent to the in-document rendering.
+% \linewidth has no meaning on a standalone tikz page, so the blocks are
+% given a fixed width equal to the in-document rendering.
 \setlength{\linewidth}{11cm}
 \begin{document}
 \input{validation_flow.tikz}

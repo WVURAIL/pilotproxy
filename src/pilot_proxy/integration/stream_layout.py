@@ -162,11 +162,13 @@ def validate_integration_compatibility(
     stream_map: InputStreamMap | None = None,
     require_stream_map: bool = False,
 ) -> None:
-    """Validate that receiver, detector-core, and stream-map contracts agree.
+    """Validate that the receiver, detector-core, and stream-map contracts agree.
 
-    The individual JSON loaders validate each document in isolation. This
-    check covers the cross-document identities and dimensions that cannot be
-    established by any one loader.
+    Each JSON loader validates its own document. This function checks the
+    identities and dimensions that must agree between documents. The detector
+    core ID, window length, sample format, and bit depth of the receiver
+    profile are compared with the detector-core profile. The receiver profile
+    ID, stream count, and stream unit are compared with the stream map.
     """
     if detector_core is not None:
         if profile.compatible_detector_core_id != detector_core.detector_core_id:
@@ -313,7 +315,13 @@ def layout_uint64_bound_check(
     dot_component_bits: int = DEFAULT_DOT_COMPONENT_BITS,
     num_weight_terms: int = DEFAULT_REFERENCE_WEIGHT_TERMS,
 ) -> dict[str, Any]:
-    """Conservatively check uint64 power-sum capacity for a layout."""
+    """Return the conservative uint64 power-sum bound of one weight term for a layout.
+
+    Each dot-product component is at most 2^(b-1) - 1 for
+    b = dot_component_bits, so one row adds at most 2 (2^(b-1) - 1)^2 to the
+    power sum. This per-row bound is multiplied by detector_rows_per_frame
+    and compared with the uint64 maximum.
+    """
     layout = DetectorFrameLayout(
         frame_size_samples=int(frame_size_samples),
         detector_window_samples=int(detector_window_samples),

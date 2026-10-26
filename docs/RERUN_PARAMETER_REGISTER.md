@@ -1,39 +1,40 @@
 # Archive re-run parameter register
 
-This is the scientific and product authority for the CHIME archive re-run. It
-governs two qualified execution paths: the approved local WSL run and the
-qualified CANFAR sharded session. The operator launches exactly one of them.
-The pass/fail gates are in [`VALIDATION_GATES.md`](VALIDATION_GATES.md), the
-local production command is in [`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md), the
-CANFAR production commands are in [`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md), and
-the actual launch values belong in the run ledger for the launched path. Neither
-venue guide can override this chain. Rows below marked local or CANFAR are
-venue-specific; every unmarked row applies identically to both paths.
+This register is the scientific and product authority for the CHIME archive
+re-run. It governs two qualified execution paths, the approved local WSL run and
+the qualified CANFAR sharded session, and the operator launches exactly one of
+them. The pass and fail gates are in
+[`VALIDATION_GATES.md`](VALIDATION_GATES.md), the local production command is in
+[`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md), the CANFAR production commands are
+in [`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md), and the actual launch values are
+recorded in the run ledger of the launched path. Neither venue guide can
+override this chain. Rows marked local or CANFAR apply to that venue only, and
+every unmarked row applies to both paths in the same way.
 
 The implementation pins below are those of the archive run of record, which
 wrote the schema-v5 products with detector core 2.3.0. The current code writes
-schema v6 with detector core 4 (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md));
-a new run records its own schema, library, profile and manifest pins in its
+schema v6 with detector core 4 (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)). A
+new run records its own schema, library, profile, and manifest pins in its
 ledger.
 
-The run is archive estimation and sufficient-statistic reprocessing. The
-coarse positive-excess flag is retained as a bootstrap diagnostic; the fine
-rank/eta decision is inactive and no calibrated detection policy is applied.
-The checked-in profiles, weight manifest, and product contract remain
-authoritative; this register ties them together and makes unresolved choices
-visible.
+The run performs archive estimation and reprocessing of the sufficient
+statistics. The coarse positive-excess flag is kept as a bootstrap diagnostic,
+the fine rank and eta decision is inactive, and no calibrated detection policy
+is applied. The checked-in profiles, weight manifest, and product contract
+remain authoritative. This register ties them together and lists the choices
+that are still unresolved.
 
-Scientific and design choices use one of four justification classes:
+Each scientific and design choice is given one of four justification classes:
 
-- **fixed by instrument**: imposed by the receiver or recorded data format;
-- **provable**: follows exactly from locked values or an arithmetic bound;
-- **literature**: comes from a cited standard or statistical method;
-- **shown reasonably optimal**: selected by a recorded comparison or measurement.
+- *fixed by instrument*, imposed by the receiver or the recorded data format;
+- *provable*, following exactly from locked values or an arithmetic bound;
+- *literature*, taken from a cited standard or statistical method; and
+- *shown reasonably optimal*, selected by a recorded measurement or test of the alternatives.
 
-`Open` means the repository does not yet support one of those four claims. A
-compiled default is not evidence that a choice is optimal. Implementation pins
-and operational controls are listed separately and do not receive a scientific
-justification label.
+A choice is marked `Open` when the repository does not yet support any of these
+four claims for it. A compiled default is no evidence that a choice is optimal.
+Implementation pins and operational controls are listed in their own tables and
+carry no scientific justification label.
 
 ## CHIME scientific and receiver parameters
 
@@ -77,8 +78,9 @@ justification label.
 | Science-budget factor, `zeta` | Not used by this acquisition | Science side | literature | A science entry (RFIsher `science.systematic_budget.primary_zeta`); it does not block sufficient-statistic acquisition |
 
 The production pre-flight must resolve `nfft = 16384`. Any other value changes
-frame time, windows, rows, fine-bin count, and fine-bin width. It should fail the
-current production gate instead of silently inheriting the expected values above.
+the frame time, windows, rows, fine-bin count, and fine-bin width. Such a value
+must fail the current production gate, and the expected values above are never
+inherited silently.
 
 Sources: [`chime_dtv_fengine.json`](../configs/receiver_profiles/chime_dtv_fengine.json),
 [`pilotproxy_cuda_local_reference_power_ratio.json`](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json),
@@ -88,8 +90,8 @@ Sources: [`chime_dtv_fengine.json`](../configs/receiver_profiles/chime_dtv_fengi
 
 ## Cross-instrument design invariant
 
-These are profile values, not settings for the CHIME archive launch. The CHORD
-profiles still require verification against an operational data product.
+These rows are profile values and set nothing for the CHIME archive launch. The
+CHORD profiles still require verification against an operational data product.
 
 | Parameter | CHIME | CHORD | CHORD Pathfinder | Basis |
 |---|---:|---:|---:|---|
@@ -101,8 +103,8 @@ profiles still require verification against an operational data product.
 | Input streams | 2048 | 1024 | 128 | fixed by instrument |
 | Profile detector rows | 262144 | 131072 | 16384 | provable |
 
-The design invariant is `frame_size_samples / K = 128`. The supported compiled
-values of `K` are 64 and 128. `K = 256` is not supported.
+The design invariant is `frame_size_samples / K = 128`. The compiled values of
+`K` are 64 and 128, and `K = 256` is not supported.
 
 Sources: the CHIME profile above,
 [`chord_dtv_fengine.json`](../configs/receiver_profiles/chord_dtv_fengine.json), and
@@ -110,8 +112,8 @@ Sources: the CHIME profile above,
 
 ## Implementation and product pins
 
-These values reproduce the archive run of record. They are implementation or provenance
-pins, not claims that a scientific choice is optimal.
+These values reproduce the archive run of record. They pin the implementation
+and the provenance, and they make no claim that a scientific choice is optimal.
 
 | Pin | Required value or rule | Authority |
 |---|---|---|
@@ -138,14 +140,15 @@ pins, not claims that a scientific choice is optimal.
 | Fine census exclusions | empty unless explicitly supplied; exact array stored per product | [`fine_reduction.py`](../src/pilot_proxy/fine_reduction.py) |
 | Per-frame spectrum | `[frames, 16384]` signed 16-bit codes when the required `nfft` passes | [`product_contract.py`](../src/pilot_proxy/product_contract.py) |
 | Spectrum encoding | 0.01 dB per code about the per-frame reference; invalid code -32768 | [`product_contract.py`](../src/pilot_proxy/product_contract.py) |
-| Rail and fill diagnostics | separate per-frame counts; total components `2 * nfft * streams` | [`product_contract.py`](../src/pilot_proxy/product_contract.py) |
+| Rail and fill diagnostics | distinct per-frame counts; total components `2 * nfft * streams` | [`product_contract.py`](../src/pilot_proxy/product_contract.py) |
 | Per-channel target, references, norms, and adaptation | exact rows in the shipped manifest; channel 14 is the sole adaptive wrap case | [`chime_dtv_weights_k128.bin.manifest.json`](../weights/chime_dtv_weights_k128.bin.manifest.json) |
 | Receiver-profile SHA-256 | `bc59e77442a4c15f74c716d14eaeea4f10a69517d3bfb8c88ce10a7a42ea1e15` | Checked-in file digest at the run's source revision; later revisions of the file change no field the detector reads |
 | Weight-bank SHA-256 | `1383c6d0ca521a26b317d008feb6e09eb41427155bda9a320f70bca62e0e6259` | Shipped manifest and checked-in file digest |
 | Weight-manifest SHA-256 | `d0ccc8162a350e9d3266e6acf3b38d2fe5982c474b73ef0715b8b838954e81a7` | Checked-in file digest at the run's source revision; the shipped manifest is regenerated from the current profile (`sinc_hamming` response, `nyquist_zone` 2) with the same weight bank, and no field the detector reads changed |
 
-Do not duplicate the 23 per-channel weight rows here. Pin the manifest path and
-digest in the run ledger, then check the resolved first product against it.
+The 23 per-channel weight rows are not copied here. The manifest path and digest
+are pinned in the run ledger, and the first resolved product is checked against
+them.
 
 ## Archive launch controls
 
@@ -157,15 +160,15 @@ digest in the run ledger, then check the resolved first product against it.
 | Analyzer | `pilot-proxy-detector` | Locked |
 | Pilot selection | 506, 521, 537, 552, 568, 583, 598, 614, 629, 644, 660, 675, 690, 706, 721, 736, 752, 767, 783, 798, 813, 829, 844 | Locked |
 | Frozen inventory path and SHA-256 | `$WORK/archive_inputs/chime-pilots-v5/inventory.jsonl`; `b2cfef752a6f2cf88317141a974161439299668a37a5464d710b3800b9a872d8` | Prepared; verify before launch |
-| Source inventory accounting | 170,377 units and 9,214 events | Verified against the source survey and supplemental resolution |
-| Frozen inventory accounting | 165,682 usable units and 8,983 events; 4,695 exclusions | Approved and generated |
+| Source inventory accounting | 170377 units and 9214 events | Verified against the source survey and supplemental resolution |
+| Frozen inventory accounting | 165682 usable units and 8983 events; 4695 exclusions | Approved and generated |
 | Exclusion ledger SHA-256 | `d0ab78db9dec847fb5270fb94e3fc45efd6bbbc71adc376830fb71467693079a` | Locked |
 | Pending-event resolution | 3 events, 69 selected objects absent, no errors or sub-floor objects | Verified by authenticated metadata checks |
 | Pending-event resolution SHA-256 | `077915779d234ad9cca1e9b52171e28025a60474f20fad7aff5684f55ce0c4c7` | Locked |
 | Inventory manifest SHA-256 | `5695e1cc9c007cb2c79ad39535cf9ed2fb20848ad00d3cf0215933670d0707e5` | Locked |
 | Resolved `nfft` | 16384 | Must pass pre-flight |
 | Execution host (local) | Local WSL workstation: 24-core host, 32 WSL virtual CPUs, 62 GiB WSL memory, one 16 GiB RTX 5000 Ada | Locked for the local path; verify current free space at launch |
-| Execution host (CANFAR) | CANFAR H100 session: cgroup caps of 16 CPUs and 96 GiB RAM, 11,008 MiB visible device memory; stage on `/scratch` at 1.2 GB/s and never on `/arc` at 241 MB/s | Locked for the CANFAR path; verify free space and the staging filesystem at launch |
+| Execution host (CANFAR) | CANFAR H100 session: cgroup caps of 16 CPUs and 96 GiB RAM, 11008 MiB visible device memory; stage on `/scratch` at 1.2 GB/s and never on `/arc` at 241 MB/s | Locked for the CANFAR path; verify free space and the staging filesystem at launch |
 | Topology (local) | One detector process; no other detector process against the single GPU | Locked |
 | Topology (CANFAR) | 5 concurrent single-channel shards, each holding exactly one distinct physical channel; the shard count is VRAM-bound at 5, since 6 shards leaves 4 of 6 running and 8 exhausts device memory; repeat shard waves until all 23 channels are complete | Locked; qualified by the concurrent sharded-topology gate |
 | Source revision | Exact pushed commit recorded in the run ledger | Freeze after all code and documentation changes |
@@ -179,8 +182,8 @@ digest in the run ledger, then check the resolved first product against it.
 | Partial-run acknowledgement | off | Locked; any new quarantine or failure stops acceptance |
 | Fine products | on | Locked; retains exact fine powers and does not enable fine detection |
 | Checkpoint interval | 250 units | Reduces cumulative product rewrites; a stop can repeat 249 analyzed files plus uncheckpointed prefetched downloads |
-| Real-data GPU gate | One 2048-stream file, one full chunk, peak VRAM below 13,900 MiB, product and receiver-state validation pass | Repeat after the receiver-state source change and record new evidence |
-| Production-profile rehearsal | Archive source, four workers, eight slots, full chunks, forced checkpoint, receiver-state validation, and identical-command resume in a separate capped output | Repeat after the receiver-state source change and record new evidence |
+| Real-data GPU gate | One 2048-stream file, one full chunk, peak VRAM below 13900 MiB, product and receiver-state validation pass | Repeat after the receiver-state source change and record new evidence |
+| Production-profile rehearsal | Archive source, four workers, eight slots, full chunks, forced checkpoint, receiver-state validation, and identical-command resume in its own capped output | Repeat after the receiver-state source change and record new evidence |
 | Resume invariant | Same source revision, inventory, output, staging, selection, execution settings, and preserved library | Locked |
 | Output directory | fresh path outside the source checkout | Fill at launch |
 | Receiver profile path and SHA-256 | Checked-in CHIME profile and locked digest above | Verify at launch |
@@ -190,25 +193,26 @@ digest in the run ledger, then check the resolved first product against it.
 | Detector library (CANFAR) | SM90 artifact built once on the session node from the same frozen CUDA source, then preserved outside the checkout; its SHA-256 is recorded in the run ledger, not pinned here | The preserved SM89 artifact cannot run on this device. `nvcc` is not byte-reproducible, so a rebuild yields a different digest and is a new artifact: preserve the built file, gate that exact file, record its digest, and reuse it for every resume |
 | Terminal product | all 23 per-pilot v5 products; channel subsets are derived only | Locked |
 
-The 23 pilot identifiers are the ATSC 14--36 pilot locations mapped onto the
-verified CHIME grid. No production file or chunk cap is allowed.
+The 23 selected pilots are the pilot locations of ATSC channels 14 through 36,
+mapped onto the verified CHIME grid. No file or chunk cap is allowed in
+production.
 
-The run used kernel core 2.3.0 in both paths. On the local
-path, use the preserved SM89 artifact named above. On the CANFAR path, build the
-SM90 artifact on the session node from the same frozen CUDA source, because the
-preserved SM89 artifact cannot run on that device. In either case complete the
-source-build GPU and parity gates and the capability and real-file gates against
-the exact artifact that will run, record its digest before launch, and use that
-recorded digest for every restart. Rebuilding within an approved run changes the
-pinned byte identity and requires a new approval; a CANFAR rebuild in a later
-session requires re-running the SM90 gates and recording the new digest in the
-run ledger before the run continues.
+The run used kernel core 2.3.0 on both paths. The local path uses the preserved
+SM89 artifact named above. On the CANFAR path, the SM90 artifact is built on the
+session node from the same frozen CUDA source, because the preserved SM89
+artifact cannot run on that device. On either path, the source-build GPU and
+parity gates and the capability and real-file gates are completed against the
+exact artifact that will run. Its digest is recorded before launch and used for
+every restart. A rebuild during an approved run changes the pinned byte identity
+and requires a new approval. A CANFAR rebuild in a later session requires the
+SM90 gates to be run again and the new digest to be recorded in the run ledger
+before the run continues.
 
 Source: [`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md).
 
 ## Approved launch decisions
 
-- The frozen inventory excludes the exact 4,695 known-unusable source units.
+- The frozen inventory excludes the exact 4695 known-unusable source units.
   The full inventory and its quarantine are kept unchanged beside it.
 - Three pending survey events were resolved by authenticated metadata checks.
   All 69 selected objects were absent, so no inventory rows were added.
@@ -232,29 +236,29 @@ fine terms while the fine decision remains inactive.
 
 ## Threshold preparation
 
-These values are the detector side's: eras, the residual floor, the rank and
-multiplier families and the drift margins are entries of this repository's
-detector register (`projects/chime_atsc/detector_register.json`, every entry
-tagged `side: detector`), read through `pilot_proxy.config.register`. The
-science side owns the science and selector entries (RFIsher
-`projects/chime_bao/`, its `docs/decision-register.md`). The detector archive
-remains a threshold-independent input: this side writes every evaluable
-candidate and does not choose one.
+These values belong to the detector side. The eras, the residual floor, the rank
+and multiplier families, and the drift margins are entries of this repository's
+detector register (`projects/chime_atsc/detector_register.json`, with every
+entry tagged `side: detector`), and they are read through
+`pilot_proxy.config.register`. The science side owns the science and selector
+entries (RFIsher `projects/chime_bao/` and its `docs/decision-register.md`). The
+detector archive stays independent of the threshold, since the detector side
+writes every evaluable candidate and chooses none of them.
 
 | Decision | Current value | State | Basis |
 |---|---:|---|---|
 | Era summary | monthly median per-acquisition level | Provisional | Robust reduction before station-state segmentation |
 | Minimum era support | 6 observed months and a 270-day elapsed span per side | Provisional | Archive guardrail; first and last retained timestamps determine the span and gaps remain visible separately |
-| Minimum station step | 2 dB | Provisional | Separates large state changes from ordinary propagation scatter |
+| Minimum station step | 2 dB | Provisional | Distinguishes large state changes from ordinary propagation scatter |
 | Rank threshold | `abs(z) >= 4` | Provisional | Conservative single-comparison threshold; the date scan is not globally calibrated |
-| Maximum eras | 5 | Provisional | Over-segmentation cap rather than a formal penalty |
+| Maximum eras | 5 | Provisional | Over-segmentation cap; no formal penalty |
 | Thresholding era | latest | Locked | Only the current station state is relevant to a new operating point |
 | Quiet-era eligibility | median level at most 1 dB | Provisional | Archive-specific boundary for a transmitter-off floor |
 | Quiet-floor summary | p90 of at least 30 finite frames | Provisional | One-sided screening bound; exact coverage is not calibrated |
 | Within-era split | calendar midpoint of the latest era | Locked method | Avoids an equal-frame split when cadence changes |
 | Cost drift margin | 1.05 | Provisional | The drift screen's working value; a final margin must follow downstream science materiality |
 | Systematic-residual drift margin | 1.10 | Provisional | The drift screen's working value; a final margin must follow transfer uncertainty or a residual-budget allocation |
-| Per-half retained-frame floor | 30 | Provisional | The drift screen's working value; a final floor must come from estimator precision rather than reuse the pooled selector floor |
+| Per-half retained-frame floor | 30 | Provisional | The drift screen's working value; a final floor must come from estimator precision and must not reuse the pooled selector floor |
 | Stability uncertainty | unset | Open | Point-estimate ratios need an acquisition- or day-blocked interval before an operational stability claim |
 | Shelf-to-science systematic and variance gains | unity | Conditional only | Screening closure; no visibility-domain transfer measurement exists |
 | Fine rank | the fixed median rank of the intended bulk, `rho = floor((n_bulk + 1) / 2)`: 63 on both CHIME anchor parities, 60 and 53 on channels 20 and 34 | Locked | Fixed before invalid bins are removed; frames lacking that rank stay always masked. No rank is searched |
@@ -263,29 +267,29 @@ candidate and does not choose one.
 | Working multiplier | each channel's threshold-rule word on its current era: the equal-event knee (`characterization.knee`) when the tolerance and the 30-year limit are met, else the loosest word below it, else the permanent mask (`characterization.threshold_rule`) | Provisional | The knee is an operating heuristic read from the same data; no false-alarm rate is established |
 | Designated-set anchor and width | unset | Open | Requires a held-out latest-era calibration |
 
-The science side's selector refuses an operational label while required
-choices remain provisional, open, or conditional. A unity transfer may be
-used only for an explicitly labeled screening calculation. The stable
-identifiers, literature and sensitivity values of each entry are in the
-detector register; the science side's entries and refusal behavior are in
-RFIsher's `docs/decision-register.md`.
+The selector on the science side refuses an operational label while any required
+choice is still provisional, open, or conditional. A unity transfer may be used
+only for an explicitly labeled screening calculation. The stable identifiers,
+literature, and sensitivity values of each entry are in the detector register,
+and the entries and refusal behavior of the science side are in RFIsher's
+`docs/decision-register.md`.
 
-The local calibration suite below is a report. Its keep/excise
-labels and fallback threshold are never operational exports. Threshold input
-uses the `--thresholds` option or `PP_THRESHOLD_TABLE` environment variable;
-the default table is `<calibration>/tables/thresholds.csv`.
+The local calibration suite below is a report, and its keep and excise labels
+and its fallback threshold are never exported for operation. The threshold input
+is given by the `--thresholds` option or the `PP_THRESHOLD_TABLE` environment
+variable, and the default table is `<calibration>/tables/thresholds.csv`.
 
 ## Existing report-only choices
 
-These values reproduce the calibration report. They do not define the new
-prepared threshold family.
+These values reproduce the calibration report and do not define the prepared
+threshold family.
 
 | Decision | Current value | State | Basis |
 |---|---:|---|---|
-| Report multiplier ladder | 1.0, 1.1, 1.2, 1.4, 2.0, 5.0 | Report only | Sparse display and comparison grid |
+| Report multiplier ladder | 1.0, 1.1, 1.2, 1.4, 2.0, 5.0 | Report only | Sparse grid for display and side-by-side reading |
 | Null scale probes | lower-half p32, p5, and p0.3 with normal deviates 1, 1.96, and 2.9677 | Report only | Robust report diagnostic inherited from the released residual calculation |
-| Null-centre agreement | 0.20 dB | Provisional | Archive-specific diagnostic band |
-| Lower-tail support | 20 frames | Provisional | Minimal report guard, not a precision calculation |
+| Null-center agreement | 0.20 dB | Provisional | Archive-specific diagnostic band |
+| Lower-tail support | 20 frames | Provisional | Minimal report guard; no precision calculation |
 | Detection-floor marker | one-sided Gaussian probability 0.001 | Report only | Produces the derived normal deviate 3.090232 |
 | Kept-tail summary | p99 | Report only | Report diagnostic only |
 | Excision label | 50% masked | Report only | Threshold selection uses the continuous masking cost instead |
@@ -294,11 +298,11 @@ prepared threshold family.
 | Missing-threshold fallback | eta = 1.4 | Report only | Reproduces report rows and cannot support an operational disposition |
 | Threshold-bracket identification | ratio below 1.10 | Provisional | Ten-percent materiality choice |
 | Era upper-level summary | p90 | Report only | Report summary only |
-| Wide-spectrum centre exclusion | 60 Hz half-width | Report only | Labels the channel-centre instrumental feature rather than a transmitter |
+| Wide-spectrum center exclusion | 60 Hz half-width | Report only | Labels the instrumental feature at the channel center, which is not a transmitter |
 | Wide-spectrum pilot search | 5 kHz half-width | Report only | Report refinement window around the synthesized pilot |
-| Wide-spectrum peak census | at least 3 dB, at least 3 kHz separation, at most 8 peaks | Report only | Sparse report census rather than a detection policy |
+| Wide-spectrum peak census | at least 3 dB, at least 3 kHz separation, at most 8 peaks | Report only | Sparse report census; no detection policy |
 | Fine-spectrum upper summary | p90 | Report only | Shows intermittent power beside the median trace |
-| Fine-line census | at least 1.5 dB level and prominence, at least 48 Hz separation, at most 6 lines | Report only | Four padded-bin separation avoids counting correlated neighbours twice |
+| Fine-line census | at least 1.5 dB level and prominence, at least 48 Hz separation, at most 6 lines | Report only | Four padded-bin separation avoids counting correlated neighbors twice |
 
 ## Operational setup before archive launch
 
@@ -306,19 +310,19 @@ prepared threshold family.
 |---|---|---|
 | Archive certificate | Present locally, owner-only; record its expiry | Renew before launch; at least 72 hours before each expiry, stop after a checkpoint, renew, and resume with the identical command |
 | Local archive environment and client | Prepared for the frozen source revision | Refresh it and rerun the full suite on the final source; never record secrets in the ledger |
-| Real-data GPU capacity | Peak below the 13,900 MiB limit | Repeat on the final source and require receiver-state fields for every unit |
+| Real-data GPU capacity | Peak below the 13900 MiB limit | Repeat on the final source and require receiver-state fields for every unit |
 | Production-profile resume | Resumes to the same unique units and frames, with empty staging | Repeat on the final source and require receiver-state fields through resume |
 
-Do not promote the recorded testbench rank to deployed runtime data. An exported
-pending bundle leaves anchor, zero-based `cfar_rank`, and multiplier unset while
-calibration is pending.
+The recorded testbench rank is never promoted to deployed runtime data. While
+calibration is pending, an exported pending bundle leaves the anchor, the
+zero-based `cfar_rank`, and the multiplier unset.
 
-## Separate radio transfer study
+## Radio transfer study
 
-This study is not an archive-launch gate. It validates estimator transfer
-through the radio path and is separate from the archive acquisition.
+This study is not a gate for the archive launch. It validates the estimator
+transfer through the radio path and is independent of the archive acquisition.
 
-Fill these values after a real receiver capture exists:
+These values are filled in once a real receiver capture exists:
 
 | Parameter | Required value |
 |---|---|
@@ -338,9 +342,9 @@ Fill these values after a real receiver capture exists:
 | Evaluator streams | 4 |
 | SNR grid | -60 through 0 dB in 2 dB steps |
 | Trials | 60 per point |
-| Seed | 20260824 for direct comparison with the synthetic curve |
+| Seed | 20260824, so the curve can be checked directly against the synthetic curve |
 | Detector backend | CUDA |
-| Synthesis backend | CPU for direct comparison with the synthetic curve |
+| Synthesis backend | CPU, so the curve can be checked directly against the synthetic curve |
 | Noise source | GNU Radio through `/usr/bin/python3` |
 | Quantization clip sigma | `--clip-sigma 3`; leave `--scale` unset so the evaluator estimates it |
 | Channel gain and phase | `--channel-gain-db 0 --channel-phase-deg 0` |
@@ -350,25 +354,27 @@ Fill these values after a real receiver capture exists:
 | Added frequency offset | 0 Hz |
 | Output directory | fresh path outside the source checkout |
 
-Four evaluator streams repeat the same captured waveform with independent added
-noise; they are not four independent receiver feeds. The sweep treats receiver
-noise and multipath already present in the capture as part of the clean signal.
-The signal audit runs first. The evaluator startup guard then checks the clean
-capture through the detector statistic and refuses a mistuned or reversed signal.
+The four evaluator streams repeat the same captured waveform with independent
+added noise, so they are copies of one receiver feed. The sweep treats the
+receiver noise and multipath already present in the capture as part of the clean
+signal. The signal audit runs first. The startup guard of the evaluator then
+checks the clean capture through the detector statistic and refuses a mistuned
+or reversed signal.
 
-The archive adapter's detector-window reversal is part of reading the recorded
-CHIME frames. The evaluator's reference archive phase is a separate testbench
-transform and must remain off for this transfer curve.
+The detector-window reversal of the archive adapter is part of reading the
+recorded CHIME frames. The reference archive phase of the evaluator is a
+different transform, used only in the testbench, and it must stay off for this
+transfer curve.
 
-Preserve the exact audit and evaluator commands. The evaluator report embeds the
-audit JSON, but it does not independently bind that file to the capture or record
-every command-line value. `--waveform-audit-json` is provenance-only and does not
-replace the evaluator's nominal 11.3 dB conversion; pass the measured value
-explicitly.
+The exact audit and evaluator commands are preserved. The evaluator report
+embeds the audit JSON, but it does not independently bind that file to the
+capture or record every command-line value. `--waveform-audit-json` records
+provenance only and does not replace the nominal 11.3 dB conversion of the
+evaluator, so the measured value is passed explicitly.
 
 ## Run ledger
 
-Before launch, create a run ledger beside the output and record the items below.
+Before launch, a run ledger is created beside the output with the items below.
 
 - UTC start time and operator;
 - complete command as executed;
@@ -396,4 +402,4 @@ Before launch, create a run ledger beside the output and record the items below.
 - final per-pilot audit results and canonical validation when terminal combine
   succeeds.
 
-Do not store credentials or generated products in the source checkout.
+Credentials and generated products are never stored in the source checkout.

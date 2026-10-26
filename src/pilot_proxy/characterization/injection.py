@@ -1,4 +1,4 @@
-"""Recovery statistics for truth-labelled injections: detection probability at
+"""Recovery statistics for truth-labeled injections: detection probability at
 a matched false-alarm rate, and the recovery-linearity fit.
 
 An injection ladder puts a known tone into stored data at several amplitudes,
@@ -29,7 +29,7 @@ import numpy as np
 from pilot_proxy.config.project import default_project
 from pilot_proxy.testbench.evaluate_snr import wilson_interval
 
-# An empirical quantile at P_fa needs enough H0 frames to be meaningful: at
+# An empirical quantile at P_fa is meaningful only when the H0 frames give at
 # least this many expected false alarms (detector register entry
 # detection.minimum_frames_per_false_alarm).
 MIN_FRAMES_PER_FALSE_ALARM = default_project().register.value(

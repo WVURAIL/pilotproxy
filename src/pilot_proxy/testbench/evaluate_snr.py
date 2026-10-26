@@ -117,7 +117,7 @@ HALF_SCALE = 2.0
 COMPLEX_COMPONENT_COUNT = 2.0
 DEFAULT_EVALUATOR_SEED = 12345
 DEFAULT_NOISE_TRIALS = 3
-DEFAULT_NUM_INPUT_STREAMS = 4  # The standard trial combines 4 streams of 128 rows, giving 512 terms.
+DEFAULT_NUM_INPUT_STREAMS = 4  # 4 streams of 128 rows give the 512 terms of the standard trial
 DEFAULT_GNURADIO_PYTHON = "/usr/bin/python3"
 DEFAULT_CLIP_SIGMA = 3.0
 DEFAULT_SNR_SWEEP_MIN_DB = -45.0
@@ -459,15 +459,16 @@ def assert_clean_pilot_lands_on_target(
     nyquist_zone: int,
     minimum_normalized_ratio: float = 8.0,
 ) -> dict[str, Any]:
-    """Check that the configured detector sees the clean pilot before a sweep.
+    """Check that the clean pilot falls in the detector's target bin before a sweep.
 
     If the pilot excites the wrong projection, the target/reference ratio
     stays near one even as the requested signal grows. The resulting curve
-    would measure noise instead of detection sensitivity.
+    would then measure noise instead of detection sensitivity.
 
-    Use the same CPU floating statistic as the sweep. An independent FFT can
-    use a different frequency convention and still appear self-consistent.
-    One clean channelization at startup catches that disagreement early.
+    The check uses the same CPU floating-point statistic as the sweep, since
+    an independent FFT can use a different frequency convention and still
+    appear self-consistent. One clean channelization at startup detects that
+    disagreement before any trial is run.
     """
     rows = _float_streams_for_reference(
         clean_streams,
@@ -572,15 +573,15 @@ def _kernel_measurements(
     dtv_bandwidth_hz: float,
     threshold: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run the deployed exact chain on the device and read back frame powers.
+    """Run the deployed exact chain on the device and read back the frame powers.
 
-    Kernel core 3.0.0: the device computes the exact row projections and the
-    frozen fxfft256 fine powers (``detect_packed_detector_input``), and the
-    frame powers are their exact uint64 all-bin sums. The library has no
-    float coarse path and no coarse rational-half mask any more, so the
-    float32 diagnostic ratio and the rational-half mask are formed from those
-    exact powers on the host, exactly as ``_cpu_reference_measurements``
-    forms them from the CPU reference.
+    In kernel core 3.0.0, the exact row projections and the frozen fxfft256
+    fine powers are computed on the device (``detect_packed_detector_input``),
+    and each frame power is the exact uint64 sum of the fine powers over all
+    bins. The library has no float coarse path and no coarse rational-half
+    mask. The float32 diagnostic ratio and the rational-half mask are
+    therefore formed from the exact powers on the host, in the same way
+    ``_cpu_reference_measurements`` forms them from the CPU reference.
     """
     from pilot_proxy.detect import detect_packed_detector_input
 
@@ -612,15 +613,15 @@ def _cpu_reference_measurements(
     dtv_bandwidth_hz: float,
     threshold: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """CPU exact-integer sibling of ``_kernel_measurements``.
+    """Return the fields of ``_kernel_measurements`` from the exact CPU reference.
 
-    Uses the exact CPU reference (``coarse_power_ratio_cpu_reference_packed``:
-    rows -> fxfft256 -> all-bin sums, the kernel's frame powers) for the
-    power sums and Python-integer arithmetic for the rational-half threshold
-    decision, so the fields are the kernel's semantics without a GPU. The
-    kernel <-> reference equivalence itself is CI-gated by the kernel parity
-    suite; a small same-seed GPU spot check ties a CPU-produced sweep to the
-    deployed kernel.
+    The power sums come from ``coarse_power_ratio_cpu_reference_packed``.
+    There, the rows are transformed by fxfft256 and the fine powers are summed
+    over all bins to give the kernel's frame powers. The rational-half
+    threshold decision is made in Python integer arithmetic, so the fields
+    match the kernel's without a GPU. The equivalence of the kernel and the reference is checked
+    in CI by the kernel parity suite. A small GPU spot check with the same
+    seed ties a sweep made on the CPU to the deployed kernel.
     """
     _power_ratio, sums = coarse_power_ratio_cpu_reference_packed(packed, weights, int(bits))
     return _measurements_from_exact_powers(
@@ -648,9 +649,9 @@ def _measurements_from_exact_powers(
     dtv_bandwidth_hz: float,
     threshold: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Host-side diagnostic ratio and rational-half mask, then all fields.
+    """Form the diagnostic ratio and rational-half mask on the host and return all fields.
 
-    Both backends hand over the exact frame powers. The float32 diagnostic is
+    Both backends pass in the exact frame powers. The float32 diagnostic is
     ``2 P_0 / (P_1 + P_2)`` rounded to float32 (0.0 when the reference power
     is zero), and the rational-half mask is the exact Python-integer
     comparison ``P_0 * half_den > half_num * (P_1 + P_2)``, so no overflow can
@@ -700,7 +701,7 @@ def _measurements_from_powers(
     mask: int,
     overflow: int,
 ) -> dict[str, Any]:
-    """Backend-agnostic measurement fields from the three integer powers."""
+    """Return the measurement fields of either backend from the three integer powers."""
     p_ref_sum = int(p_ref_lower + p_ref_upper)
     coarse_power_ratio = float(
         power_terms_to_coarse_power_ratio(p_target, p_ref_sum)
@@ -775,7 +776,7 @@ def _measurements_from_powers(
 
 
 def _positive_to_db(value: float) -> float:
-    """Convert a positive linear value to dB, preserving non-positive as -inf."""
+    """Convert a positive linear value to dB, and return -inf for a non-positive value."""
     value = float(value)
     if value <= 0.0:
         return float("-inf")
@@ -1239,11 +1240,11 @@ def wilson_interval(
     *,
     z: float = 1.959963984540054,
 ) -> tuple[float, float]:
-    """Wilson score 95% interval for a binomial proportion.
+    """Return the Wilson score 95% interval for a binomial proportion.
 
-    Detection-rate points on publication curves should carry these bounds;
-    they stay meaningful at rates near 0 or 1 where the normal approximation
-    fails. Returns (lo, hi); (nan, nan) when trials == 0.
+    These bounds are used for the detection-rate points on publication curves
+    because they stay meaningful at rates near 0 or 1, where the normal
+    approximation fails. Returns (lo, hi), or (nan, nan) when trials == 0.
     """
     n = int(trials)
     if n <= 0:

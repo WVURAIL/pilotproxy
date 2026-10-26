@@ -1,9 +1,10 @@
 """Validation for names that become managed filesystem components.
 
-Explicit path options (``--out``, ``--inventory``, ``--root``) remain paths.
-Names, plugin identifiers, and instrument identifiers do not: accepting path
-separators or ``..`` in those values lets an apparently managed output escape
-its configured root and makes two spellings refer to the same object.
+Explicit path options (``--out``, ``--inventory``, ``--root``) are used as
+paths. Names, plugin identifiers, and instrument identifiers are checked
+against a fixed pattern, since a path separator or ``..`` in these values
+would let a managed output escape its configured root and would allow two
+spellings to refer to the same object.
 """
 from __future__ import annotations
 
@@ -13,7 +14,10 @@ _IDENTIFIER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
 
 
 def baseband_filename(event, freq_id) -> str:
-    """Shared archive naming rule, including explicitly identified legacy rows."""
+    """Return the shared archive file name ``baseband_<event>_<freq_id>.h5``.
+
+    Legacy rows that are explicitly marked are named by the same rule.
+    """
     return f"baseband_{event}_{freq_id}.h5"
 
 

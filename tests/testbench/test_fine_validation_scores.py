@@ -173,8 +173,8 @@ def test_fraction_oracle_demonstrates_exact_ratio_not_float_rank_sort():
     geometry = construct_geometry(29)
     powers = np.ones((1, 3, 256), dtype=np.uint64)
     bulk = np.flatnonzero(geometry.bulk_mask)
-    # All these adjacent values alias to the same float64; input bin order
-    # intentionally runs opposite to exact rational order.
+    # These adjacent values all alias to the same float64. The input bin
+    # order runs opposite to the exact rational order on purpose.
     powers[0, 0, bulk] = np.arange(len(bulk), dtype=np.uint64)[::-1] + (1 << 60)
     powers[0, 0, geometry.designated_bins] = (1 << 60) + 60
     result = fixed_scores(powers, geometry)

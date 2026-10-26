@@ -15,7 +15,7 @@ spec.loader.exec_module(cal)
 
 
 def exact_tail(n, k):
-    # Independent integer arithmetic: p=39/40, no SciPy distribution call.
+    # exact integer arithmetic with p = 39/40, independent of the SciPy distributions
     return sum(Fraction(comb(n, j) * 39**j, 40**n) for j in range(k, n + 1))
 
 

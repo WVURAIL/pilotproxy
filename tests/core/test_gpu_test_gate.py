@@ -1,4 +1,4 @@
-"""The required-hardware gate must fail rather than silently skip."""
+"""With --require-cuda, a skipped GPU test is reported as a failure."""
 
 import os
 from pathlib import Path

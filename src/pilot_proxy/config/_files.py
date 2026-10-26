@@ -56,8 +56,11 @@ def check_keys(data: Mapping[str, Any], *, required: Iterable[str],
 
 
 def number(value: Any, *, field: str, where: str, positive: bool = False) -> float:
-    """A YAML/JSON number as a float. Strings are refused, so a float written
-    as ``6.0e6`` (which PyYAML reads as text) cannot slip through."""
+    """Return a YAML or JSON number as a float.
+
+    Strings are refused, so a float written as ``6.0e6``, which PyYAML reads as
+    text, raises an error.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ProfileError(f"{where}: {field} must be a number, got {value!r}")
     result = float(value)

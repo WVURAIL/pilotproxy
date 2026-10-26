@@ -1,25 +1,28 @@
-"""
-Data source: CADC storage + the CHIME/FRB Datatrail archive.
+"""Data source for CADC storage and the CHIME/FRB Datatrail archive.
 
-A source for CANFAR archive work, in three halves:
+This source is used for CANFAR archive work and has three parts:
 
-  enumerate()  read an inventory (inventory.jsonl) and yield one Unit per file,
-               filtered to the selected freq_ids and/or events. The inventory is a cheap,
-               offline listing, so enumerate itself never touches the network.
+  enumerate()  reads an inventory (inventory.jsonl) and yields one Unit per
+               file, filtered to the selected freq_ids, events, or both. The
+               inventory is a cheap offline listing, so enumerate never uses
+               the network.
 
-  survey()     build that inventory.jsonl: walk the Datatrail scope(s), discover
-               every event, and verify each file the reader's archive shape
-               (Reader.survey_files) declares for it at CADC -- one HDF5 per
-               freq_id for baseband; whatever a different product's reader
-               declares for that product. Resumable + incremental.
+  survey()     builds inventory.jsonl. It walks the Datatrail scope(s),
+               discovers every event, and verifies at CADC each file that the
+               reader's archive shape (Reader.survey_files) declares for the
+               event. For baseband this is one HDF5 file per freq_id, and the
+               reader of another product declares that product's files. The
+               survey is resumable and incremental.
 
-  fetch()      stage one file with cadcget via a CADC StorageInventoryClient,
-               authenticated by a proxy certificate, with bounded retries.
+  fetch()      stages one file with cadcget through a CADC
+               StorageInventoryClient, authenticated by a proxy certificate,
+               with bounded retries.
 
-Prerequisites (checked by `doctor`):
+Prerequisites, checked by ``doctor``:
+
   * a valid CADC proxy cert (CADC_CERT or ~/.ssl/cadcproxy.pem)
-  * the `cadcdata` / `cadcutils` packages  (for enumerate/fetch/verify)
-  * the `datatrail-cli` package installed  (for survey only -- `[survey]` extra)
+  * the ``cadcdata`` and ``cadcutils`` packages, for enumerate, fetch, and verify
+  * the ``datatrail-cli`` package, for survey only (the ``[survey]`` extra)
 """
 from __future__ import annotations
 
@@ -69,25 +72,25 @@ from .cadc_inventory import (
 
 
 def _default_shape():
-    """The reader whose file shape survey uses when the caller supplied none.
+    """Return the reader whose file shape survey uses when the caller supplies none.
 
-    Used when the caller supplies no reader (including direct src.survey()
-    calls in tests): the chime-baseband shape is this source's default naming.
-    Imported lazily so merely importing this module never pulls the reader
-    stack.
+    This covers direct src.survey() calls in tests. The chime-baseband shape is
+    this source's default naming. The reader is imported lazily, so importing
+    this module does not load the reader stack.
     """
     from pilot_proxy.chime.baseband_reader import ChimeBasebandReader
     return ChimeBasebandReader()
 
 
 def _default_cert() -> str:
-    """The CADC proxy cert used for the direct fetch path.
+    """Return the path of the CADC proxy cert used for the direct fetch path.
 
-    CADC_CERT overrides (honored even if absent -- the user's stated intent, and
-    the clean way to point a headless/batch job at a different cert); otherwise the
-    standard ~/.ssl/cadcproxy.pem that `cadc-get-cert` writes. preflight() checks
-    the resolved path actually exists, so a missing or unrenewed cert is flagged at
-    doctor time rather than mid-fetch.
+    CADC_CERT takes precedence and is used even when the file is absent, since it
+    states the user's intent and is the simple way to point a headless or batch
+    job at a different cert. Otherwise the standard ~/.ssl/cadcproxy.pem written
+    by ``cadc-get-cert`` is used. preflight() checks that the resolved path
+    exists, so a missing or unrenewed cert is reported by ``doctor`` before any
+    fetch starts.
     """
     return os.environ.get("CADC_CERT") or os.path.expanduser("~/.ssl/cadcproxy.pem")
 
@@ -96,35 +99,34 @@ STORAGE_SERVICE_ENV = "PILOT_PROXY_STORAGE_SERVICE"
 
 
 def storage_service_override() -> Optional[str]:
-    """Storage Inventory service to fetch through, or None for the default.
+    """Return the Storage Inventory service to fetch through, or None for the default.
 
     cadcdata routes every download through ivo://cadc.nrc.ca/global/raven, which
-    locates a replica before the bytes move. When that locator is degraded the
-    replicas themselves stay healthy, so pointing the client straight at one
-    (ivo://cadc.nrc.ca/uvic/minoc, say) keeps a run moving. Replicas serve the
-    same objects, and fetch() still checks every staged file against the size
-    the inventory recorded, so this changes the route the bytes travel and
-    nothing about which bytes arrive. The resolved value is recorded in
-    scan_scope.json, so the route a run actually took stays in its provenance.
+    locates a replica before the bytes are transferred. When that locator is
+    degraded, the replicas themselves stay healthy, and a run can continue with
+    the client pointed straight at one, such as ivo://cadc.nrc.ca/uvic/minoc.
+    Replicas serve the same objects, and fetch() still checks every staged file
+    against the size recorded in the inventory. This setting therefore changes
+    only the route of the bytes, and the same bytes arrive. The resolved value
+    is recorded in scan_scope.json, so the route a run actually took is kept in
+    its provenance.
     """
     value = (os.environ.get(STORAGE_SERVICE_ENV) or "").strip()
     return value or None
 
 
-# --------------------------------------------------------------------------
-# survey: defaults, geometry, and the Datatrail CLI plumbing
-# --------------------------------------------------------------------------
-# Final fallback when neither --scope nor the telescope's YAML `scopes` resolve.
-# Each station (chime + outriggers kko/gbo/hco) declares its own baseband
-# scope(s) in instruments/*.yaml, so survey defaults to those; this constant only
-# applies to a telescope that declares none. (Outrigger-LABELLED chime events are
-# still dropped unless --include-outrigger.)
+# Survey defaults and retry limits
+# Final fallback when neither --scope nor the telescope's YAML ``scopes``
+# resolve. Each station (chime and the kko, gbo, and hco outriggers) declares
+# its own baseband scope(s) in instruments/*.yaml, and survey uses those. This
+# constant applies only to a telescope that declares none. CHIME events with an
+# outrigger label are still dropped unless --include-outrigger is given.
 _DEFAULT_SCOPES = ("chime.event.baseband.raw", "chime.scheduled.baseband.raw")
 
 _DEFAULT_MINIMUM_ARCHIVE_BYTES = 1
 
 _MAX_ATTEMPTS = 3            # per-event verification retries across resumes
-_MAX_SERVICE_WAIT = 3600     # s to ride out a service/cert outage before aborting
+_MAX_SERVICE_WAIT = 3600     # max wait (s) for a service or cert outage before aborting
 _DEFAULT_SURVEY_WORKERS = 12
 _DATASET_PROGRESS_SEGMENTS = 10
 _INITIAL_SERVICE_BACKOFF = 60
@@ -135,13 +137,13 @@ _ERROR_SUMMARY_LENGTH = 200
 _DEFAULT_ARCHIVE_RETRIES = 3
 _INITIAL_ARCHIVE_BACKOFF = 4.0
 
-# Accept an all-absent ("empty") event on its FIRST sighting once the
-# observation is at least this old. By then replication to CADC is long
-# settled, so a definitive NotFound on every probe means the bytes aged off
-# (or never landed) and no number of re-checks recovers them. Younger or
-# undatable events keep the _MAX_ATTEMPTS cross-resume allowance, which
-# exists for exactly one transient: archive-side replication still in
-# flight for a recently registered event. Override per run: --empty-age-days.
+# Minimum age (days) for an all-absent ("empty") event to be accepted on its
+# first sighting. By then replication to CADC has long settled, so a definitive
+# NotFound on every probe means the bytes aged off or never arrived, and no
+# number of re-checks recovers them. Younger or undatable events keep the
+# _MAX_ATTEMPTS cross-resume allowance, which exists for the one transient
+# case of archive-side replication still in progress for a recently
+# registered event. The age is set per run with --empty-age-days.
 _EMPTY_TERMINAL_AGE_DAYS = 30
 
 _DATE_RE = re.compile(r"/raw/(\d{4})/(\d{2})/(\d{2})/")
@@ -161,10 +163,12 @@ def _sleep(seconds: float) -> None:
 
 
 def _obs_age_days(obs_date) -> Optional[int]:
-    """Whole days since `obs_date` ('YYYY-MM-DD', as _DATE_RE extracts it from
-    the Common Path), or None when the date is absent/unparseable ('unknown').
-    None deliberately fails OPEN into the retry path: an event we cannot date
-    is never written off on a single sighting."""
+    """Return the whole days since ``obs_date``, or None when it is absent or unparseable.
+
+    ``obs_date`` is 'YYYY-MM-DD' as _DATE_RE extracts it from the Common Path,
+    or 'unknown'. A None result sends the event to the retry path, so an event
+    that cannot be dated is never written off on a single sighting.
+    """
     try:
         d = datetime.date.fromisoformat(str(obs_date))
     except ValueError:
@@ -173,9 +177,11 @@ def _obs_age_days(obs_date) -> Optional[int]:
 
 
 def _resolve_freq_ids(spec, n_channels: Optional[int]) -> List[int]:
-    """--freq-ids -> a sorted list of freq_id ints. Accepts 'all' (every freq_id in
-    the instrument's band, i.e. range(n_channels)), a list, or the same string forms
-    as --select."""
+    """Parse --freq-ids into a sorted list of freq_id ints.
+
+    Accepts 'all' (every freq_id in the instrument's band, range(n_channels)),
+    a list, or the same string forms as --select.
+    """
     all_ids = (list(range(n_channels)) if n_channels is not None else [])
     if spec is None:
         return all_ids
@@ -186,8 +192,10 @@ def _resolve_freq_ids(spec, n_channels: Optional[int]) -> List[int]:
 
 
 def _load_json_file(path: Path, default):
-    """Read+parse JSON from `path`; return `default` if the file is missing,
-    empty, or corrupt -- e.g. a checkpoint a previous run was killed mid-write.
+    """Read and parse JSON from ``path``, or return ``default``.
+
+    ``default`` is returned when the file is missing, empty, or corrupt, such as
+    a checkpoint that a previous run was killed while writing.
     """
     try:
         if not path.exists():
@@ -199,10 +207,11 @@ def _load_json_file(path: Path, default):
 
 
 def _enumerate_events(scopes, include_outrigger, cache_path: Path, re_enumerate):
-    """{(scope, event): [labels...]} across all larger-datasets, cached to disk.
+    """Return {(scope, event): [labels...]} for all larger-datasets, cached to disk.
 
-    Phase 1: cheap, network-only listing. Cached so a re-run skips straight to
-    verification unless --re-enumerate is given.
+    This is phase 1 of the survey, a cheap network-only listing. The result is
+    cached, so a re-run goes straight to verification unless --re-enumerate is
+    given.
     """
     if cache_path.exists() and not re_enumerate:
         raw = _load_json_file(cache_path, None)
@@ -224,14 +233,15 @@ def _enumerate_events(scopes, include_outrigger, cache_path: Path, re_enumerate)
                 if cached_scopes == sorted(map(str, scopes)):
                     return {tuple(key.split("|", 1)): list(labels)
                             for key, labels in event_map.items()}
-                # The dir was enumerated for different scope(s). Serving the stale
-                # list would silently survey the wrong scope, so stop loudly.
+                # The directory was enumerated for different scope(s). The stale
+                # list would survey the wrong scope without notice, so the run
+                # stops with an error.
                 raise SystemExit(
                     f"inventory directory {cache_path.parent} was already "
                     f"enumerated for scope(s) {cached_scopes}, but this run "
                     f"requests {sorted(scopes)}. An inventory is tied to its "
                     "scope(s); use a fresh --name/output directory.")
-        # corrupt/empty cache -> fall through and re-enumerate
+        # a corrupt or empty cache is re-enumerated below
 
     membership: dict = defaultdict(set)
     for scope in scopes:
@@ -241,8 +251,9 @@ def _enumerate_events(scopes, include_outrigger, cache_path: Path, re_enumerate)
                 f"datatrail could not list datasets under scope {scope!r}; "
                 f"the existing event cache at {cache_path} was left untouched. "
                 "Re-run when the service responds.")
-        # One `datatrail ls` per dataset -- a slow walk -- so show progress, but
-        # not all N names (use --scopes-only recon to inspect dataset structure).
+        # One ``datatrail ls`` per dataset makes a slow walk, so progress is
+        # printed without all N names. The --scopes-only recon lists the
+        # dataset structure.
         print(f"{scope}: walking {len(datasets)} larger-dataset(s)", flush=True)
         step = max(1, len(datasets) // _DATASET_PROGRESS_SEGMENTS)
         for i, ds in enumerate(datasets, 1):
@@ -275,24 +286,25 @@ def _commit_decision(n_errored: int, attempts: int, n_records: int,
                      empty_max_attempts: Optional[int] = None) -> tuple:
     """Return (write_records, mark_done, incomplete) for one event.
 
-      clean, rows resolved           -> write rows, mark done
-      partial, attempts left         -> write nothing, don't mark (clean retry)
-      partial, out of attempts       -> accept what verified, mark done, flag
-      empty (cp resolved, 0 rows,    -> write nothing, retry across resumes, then
-        0 hard errors), retries left     accept-as-empty + mark done -- so a 0-row
-      empty, out of attempts            event can never silently read as "clean"
+      case                          result
+      clean, rows resolved          write rows, mark done
+      partial, attempts left        write nothing, do not mark (clean retry)
+      partial, out of attempts      write what verified, mark done, flag
+      empty, retries left           write nothing, retry on the next resume
+      empty, out of attempts        accept as empty, mark done
 
-    `n_records` is how many files verified PRESENT. Zero PRESENT *and* zero
-    errored means the event resolved a common path but produced no usable file:
-    distinct from a fully-resolved event, and a case that must never be written
-    out as a clean 0-row 'done'.
-    `empty_max_attempts` caps the EMPTY case only (None -> `max_attempts`).
-    survey passes 1 when the observation is old enough that absence cannot be
-    replication lag (_EMPTY_TERMINAL_AGE_DAYS / --empty-age-days), so a
-    definitively-absent old event is accepted on first sighting instead of
-    burning cross-resume probes that were never observed to recover. The
-    errored/partial path is unaffected: a hard probe error is not an answer,
-    however old the observation.
+    ``n_records`` is the number of files verified present. An event is empty
+    when its common path resolved but it has zero present files and zero hard
+    errors. Such an event produced no usable file, so it is never written out as
+    a clean 0-row done.
+
+    ``empty_max_attempts`` caps the empty case only (None uses
+    ``max_attempts``). survey passes 1 when the observation is old enough that
+    absence cannot be replication lag (_EMPTY_TERMINAL_AGE_DAYS or
+    --empty-age-days). A definitively absent old event is then accepted on its
+    first sighting, and no cross-resume probes are spent on events that have
+    never been seen to recover. The errored and partial path is unaffected,
+    since a hard probe error is not an answer, however old the observation.
     """
     if n_errored == 0:
         if n_records == 0:                        # resolved, but nothing present
@@ -325,23 +337,24 @@ class CadcDatatrailSource(DataSource):
     )
 
     def __init__(self) -> None:
-        # One client per thread: fetch()/cadcinfo() may run concurrently (download
-        # workers, or the survey verify pool), and a shared CADC client is not
-        # guaranteed safe for concurrent calls.
+        # One client per thread. fetch() and cadcinfo() may run concurrently in
+        # the download workers or the survey verify pool, and a shared CADC
+        # client is not guaranteed safe for concurrent calls.
         self._local = threading.local()
-        # Resolve optional exception families before a timed network operation;
-        # imports on the first failure must not consume its retry/timeout budget.
+        # The optional exception families are resolved before any timed network
+        # operation, so imports on the first failure do not use up its retry
+        # and timeout budget.
         self._expected_errors = _cadc_transport.expected_errors()
         self._last_survey_completeness: Optional[dict[str, int]] = None
 
     def survey_completeness_issues(
             self, out_dir: str) -> Optional[dict[str, int]]:
-        """Omissions in the persisted state produced by the latest survey.
+        """Return the omission counts in the persisted state of the latest survey.
 
         Accepted-empty and definitive no-data events are explicit archive
-        dispositions, not unresolved omissions. Strict mode fails on partial
-        terminal events, contract refusals, and events still pending a later
-        resumable pass (including a ``--max-events`` stop).
+        dispositions and are not counted as omissions. Strict mode fails on
+        partial terminal events, contract refusals, and events still pending a
+        later resumable pass, as after a ``--max-events`` stop.
         """
         del out_dir
         if self._last_survey_completeness is None:
@@ -368,7 +381,7 @@ class CadcDatatrailSource(DataSource):
             return StorageInventoryClient(subj, resource_id=service)
         return StorageInventoryClient(subj)
 
-    # -- enumerate -----------------------------------------------------------
+    # Enumerate
     def _inventory_path(self, ctx: RunContext) -> str:
         o = ctx.options or {}
         p = o.get("inventory")
@@ -407,29 +420,29 @@ class CadcDatatrailSource(DataSource):
                 r = parse_row(line, path, line_number)
                 ch = r.get("freq_id")
                 if ch is not None and n_channels is not None:
-                    # The row parser proves this is an integer; the shared
-                    # grammar supplies the instrument-specific upper bound.
+                    # The row parser has already checked that this is an
+                    # integer, and the shared grammar checks the instrument's
+                    # upper bound.
                     parse_freq_ids([ch], n_channels=n_channels)
                 if not sel.wants_freq_id(ch):
                     continue
                 if not sel.wants_event(r.get("event")):
                     continue
-                # Rows are self-describing since the shape moved onto the
-                # reader: survey writes each file's `name`, and enumerate just
-                # joins it to the common path -- no naming re-derivation, so
-                # survey and read cannot drift: current inventory rows always
-                # carry the exact verified relative name.
+                # Each row carries the exact verified relative name written by
+                # survey, and enumerate joins it to the common path. The name is
+                # never derived again, so survey and read cannot disagree on it.
                 name = r["name"]
                 uri = join_uri(r["common_path"], name)
                 logical_key = logical_unit_key(r["scope"], r["event"], name)
                 if logical_key in seen:
                     continue
                 seen.add(logical_key)
-                # meta: the row, minus the URI ingredients, plus the stable
-                # quarantine identity. Shape-specific columns (freq_id for
-                # baseband; whatever a calibration shape wrote) ride through
-                # untouched -- meta is opaque to the engine and is exactly how
-                # an analyzer keys a companion lookup (e.g. gains by event).
+                # meta is the row without the URI parts, plus the stable
+                # quarantine identity. Shape-specific columns, such as freq_id
+                # for baseband or the columns a calibration shape wrote, are
+                # passed through unchanged. The engine does not interpret these
+                # columns, and an analyzer uses them to look up companion files,
+                # such as gains by event.
                 meta = {k: v for k, v in r.items()
                         if k not in ("common_path", "name")}
                 if ch is not None:
@@ -440,11 +453,11 @@ class CadcDatatrailSource(DataSource):
                 units.append(Unit(key=logical_key, name=name, meta=meta))
         return units
 
-    # -- fetch ---------------------------------------------------------------
+    # Fetch
     def fetch(self, unit: Unit, dest: str,
               retries: int = _DEFAULT_ARCHIVE_RETRIES,
               base: float = _INITIAL_ARCHIVE_BACKOFF):
-        """Fetch one object with finite connect/read-inactivity waits."""
+        """Fetch one object with finite connect and read-inactivity timeouts."""
         client = self._get_client()
         delay, last = base, None
         expected = (unit.meta or {}).get("size_bytes")
@@ -463,10 +476,10 @@ class CadcDatatrailSource(DataSource):
             try:
                 uri = unit.meta.get("cadc_uri", unit.key)
                 if getattr(self._local, "socket_timeout_fallback", True):
-                    # The socket default is process-wide. This compatibility
-                    # path is serialized and always restored; current CADC
-                    # clients use the per-session path above and remain fully
-                    # concurrent.
+                    # The socket default is process-wide, so this compatibility
+                    # path is serialized and the default is always restored.
+                    # Current CADC clients use the per-session timeout set in
+                    # _get_client and stay fully concurrent.
                     with _cadc_transport.socket_timeout(
                             _cadc_transport.CADC_READ_TIMEOUT_SECONDS):
                         client.cadcget(uri, dest=dest)
@@ -492,11 +505,11 @@ class CadcDatatrailSource(DataSource):
         discard_partial()
         return False, str(last)[:_ERROR_SUMMARY_LENGTH]
 
-    # -- survey ---------------------------------------
-    # (The per-product file shape -- which files one event contributes, and
-    # their names -- lives on the reader (Reader.survey_files) so survey and
-    # read share one naming definition and cannot drift; survey() below
-    # consults ctx.reader, falling back to the chime-baseband reader's shape.)
+    # Survey
+    # The per-product file shape, which gives the files one event contributes
+    # and their names, is defined on the reader (Reader.survey_files). Survey
+    # and read then share one naming definition and cannot disagree. survey()
+    # uses ctx.reader and falls back to the chime-baseband reader's shape.
     def _cadc_size(self, uri, retries: int = _DEFAULT_ARCHIVE_RETRIES,
                    base: float = _INITIAL_ARCHIVE_BACKOFF, deadline=None):
         delay, last = base, None
@@ -529,15 +542,16 @@ class CadcDatatrailSource(DataSource):
 
     @with_survey_output_lock
     def survey(self, ctx: RunContext, out_dir: str) -> str:
-        """Build inventory.jsonl for the selected scope(s) + freq_ids.
+        """Build inventory.jsonl for the selected scope(s) and freq_ids.
 
-        Two phases, resumable and incremental: enumerate the unique events under
-        each scope (cached), then for every not-yet-done event resolve its Common
-        Path and cadcinfo each requested freq_id, writing verified rows atomically
-        per event. Re-running tops up remaining cached events without
-        re-surveying completed ones. Use `--re-enumerate` to discover newly
-        registered events; use a fresh inventory to re-probe an already
-        completed event.
+        The survey runs in two resumable, incremental phases. First, the unique
+        events under each scope are enumerated and cached. Following this, the
+        Common Path of every event not yet done is resolved, each requested
+        freq_id is checked with cadcinfo, and the verified rows are written
+        atomically per event. A re-run surveys the remaining cached events and
+        skips the completed ones. Newly registered events are discovered with
+        ``--re-enumerate``, and an already completed event is probed again only
+        in a fresh inventory.
         """
         o = ctx.options or {}
         scope_opt = o.get("scope")
@@ -567,10 +581,10 @@ class CadcDatatrailSource(DataSource):
         if empty_age_days < 0:
             raise SystemExit("--empty-age-days must be zero or greater")
 
-        # The reader owns the archive file shape (which files one event
-        # contributes, and their names -- Reader.survey_files). The CLI resolves
-        # the run's reader onto ctx.reader; a caller that supplied none falls
-        # back to the chime-baseband shape.
+        # The reader defines the archive file shape, the files one event
+        # contributes and their names (Reader.survey_files). The CLI sets the
+        # run's reader on ctx.reader, and a caller that supplies none gets the
+        # chime-baseband shape.
         shape = ctx.reader if ctx.reader is not None else _default_shape()
         reader_name = getattr(getattr(shape, "info", None), "name",
                               type(shape).__name__)
@@ -606,7 +620,7 @@ class CadcDatatrailSource(DataSource):
                   f" shape={reader_name} minimum_bytes={minimum_bytes}"
                   f"{fid_note} -> {inv_path}", flush=True)
 
-            # ---- phase 1: enumerate the unique events (cached) ----
+            # Phase 1: enumeration of the unique events (cached)
             membership = _enumerate_events(scopes, include_outrigger,
                                            out / "enum_cache.json", re_enumerate)
             events = sorted(ev for ev, lbls in membership.items()
@@ -614,7 +628,7 @@ class CadcDatatrailSource(DataSource):
                             or not any(_OUTRIGGER_RE.search(x) for x in lbls))
             print(f"to survey: {len(events)} events", flush=True)
 
-            # ---- phase 2: verify each event's freq_ids (resumable) ----
+            # Phase 2: verification of each event's freq_ids (resumable)
             attempts_path = out / "attempts.json"
             attempts = load_attempts(attempts_path)
             pending_path = out / "pending_events.json"
@@ -623,20 +637,23 @@ class CadcDatatrailSource(DataSource):
                 raise SystemExit(f"invalid pending survey state: {pending_path}")
             store = SurveyStore(out / "survey_state.sqlite3")
             surveyed = store.completed_keys()
-            # A crash can land after the event transaction but before its attempts
-            # checkpoint. The committed event wins; discard that harmless stale count.
+            # A crash can occur after the event transaction and before its
+            # attempts checkpoint. The committed event takes precedence, and the
+            # harmless stale count is discarded.
             for key in surveyed:
                 attempts.pop(key, None)
                 pending.pop(key, None)
             atomic_write_json(attempts_path, attempts)
             atomic_write_json(pending_path, pending)
-            # Recover JSONL/text views if a previous process stopped after committing
-            # SQLite but before its periodic/final render.
+            # The JSONL and text views are rebuilt in case a previous process
+            # stopped after a SQLite commit and before its periodic or final
+            # render.
             store.render_views(out)
             print(f"resume: {len(surveyed)} events already done", flush=True)
 
-            # accept-as-empty ledger: one JSON object per written-off event, so the
-            # write-off is auditable (when, how many sightings, why) and greppable.
+            # The accept-as-empty ledger holds one JSON object per written-off
+            # event, so each write-off can be audited (when, how many sightings,
+            # why) and found with grep.
             no_files_path = out / "no_files_events.jsonl"
             pool = ThreadPoolExecutor(max_workers=workers)
             n_new = 0
@@ -668,11 +685,11 @@ class CadcDatatrailSource(DataSource):
                     cp, ps_ok = DATATRAIL.common_path(
                         scope, ev, deadline=deadline)
                 except DatatrailContractError as exc:
-                    # Deterministic: the service answered, the payload is not one
-                    # this adapter can act on. Retrying cannot change it, and it
-                    # must never masquerade as an outage (which would stall the
-                    # whole survey on one event and then abort with a misleading
-                    # certificate message).
+                    # The service answered with a payload this adapter cannot
+                    # act on. The refusal is deterministic, so a retry cannot
+                    # change it. It must never be treated as an outage, which
+                    # would stall the whole survey on one event and then abort
+                    # with a misleading certificate message.
                     return "refused", [], [], 0, "unknown", None, str(exc), {}
                 if not ps_ok:
                     return "service_down", [], [], 0, "unknown", None, None, {}
@@ -681,8 +698,8 @@ class CadcDatatrailSource(DataSource):
                 obs_date = (lambda m: f"{m[1]}-{m[2]}-{m[3]}" if m else "unknown")(
                     _DATE_RE.search(cp))
                 labels = membership[(scope, ev)]
-                # The candidate files one event contributes -- (name, fields) pairs
-                # from the reader's shape. Baseband yields one per freq_id; a
+                # The reader's shape gives the candidate files of one event as
+                # (name, fields) pairs. Baseband yields one per freq_id, and a
                 # per-event product may yield a single file with its own fields.
                 cand = [candidate_file(item, reader_name)
                         for item in shape.survey_files(ev, cp, freq_ids, ctx)]
@@ -703,9 +720,10 @@ class CadcDatatrailSource(DataSource):
                     if err is not None:
                         errored.append(name)
                     elif size is not None and size >= minimum_bytes:
-                        # Self-describing row: `name` is what enumerate/fetch will
-                        # stage (joined to common_path), and the shape's per-file
-                        # fields land verbatim as columns.
+                        # The row is self-describing. ``name`` is the file that
+                        # enumerate and fetch stage (joined to common_path), and
+                        # the shape's per-file fields are written verbatim as
+                        # columns.
                         rec = {
                             "scope": str(scope), "event": str(ev), "name": name,
                             "size_bytes": int(size),
@@ -725,7 +743,7 @@ class CadcDatatrailSource(DataSource):
                     "n_sub_floor": len(sub_floor),
                     "n_absent": len(cand) - len(records) - len(errored) - len(sub_floor),
                 }
-                if errored and len(errored) == len(cand):       # all errored -> outage
+                if errored and len(errored) == len(cand):       # all probes errored, treated as an outage
                     return "service_down", records, errored, len(cand), obs_date, cp, None, details
                 return "progress", records, errored, len(cand), obs_date, cp, None, details
 
@@ -739,8 +757,9 @@ class CadcDatatrailSource(DataSource):
                               f"(resumable).", flush=True)
                         break
 
-                    # ride out a transient outage on the SAME event; only a sustained
-                    # one aborts (the signature of an expired cert, which won't heal).
+                    # A transient outage is waited out on the same event. Only a
+                    # sustained outage aborts the survey, since it is the
+                    # signature of an expired cert, which does not recover.
                     backoff = _INITIAL_SERVICE_BACKOFF
                     outage_started = _monotonic()
                     outage_deadline = outage_started + max(
@@ -784,13 +803,14 @@ class CadcDatatrailSource(DataSource):
 
                     n_new += 1
                     if status == "refused":
-                        # Committed as done (resume skips it) with the reason in
-                        # the accept-as-empty ledger, so the write-off is
-                        # auditable and greppable rather than a silent gap. If the
-                        # named URI turns out to be a legitimate new collection,
-                        # widen _MINOC_COLLECTIONS in datatrail_client.py and re-open
-                        # these rows (DELETE FROM events WHERE status='refused'
-                        # in survey_state.sqlite3) before re-running.
+                        # The event is committed as done, so resume skips it,
+                        # and the reason is written to the accept-as-empty
+                        # ledger, where the write-off can be audited and found
+                        # with grep. If the named URI is a legitimate new
+                        # collection, widen _MINOC_COLLECTIONS in
+                        # datatrail_client.py and re-open these rows (DELETE FROM
+                        # events WHERE status='refused' in survey_state.sqlite3)
+                        # before re-running.
                         n_refused += 1
                         ledger = {
                             "ts": datetime.datetime.now(datetime.timezone.utc)
@@ -823,26 +843,29 @@ class CadcDatatrailSource(DataSource):
                               "no candidate files; no archive absence inferred", flush=True)
                         continue
 
-                    # `empty` = a common path resolved but every requested freq_id
-                    # came back absent/sub-floor: 0 rows AND 0 hard errors. That is
-                    # NOT a clean, fully-resolved event and must never be written
-                    # out as a silent 0-row "done". Absence here is
-                    # already definitive per probe (_cadc_size reports NotFound as
-                    # an answer, not an error; outages take the service_down
-                    # circuit; hard errors take the INCOMPLETE path), so the only
-                    # transient it could mask is archive-side replication lag --
-                    # which can only affect a RECENT observation. An empty event
-                    # whose obs_date is at least `empty_age_days` old is therefore
-                    # accepted on FIRST sighting; a younger or undatable one stays
-                    # un-done (retried across resumes) until _MAX_ATTEMPTS. Either
-                    # way the acceptance is recorded in no_files_events.jsonl, so a
-                    # 0-row event can neither vanish silently nor re-probe forever.
+                    # An event is empty when a common path resolved but every
+                    # requested freq_id came back absent or below the byte floor,
+                    # with 0 rows and 0 hard errors. Such an event is not a clean,
+                    # fully resolved event and must never be written out as a
+                    # silent 0-row done. Absence here is already definitive for
+                    # each probe, since _cadc_size returns NotFound as an answer.
+                    # Outages take the service_down path, and hard errors take
+                    # the incomplete path. The only transient case it could mask
+                    # is archive-side replication lag, which can affect only a
+                    # recent observation. Thus, an empty event whose
+                    # obs_date is at least empty_age_days old is accepted on its
+                    # first sighting. A younger or undatable event stays pending
+                    # and is retried across resumes until _MAX_ATTEMPTS. In both
+                    # cases the acceptance is recorded in no_files_events.jsonl,
+                    # so a 0-row event can neither vanish without notice nor be
+                    # probed again forever.
                     empty = not records and not errored
-                    sightings = attempts.get(key, 0) + 1    # incl. this run's probe
+                    sightings = attempts.get(key, 0) + 1    # counts this run's probe
                     if empty and details["collection_restored"] and not details["n_sub_floor"]:
-                        # A guessed prefix with no independently found object is
-                        # not evidence of archive absence, regardless of age or
-                        # repeat count. Keep it resumable and record why.
+                        # A guessed prefix with no independently found object
+                        # gives no evidence of archive absence, at any age or
+                        # repeat count. The event stays resumable, and the reason
+                        # is recorded.
                         pending[key] = {
                             "scope": scope, "event": ev, "common_path": str(cp),
                             "reason": "unverified-restored-collection",
@@ -866,7 +889,7 @@ class CadcDatatrailSource(DataSource):
                         n_incomplete += 1
                     if done:
                         no_files_record = None
-                        if empty:                  # terminal 0-file event: ledger it
+                        if empty:                  # terminal 0-file event, written to the ledger
                             no_files_record = {
                                 "ts": datetime.datetime.now(datetime.timezone.utc)
                                               .strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -894,9 +917,9 @@ class CadcDatatrailSource(DataSource):
                         if empty:
                             n_empty_retry += 1
 
-                    # surface the empty case too -- otherwise it prints nothing and
-                    # the run looks like it did nothing at all (0 events processed
-                    # visibly, 0 rows on disk).
+                    # The empty case is printed too. Without it, a run of empty
+                    # events prints nothing and looks like it did nothing at all
+                    # (0 events shown, 0 rows on disk).
                     if (records or errored or empty
                             or i % _EVENT_PROGRESS_INTERVAL == 0):
                         if empty and done:
@@ -918,10 +941,11 @@ class CadcDatatrailSource(DataSource):
                         print(f"[{i}/{len(events)}] {ev}: "
                               f"{len(records)}/{n_cand} files{tag}", flush=True)
             finally:
-                # Cancel work that has not started and join active probes before
-                # releasing the output lock or returning an error. Supported CADC
-                # calls carry finite per-request timeouts (and the outage deadline),
-                # so shutdown is bounded by the remaining in-flight requests.
+                # Work that has not started is cancelled, and active probes are
+                # joined before the output lock is released or an error is
+                # returned. Supported CADC calls carry finite per-request
+                # timeouts and the outage deadline, so shutdown is bounded by the
+                # remaining in-flight requests.
                 pool.shutdown(wait=True, cancel_futures=True)
                 atomic_write_json(attempts_path, attempts)
                 try:
@@ -943,9 +967,9 @@ class CadcDatatrailSource(DataSource):
                     finally:
                         store.close()
 
-            # Row-level accounting: the final word on the run, so an empty
-            # inventory can never hide behind "survey wrote <path>" while 0 rows
-            # landed.
+            # The row count is the final report of the run, so an empty
+            # inventory is never hidden behind "survey wrote <path>" when 0 rows
+            # were written.
             total_rows = (sum(1 for ln in open(inv_path) if ln.strip())
                           if inv_path.exists() else 0)
             print(f"\nsurvey: {n_new} events this run -- {n_rows} rows written, "
@@ -976,7 +1000,7 @@ class CadcDatatrailSource(DataSource):
             print(f"survey wrote {inv_path}", flush=True)
             return str(inv_path)
 
-    # -- doctor --------------------------------------------------------------
+    # Doctor
     def fetch_preflight(self, ctx: RunContext) -> tuple[bool, list[str], list[str]]:
         """Check only the dependencies needed to read an inventory and fetch."""
         del ctx
@@ -997,16 +1021,18 @@ class CadcDatatrailSource(DataSource):
     def preflight(self, ctx: RunContext) -> tuple[bool, list[str], list[str]]:
         _ok, problems, notes = self.fetch_preflight(ctx)
 
-        # -- survey-only prerequisites: datatrail ------------------------------
-        # scan/fetch never call datatrail; these are survey-only and stay silent
-        # when datatrail is absent (`requires` already lists it). The whole
-        # datatrail surface lives behind pilot_proxy.archive.datatrail_client.
+        # Survey prerequisites (datatrail)
+        # scan and fetch never call datatrail. These checks apply to survey only
+        # and are skipped when datatrail is absent, since ``requires`` already
+        # lists it. All datatrail calls go through
+        # pilot_proxy.archive.datatrail_client.
         if Datatrail.installed():
-            # (a) the machine-readable CLI contract survey drives (`datatrail
-            # ls/ps --json`, datatrail-cli >= 0.11). A pre-0.11 install has no
-            # --json flag; the live call would misread as a service outage and
-            # stall survey ~an hour before a misleading 'expired cert' abort.
-            # Report the real cause here, before the run, instead.
+            # (a) The machine-readable CLI contract that survey uses
+            # (``datatrail ls/ps --json``, datatrail-cli >= 0.11). A pre-0.11
+            # install has no --json flag. The live call would then be read as a
+            # service outage and stall the survey for about an hour before a
+            # misleading 'expired cert' abort, so the real cause is reported
+            # here before the run.
             ok, detail = Datatrail.api_available()
             if not ok:
                 problems.append(
@@ -1015,10 +1041,10 @@ class CadcDatatrailSource(DataSource):
                     "uses `datatrail ls/ps --json` (datatrail-cli>=0.11); "
                     "upgrade datatrail-cli (scan/fetch are unaffected).")
 
-            # (b) validate the scope(s) survey will walk against datatrail's live
-            # namespace, so a stale/renamed scope fails here instead of silently
-            # walking nothing into an empty inventory. datatrail owns which scopes
-            # EXIST; the instrument YAML owns which to walk.
+            # (b) The scope(s) survey will walk are checked against datatrail's
+            # live namespace, so a stale or renamed scope fails here, before
+            # survey can walk it into an empty inventory. datatrail defines which
+            # scopes exist, and the instrument YAML defines which ones to walk.
             o = ctx.options or {}
             scope_opt = o.get("scope")
             effective = (tuple(s.strip() for s in
@@ -1030,8 +1056,8 @@ class CadcDatatrailSource(DataSource):
                 try:
                     known = set(DATATRAIL.list_scopes())
                 except Exception:
-                    known = set()    # datatrail unreachable -> can't validate
-                if known:            # empty => transient/auth, not 'all invalid'
+                    known = set()    # datatrail unreachable, so no validation
+                if known:            # empty means a transient or auth failure
                     missing = [s for s in effective if s not in known]
                     if missing:
                         problems.append(
@@ -1040,10 +1066,10 @@ class CadcDatatrailSource(DataSource):
                             "`scopes:` or --scope (`datatrail ls` lists valid "
                             "scopes).")
                 else:
-                    # couldn't list scopes (datatrail down / not installed). Don't
-                    # claim the scopes are invalid -- surface a visible, non-fatal
-                    # 'skipped' so doctor's READY isn't silently masking a check
-                    # that never actually ran.
+                    # The scopes could not be listed (datatrail down or not
+                    # installed), so they are not reported as invalid. A visible,
+                    # non-fatal 'skipped' note is added, so doctor's READY does
+                    # not hide a check that never ran.
                     notes.append(
                         "datatrail scope(s) not validated: could not reach "
                         "datatrail to list scopes -- survey will still attempt "

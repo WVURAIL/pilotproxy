@@ -94,9 +94,10 @@ def test_summarize_result_json_skips_histograms_for_sweep_by_default(tmp_path) -
 
 
 def test_summarize_result_json_can_force_histograms_for_sweep(tmp_path) -> None:
-    # Forcing histograms needs matplotlib (the `plot`/`chime` extra); skip rather
-    # than hard-fail (SystemExit) on a minimal `.[test]` install without it,
-    # matching the gnuradio importorskip in test_evaluate_dtv_snr.py.
+    # Forced histograms need matplotlib (the plot or chime extra), and
+    # summarize_result_json raises SystemExit without it. The test is skipped
+    # when matplotlib is missing, in the same way as the gnuradio test of
+    # test_evaluate_dtv_snr.py.
     pytest.importorskip("matplotlib")
 
     input_json = tmp_path / "sweep.json"

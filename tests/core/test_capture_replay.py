@@ -1,4 +1,8 @@
-"""Native fixture replay, authenticated refusals, and calibration handoff."""
+"""Tests of the capture replay on the native fixture.
+
+The tests cover the replay itself, the rejection of altered inputs with and
+without refreshed hashes, and the handoff to calibration.
+"""
 
 import copy
 import importlib.util

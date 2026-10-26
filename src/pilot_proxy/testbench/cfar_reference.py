@@ -1,25 +1,28 @@
-"""Part 4: synthetic bench, CA against OS at a fixed ideal false-alarm rate.
+"""CA against OS at a fixed ideal false-alarm rate on the synthetic bench.
 
-Ideal statistic per fine bin: T = (X / 4096) / (Y / 8192), X ~ noncentral chi2(4096, lambda), Y ~ chi2(8192), bins
-independent (the ideal F(4096, 8192) law of ch05 for the bulk; for D the independence is the same assumption the
-fine-score plates make). lambda = 4096 (s g_f + c_f): s is the pilot SNR (pilot power over the noise power of one
-bin, so E[T] = 1 + s at the pilot's bin), g_f the pilot's response at padded bin f, c_f a contaminating bulk bin's
-SNR. X is drawn as (N + sqrt(lambda))^2 + chi2(4095), exact, so every case shares one noise draw (common random
-numbers).
+This is part 4 of the cfar-choice-2026-09-29 study.
 
-Geometry: 256 padded bins, pad factor 2 (128 natural bins), D = anchor +/- 2, bulk = every second bin minus the
-anchor's +/- 2 guard and D (anchors.bulk_mask with guard 1, no census bins): |B| = 125 at an even anchor (128),
-126 at an odd anchor (127). The pilot is a tone on the anchor bin, rectangular window (the Dirichlet response
-|sin(pi d) / (L sin(pi d / L))|^2, d in natural bins): on an even anchor it is on the natural grid and puts nothing
-in the bulk; on an odd anchor it sits half a natural bin off the grid and its shoulders fall on the even bulk bins
-(0.045 at anchor +/- 3, 0.016 at +/- 5, ...). Contaminating bins: 0 to 3 bulk bins far from the anchor at +10,
-+20 or +30 dB.
+The ideal statistic of each fine bin is T = (X / 4096) / (Y / 8192), with X ~ noncentral chi2(4096, lambda),
+Y ~ chi2(8192), and independent bins. This is the ideal F(4096, 8192) law of ch05 for the bulk. For D, the
+independence is the same assumption the fine-score plates make. The noncentrality is lambda = 4096 (s g_f + c_f),
+where s is the pilot SNR (the pilot power over the noise power of one bin, so E[T] = 1 + s at the pilot's bin), g_f
+is the pilot's response at padded bin f, and c_f is the SNR of a contaminating bulk bin. X is drawn exactly as
+(N + sqrt(lambda))^2 + chi2(4095), so every case shares one noise draw (common random numbers).
 
-Detectors: Z = max_D T / ref, ref = mean_B T (CA), T_(63) (OS 63), T_(94) (OS 94, three quarters) and T_(113)
-(OS 113, nine tenths). Each threshold is the upper 1e-3 point of its own Z under the clean ideal null (no pilot,
-no contamination) at the same |B|, from 4e6 simulated frames.
+The geometry has 256 padded bins with a pad factor of 2 (128 natural bins). D is the anchor +/- 2. The bulk is every
+second bin minus the anchor's +/- 2 guard and D (anchors.bulk_mask with guard 1 and no census bins), which gives
+|B| = 125 at an even anchor (128) and 126 at an odd anchor (127). The pilot is a tone on the anchor bin with a
+rectangular window, whose Dirichlet response is |sin(pi d) / (L sin(pi d / L))|^2 for d in natural bins. On an even
+anchor, the tone is on the natural grid and puts nothing in the bulk. On an odd anchor, it is half a natural bin off
+the grid, and its shoulders fall on the even bulk bins (0.045 at anchor +/- 3, 0.016 at +/- 5, ...). In the
+contaminated cases, 0 to 3 bulk bins far from the anchor are set to +10, +20, or +30 dB.
 
-Ideal independent-bin reference only. The simulated or quadrature threshold is not an operational eta_Pfa calibration.
+The detectors are Z = max_D T / ref, with ref = mean_B T (CA), T_(63) (OS 63), T_(94) (OS 94, three quarters), or
+T_(113) (OS 113, nine tenths). Each threshold is the upper 1e-3 point of the detector's own Z under the clean ideal
+null (no pilot and no contamination) at the same |B|, from 4e6 simulated frames.
+
+This study is limited to the ideal independent-bin reference. The simulated or quadrature threshold is not an
+operational eta_Pfa calibration.
 
 Run with --out DIR using this module.
 """
@@ -113,7 +116,7 @@ def snr_at(pd, snr_db, target):
 
 
 def run(output_dir):
-    """Run the recorded clean and contaminated reference comparisons."""
+    """Run the recorded clean and contaminated reference cases."""
     OUT = Path(output_dir)
     OUT.mkdir(parents=True, exist_ok=False)
     (OUT / "REFERENCE.md").write_text('Ideal independent-bin reference only. The simulated or quadrature threshold is not an operational eta_Pfa calibration.\n', encoding="utf-8")

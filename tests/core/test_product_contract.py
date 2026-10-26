@@ -21,7 +21,7 @@ def test_current_product_schema_identity_is_structured() -> None:
     assert PER_PILOT_PRODUCT_SCHEMA_NAME == "pilotproxy_per_pilot_product"
     assert PER_PILOT_PRODUCT_SCHEMA_REVISION == 6
     assert PER_PILOT_PRODUCT_SCHEMA_TOKEN == "pilotproxy_per_pilot_product_v6"
-    # The products of record keep their v5 token; readers recognize it.
+    # The products of record keep their v5 token, which readers recognize.
     assert PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN == "pilotproxy_per_pilot_product_v5"
 
 

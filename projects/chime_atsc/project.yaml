@@ -1,6 +1,7 @@
 # Project profile: CHIME baseband archive, ATSC UHF television as the emitter.
-# Data only. pilot_proxy.config.project loads this directory; the Python
-# modules hold no project values. Paths are relative to this directory.
+# This directory holds data only. It is loaded by pilot_proxy.config.project,
+# and the Python modules hold no project values. Paths are relative to this
+# directory.
 name: chime_atsc
 instrument: chime                        # pilot_proxy/instruments/chime.yaml
 detector_adapter: narrowband_marker

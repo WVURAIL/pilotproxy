@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Prepare or explicitly launch one finite noise/TX-zero/tone reference capture.
+"""Prepare or launch one finite reference capture in noise, TX-zero, or tone mode.
 
-Preparation does not open a device. Hardware capture requires explicit launch flags.
-This helper does not supply measured dBm, an OTA calibration or an observing policy.
+Preparation does not open a device, and a hardware capture requires explicit
+launch flags. This helper does not supply measured dBm, an over-the-air (OTA)
+calibration, or an observing policy.
 """
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ def write_new(path, value):
 
 def prepare(output, *, build_manifest, serial, mode, record_seconds=2., tone_component=.005,
             native_tx_gain_db=50, expected_tx_gain_readback_db=50):
-    """Prepare one explicit attempt; this never opens the radio."""
+    """Prepare one explicit capture attempt without opening the radio."""
     if mode not in {"noise", "txzero", "tone"}:
         raise ValueError("mode must be noise, txzero or tone")
     if not math.isfinite(record_seconds) or not .02 <= record_seconds <= 4:
@@ -174,7 +175,7 @@ def capture(output, *, hardware_authorized=False, transmit=False, rf_confined_au
         raise
     finally:
         if process is not None and process.poll() is None:
-            # Also clean up unexpected parent-side exceptions, not only timeout.
+            # stop a worker left running by a parent-side exception
             process.send_signal(signal.SIGTERM)
             try:
                 process.wait(timeout=5)

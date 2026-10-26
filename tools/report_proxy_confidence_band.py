@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Reproduce exploratory joint proxy bands on frozen archive score products.
 
-The output is a statistical diagnostic, not a replacement telescope policy or a
-confidence bound on physical DTV power. Full arrays stay in the output directory.
+The output is a statistical diagnostic of the event-weighted shelf proxy. The
+telescope policy and the accepted detector words are unchanged. This report
+does not cover a confidence bound on physical DTV power, since the physical
+transfer uncertainty is not modeled. The full arrays are kept in the output
+directory.
 """
 from __future__ import annotations
 
@@ -42,7 +45,7 @@ def write_json(path, value):
 
 
 def freeze_channel(channel, scores, output, frozen_inputs=None):
-    """Preserve all arrays actually used, rather than relying on mutable paths."""
+    """Freeze the analysis arrays of one channel in the output, since the score paths can change."""
     if frozen_inputs is None:
         frames = rule.load_frames(channel, scores)
         meta = json.loads((scores / f"ch{channel}.json").read_text())
@@ -84,7 +87,7 @@ def freeze_channel(channel, scores, output, frozen_inputs=None):
 
 
 def event_time_clusters(frames, days):
-    """Keep an observing event intact even if it crosses a UTC boundary."""
+    """Return UTC block labels with each observing event assigned whole by its earliest frame."""
     _, event = np.unique(frames.event, return_inverse=True)
     first = np.full(event.max() + 1, np.inf)
     np.minimum.at(first, event, frames.time)
@@ -94,8 +97,10 @@ def event_time_clusters(frames, days):
 
 
 def curve_for_rule(frames, words, mask, window):
-    # This substitution is only a sensitivity calculation; it does not promote
-    # a proxy band to physical power or edit any accepted detector word.
+    # The band is substituted into the rule's sweep fields for a sensitivity
+    # calculation only. The accepted detector words are unchanged, and the
+    # band keeps its proxy scale. se holds half the upper margin, so the
+    # rule's x + 2 se reproduces the band's upper end.
     upper = np.asarray(window["upper"])
     eligible = np.asarray(window["eligible"], dtype=bool)
     x = np.maximum(np.asarray(window["signed_mean"]), 0)
@@ -115,7 +120,7 @@ def at_word(words, window, word):
 
 
 def load_model_calibration(path, replicates):
-    """Verify a model artifact; archive application is still only diagnostic."""
+    """Verify and return a declared-model calibration, which is applied to the archive as a diagnostic only."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from calibrate_proxy_confidence_band import source_hashes, verify_calibration
 
@@ -219,8 +224,9 @@ def main():
             if calibration is not None:
                 band = widen_upper_band(band, calibration["multiplier"],
                                         minimum_critical=calibration["minimum_critical"])
-            # Independent comparison with the existing accepted sweep, including
-            # the last window's different denominator and inherited event weights.
+            # The band means are compared with the accepted sweep in each
+            # window. The last-year window has its own denominator and keeps
+            # the full-era event weights.
             for name, mask in windows.items():
                 selected = rule.ChannelFrames(
                     channel=ch, required=frames.required[mask], weight=frames.weight[mask],
@@ -234,8 +240,9 @@ def main():
                                            rule.SHELF * reference["mean_excess"][idx[present]],
                                            rtol=1e-9, atol=1e-12)
                 if mode == "event":
-                    # The new implementation refuses cancellation-dominated
-                    # zero-support moments that the old sweep rounds to zero.
+                    # Only eligible points are compared. simultaneous_upper_band
+                    # refuses the cancellation-dominated zero-support moments
+                    # that rule.sweep rounds to zero.
                     check = present & np.asarray(got["eligible"])
                     np.testing.assert_allclose(np.asarray(got["se"])[check],
                                                reference["se"][idx[check]], rtol=1e-4, atol=1e-10)

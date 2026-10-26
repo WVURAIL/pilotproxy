@@ -95,7 +95,7 @@ def test_generate_atsc_uses_gnuradio_python_and_disables_user_site(
     assert env["PYTHONNOUSERSITE"] == "1"
     assert env["PYTHONPATH"].split(os.pathsep)[1:] == ["existing"]
     bridge, entries, package_target = bridge_snapshots[0]
-    assert not bridge.exists()  # lifetime is scoped to the child invocation
+    assert not bridge.exists()  # the bridge is removed when the child returns
     assert entries == ["pilot_proxy"]
     assert package_target == PACKAGE_ROOT
 
@@ -321,8 +321,8 @@ def test_evaluate_snr_cli_forwards_parsed_namespace(monkeypatch, tmp_path) -> No
 
     assert result == 0
     args = captured["args"]
-    # The subparser inherits the testbench parser (parents=), so values arrive
-    # typed and normalized by the single authoritative parser.
+    # The subparser inherits the testbench parser through parents=, so the
+    # values are typed and normalized by the testbench parser itself.
     assert args.num_input_streams == int(NUM_INPUT_STREAMS_TEXT)
     assert args.snr_start_db == float(SNR_START_DB_TEXT)
     assert args.snr_stop_db == float(SNR_STOP_DB_TEXT)
@@ -340,7 +340,7 @@ def test_evaluate_snr_cli_accepts_detector_backend(monkeypatch, tmp_path) -> Non
         "pilot_proxy.testbench.evaluate_snr.run",
         lambda args: captured.setdefault("args", args) and 0 or 0,
     )
-    # The exact publication-sweep command shape from the validation runbook.
+    # publication sweep arguments from the validation runbook
     result = cli.main(
         [
             "evaluate-snr",

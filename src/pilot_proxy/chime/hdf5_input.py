@@ -121,9 +121,9 @@ def _infer_axes(obj: h5py.Dataset) -> tuple[int, int, int | None]:
         stream_axis = labels.index("input")
     else:
         logical_axes = [axis for axis in range(obj.ndim) if axis != complex_axis]
-        # Unlabelled CHIME arrays use the conventional (time, input[, RI])
-        # layout.  Inferring the largest dimension as the stream axis swaps a
-        # normal time-major block whenever time happens to be longest.
+        # Unlabeled CHIME arrays are read in the conventional (time, input[, RI])
+        # layout. Taking the largest dimension as the stream axis would swap the
+        # axes of a time-major block whenever time is the longest axis.
         time_axis = logical_axes[0] if logical_axes else 0
         stream_axis = logical_axes[1] if len(logical_axes) > 1 else time_axis
     return int(time_axis), int(stream_axis), complex_axis
@@ -223,9 +223,9 @@ def nearest_atsc_physical_channel(
     candidates = range(ATSC_UHF_MIN_PHYSICAL_CHANNEL, ATSC_UHF_MAX_PHYSICAL_CHANNEL + 1)
     best = min(candidates, key=lambda ch: abs(physical_channel_to_pilot_hz(ch) - freq))
     delta = abs(physical_channel_to_pilot_hz(best) - freq)
-    # A pilot belongs to this receiver channel only when the coarse-channel
-    # center is at most half one 390.625-kHz F-engine bin away.  A former 3-MHz
-    # threshold admitted adjacent freq_ids into the same ATSC pilot dataset.
+    # A pilot is assigned to this receiver channel only when the coarse-channel
+    # center is at most half of one 390.625 kHz F-engine bin away. A 3 MHz
+    # tolerance would assign adjacent freq_ids to the same ATSC pilot dataset.
     return int(best) if delta <= float(tolerance_hz) else None
 
 
@@ -406,9 +406,10 @@ def discover_chime_pilot_datasets(
     filename_pattern: str = "*.h5",
 ) -> dict[int, ChimePilotDataset]:
     """Discover segmented CHIME pilot-channel datasets below the root path."""
-    # Segment first by receiver-channel identity, not merely by the much wider
-    # 6-MHz ATSC physical channel.  The public result remains keyed by physical
-    # channel because one ATSC pilot must resolve to exactly one CHIME freq_id.
+    # Segments are grouped first by receiver-channel identity (physical channel,
+    # freq_id and coarse-channel center), since a 6 MHz ATSC physical channel is
+    # much wider than one 390.625 kHz CHIME coarse channel. The result is keyed
+    # by physical channel because one ATSC pilot must map to exactly one freq_id.
     grouped: dict[
         tuple[int, int | None, float | None],
         list[tuple[ChimeSegment, int, int, int | None]],

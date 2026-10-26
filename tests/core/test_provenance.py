@@ -53,11 +53,9 @@ def test_package_source_sha256_is_memoized_per_process(tmp_path) -> None:
     assert package_source_sha256(pkg) != first
 
 
-# -- detector_version token policy -------------------------------------------
-#
-# One rule, two enforcement sites: the detector's resume guard and combine's
-# _check_invariants. Both import detector_version_geometry, so these tests are
-# the specification for both.
+# The detector_version token rule is enforced in two places, the detector's
+# resume guard and combine's _check_invariants. Both import
+# detector_version_geometry, so the tests below specify both.
 
 def test_geometry_drops_build_tokens_and_keeps_the_rest() -> None:
     assert detector_version_geometry(_ver()) == (
@@ -69,10 +67,13 @@ def test_geometry_drops_build_tokens_and_keeps_the_rest() -> None:
 
 
 def test_release_version_bump_is_geometry_identical() -> None:
-    """The 0.3.0.dev0 -> 1.0.0 release bump changes the version label and, via
-    the edit to __init__.py, the source tree hash. Neither is geometry: a
-    survey's separately completed pilot products may stack across the bump.
-    Resume itself requires the exact full build identity."""
+    """The release bump from 0.3.0.dev0 to 1.0.0 leaves the geometry unchanged.
+
+    The bump changes the version label and, through the edit to __init__.py,
+    the source tree hash. Neither is part of the geometry, so pilot products
+    of one survey that were completed in different runs may stack across the bump.
+    Resume still requires the exact full build identity.
+    """
     before = _ver(version="0.3.0.dev0", source="02066f1d6337")
     after = _ver(version="1.0.0", source="0c66af82f98b")
     assert before != after

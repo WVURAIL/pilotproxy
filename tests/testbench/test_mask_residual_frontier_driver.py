@@ -129,7 +129,7 @@ def test_the_three_spectrum_normalizations_keep_their_denominators_apart() -> No
     assert spectra["removed"][10] == pytest.approx(0.5)
 
 
-# --- --stage rederive: frames stored before kernel core 3.0.0 ---------------
+# --stage rederive on frames stored before kernel core 3.0.0
 
 _META = {
     "schema_version": "pilotproxy_mask_residual_frontier_v1",
@@ -163,7 +163,7 @@ def _stored_study(tmp_path: Path, *, frames: int = 6) -> Path:
     (source / "study_config.json").write_text(json.dumps(config))
     rng = np.random.default_rng(5)
     fine = rng.integers(0, 1 << 40, size=(frames, 3, 256), dtype=np.uint64)
-    # The earlier core's row-domain powers: close to, but not, the fine sums.
+    # row-domain powers of the earlier core, offset by 3 from the fine sums / 256
     marginals = (fine.sum(axis=2, dtype=np.uint64) // np.uint64(256)) + np.uint64(3)
     meta = dict(_META, config_sha256=config["config_sha256"])
     excess = np.asarray([
@@ -236,7 +236,7 @@ def test_rederive_writes_fine_sum_frame_powers_and_their_excess(tmp_path) -> Non
     (row,) = receipt["shards"]
     assert row["stored_excess_and_shelf_reproduced_from_stored_frame_powers"] is True
     assert row["frames"] == 6
-    # A second pass refuses rather than overwriting.
+    # A second pass into the same output is refused, so nothing is overwritten.
     with pytest.raises(SystemExit):
         DRIVER["main"](
             ["--stage", "rederive", "--source-dir", str(source), "--output-dir", str(out)]

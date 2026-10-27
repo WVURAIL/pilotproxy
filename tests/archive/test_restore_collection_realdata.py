@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Real-data invariant for the _restore_collection patch.
+"""Real-data invariant for _restore_collection.
 
-Rebuilds minoc replica lists out of the frozen Aug-3 production bundle and the
-July datatrawl inventory (common_path + filename are exactly what the pre-patch
-code derived), then re-runs the CURRENT derivation over every bare/prefixed
-masking of each set. The patch is only safe if the derived
-(common_path, names) is invariant under which replicas arrive bare.
+Minoc replica lists are rebuilt from the frozen Aug-3 production bundle and
+the July datatrawl inventory, whose common_path and file name are the values
+the adapter derived before restoration was added. The current derivation is
+then rerun over every bare and prefixed masking of each set. Restoration is
+safe only if the derived (common_path, names) is the same whichever replicas
+arrive bare.
 
-No network: the datatrail CLI is faked at subprocess.run, same boundary as
-tests/archive/test_datatrail_adapter.py.
-
-Skips itself when a bundle is not mounted.
+The datatrail CLI is faked at subprocess.run, the same boundary as
+tests/archive/test_datatrail_adapter.py, so no test reaches the network. A
+test skips itself when its bundle is not mounted.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ import pytest
 
 from pilot_proxy.archive import datatrail_client as dt
 
-# Real-data inputs, read from the environment; the tests skip when they are absent.
+# real-data inputs from the environment, skipped when absent
 _BUNDLE = os.path.join(os.environ.get("PILOT_PROXY_ARCHIVE_BUNDLE", "archive_inputs/chime-pilots-v5"),
                        "inventory.source.jsonl")
 _JULY = os.path.join(os.environ.get("PILOT_PROXY_JULY_INVENTORIES", "Datatrawl-Inventories"),
@@ -59,14 +59,14 @@ def _resolve(monkeypatch, uris):
 
 
 def _row_name(row) -> str:
-    """The July schema has no 'name'; its rows carry freq_id instead."""
+    """Return a row's file name, built from freq_id for July rows, which have no 'name'."""
     if "name" in row:
         return row["name"]
     return "baseband_%s_%s.h5" % (row["event"], row["freq_id"])
 
 
 def _read(path, limit, per_event_cap=6, want=None):
-    """({key: [prefixed uri, ...]}, {key: recorded common_path})."""
+    """Return ({key: [prefixed uri, ...]}, {key: recorded common_path})."""
     groups: dict = collections.OrderedDict()
     recorded: dict = {}
     with open(path) as fh:
@@ -121,8 +121,9 @@ def test_derivation_is_invariant_under_which_replicas_arrive_bare(monkeypatch):
 
 @pytest.mark.skipif(not os.path.exists(_BUNDLE), reason="v5 bundle not mounted")
 def test_all_bare_reproduces_the_bundle_common_path_exactly(monkeypatch):
-    """Strip the prefix off EVERY replica and the adapter still lands on the
-    byte-identical common_path the pre-patch Aug-3 survey recorded."""
+    """With the prefix stripped from every replica, the adapter returns the
+    common_path that the Aug-3 survey recorded before restoration was added,
+    byte for byte."""
     groups, recorded = _read(_BUNDLE, limit=250)
     assert len(groups) == 250
     for key, uris in groups.items():
@@ -134,11 +135,11 @@ def test_all_bare_reproduces_the_bundle_common_path_exactly(monkeypatch):
 @pytest.mark.skipif(not os.path.exists(_JULY), reason="July inventory not mounted")
 def test_july_era_common_paths_reproduce_modulo_a_pre_patch_trailing_slash(
         monkeypatch):
-    """Re-derive from July's own recorded rows, in both the prefixed and the
-    all-bare form. Any July value the current adapter does not reproduce
-    byte-for-byte differs ONLY by a trailing slash, which `common.rstrip('/')`
-    removes -- and that difference is pre-patch (restoration is a no-op on the
-    prefixed form, which mismatches identically)."""
+    """The July rows are re-derived in both the prefixed and the all-bare
+    form. Any July value that the current adapter does not reproduce byte for
+    byte differs only by a trailing slash, which is removed by
+    `common.rstrip('/')`. The prefixed form is not changed by restoration and
+    mismatches in the same way, so restoration did not cause the mismatch."""
     slashed = _trailing_slash_events(_JULY)
     assert len(slashed) == 43, len(slashed)
     groups, recorded = _read(_JULY, limit=300, want=slashed)
@@ -156,8 +157,8 @@ def test_july_era_common_paths_reproduce_modulo_a_pre_patch_trailing_slash(
                 slash_only += 1
                 slash_only_keys.add(key)
     assert exact + slash_only == 2 * len(groups)
-    # the ONLY events that need the rstrip are exactly the 43 July recorded
-    # with a trailing slash -- and each mismatches in BOTH forms, so the
-    # patch is not what moved them
+    # the events that need the rstrip are the 43 that July recorded with a
+    # trailing slash, and each mismatches in both forms, so restoration did
+    # not move them
     assert slash_only_keys == slashed, slash_only_keys ^ slashed
     assert slash_only == 2 * 43, slash_only

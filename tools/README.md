@@ -1,10 +1,10 @@
 # Tools catalog
 
-Run these commands from the repository root after installing the package.
-The supported package and CLI live in `src/pilot_proxy/`; this directory holds
-explicit analysis and maintenance commands, not modules to import in production.
-Use each command's `--help` for required inputs. Write new outputs outside
-frozen evidence directories.
+This directory holds standalone analysis and maintenance commands. Run them
+from the repository root after installing the package. The supported package
+and CLI are in `src/pilot_proxy/`, and production code does not import these
+tools. Each command lists its required inputs under `--help`. New outputs are
+never written into the frozen evidence directories.
 
 | Task | Entry points |
 |---|---|
@@ -18,16 +18,20 @@ frozen evidence directories.
 | Documentation and distributable maintenance | `generate_doc_specs.py`, `make_code_only_cut.py` |
 | Stack-to-proxy amplitude ratio of the frozen records | `archive/derive_stack_amplitude_ratio.py` |
 
-The confidence-band and mask-frontier drivers are validation studies, not the
-production retained-power estimator. `mask_residual_frontier.py` includes a
-per-frame-floor comparison, discussed in the detector supplement, that the
-method does not use; retained power is the signed mean in
-`characterization/threshold_rule.py`.
+The confidence-band and mask-frontier drivers are validation studies. The
+production retained-power estimator is the signed mean in
+`characterization/threshold_rule.py`. `mask_residual_frontier.py` also reports
+a per-frame-floor variant, discussed in the detector supplement, that the
+method does not use.
 
 ## Stack amplitude ratio
 
-`archive/derive_stack_amplitude_ratio.py` (`tools/derive_coherent_fraction.py`
-in 1.0.0) derives the stack-to-proxy amplitude ratio from the frozen inputs, and
-its `c.json` output keeps their field names. It reproduces the operating-duty
-scenario of those records and does not select thresholds. The measured ratio is
-not an intrinsic coherent fraction; see [terminology](../docs/TERMINOLOGY.md).
+`archive/derive_stack_amplitude_ratio.py` derives the stack-to-proxy amplitude
+ratio from the frozen inputs. In release 1.0.0 it was
+`tools/derive_coherent_fraction.py`. Its `c.json` output keeps the field names
+of those inputs. The operating-duty scenario of the frozen records is
+reproduced, and no thresholds are selected. On the calibrated scale, the ratio
+is the amplitude ratio `gamma` of the [terminology](../docs/TERMINOLOGY.md),
+the redundant-stack amplitude over the archive shelf proxy. It covers the
+spatial phase cancellation of calibrated redundant stacking and the
+archive-to-capture transfer.

@@ -172,8 +172,8 @@ def test_chime_plots_write_expected_files_and_summary_rows(tmp_path) -> None:
 def test_chime_plots_refuse_a_run_without_the_current_contract(
     tmp_path, token, message
 ) -> None:
-    # The detector outputs carry no schema token and no fine powers; the run
-    # config names the frame-power definition they use.
+    # The detector outputs hold no schema token and no fine powers. The
+    # frame-power definition they use is named in the run config.
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     np.savez_compressed(run_dir / "chime_detector_outputs.npz", valid=np.ones((1, 1)))

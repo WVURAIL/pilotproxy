@@ -1,12 +1,13 @@
 # coding=utf-8
 """The default designated window follows the predicted pilot line.
 
-The anchors below are the measured carrier-line bins from the 2018--2026
-CHIME survey products (argmax of the mean fine spectrum per channel, all
-six channels with a persistent carrier). The prediction is pure geometry
--- coarse-grid quantization residual of the sense-flipped pilot offset --
-so the measured bin differs from it by the station's own carrier offset
-(up to ~340 Hz observed), which the default half-width absorbs.
+The anchors below are the measured carrier-line bins from the 2018 to 2026
+CHIME survey products, taken as the argmax of the mean fine spectrum of each
+channel for all six channels with a persistent carrier. The prediction is
+pure geometry. It is the coarse-grid quantization residual of the
+sense-flipped pilot offset, so the measured bin differs from it by the
+station's own carrier offset (up to about 340 Hz observed). The default
+half-width covers this offset.
 """
 from __future__ import annotations
 
@@ -66,10 +67,10 @@ def test_measured_line_lands_in_the_default_window(freq_id):
 
 @pytest.mark.parametrize("freq_id", sorted(MEASURED_ANCHORS))
 def test_upright_prediction_misses_the_measured_line(freq_id):
-    """The zone-2 mirror is load-bearing: the upright mapping must NOT fit.
+    """The upright (zone 1) mapping misses every measured line, so the zone-2 mirror is required.
 
-    (Except where the pilot's residual happens to be small enough that both
-    signs land inside the window; no surveyed channel is in that regime.)
+    Both signs would land in the window only for a pilot with a small enough
+    residual, and no surveyed channel has one.
     """
     channel, measured = MEASURED_ANCHORS[freq_id]
     predicted = _predict(freq_id, channel, DEFAULT_NYQUIST_ZONE)

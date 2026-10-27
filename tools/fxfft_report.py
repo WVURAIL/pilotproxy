@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""Quantization study for fxfft256 v1: fixed-point vs float64 pipeline.
+"""Measure the quantization error of fxfft256 v1 against the float64 pipeline.
 
-Measures, on the golden families and a realistic multi-stream synthetic:
+Four quantities are measured on the golden families and on a synthetic
+128-stream frame:
 
-1. spectrum-domain error of the fixed-point FFT against the complex128
-   reference (absolute, and relative to the spectrum peak);
-2. Parseval drift |sum_b |X|^2 - 256 sum_m |z|^2| (the float pipeline
-   holds this at ULP; the fixed-point path holds it to rounding);
-3. headroom: per-stage working maxima against the int32 bound;
-4. end-to-end fine-statistic delta: F2[b] via the frozen fixed-point path
-   versus F2[b] via the analyzer's float pipeline (``fine_reduction``),
-   on a synthetic frame with lines at the survey-measured offsets ---
-   the number that shows the quantization is negligible against the
-   coherent gain.
+1. the spectrum-domain error of the fixed-point FFT against the complex128
+   reference, as an absolute value and relative to the spectrum peak;
+2. the relative Parseval drift |sum_b |X|^2 - 256 sum_m |z|^2| / (256 sum_m |z|^2),
+   which the fixed-point path holds to rounding error (the float pipeline
+   holds it at ULP);
+3. the headroom, as the per-stage working maxima against the int32 bound;
+4. the end-to-end change in the fine statistic F2[b] between the frozen
+   fixed-point path and the analyzer's float pipeline (``fine_reduction``),
+   on a frame with a line at the survey-measured +1287 Hz offset.
 
-These measurements set the frozen tolerances in
+The fourth quantity shows that the quantization error is negligible against
+the coherent gain. These measurements set the frozen tolerances in
 ``tests/core/test_fxfft256.py`` and are quoted in
 ``docs/DESIGN_DECISIONS.md``.
 """

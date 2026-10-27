@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Prepare or explicitly launch five finite, descriptive antenna-control triplets.
 
-Preparation performs no device operation. Run is exclusive, consumes the frozen
-schedule once, and stops at the first failed acquisition or unconfirmed cleanup.
-No thermal-noise, RF-power or distribution-acceptance claim is made.
+The radio is never opened during preparation. A run is exclusive, consumes the
+frozen schedule once, and stops at the first failed acquisition or unconfirmed
+cleanup. The controls are descriptive and do not cover thermal-noise, RF-power,
+or distribution-acceptance claims.
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ import random
 import shutil
 import sys
 
-# Set before dynamically loading the NumPy-using capture preparer.
+# one numerical thread, set before the capture helper loads NumPy
 for _variable in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
     os.environ[_variable] = "1"
 
@@ -71,7 +72,10 @@ def require(condition, message):
 
 
 def mode_order():
-    """Fixed random.Random(MT19937) shuffles; never redraw after acquisition."""
+    """Return the frozen acquisition order, one seeded MT19937 shuffle of the modes per triplet.
+
+    The order is fixed by SEED and is never redrawn after acquisition.
+    """
     rng = random.Random(SEED)
     order = []
     for triplet in range(TRIPLETS):
@@ -112,7 +116,7 @@ def verify_attempt(plan, expected):
 
 
 def prepare(output, *, build_manifest, analysis_sources, serial=SERIAL):
-    """Freeze all fifteen plans and source identities; never open the radio."""
+    """Freeze all fifteen attempt plans and source identities without opening the radio."""
     output = Path(output).resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError("Use a new empty study directory; preparation cannot overwrite a study.")

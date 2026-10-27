@@ -9,8 +9,8 @@
 #   make info      - Print configuration
 #
 # Configuration:
-#   GPU architecture: auto-detected via nvidia-smi; override with make SM=86
-#   Override compiler:            make NVCC=/usr/local/cuda/bin/nvcc
+#   GPU architecture:  read from nvidia-smi, override with make SM=86
+#   CUDA compiler:     make NVCC=/usr/local/cuda/bin/nvcc
 #
 # ==============================================================================
 
@@ -20,9 +20,10 @@
 NVCC                  ?= nvcc
 CC                    ?= gcc
 CXX                   ?= g++
-# Auto-detect the arch of the first visible GPU (drivers >= 460 report
-# compute_cap). Empty on GPU-less hosts; guarded below so only goals that
-# compile device code require it. Override for cross-compiles: make SM=90
+# SM is the compute capability of the first visible GPU, as reported by
+# nvidia-smi (drivers >= 460 report compute_cap). It is empty on a host with
+# no GPU, and the check below requires it only for goals that compile device
+# code. Cross-compiles set it by hand, for example make SM=90.
 SM                    ?= $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -n1 | tr -d '. \r')
 DP4A                  ?= 1
 DETECTOR_WINDOW_SAMPLES ?= 128
@@ -79,8 +80,8 @@ CUDA_TEST_HEADERS := pilotproxy_detector.h pilotproxy_reference.h config.h fxfft
 # ------------------------------------------------------------------------------
 # Build-configuration tracking
 # ------------------------------------------------------------------------------
-# Goals that compile device code need a concrete SM; everything else (clean,
-# test_ref, test_c_header, help, ...) must keep working on GPU-less hosts.
+# Goals that compile device code need a concrete SM. All other goals (clean,
+# test_ref, test_c_header, help) must work on a host with no GPU.
 SM_REQUIRED_GOALS := all debug test test_cuda test_cuda_grid_stride $(TARGET) $(DEBUG_TARGET) $(CUDA_TEST)
 ifeq ($(strip $(SM)),)
 ifneq ($(filter $(SM_REQUIRED_GOALS),$(if $(MAKECMDGOALS),$(MAKECMDGOALS),all)),)
@@ -88,9 +89,9 @@ $(error no GPU detected (nvidia-smi absent or predates the compute_cap query); p
 endif
 endif
 
-# Fail before the recipe if the requested CUDA compiler is not executable. This
-# catches stale hard-coded paths such as /usr/local/cuda/bin/nvcc when nvcc is
-# actually installed elsewhere on PATH.
+# The build stops before the recipe when the requested CUDA compiler is not
+# executable. This catches a stale hard-coded path such as
+# /usr/local/cuda/bin/nvcc when nvcc is installed elsewhere on PATH.
 NVCC_REQUIRED_GOALS := $(SM_REQUIRED_GOALS)
 NVCC_RESOLVED := $(shell command -v "$(NVCC)" 2>/dev/null)
 ifeq ($(strip $(NVCC_RESOLVED)),)
@@ -99,9 +100,10 @@ $(error CUDA compiler not found: NVCC=$(NVCC). Run 'command -v nvcc' and either 
 endif
 endif
 
-# Make's timestamp check does not see changed compiler flags. Include the
-# architecture, CONFIG_DEFS, and build mode in stamp filenames so changing
-# any of them rebuilds the affected output. Debug and release stay separate.
+# Make's timestamp check does not see changed compiler flags. The
+# architecture, CONFIG_DEFS, and build mode are written into the stamp file
+# names, so a change to any of them rebuilds the affected output. Debug and
+# release builds keep their own stamps.
 CONFIG_KEY := sm$(SM)_dp4a$(DP4A)_k$(DETECTOR_WINDOW_SAMPLES)_bt$(BLOCK_THREADS)_gmb$(GRID_MAX_BLOCKS)_cwl$(CONSTANT_WEIGHT_LANES)_swl$(SHARED_WEIGHT_LANES)
 RELEASE_CONFIG_STAMP := .config_release_$(CONFIG_KEY).stamp
 DEBUG_CONFIG_STAMP := .config_debug_$(CONFIG_KEY).stamp
@@ -152,9 +154,9 @@ $(CUDA_TEST): $(TARGET) $(CUDA_TEST_SOURCES) $(CUDA_TEST_HEADERS) $(RELEASE_CONF
 test_cuda: $(CUDA_TEST)
 	./$(CUDA_TEST)
 
-# A four-block launch capacity exercises the grid-stride paths. Restore
-# the default library afterward so later tests can use the full capacity,
-# including the Python GPU suite's 2048 streams.
+# A launch capacity of four blocks exercises the grid-stride paths. The
+# default library is rebuilt afterward, so later tests have the full
+# capacity, such as the 2048 streams of the Python GPU suite.
 test_cuda_grid_stride:
 	$(MAKE) test_cuda GRID_MAX_BLOCKS=4
 	@echo "Restoring default build (GRID_MAX_BLOCKS=$(GRID_MAX_BLOCKS))"

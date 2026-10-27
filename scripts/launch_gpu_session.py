@@ -36,11 +36,12 @@ def _positive_int(value: str) -> int:
 
 
 def _inject_registry_creds() -> bool:
-    """Translate the friendly env vars into the canfar client's nested settings.
+    """Copy the registry env vars into the nested settings of the canfar client.
 
-    Setting ``CANFAR_CONFIG__REGISTRY__{USERNAME,SECRET}`` lets a plain
-    ``Session()`` load your normal auth context *and* pick up the Harbor creds,
-    without us constructing (and possibly clobbering) the loaded Configuration.
+    With ``CANFAR_CONFIG__REGISTRY__{USERNAME,SECRET}`` set, a plain
+    ``Session()`` loads the normal auth context and also picks up the Harbor
+    credentials. The script then never builds its own Configuration, which
+    could overwrite the loaded one. Returns True when both variables are set.
     """
     user = os.environ.get("CANFAR_REGISTRY_USER")
     secret = os.environ.get("CANFAR_REGISTRY_SECRET")

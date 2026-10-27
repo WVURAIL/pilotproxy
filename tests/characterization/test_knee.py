@@ -68,8 +68,8 @@ def test_the_word_is_the_knee():
 
 
 def test_every_event_carries_equal_weight():
-    # One event of 99 low frames and three single-frame high events: the knee keeps the
-    # low event's frames, which are most of the frames but one event in four.
+    # One event has 99 low frames, and three single-frame events are high. The knee
+    # keeps the frames of the low event, which are most of the frames but one event in four.
     words = [1000] * 99 + [5000, 6000, 7000]
     events = ["burst"] * 99 + ["a", "b", "c"]
     result = wt.propose(words, events, rule=wt.RULE_ID_V1)
@@ -87,7 +87,7 @@ def _two_populations(low, high):
 
 
 def test_mostly_low_scores_bend_above_the_line():
-    # most frames are noise: the curve bends above the line where the low population ends, as under rule v1
+    # most frames are noise, so the curve bends above the line where the low population ends, as under rule v1
     words, events = _two_populations(900, 100)
     v2, v1 = wt.propose(words, events), wt.propose(words, events, rule=wt.RULE_ID_V1)
     assert v2["knee_bend"] == "above" and v2["knee_word_q16"] == v1["knee_word_q16"]
@@ -95,8 +95,8 @@ def test_mostly_low_scores_bend_above_the_line():
 
 
 def test_mostly_high_scores_bend_below_the_line():
-    # nearly every frame carries the signal: the stronger bend is below the line, where the high population
-    # begins, and keeps the few low frames; rule v1 would keep nearly everything
+    # Nearly every frame contains the signal, so the stronger bend is below the line, where the
+    # high population begins, and only the few low frames are kept. Rule v1 would keep nearly every frame.
     words, events = _two_populations(50, 950)
     v2, v1 = wt.propose(words, events), wt.propose(words, events, rule=wt.RULE_ID_V1)
     assert v2["knee_bend"] == "below" and v2["knee_objective"] < 0

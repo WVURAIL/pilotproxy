@@ -1,31 +1,30 @@
 #!/usr/bin/env python3
 """
-Failure-injection stress tests for survey concurrency and output ownership --
-properties a production run depends on but a single happy-path run cannot
-demonstrate, because it only ever proves that ONE worker count produced ONE
-file.
+Failure-injection stress tests for survey concurrency and output ownership.
 
-What is asserted here:
-  * the inventory is byte-identical at every --workers value. Row CONTENT is
-    made a pure function of the URI, and each probe is deliberately staggered,
-    so if ordering ever came from completion order instead of candidate order
-    (cadc.py:650 `pool.map`, whose input order is what makes record ordinals
-    deterministic) the bytes would move;
-  * the pool really is `workers`-wide -- enforced with a Barrier, so a
-    regression that serialized it fails instead of passing quietly and slowly;
-  * the pool parallelizes WITHIN one event only. Events are strictly
-    sequential (the main thread blocks on the map), which is why --workers on
-    a one-file-per-event reader buys nothing. Documented nowhere, asserted
-    nowhere until now;
+A production run depends on these properties, and a single normal run cannot
+show them, since it shows only that one worker count produced one file. The
+tests check that:
+
+  * the inventory is byte-identical at every --workers value. The row content
+    depends only on the URI, and each probe is staggered, so the bytes would
+    move if the order came from completion order instead of candidate order.
+    The input order of `pool.map` in survey() is what makes the record
+    ordinals deterministic.
+  * the pool is `workers` wide. A Barrier enforces this, so a regression that
+    serialized the pool fails instead of passing slowly with no warning.
+  * the pool parallelizes the probes of one event only. Events are strictly
+    sequential, since the main thread blocks on the map, so --workers gains
+    nothing for a reader with one file per event.
   * probes never touch the store or the checkpoint. sqlite3.connect defaults
-    to check_same_thread=True, so moving commit() into a worker would raise --
-    but nothing pinned that the split exists;
-  * two surveys can never interleave in one directory, in-process AND across
-    processes, and a refused second survey mutates nothing.
+    to check_same_thread=True, so moving commit() into a worker would raise,
+    and the tests check that the split exists.
+  * two surveys can never interleave in one directory, in one process or
+    across processes, and a refused second survey changes nothing.
 
-Offline: the datatrail CLI child and the CADC probe are the only faked seams,
-except the one cross-process test, which spawns a real second interpreter that
-touches nothing but SurveyOutputLock.
+The datatrail CLI child and the CADC probe are the only faked seams. The one
+exception is the cross-process test, which spawns a real second interpreter
+that touches nothing but SurveyOutputLock.
 
 Run:
   TMPDIR=/tmp PYTHONPATH=src python -m pytest tests/archive/test_survey_stress_concurrency.py
@@ -56,8 +55,8 @@ from pilot_proxy.chime.baseband_reader import baseband_filename
 
 SCOPE = "chime.event.baseband.raw"
 EVENTS = ["100000000", "100000001", "100000002"]
-# 16 divides every worker count under test, so the Barrier below always
-# completes whole rounds and can never dead-end on a remainder.
+# Every worker count under test divides 16, so the Barrier below always
+# completes whole rounds and can never stall on a remainder.
 FREQ_IDS = list(range(16))
 WORKER_COUNTS = [1, 2, 4, 8, 16]
 
@@ -68,9 +67,12 @@ class _Proc:
 
 
 class _MisWiredFake(BaseException):
-    """BaseException on purpose -- _run_json catches Exception and would
-    reclassify a broken fake as a service outage, hanging the suite in the
-    one-hour retry circuit instead of failing it."""
+    """Error raised by a miswired fake, derived from BaseException on purpose.
+
+    _run_json catches Exception and would read a broken fake as a service
+    outage, which would hang the suite in the one-hour retry circuit instead
+    of failing it.
+    """
 
 
 def _cp(event) -> str:
@@ -104,7 +106,7 @@ def _install_cli(monkeypatch, *, on_ps=None):
 
 
 class _Probes:
-    """Every CADC probe, with the thread that ran it and when."""
+    """Record every CADC probe with the thread that ran it and its start and end times."""
 
     def __init__(self, barrier=None):
         self.barrier = barrier
@@ -114,9 +116,9 @@ class _Probes:
     def size(self, uri):
         started = time.monotonic()
         if self.barrier is not None:
-            # Forces `parties` probes to be in flight simultaneously. If the
-            # pool ever stopped being parties-wide this raises instead of
-            # silently passing on a serialized run.
+            # `parties` probes must be in flight at once. If the pool were
+            # narrower than `parties`, this raises instead of passing on a
+            # serialized run with no warning.
             try:
                 self.barrier.wait(timeout=20)
             except threading.BrokenBarrierError:  # pragma: no cover - failure
@@ -126,8 +128,8 @@ class _Probes:
         with self.lock:
             self.records.append((uri, threading.get_ident(), started,
                                  time.monotonic()))
-        # size derived from the URI: inventory CONTENT is then a pure function
-        # of the event set, never of scheduling or completion order.
+        # size derived from the URI, so the inventory content depends only on
+        # the event set and never on scheduling or completion order
         digest = hashlib.sha256(uri.encode()).hexdigest()[:8]
         return (1 << 20) + int(digest, 16) % 4096, None
 
@@ -170,13 +172,11 @@ def _run_at(monkeypatch, out_dir, workers, *, barrier=True):
     return probes
 
 
-# ##########################################################################
-# 1. Worker-count invariance.
-# ##########################################################################
+# 1. worker-count invariance
 @pytest.fixture(scope="module")
 def reference(tmp_path_factory):
-    """One single-threaded inventory, the baseline every worker count must
-    reproduce byte for byte."""
+    """Return one single-threaded inventory, the baseline that every worker
+    count must reproduce byte for byte."""
     out = tmp_path_factory.mktemp("reference")
     probes = _Probes()
     with pytest.MonkeyPatch.context() as monkeypatch:
@@ -192,18 +192,19 @@ def test_the_inventory_is_byte_identical_at_every_worker_count(
         monkeypatch, tmp_path, reference, workers):
     probes = _run_at(monkeypatch, tmp_path, workers)
     assert (tmp_path / "inventory.jsonl").read_bytes() == reference
-    # ... and the run really was `workers`-wide, so the equality above is not
-    # the trivial equality of five serial runs.
+    # the run was `workers` wide, so the equality above holds for parallel
+    # runs as well as for the serial reference
     assert len(probes.threads) == min(workers, len(FREQ_IDS))
     assert len(probes.records) == len(EVENTS) * len(FREQ_IDS)
 
 
 def test_record_ordinals_follow_candidate_order_not_completion_order(
         monkeypatch, tmp_path):
-    # pool.map preserves INPUT order (cadc.py:650), which is what makes the
-    # `records` ordinal -- and therefore inventory.jsonl's within-event order
-    # -- deterministic. Staggering the probes so completion order differs is
-    # the whole point: with as_completed() semantics this list would shuffle.
+    # pool.map in survey() preserves the input order, which makes the
+    # `records` ordinal deterministic, and with it the order of the rows of
+    # one event in inventory.jsonl. The probes are staggered so that the
+    # completion order differs, and with as_completed() semantics this list
+    # would shuffle.
     _run_at(monkeypatch, tmp_path, 16)
     rows = [json.loads(line) for line
             in (tmp_path / "inventory.jsonl").read_text().splitlines() if line]
@@ -214,12 +215,12 @@ def test_record_ordinals_follow_candidate_order_not_completion_order(
 
 def test_enumeration_order_does_not_leak_into_the_inventory(monkeypatch,
                                                             tmp_path):
-    # survey() iterates `sorted(events)` (cadc.py:568), so the order datatrail
-    # happened to list events in cannot reach the file. (The stronger property
-    # -- that the VIEW is ordered by event_key rather than by commit order --
-    # can only be told apart across a resume, and is pinned by
+    # survey() iterates `sorted(events)`, so the listing order of datatrail
+    # cannot reach the file. The stronger property, that the view is ordered
+    # by event_key and never by commit order, can be seen only across a
+    # resume. It is tested by
     # test_view_order_is_by_event_key_not_by_commit_order in
-    # tests/archive/test_survey_stress_resume.py.)
+    # tests/archive/test_survey_stress_resume.py.
     probes = _Probes()
     _install_cli(monkeypatch)
     _install_archive(monkeypatch, probes)
@@ -235,9 +236,9 @@ def test_enumeration_order_does_not_leak_into_the_inventory(monkeypatch,
 
 def test_a_falsy_worker_count_falls_back_to_the_default(monkeypatch, tmp_path,
                                                         reference):
-    # cadc.py:518-519 clamps a falsy --workers to _DEFAULT_SURVEY_WORKERS.
-    # Unreachable through the CLI (commands.py:67-68 rejects < 1), so a direct
-    # survey() call is the only way to cover it.
+    # survey() clamps a falsy --workers to _DEFAULT_SURVEY_WORKERS. The CLI
+    # cannot reach this branch, since survey_chime in commands.py rejects a
+    # value below 1, so a direct survey() call is the only way to cover it.
     probes = _Probes()
     _install_cli(monkeypatch)
     _install_archive(monkeypatch, probes)
@@ -247,14 +248,12 @@ def test_a_falsy_worker_count_falls_back_to_the_default(monkeypatch, tmp_path,
     assert 1 < len(probes.threads) <= cadc_src._DEFAULT_SURVEY_WORKERS
 
 
-# ##########################################################################
-# 2. What the pool does and does not parallelize.
-# ##########################################################################
+# 2. what the pool parallelizes
 def test_events_are_processed_strictly_sequentially(monkeypatch, tmp_path):
-    # The pool is created once (cadc.py:591) but iterated from the main loop,
-    # so it fans out ACROSS ONE EVENT'S CANDIDATES and never across events.
-    # That is why --workers 12 buys nothing on a reader whose survey_files()
-    # yields a single file per event. Nothing else states this.
+    # The pool is created once in survey() and is fed from the main loop, so
+    # it fans out over the candidates of one event and never over events. For
+    # this reason --workers 12 gains nothing for a reader whose survey_files()
+    # yields a single file per event.
     probes = _run_at(monkeypatch, tmp_path, 8)
     windows = []
     for event in EVENTS:
@@ -267,20 +266,18 @@ def test_events_are_processed_strictly_sequentially(monkeypatch, tmp_path):
 
 def test_probes_run_off_the_main_thread_while_the_store_stays_on_it(
         monkeypatch, tmp_path):
-    # The durable state is main-thread-only: SurveyStore holds a
-    # sqlite3 connection created with check_same_thread=True (the default),
-    # so a future refactor that committed from a worker would raise
-    # ProgrammingError rather than corrupt anything -- but only as long as the
-    # probes are the only thing on the pool.
+    # The durable state stays on the main thread. SurveyStore holds a sqlite3
+    # connection created with check_same_thread=True (the default), so a later
+    # change that committed from a worker would raise ProgrammingError instead
+    # of corrupting anything. This holds only while the probes are the only
+    # work on the pool.
     main = threading.get_ident()
     probes = _run_at(monkeypatch, tmp_path, 4)
     assert main not in probes.threads
     assert len(probes.threads) == 4
 
 
-# ##########################################################################
-# 3. Output ownership -- two surveys can never interleave.
-# ##########################################################################
+# 3. output ownership, so two surveys can never interleave
 def test_a_second_survey_in_one_directory_is_refused_not_interleaved(
         monkeypatch, tmp_path):
     probes = _Probes()
@@ -298,15 +295,15 @@ def test_a_second_survey_in_one_directory_is_refused_not_interleaved(
     assert "already in use by another active survey" in str(excinfo.value)
     assert str(tmp_path.resolve()) in str(excinfo.value)
     assert len(probes.records) == n_probes          # nothing was probed
-    # ... and nothing on disk moved, except the diagnostic lock file itself.
+    # nothing on disk moved except the diagnostic lock file itself
     assert {str(p.relative_to(tmp_path)): p.read_bytes() for p in tmp_path.rglob("*")
             if p.is_file() and p.name != ".survey.lock"} == before
 
 
 def test_the_lock_covers_enumeration_and_every_commit(monkeypatch, tmp_path):
-    # with_survey_output_lock wraps the WHOLE call (cadc.py:487), so the
-    # window is not "while writing" but "from the manifest check to the final
-    # render". Contend from inside a ps reply, i.e. mid-run.
+    # with_survey_output_lock wraps the whole call, so the lock is held from
+    # the manifest check to the final render. The lock is contended during
+    # a ps reply, in the middle of the run.
     contended: list = []
 
     def contend(event):
@@ -335,15 +332,15 @@ def test_a_refused_second_survey_creates_no_state_in_a_fresh_directory(
     with SurveyOutputLock(out):
         with pytest.raises(SystemExit):
             _survey(out, workers=2)
-    # no manifest, no database, no views -- only the diagnostic lock file the
-    # HOLDER created.
+    # only the diagnostic lock file created by the holder exists, with no
+    # manifest, database or views
     assert sorted(p.name for p in out.iterdir()) == [".survey.lock"]
     assert probes.records == []
 
 
 def _src_dir() -> str:
-    """The src/ directory this test's pilot_proxy was imported from, so the
-    child under test is the same tree (including a mutated scratch copy)."""
+    """Return the src/ directory of the pilot_proxy this test imported, so the
+    child runs the same tree, even a mutated scratch copy."""
     import pilot_proxy
     return os.path.dirname(os.path.dirname(pilot_proxy.__file__))
 
@@ -368,15 +365,15 @@ def _lock_child(out_dir):
 
 
 def test_two_processes_cannot_both_own_one_output_directory(tmp_path):
-    # The in-process tests above share one flock table; this one proves the
-    # exclusion is real ACROSS PROCESSES, which is the case that matters when
-    # an operator starts a second survey in another terminal.
+    # The in-process tests above share one flock table. This test checks the
+    # exclusion across processes, which is the case met when an operator
+    # starts a second survey in another terminal.
     with SurveyOutputLock(tmp_path):
         held = _lock_child(tmp_path)
     assert held.returncode == 0, held.stderr
     assert held.stdout.startswith("REFUSED"), (held.stdout, held.stderr)
     assert "already in use by another active survey" in held.stdout
 
-    # ... and that the lock is genuinely released, not merely unavailable.
+    # the lock is released once the holder exits
     free = _lock_child(tmp_path)
     assert free.stdout.strip() == "ACQUIRED", (free.stdout, free.stderr)

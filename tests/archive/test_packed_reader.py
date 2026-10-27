@@ -1,6 +1,9 @@
 # coding=utf-8
-"""The native-packed reader yields the same samples as the bundled unpacking
-reader, just in raw 4+4-bit form (so the kernel packing keeps the int4 grid)."""
+"""The native-packed reader yields the same samples as the bundled unpacking reader.
+
+The samples stay in raw 4+4-bit form, so the kernel packing keeps the int4
+grid.
+"""
 from __future__ import annotations
 
 import numpy as np
@@ -32,9 +35,9 @@ def test_packed_reader_matches_unpacked(tmp_path):
     packed_reader = ChimeBasebandPackedReader()
     unpacked_reader = ChimeBasebandReader()
 
-    # The packed reader's probe is a superset of the bundled reader's: identical
-    # channel/format keys, plus a per-unit absolute-time axis read from the file
-    # root attrs and receiver-state identifiers.
+    # The probe of the packed reader has every channel and format key of the
+    # bundled reader, plus a per-unit absolute-time axis and receiver-state
+    # identifiers read from the root attrs of the file.
     unpacked_probe = unpacked_reader.probe(str(synth))
     packed_probe = packed_reader.probe(str(synth))
     for k, v in unpacked_probe.items():
@@ -112,22 +115,25 @@ def test_input_map_hash_changes_with_content(tmp_path):
 
 
 def _ctx_with_nfft(nfft):
-    """RunContext with a per-run nfft override, via the same attribute the CLI's
-    --nfft mutates and iter_arrays reads (ctx.instrument.nfft)."""
+    """Return a RunContext with a per-run nfft override.
+
+    The override sets ctx.instrument.nfft, the attribute set by the CLI --nfft
+    option and read by iter_arrays.
+    """
     inst = load_instrument("chime")
     inst.nfft = nfft
     return RunContext(instrument=inst)
 
 
 def test_probe_rejects_short_file_as_unreadable(tmp_path):
-    """A file too short for one transform must be quarantinable, not run-fatal.
+    """A file shorter than one transform is quarantined and the run continues.
 
-    Found by the 2026-08-23 pre-flight: a 3.9 MB stub in the CANFAR staging
-    aborted a scan that had already completed eight channels, because the
-    analyzer raised on zero frames and the engine treats analyzer exceptions as
-    run-level errors by design. Classifying it at probe time hands the engine
-    the one disposition that quarantines without interrupting the run at all;
-    the iteration-time check below covers the configurations probe cannot see.
+    In the 2026-08-23 pre-flight, a 3.9 MB stub in the CANFAR staging aborted a
+    scan that had already completed eight channels. The analyzer raised on zero
+    frames, and the engine treats analyzer exceptions as run-level errors by
+    design. When the file is classified at probe time, the engine quarantines it
+    and the run continues. The iteration-time check below covers the
+    configurations that probe cannot see.
     """
     from pilot_proxy.archive.interfaces import UnreadableUnitError
 
@@ -139,9 +145,12 @@ def test_probe_rejects_short_file_as_unreadable(tmp_path):
 
 
 def test_nfft_above_default_quarantines_at_iteration(tmp_path):
-    """Instrument nfft above the format default: a file with one default-length
-    frame but zero frames at the run's nfft must raise the quarantinable type
-    from iter_arrays, not reach the analyzer's run-fatal zero-frame check."""
+    """With an instrument nfft above the format default, the file is quarantined at iteration.
+
+    A file with one default-length frame has zero frames at the nfft of the
+    run. iter_arrays must raise the quarantinable error type before the
+    run-fatal zero-frame check of the analyzer is reached.
+    """
     from pilot_proxy.archive.interfaces import UnreadableUnitError
 
     path = tmp_path / "one_default_frame.h5"
@@ -154,14 +163,15 @@ def test_nfft_above_default_quarantines_at_iteration(tmp_path):
 
 
 def test_nfft_below_default_is_deliberately_conservative(tmp_path):
-    """Instrument nfft below the format default: probe still quarantines.
+    """With an instrument nfft below the format default, probe still quarantines.
 
     Probe never sees the configured nfft, so its gate uses the format default
     that every shipped instrument frames at. A file that could frame at a
-    smaller configured nfft is therefore quarantined at probe -- the accepted
-    cost of catching stubs without interrupting an unattended multi-week scan;
-    no shipped instrument configures nfft below the default. This test pins
-    that trade so a future below-default instrument revisits it deliberately.
+    smaller configured nfft is therefore quarantined at probe. This is the
+    accepted cost of catching stubs without interrupting an unattended
+    multi-week scan, and no shipped instrument sets nfft below the default.
+    This test pins that trade, so a future instrument with a smaller nfft must
+    revisit it.
     """
     from pilot_proxy.archive.interfaces import UnreadableUnitError
 
@@ -178,7 +188,7 @@ def test_nfft_below_default_is_deliberately_conservative(tmp_path):
 
 
 def test_probe_accepts_exactly_one_frame(tmp_path):
-    """The boundary is inclusive: exactly nfft samples is one usable frame."""
+    """The boundary is inclusive, so exactly nfft samples make one usable frame."""
     exact = tmp_path / "exactly_one.h5"
     fmt.make_synth_file(str(exact), n_time=NFFT, n_feeds=N_FEEDS,
                         f_center_mhz=470.3125, f_tone_bb=1500.0, seed=6)

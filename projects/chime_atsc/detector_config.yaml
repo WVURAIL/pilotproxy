@@ -1,5 +1,5 @@
 # Detector geometry for this project. The kernel of record (2.3.0) is built for
-# these values; they are declared here so the characterization can read them.
+# these values, and they are declared here for the characterization to read.
 detector_window: 128     # K, samples per detector row
 fine_bins: 256           # L_F = 2 nfft / K
 nfft: 16384              # samples per frame

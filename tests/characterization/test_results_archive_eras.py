@@ -36,7 +36,7 @@ def _spans(seg):
     return [(e.first_month - M0, e.last_month - M0, e.state) for e in seg.eras]
 
 
-# ------------------------------------------------------------- config
+# Configuration
 def test_config_is_versioned_and_digested():
     cfg = EraConfig()
     assert cfg.digest == hashlib.sha256(cfg.canonical_json().encode()).hexdigest()
@@ -50,7 +50,7 @@ def test_config_is_versioned_and_digested():
     assert eras.state_of(0.75) == "ambiguous" and eras.state_of(NAN) == "ambiguous"
 
 
-# -------------------------------------------------------- state rule
+# State rule
 def test_ambiguous_months_between_agreeing_neighbours_are_absorbed():
     seg = segment([_rec(0, 2.0), _rec(1, 2.0), _rec(2, 0.7), _rec(3, 0.8), _rec(4, 2.0), _rec(5, 2.0)])
     assert _spans(seg) == [(0, 5, PROXY_HIGH)]
@@ -76,7 +76,7 @@ def test_single_month_excursions_are_flagged_not_transitions():
     seg = segment([_rec(0, 2.0), _rec(1, 2.0), _rec(2, 0.1), _rec(3, 2.0), _rec(4, 2.0)])
     assert _spans(seg) == [(0, 4, PROXY_HIGH)]
     assert [(e.month - M0, e.kind, e.detail) for e in seg.excursions] == [(2, "state", PROXY_LOW)]
-    # a trailing single month of the other state is an excursion too: no 2-month persistence
+    # a trailing single month of the other state is also an excursion, since it lacks the 2-month persistence
     seg = segment([_rec(0, 2.0), _rec(1, 2.0), _rec(2, 2.0), _rec(3, 0.1)])
     assert _spans(seg) == [(0, 3, PROXY_HIGH)] and len(seg.excursions) == 1
     # two consecutive months of the new state are a transition
@@ -86,7 +86,7 @@ def test_single_month_excursions_are_flagged_not_transitions():
 
 
 def test_persistence_and_inheritance_iterate_to_a_fixed_point():
-    # H A H is one persistent high run; the lone L inside it is an excursion whose removal merges the run
+    # H A H is one persistent high run, and the lone L in it is an excursion whose removal merges the run
     seg = segment([_rec(0, 2.0), _rec(1, 0.7), _rec(2, 2.0), _rec(3, 0.1), _rec(4, 2.0), _rec(5, 2.0)])
     assert _spans(seg) == [(0, 5, PROXY_HIGH)]
     assert [e.month - M0 for e in seg.excursions] == [3]
@@ -117,7 +117,7 @@ def test_no_definite_state_is_one_ambiguous_only_era_and_reported_as_fallback():
     assert _spans(seg) == [(0, 1, PROXY_HIGH)] and seg.populated == (M0, M0 + 1)
 
 
-# ------------------------------------------------------ station rule
+# Station rule
 def test_station_change_needs_a_persistent_shift_against_the_running_location():
     highs = [_rec(i, 2.0, peak=2.0) for i in range(4)] + [_rec(i, 2.0, peak=7.0) for i in range(4, 7)]
     seg = segment(highs)
@@ -137,18 +137,18 @@ def test_station_change_needs_a_persistent_shift_against_the_running_location():
 
 
 def test_station_change_must_be_confirmed_at_the_new_location():
-    # a one-month excursion followed by a genuine change: the excursion month is not promoted to an era
+    # a one-month excursion is followed by a real change, and the excursion month does not become an era
     locs = [-2, -3, 1, -1, 0, 3, 7, 6, 5, 4, 6, 7, 4]
     seg = segment([_rec(i, 2.0, peak=float(v)) for i, v in enumerate(locs)])
     assert _spans(seg) == [(0, 5, PROXY_HIGH), (6, 12, PROXY_HIGH)]
     # month 2 (+3.5 bins for one month) and month 5 (the month before the change) are excursions
     assert [(e.month - M0, e.kind) for e in seg.excursions] == [(2, "station"), (5, "station")]
     assert seg.eras[1].evidence == EVIDENCE_STATION
-    # the first tested month disagreeing with two agreeing followers is the excursion, not a one-month era
+    # a first tested month that disagrees with the two agreeing months after it is an excursion and opens no era
     seg = segment([_rec(i, 2.0, peak=float(v)) for i, v in enumerate([1, -2, -3, -2.5, -2, -3])])
     assert _spans(seg) == [(0, 5, PROXY_HIGH)]
     assert [(e.month - M0, e.kind, e.detail) for e in seg.excursions] == [(0, "station", "+3.0 bins")]
-    assert seg.eras[0].peak_offset_bins == pytest.approx(-2.25)   # the era location counts every tested month, the excursion included
+    assert seg.eras[0].peak_offset_bins == pytest.approx(-2.25)   # the era location counts every tested month, the excursion month too
 
 
 def test_persistence_counts_definite_months_only():
@@ -169,16 +169,16 @@ def test_station_rule_ignores_proxy_low_months():
     assert math.isnan(seg.eras[0].peak_offset_bins)
 
 
-# --------------------------------------------------- instrument rule
+# Instrument rule
 def test_instrument_change_is_an_entering_map_that_persists():
     seg = segment([_rec(i, 2.0, maps=("a",)) for i in range(3)] + [_rec(i, 2.0, maps=("b",)) for i in range(3, 6)])
     assert _spans(seg) == [(0, 2, PROXY_HIGH), (3, 5, PROXY_HIGH)]
     assert seg.eras[1].evidence == EVIDENCE_INSTRUMENT and seg.instrument_change_months == (M0 + 3,)
-    # the map enters inside a mixed month: the change opens there
+    # the map enters in a mixed month, and the change opens there
     seg = segment([_rec(0, 2.0, maps=("a",)), _rec(1, 2.0, maps=("a",)), _rec(2, 2.0, maps=("a", "b")),
                    _rec(3, 2.0, maps=("b",)), _rec(4, 2.0, maps=("b",))])
     assert _spans(seg) == [(0, 1, PROXY_HIGH), (2, 4, PROXY_HIGH)]
-    # a map that leaves is not a change; a map present for one month is an excursion
+    # a map that leaves makes no change, and a map present for one month is an excursion
     seg = segment([_rec(0, 2.0, maps=("a", "z")), _rec(1, 2.0, maps=("a",)), _rec(2, 2.0, maps=("a", "c")),
                    _rec(3, 2.0, maps=("a",)), _rec(4, 2.0, maps=("a", "d"))])
     assert _spans(seg) == [(0, 4, PROXY_HIGH)]
@@ -199,7 +199,7 @@ def test_coincident_boundaries_join_their_evidence_and_records_name_transitions(
     assert seg.unmatched_station_records == (blocks.month_label(M0 + 9),)
 
 
-# ------------------------------------------------------ on a product
+# Synthetic product
 HIGH_DB, AMBIGUOUS_DB, LOW_DB = 2.5, 0.75, 0.2
 PEAK_OFFSET = 4
 MONTHS = 24
@@ -236,12 +236,12 @@ def _derived_arrays(target, p_ref_sum, target_norm, reference_norm, spec):
 
 def _level_db_of_month(month):
     if month == 5:
-        return LOW_DB                       # a single-month excursion inside the high era
+        return LOW_DB                       # a single-month excursion in the high era
     if month < 10:
         return HIGH_DB
     if month == 10:
         return AMBIGUOUS_DB                 # the ambiguous month of the transition zone
-    return LOW_DB                           # month 11 is left empty; 12.. are low
+    return LOW_DB                           # month 11 is left empty and months 12 on are low
 
 
 @pytest.fixture
@@ -257,7 +257,7 @@ def product_path(tmp_path):
         reference_norm = int(np.asarray(z["reference_norm_sum_sq"]).reshape(-1)[0])
         p_ref_sum = np.asarray(z["p_ref_sum_u64"]).reshape(-1)
         maps = np.array(z["unit_input_map_sha256"], copy=True)
-    # acquisitions: ten per month on ten distinct days, months 22-23 hold two acquisitions only
+    # ten acquisitions per month on ten distinct days, and only two in each of months 22-23
     time0 = np.empty(units)
     keep = np.ones(units, dtype=bool)
     for u in range(units):
@@ -268,25 +268,25 @@ def product_path(tmp_path):
             keep[u] = False
     delta = np.full(units, 1.0 / spec["sample_rate_hz"])
     delta[3 * UNITS_PER_MONTH] = np.nan               # one acquisition of month 3 has no sample interval
-    # per-frame level: p_target = Q * (target_norm / reference_norm) * p_ref_sum makes 10 log10(F / mu0) = level
+    # the per-frame level is set by p_target = Q * (target_norm / reference_norm) * p_ref_sum, which makes 10 log10(F / mu0) = level
     month_of_frame = np.array([_month_of_unit(u) for u in unit_of_frame])
     level = np.array([_level_db_of_month(m) for m in month_of_frame])
     q = 10.0 ** (level / 10.0)
     target = np.rint(q * target_norm / reference_norm * p_ref_sum).astype(np.uint64)
-    # dropped acquisitions are invalid frames: the view requires valid == (p_ref_sum != 0)
+    # frames of dropped acquisitions are invalid, since the view requires valid == (p_ref_sum != 0)
     valid_frames = keep[unit_of_frame]
     p_ref_sum = np.where(valid_frames, p_ref_sum, 0).astype(np.uint64)
     half = (p_ref_sum // 2).astype(np.uint64)
     rejected = (valid_frames & (target.astype(object) * reference_norm > target_norm * p_ref_sum.astype(object))
                 ).astype(np.uint8)
-    # fine terms: a flat target with one spike PEAK_OFFSET bins above the nominal bin in the high months
+    # the fine target is flat, with one spike PEAK_OFFSET bins above the nominal bin in the high months
     fine[:, 0, :] = 20
     fine[:, 1, :] = 20
     fine[:, 2, :] = 20
     with Product(path) as p:
         nominal = p.geometry.nominal_fine_bin
     fine[level >= HIGH_DB, 0, (nominal + PEAK_OFFSET) % fine.shape[2]] = 1000
-    # instrument: map 'b' from month 8 on (inside the high era); one 'c' acquisition in month 15
+    # map 'b' is used from month 8 on (in the high era), and one acquisition of month 15 uses map 'c'
     maps[:] = "a" * 64
     maps[np.array([_month_of_unit(u) for u in range(units)]) >= 8] = "b" * 64
     maps[15 * UNITS_PER_MONTH + 4] = "c" * 64
@@ -295,8 +295,8 @@ def product_path(tmp_path):
         path, unit_time0_ctime=time0, unit_delta_time=delta, p_target_u64=target.reshape(-1, 1),
         p_ref_lower_u64=half.reshape(-1, 1), p_ref_upper_u64=half.reshape(-1, 1), p_ref_sum_u64=p_ref_sum.reshape(-1, 1),
         valid=valid_frames.astype(np.uint8).reshape(-1, 1), reject_mask=rejected.reshape(-1, 1),
-        # the frame powers are the fine powers' all-bin sums (kernel core 3.0.0):
-        # scale the spectral shape so its sums are the levels above
+        # the frame powers are the all-bin sums of the fine powers (kernel core 3.0.0),
+        # and the spectral shape is scaled so that its sums are the levels above
         fine_power_u64=v5_fixture.fine_powers_with_sums(fine, target, half, p_ref_sum - half),
         unit_input_map_sha256=maps, unit_git_version_tag=tags,
         baseband_power_linear=np.full((frames, 1), 4.0),
@@ -322,13 +322,13 @@ def test_era_table_on_a_synthetic_product(product_path, tmp_path):
         assert table.fallback == "" and table.indeterminate == ""
         assert table.ambiguous_months == 1 and table.populated_months == 21
         assert table.ambiguous_fraction == pytest.approx(1 / 21)
-        # the excursion inside the high era and the one-acquisition map in month 15
+        # the excursion in the high era and the one-acquisition map in month 15
         assert [(e.month - M0, e.kind, e.detail) for e in table.excursions] == [
             (5, "state", PROXY_LOW), (15, "instrument", "c" * 8)]
         assert table.instrument_change_months == (M0 + 8,)
-        # 214 acquisitions carry selected frames (21 full months and 2 + 2 in the last two); tags alternate
+        # 214 acquisitions have selected frames (21 full months and 2 + 2 in the last two), and the tags alternate
         assert table.software_tags == 2 and table.software_tag_changes == 21 * UNITS_PER_MONTH + 4 - 1
-        # frames: 100 per month; month 3's acquisition without a sample interval still counts through unit_time
+        # each month has 100 frames, and the month 3 acquisition without a sample interval still counts through unit_time
         assert first.frames == 800 and first.frames_without_time == 10 and first.units == 80
         assert second.frames == 200 and second.units == 20 and second.frames_without_time == 0
         assert current.frames == 1000 and current.units == 100 and current.populated_months == 10
@@ -337,7 +337,7 @@ def test_era_table_on_a_synthetic_product(product_path, tmp_path):
         assert first.level_median_db == pytest.approx(HIGH_DB, abs=0.01)
         assert current.level_median_db == pytest.approx(LOW_DB, abs=0.01)
         assert first.peak_offset_bins == second.peak_offset_bins == PEAK_OFFSET and math.isnan(current.peak_offset_bins)
-        # the per-frame peak sits at the spike in high months; the monthly record says so
+        # the per-frame peak is at the spike in the high months, and the monthly record agrees
         peaks = eras.frame_peak_offsets(p, p.selected)
         month3 = table.months[3]
         assert month3.peak_offset_bins == PEAK_OFFSET and month3.peak_cohort == "detected"
@@ -345,15 +345,16 @@ def test_era_table_on_a_synthetic_product(product_path, tmp_path):
         assert np.all(peaks[(p.selected) & (p.level_db > 2.0)] == PEAK_OFFSET)
         assert table.months[10].state == "ambiguous" and table.resolved[M0 + 10] == eras.ZONE
         assert [m.label for m in table.months if not m.populated] == ["2021-11", "2021-12"]
-        # masks: the current era's frames are months 12-21; frames with NaN time follow their acquisition's month
+        # the frames of the current era are months 12-21, and frames with NaN time take the month of their acquisition
         current_mask = table.current_era_mask(p)
         assert current_mask.sum() == 1000
         months = eras.frame_months(p)
         assert np.isnan(p.frame_time[table.era_mask(p, 0)]).sum() == 10
         assert (months[table.era_mask(p, 0)] <= M0 + 7).all() and (months[current_mask] >= M0 + 12).all()
         assert not (table.era_mask(p, 0) & current_mask).any()
-        # sensitivity: making 0.75 dB proxy-low (1/1 dB) moves the current-era start to month 10; 0.5/1 is the policy;
-        # 0.5/0.5 makes it proxy-high and extends the instrument era instead, leaving the current era in place
+        # The policy thresholds are 0.5/1 dB. Thresholds of 1/1 dB make 0.75 dB proxy-low and move the
+        # start of the current era to month 10. Thresholds of 0.5/0.5 dB make it proxy-high and extend
+        # the instrument era, which leaves the current era in place.
         moves = {(o.parameter, o.value): o for o in table.sensitivity}
         assert moves[("thresholds_db", "1/1")].moves and moves[("thresholds_db", "1/1")].first_month == M0 + 10
         assert not moves[("thresholds_db", "0.5/1")].moves and not moves[("thresholds_db", "0.5/0.5")].moves
@@ -411,7 +412,7 @@ def test_an_author_dated_era_list_replaces_the_rule_eras_and_keeps_its_month_rec
         assert current.state == PROXY_LOW and current.evidence == eras.EVIDENCE_POWER
         assert current.frames == 1300 and current.units == 130 and current.populated_months == 13
         assert current.months_spanned == 14 and current.peak_offset_bins == PEAK_OFFSET and current.peak_months == 2
-        # months 6 and 7 are populated and in no span: the boundary interval, reported as zone months
+        # months 6 and 7 are populated and in no span, so they form the boundary interval and are reported as zone months
         assert current.boundary_uncertainty_months == 2 and current.boundary_ambiguous_months == 2
         assert current.boundary_gap_months == 0 and table.transition_zone_months == (M0 + 6, M0 + 7)
         assert table.current_index == 1 and table.stale_latest and table.stale_lag_months == 2

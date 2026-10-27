@@ -1,13 +1,13 @@
 # coding=utf-8
-"""End-to-end: the analyzer writes the exact fine terms into the product.
+"""End-to-end test that the analyzer writes the exact fine terms into the product.
 
-Complements ``tests/core/test_fine_power_retention.py``, which pins the
-arithmetic. This one drives the real ``PilotProxyDetectorAnalyzer`` over a
-synthetic baseband file and asserts the saved product carries
-``fine_power_u64`` as exact uint64 -- covering both the device path (kernel
-supplies the terms) and the host fallback (kernel does not) -- and that the
-writer enforces the per-pilot v6 invariant: every frame power is the exact
-all-bin sum of its fine powers.
+The arithmetic is pinned in ``tests/core/test_fine_power_retention.py``. Here,
+the ``PilotProxyDetectorAnalyzer`` is run over a synthetic baseband file, and
+the saved product must hold ``fine_power_u64`` as exact uint64. Both the device
+path, where the kernel supplies the fine terms, and the host fallback, where it
+does not, are covered. The writer must also enforce the per-pilot v6
+invariant. That is, every frame power must be the exact all-bin sum of its
+fine powers.
 """
 from __future__ import annotations
 
@@ -70,10 +70,11 @@ def _make_detector_fn(
         rows = int(pk.shape[1])
         streams = rows // WINDOWS
 
-        # Deterministic row sums, and frame powers derived *from them* the
-        # kernel's way (the all-bin sums of their fixed-point fine spectra),
-        # so the writer's v6 invariant holds. A fake that reports powers
-        # unrelated to its fine powers is rejected (target_delta).
+        # The row sums are deterministic. The frame powers are derived from them
+        # in the same way as in the kernel, as the all-bin sums of their
+        # fixed-point fine spectra, so the v6 invariant of the writer holds. A
+        # fake whose powers do not match its fine powers is rejected
+        # (target_delta).
         rng = np.random.default_rng(7)
         rs = rng.integers(
             -14336, 14337, size=(batch, REFERENCE_WEIGHT_TERMS, rows, 2)
@@ -209,9 +210,9 @@ def test_product_carries_exact_fine_powers(tmp_path, supply_fine_powers):
     S = np.asarray(got["fine_power_u64"])
     assert S.dtype == np.dtype(np.uint64), S.dtype
     assert S.shape == (N_FRAMES, REFERENCE_WEIGHT_TERMS, FINE_BINS), S.shape
-    # A real reduction, not a placeholder block of zeros.
+    # a block of zeros would mean the reduction never ran
     assert int(S.sum()) > 0
-    # The v6 invariant: each frame power is the exact all-bin sum.
+    # each frame power must be the exact all-bin sum (the v6 invariant)
     for term, field in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
         stored = [int(v) for v in np.asarray(got[field]).reshape(-1)]
         assert stored == [sum(int(x) for x in S[f, term]) for f in range(N_FRAMES)]
@@ -229,14 +230,14 @@ def test_fine_products_cannot_be_switched_off(tmp_path, option):
 
 
 def test_device_and_host_paths_agree_bit_for_bit(tmp_path):
-    """The fallback must reproduce the device terms exactly, not approximately."""
+    """The host fallback must reproduce the device terms bit for bit."""
     dev = np.asarray(_run(tmp_path / "dev", supply_fine_powers=True)["fine_power_u64"])
     host = np.asarray(_run(tmp_path / "host", supply_fine_powers=False)["fine_power_u64"])
     assert np.array_equal(dev, host)
 
 
 def test_reference_split_is_retained(tmp_path):
-    """The lower/upper split must survive; the sum alone hides asymmetry."""
+    """The lower and upper reference powers must be kept, since their sum hides any asymmetry."""
     got = _run(tmp_path, supply_fine_powers=True)
     lo = np.asarray(got["p_ref_lower_u64"], dtype=np.uint64)
     up = np.asarray(got["p_ref_upper_u64"], dtype=np.uint64)

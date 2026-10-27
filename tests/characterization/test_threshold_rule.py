@@ -55,7 +55,7 @@ def test_the_sweep_matches_direct_computation_at_every_word():
         kappa, mean, se, frames = direct(f, int(word))
         assert s["kappa"][i] == pytest.approx(kappa, rel=1e-12)
         assert s["mean_excess"][i] == pytest.approx(mean, rel=1e-9, abs=1e-12)
-        # the running sums leave ~1e-11 of rounding where the true error is zero (one frame)
+        # the running sums leave about 1e-11 of rounding where the true error is zero (one frame)
         assert s["se"][i] == pytest.approx(t.SHELF * se, rel=1e-6, abs=1e-9)
         assert s["kept_frames"][i] == frames
     assert s["x"].min() >= 0
@@ -91,7 +91,7 @@ def test_the_guard_can_fail_a_knee_the_measured_power_passes():
 
 @needs_measurements
 def test_a_failing_knee_tightens_to_the_passing_threshold_closest_to_it():
-    # passes at words 1000 and 3000, fails at 2000 and at the knee; never looks above the knee
+    # passes at words 1000 and 3000, fails at 2000 and at the knee, and no word above the knee is read
     s = sweep_of([0.1, 2.0, 0.3, 2.0, 0.1], [0.2, 3.0, 0.9, 3.0, 0.2], [0.1, 0.2, 0.4, 0.9, 0.95])
     d = t.decide(s, knee_word=4000, R=1.0, gain=1.0)
     assert d["outcome"] == "useful" and d["deployed_word"] == 3000 and d["reason"] is None
@@ -131,7 +131,7 @@ def test_a_knee_beyond_the_time_limit_is_not_useful():
 
 @needs_measurements
 def test_evidence_below_the_knee_beyond_the_time_limit_is_still_reported():
-    # the tolerance is met below the knee only at 2% of frames: 50 years
+    # below the knee the tolerance is met only at 2% of frames, which takes 50 years
     s = sweep_of([0.1, 2.0], [0.5, 3.0], [0.02, 0.9])
     d = t.decide(s, knee_word=2000, R=1.0, gain=1.0)
     assert d["outcome"] == "not useful" and d["below_knee"]["time_years"] == pytest.approx(t.CALENDAR_YEARS_PER_RETAINED_YEAR / 0.02)
@@ -144,8 +144,8 @@ REFERENCE_HALF = 1 << 40
 def fine_for_excess(excess):
     """Fine powers whose all-bin sums give ``excess`` (norms 1 : 2, so mu_0 = 1).
 
-    ``P_0 = round((e + 1) 2**40)``, ``P_1 = P_2 = 2**40``: the excess formed
-    from the sums is ``P_0 / 2**40 - 1``, within ``2**-41`` of ``e``.
+    With ``P_0 = round((e + 1) 2**40)`` and ``P_1 = P_2 = 2**40``, the excess formed
+    from the sums is ``P_0 / 2**40 - 1``, which differs from ``e`` by at most ``2**-41``.
     """
     excess = np.asarray(excess, dtype=np.float64)
     finite = np.isfinite(excess)
@@ -163,7 +163,7 @@ def _knee(f, rule):
 
 
 def v1_knee(f):
-    """The knee a cache records (rule v1); the rule reads the frames again with rule v2."""
+    """The knee a cache records (rule v1). The rule reads the frames again with rule v2."""
     return _knee(f, knee.RULE_ID_V1)
 
 
@@ -171,8 +171,8 @@ def write_cache(tmp_path, f, current_keep, product_rows=None):
     n = len(f.required)
     rows = np.arange(n) if product_rows is None else product_rows
     product = tmp_path / "product.npz"
-    # The excess is read from the frame powers, the fine powers' all-bin sums
-    # (kernel core 3.0.0); the stored v5 column is decoy row-domain data.
+    # The excess is read from the frame powers, which are the all-bin sums of the
+    # fine powers (kernel core 3.0.0). The stored v5 column holds decoy row-domain data.
     np.savez(product, normalized_pilot_excess=np.c_[f.excess, f.excess] + 0.5,
              fine_power_u64=fine_for_excess(f.excess),
              target_norm_sq=np.asarray([1], dtype=np.int64),
@@ -324,7 +324,7 @@ def test_calendar_cost_and_historical_duty_are_explicit():
     assert ideal["deployed"]["time_years"] == 2.0
     assert historical["deployed_word"] == ideal["deployed_word"]
     assert historical["deployed"]["time_years"] == pytest.approx(2 * t.LEGACY_CALENDAR_FACTOR)
-    # With only 10% retained, the old duty scenario exceeds the 20-year limit.
+    # With only 10% of frames kept, the calendar time under the historical duty exceeds the 20-year limit.
     assert t.decide(full, 1000, 1.0, gain=1.0)["deployed_word"] == 1000
     assert t.decide(full, 1000, 1.0, gain=1.0,
                     calendar_factor=t.LEGACY_CALENDAR_FACTOR)["reason"] == "out of time"

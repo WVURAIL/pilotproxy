@@ -1,27 +1,47 @@
-"""Rank-choice bench: clean-noise cost of OS at every rank rho = 1..|B| against CA, and the loss under k
-contaminated bulk bins at +20 dB, on the ideal i.i.d. F(4096, 8192) bench of cfar-choice-2026-09-29.
+"""Rank-choice bench for order-statistic (OS) and cell-averaging (CA) references.
 
-Model (the bench of cfar-choice-2026-09-29/bench.py and its semi-analytic check verify/v_bench.py):
-  * every fine bin is T = (X / 4096) / (Y / 8192), X ~ noncentral chi2(4096, 4096 s g_f), Y ~ chi2(8192), bins
-    independent; D = anchor +/- 2 padded bins with pilot gains (0, g1, 1, g1, 0), g1 the rectangular-window
-    Dirichlet response half a natural bin off the tone (L = 128); the bulk carries no pilot (even anchor; on an
-    odd anchor the shoulders reach the bulk at 0.045 x s, below 0.01 in T at the Pd = 0.9 SNR, and are left out);
-  * Z = max_D T / ref, ref = mean_B T (CA) or T_(rho), the rho-th smallest bulk bin (OS at rank rho);
-  * each detector's threshold eta is the upper 1e-3 point of its own Z under the clean ideal null;
-  * the reference is independent of D, so Pd(s) = 1 - E_ref[prod_{f in D} F_nc(eta ref; 4096, 8192, 4096 s g_f)],
-    exact in the D bins (scipy's noncentral F) with only the reference simulated.
-Contamination: the first k bulk columns replaced by noncentral F(4096, 8192, 4096 x 100) draws (+20 dB, far
-above every clean bin, so only their count matters to an order statistic), k in {1, 3, 10, 30, 54}, with the
-clean threshold (the detector does not know it is contaminated). Common random numbers: the same clean bins and
-the same contaminated columns (k = 3 is a subset of k = 10) across ranks and cases.
-Loss = SNR(Pd = 0.9) of the detector and case minus SNR(Pd = 0.9) of clean CA, in dB, per batch; the reported
-value is the mean over 20 batches of 20,000 frames and its error the standard error across batches.
+The bench measures the clean-noise cost of OS at every rank rho = 1..|B|
+against CA, and the loss when k bulk bins are contaminated at +20 dB. It is the
+ideal i.i.d. F(4096, 8192) bench of cfar-choice-2026-09-29 (bench.py, with its
+semi-analytic check verify/v_bench.py). The model assumes that:
+  * every fine bin is T = (X / 4096) / (Y / 8192), with
+    X ~ noncentral chi2(4096, 4096 s g_f) and Y ~ chi2(8192), and the bins are
+    independent.
+  * the designated set D is the anchor +/- 2 padded bins, with pilot gains
+    (0, g1, 1, g1, 0). Here, g1 is the rectangular-window Dirichlet response
+    half a natural bin off the tone (L = 128).
+  * the bulk carries no pilot on an even anchor. On an odd anchor the
+    shoulders reach the bulk at 0.045 x s, which is below 0.01 in T at the
+    Pd = 0.9 SNR, so the shoulders are not modeled.
+  * the statistic is Z = max_D T / ref, where ref is mean_B T for CA, or
+    T_(rho), the rho-th smallest bulk bin, for OS at rank rho.
+  * each detector's threshold eta is the upper 1e-3 point of its own Z under
+    the clean ideal null.
+  * the reference is independent of D, so
+    Pd(s) = 1 - E_ref[prod_{f in D} F_nc(eta ref; 4096, 8192, 4096 s g_f)].
+    This is exact in the D bins (scipy's noncentral F), and only the
+    reference is simulated.
 
-Pd is read from a table of prod_D F_nc on a grid in x (step 1e-4) and in SNR (step 0.002 dB, -9.6 to -3 dB);
-cases whose crossing falls outside it (the broken references, SNR near +20 dB) are solved by brentq on the pooled
-400,000 frames with the D CDFs evaluated directly, and carry no batch error.
+For contamination, the first k bulk columns are replaced by noncentral
+F(4096, 8192, 4096 x 100) draws, for k in {1, 3, 10, 30, 54}. At +20 dB these
+draws are far above every clean bin, so only their count affects an order
+statistic. The clean threshold is applied, since the detector has no previous
+knowledge of the contamination. The same clean bins and the same contaminated
+columns are used across ranks and cases as common random numbers (k = 3 is a
+subset of k = 10).
 
-Ideal independent-bin reference only. The simulated or quadrature threshold is not an operational eta_Pfa calibration.
+The loss is the SNR at Pd = 0.9 of the detector and case minus the SNR at
+Pd = 0.9 of clean CA, in dB, per batch. The reported value is the mean over 20
+batches of 20000 frames, and its error is the standard error across batches.
+
+Pd is read from a table of prod_D F_nc on a grid in x (step 1e-4) and in SNR
+(step 0.002 dB, -9.6 to -3 dB). The cases whose crossing the table cannot
+reach are the broken references, with an SNR near +20 dB. These are solved by
+brentq on the pooled 400000 frames, with the D CDFs evaluated directly, and
+carry no batch error.
+
+This is an ideal independent-bin reference only. The simulated or quadrature
+threshold is not an operational eta_Pfa calibration.
 
 Run with --out DIR using this module.
 """
@@ -56,6 +76,7 @@ def dprod(x, s):
 
 
 def build_table():
+    """Tabulate prod_D F_nc on the SNR grid SG (rows) and the x grid XG (columns)."""
     t0 = time.time()
     tab = np.empty((SG.size, XG.size))
     for j, sdb in enumerate(SG):
@@ -65,17 +86,18 @@ def build_table():
 
 
 TAB = None
-F5 = None      # the clean-null prod_D F on XG, filled in main (interpolation error below 1e-6 in the CDF)
+F5 = None      # the clean-null prod_D F on XG, filled in run (interpolation error below 1e-6 in the CDF)
 
 
 def eta_for(ref, exact=False):
+    """Return the threshold eta at the clean Pfa = 1e-3 for a reference sample, from F5 or, if exact, from dprod."""
     if exact:
         return brentq(lambda e: 1.0 - np.mean(dprod(e * ref, 0.0)) - PFA, 0.9, 1.4, xtol=1e-9)
     return brentq(lambda e: 1.0 - np.mean(np.interp(e * ref, XG, F5)) - PFA, 0.9, 1.4, xtol=1e-9)
 
 
 def snr_table(eta, ref, tab):
-    """SNR (dB) at Pd = 0.9 from the table, or None when the crossing or the x values fall outside it."""
+    """SNR (dB) at Pd = 0.9 from the table, or None when the table does not cover the crossing or the x values."""
     x = eta * ref
     if x.min() <= XG[0] or x.max() >= XG[-1]:
         return None
@@ -92,6 +114,7 @@ def snr_table(eta, ref, tab):
 
 
 def snr_direct(eta, ref, lo=-12.0, hi=40.0, npts=1501):
+    """SNR (dB) at Pd = 0.9 by brentq, with prod_D F_nc evaluated on npts points spanning eta ref."""
     x = eta * ref
     grid = np.linspace(x.min() * 0.999, x.max() * 1.001, npts)
 
@@ -101,10 +124,11 @@ def snr_direct(eta, ref, lo=-12.0, hi=40.0, npts=1501):
 
 
 def run_size(n, tab, seed):
+    """Simulate NBATCH batches for bulk size n and return the per-batch SNRs, thresholds and pooled references."""
     rng = np.random.default_rng(seed)
     dets = ["CA"] + list(range(1, n + 1))
     cases = [0] + list(KS)
-    snr = {c: {d: [] for d in dets} for c in cases}        # per batch; None where the table cannot solve
+    snr = {c: {d: [] for d in dets} for c in cases}        # per batch, None where the table cannot solve
     etas = {d: [] for d in dets}
     pooled = {c: {d: [] for d in dets} for c in cases}      # references kept for the direct solves
     direct_batches = {c: {d: 0 for d in dets} for c in cases}
@@ -126,11 +150,11 @@ def run_size(n, tab, seed):
                     etas[d].append(eta_b[d])
                 broken = c > 0 and (d == "CA" or d > n - c)
                 v = snr_table(eta_b[d], refs[d], tab)
-                if v is None and not broken:     # an unbroken reference the table cannot reach: solve this batch directly
+                if v is None and not broken:     # unbroken reference the table cannot reach, solved directly for this batch
                     v = snr_direct(eta_b[d], refs[d])
                     direct_batches[c][d] += 1
                 snr[c][d].append(v)
-                if broken:                       # the broken references are solved once, pooled
+                if broken:                       # broken references are pooled and solved once
                     pooled[c][d].append(refs[d].astype(np.float32))
                 elif c == 0 and b < 2 and d in ("CA", 63):
                     pooled[c][d].append(refs[d].astype(np.float64))
@@ -139,6 +163,7 @@ def run_size(n, tab, seed):
 
 
 def summarise(n, dets, cases, snr, etas, pooled, direct_batches):
+    """Reduce the batches of bulk size n to losses against clean CA, with a table-versus-direct check."""
     base = np.array(snr[0]["CA"], dtype=float)
     assert np.all(np.isfinite(base))
     eta_pooled = {d: float(np.mean(etas[d])) for d in dets}
@@ -162,7 +187,7 @@ def summarise(n, dets, cases, snr, etas, pooled, direct_batches):
                 rows[str(d)] = dict(loss_db=float(s - base.mean()), se_db=None, method="direct, pooled",
                                     batches_table_solved=int(sum(x is not None for x in v)), broken=True)
         out["cases"]["clean" if c == 0 else f"k{c}_20dB"] = rows
-    # cross-check: the direct solve and the table agree on the pooled first two batches of clean OS 63 and CA
+    # the direct solve is compared with the table on the first two pooled batches of clean OS 63 and CA
     chk = {}
     for d in ("CA", 63):
         ref = np.concatenate(pooled[0][d][:2])
@@ -174,7 +199,7 @@ def summarise(n, dets, cases, snr, etas, pooled, direct_batches):
 
 
 def run(output_dir):
-    """Run the fixed recorded model and seeds; only the output location varies."""
+    """Run the recorded model and its fixed seeds. The output location is the only input."""
     global TAB, F5
     OUT = Path(output_dir)
     OUT.mkdir(parents=True, exist_ok=False)

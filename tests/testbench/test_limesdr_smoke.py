@@ -1,4 +1,4 @@
-"""Compile the real worker against a fake LimeSuite; never link/open hardware."""
+"""Smoke tests compile the real worker against a fake LimeSuite, so no hardware is linked or opened."""
 from pathlib import Path
 import json
 import os

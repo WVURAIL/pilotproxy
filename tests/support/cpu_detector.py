@@ -1,4 +1,4 @@
-"""A CPU stand-in for the detector backend, so archive scans run without a GPU (plumbing only; no parity claim)."""
+"""CPU detector backends, so archive scans run in tests without a GPU."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -8,8 +8,8 @@ import numpy as np
 K = 128
 
 
-# The stub's fixed fine spectra: all power in bin 0, so the frame powers (their
-# all-bin sums, per-pilot product schema v6) are 10, 10 and 10.
+# All stub fine power is placed in bin 0, so the frame power of the target and
+# of each reference (the sum over all bins, per-pilot product schema v6) is 10.
 STUB_FINE_BINS = 256
 STUB_FRAME_POWERS = (10, 10, 10)
 
@@ -21,7 +21,11 @@ def stub_fine_powers(n: int) -> np.ndarray:
 
 
 def stub_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
-    """Trivial CPU detector: fixed fine spectra and their sums (plumbing only; no parity claim)."""
+    """Return fixed fine spectra and frame powers in the detector output layout.
+
+    The output is the same for every input, so this stub is used only in scan
+    plumbing tests and makes no parity claim.
+    """
     pk = np.asarray(packed)
     if pk.ndim == 2:
         pk = pk[None, ...]
@@ -58,7 +62,7 @@ def stub_kernel(k):
 
 
 def cpu_detector_options():
-    """CPU detector injection so scan plumbing runs GPU-free."""
+    """Return scan options that inject the stub detector, so scan plumbing runs without a GPU."""
     rng = np.random.default_rng(0)
     weights_by_channel = {
         ch: rng.integers(-120, 121, size=(3, K)).astype(np.int8)
@@ -72,12 +76,14 @@ def cpu_detector_options():
 
 
 def exact_cpu_detector_fn(*, packed, weights, kernel=None, emit_row_projections=False):
-    """The fixed-point detector chain on the CPU, exactly.
+    """Run the fixed-point detector chain on the CPU with exact integer arithmetic.
 
-    Packed rows -> exact int32 row projections -> frozen fxfft256 fine powers
-    (summed over streams) -> frame powers ``P_r = sum_f S_r[f]``. Returns the
-    keys ``detect_packed_detector_input`` returns that the archive analyzer
-    reads, so an injected backend produces bit-for-bit the kernel's numbers.
+    The matched-filter row projections of the packed rows are computed first,
+    in exact int32 arithmetic. The fine powers S_r[f] are then produced by the
+    frozen fxfft256 transform and summed over streams. The frame power of the
+    target and of each reference is ``P_r = sum_f S_r[f]``. Only the keys of
+    ``detect_packed_detector_input`` that the archive analyzer reads are
+    returned, so an injected backend produces the kernel's numbers bit for bit.
     """
     from pilot_proxy.detector_contract import (
         normalized_positive_excess,

@@ -1,9 +1,11 @@
-"""``pilot-proxy characterize archive``: the release the frame export is keyed to.
+"""Write the archive characterization release that the frame export is keyed to.
 
-Per screened band's product: its frame accounting and health reasons, and its
-eras (the predeclared rule on the selected frames, replaced by the project's
-author-dated era list where it dates the band). Nothing here sets a threshold.
-The outputs are the files ``characterize histogram-frames --release`` reads:
+For each screened band's product, ``pilot-proxy characterize archive``
+records the frame accounting, the health reasons, and the eras. The eras come
+from the predeclared rule on the selected frames and are replaced by the
+project's author-dated era list where that list dates the band. No threshold
+is set here. The outputs are the files that
+``characterize histogram-frames --release`` reads:
 
     <out>/characterization/channels/chNN/eras.json
     <out>/characterization/ledger/{channels/chNN_fidF.json, run.json}
@@ -33,7 +35,7 @@ LEDGER_SCHEMA = {"name": "pilot_proxy_characterization_ledger", "version": 2}
 
 
 def producer_identity(roots: Mapping[str, Path] | None = None) -> dict:
-    """The producing code, informational: its commit, dirty flag and a digest of the package sources.
+    """Return the commit, dirty flag, and package-source digest of the producing code, for information.
 
     Delegates to :func:`pilot_proxy.provenance.producer_identity`.
     """
@@ -108,7 +110,7 @@ def release_band(p: Product, out: Path, *, campaign_last_month: int, era_config:
     }
     table = eras.era_table(p, config=era_config, campaign_last_month=campaign_last_month, station_record={})
     if era_spec:
-        # an author-dated era list replaces the rule's eras; the rule's month record is kept beside it
+        # an author-dated era list replaces the rule's eras, and the rule's month record is kept beside it
         table = eras.impose_eras(table, p, era_spec)
     eras.write_era_json(table, out / "channels" / f"ch{ch:02d}" / "eras.json")
     era = {k: v for k, v in eras.channel_row(table).items() if k not in ("channel", "freq_id")}
@@ -129,7 +131,7 @@ def characterize_archive(products_dir: Path | str, out_dir: Path | str, *, proje
     _require_default_layers(project)
     products_dir, out = Path(products_dir), Path(out_dir) / "characterization"
     out.mkdir(parents=True, exist_ok=True)
-    producer = producer_identity()                   # read once, before any work: the code that runs is the code named
+    producer = producer_identity()                   # read once before any work, so the code named is the code that runs
     screened = {int(b.label) for b in project.frequency_plan.bands("screened")}
     opened = [Product(p, require_health=True) for p in sorted(products_dir.glob("*.npz"))]
     try:

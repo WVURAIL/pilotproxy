@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """
-Offline tests for the two survey() guarantees that only ever matter when a run
-STOPS -- the pieces that otherwise only exercise on CANFAR against live
-Datatrail/CADC, and that a green suite cannot see because survey()'s own finally
-block tidies up after itself before any test gets to look.
+Offline tests for the two survey() guarantees that matter only when a run
+stops. Without these tests they are exercised only on CANFAR against live
+Datatrail and CADC, and a green suite cannot see them because the finally
+block of survey() cleans up before any test can look.
 
-  * attempts.json is checkpointed PER EVENT (cadc.py:605 in mark_done, :612 in
-    bump), not merely once on the way out. The final rewrite in the finally
-    block (cadc.py:833) leaves the same end state either way, so the per-event
-    flush is observable only from INSIDE the event loop -- here from a faked
-    cadcinfo probe belonging to a LATER event, which is exactly the window a
-    killed process falls into.
-  * pool.shutdown(wait=True, cancel_futures=True) (cadc.py:832) joins probes
-    that are still in flight before survey() returns and the output lock is
-    released. Observed by timestamping every faked probe's entry and exit and
-    comparing them against the instant survey() handed the directory back.
+  * attempts.json is checkpointed per event, in mark_done and in bump, as well
+    as once on the way out. The final rewrite in the finally block leaves the
+    same end state either way, so the per-event flush is observable only
+    during the event loop. Here it is observed from a faked cadcinfo probe of a
+    later event, which is the window a killed process falls into.
+  * pool.shutdown(wait=True, cancel_futures=True) in survey() joins probes that
+    are still in flight before survey() returns and the output lock is
+    released. This is observed by timestamping the entry and exit of every
+    faked probe and comparing them with the instant survey() returns the
+    directory.
 
-Nothing here touches the network or a certificate: event enumeration,
-`datatrail ps` and cadcinfo are the three faked seams -- the same three
-tests/archive/test_survey_durability_stress.py fakes.
+No test reaches the network or a certificate. Event enumeration,
+`datatrail ps` and cadcinfo are the three faked seams, the same three faked
+by tests/archive/test_survey_durability_stress.py.
 
 Run:  PYTHONPATH=src python -m pytest tests/archive/test_survey_crash_window.py
 """
@@ -40,19 +40,19 @@ from pilot_proxy.archive.sources import cadc as C
 from pilot_proxy.archive.survey_state import SurveyOutputLock
 
 SCOPE = "chime.event.baseband.raw"
-OBS_DIR = "raw/2020/07/15"            # matches _DATE_RE (cadc.py:111)
-FIDS = [614, 706, 800, 900]           # -> four candidate files per event
+OBS_DIR = "raw/2020/07/15"            # matches _DATE_RE in cadc.py
+FIDS = [614, 706, 800, 900]           # four candidate files per event
 FLOOR = 1 << 20                       # ChimeBasebandReader.minimum_archive_bytes
-# The faked observation is from 2020. Declaring a far larger --empty-age-days
-# keeps a 0-file event OFF the accept-as-empty-on-first-sighting path, so it
-# takes bump() instead of mark_done() -- which is the branch under test.
+# The faked observation is from 2020. A far larger --empty-age-days keeps an
+# event with no files off the path that accepts it as empty on first sighting,
+# so it takes bump() instead of mark_done(). bump() is the branch under test.
 NEVER_AGED_OUT = 100_000
 
 pytestmark = pytest.mark.skipif(
     os.name == "nt", reason="POSIX signal and flock semantics under test")
 
 
-# ---------------------------------------------------------------- fixture ---
+# fixtures
 def events(n, start=100000000):
     return [str(start + i) for i in range(n)]
 
@@ -62,24 +62,24 @@ def key_of(event):
 
 
 def read_attempts(out):
-    """attempts.json exactly as a killed process would leave it behind."""
+    """Return attempts.json as a killed process would leave it."""
     return json.loads((Path(out) / "attempts.json").read_text())
 
 
 @contextlib.contextmanager
 def fake_archive(evs, present=(), on_probe=None):
-    """Patch the three live seams survey() leans on; restore them on exit.
+    """Patch the three live seams of survey() and restore them on exit.
 
-    `on_probe(event, name)` runs INSIDE the faked cadcinfo call, i.e. on a pool
-    worker while survey() is still mid-event. That is the only vantage point
-    from which per-event durable state is visible at all.
+    `on_probe(event, name)` runs in the faked cadcinfo call, on a pool worker
+    while survey() is still in the middle of an event. Per-event durable state
+    is visible only from there.
     """
     present = set(present)
     saved = (C._enumerate_events, C.DATATRAIL.common_path,
              C.CadcDatatrailSource._cadc_size)
     membership = {(SCOPE, ev): ["dataset0"] for ev in evs}
-    # common path -> event, so the probe never has to re-derive (and thereby
-    # re-implement) the reader's archive naming just to know who it is.
+    # event by common path, so the probe never has to re-derive, and so
+    # re-implement, the archive naming of the reader to know its event
     by_path: dict[str, str] = {}
 
     def fake_cp(scope, event, **kwargs):
@@ -92,8 +92,8 @@ def fake_archive(evs, present=(), on_probe=None):
         event = by_path[path]
         if on_probe is not None:
             on_probe(event, name)
-        # Absent is an ANSWER (None, None), not an error -- cadc.py leans on
-        # that distinction to tell "empty" from "incomplete".
+        # An absent file is the answer (None, None) with no error. cadc.py uses
+        # this to distinguish between "empty" and "incomplete".
         return (FLOOR + 1, None) if event in present else (None, None)
 
     def fake_enumerate(*args, **kwargs):
@@ -110,7 +110,7 @@ def fake_archive(evs, present=(), on_probe=None):
 
 
 def survey(out, workers=4, **options):
-    """One survey pass over the faked archive; returns its stdout."""
+    """Run one survey pass over the faked archive and return its stdout."""
     source = C.CadcDatatrailSource()
     buffer = io.StringIO()
     opts = {"freq_ids": list(FIDS), "workers": workers,
@@ -124,8 +124,8 @@ def survey(out, workers=4, **options):
 class FirstSighting:
     """Record attempts.json once per event, the first time it is probed.
 
-    One event's probes all run inside the same verify() call, so they all see
-    the same durable state; the first one to arrive is enough, and taking only
+    The probes of one event all run in the same verify() call, so they all
+    see the same durable state. The first to arrive is enough, and taking only
     the first keeps the observation independent of probe scheduling.
     """
 
@@ -140,16 +140,16 @@ class FirstSighting:
                 self.seen[event] = read_attempts(self.out)
 
 
-# ============================ 1. per-event attempts.json checkpoint =========
+# 1. per-event attempts.json checkpoint
 def test_bump_checkpoints_attempts_before_the_next_event_is_probed(tmp_path):
-    """cadc.py:612 -- bump() must FLUSH the counter, not just raise it in RAM.
+    """bump() writes the raised counter to disk as well as to memory.
 
-    Event 0 resolves a common path but has no file above the floor, so it is
-    bumped rather than committed. If that bump only lived in the in-memory
-    dict, a process killed later in the run would lose it: the event would
-    restart from attempt 0 on every resume and re-probe forever instead of ever
-    reaching the accept-as-empty terminus. The only witness is event 1's probe,
-    which runs while survey() is still inside the loop.
+    Event 0 resolves a common path and has no file above the floor, so it is
+    bumped and not committed. If the bump lived only in the in-memory dict, a
+    process killed later in the run would lose it. The event would restart
+    from attempt 0 on every resume, be probed again forever, and never reach
+    the accept-as-empty terminus. The flush is seen only by the probe of
+    event 1, which runs while survey() is still in the loop.
     """
     out = tmp_path / "inv"
     evs = events(2)
@@ -159,60 +159,60 @@ def test_bump_checkpoints_attempts_before_the_next_event_is_probed(tmp_path):
         survey(out)
 
     seen = sighting.seen
-    assert sorted(seen) == sorted(evs)          # both events really were probed
-    # Nothing checkpointed when event 0 is probed; event 0's attempt already
-    # DURABLE by the time event 1 is probed; unchanged once the run is over --
-    # that third entry is why the end state alone can never see this flush.
+    assert sorted(seen) == sorted(evs)          # both events were probed
+    # Nothing is checkpointed when event 0 is probed, and the attempt of event
+    # 0 is durable by the time event 1 is probed. The state is unchanged once
+    # the run is over, which is why the end state alone cannot show this flush.
     assert [seen[evs[0]], seen[evs[1]], read_attempts(out)] == [
         {}, {key_of(evs[0]): 1}, {key_of(evs[0]): 1}]
 
 
 def test_mark_done_checkpoints_the_dropped_attempt_immediately(tmp_path):
-    """cadc.py:605 -- mark_done() must FLUSH the pop, not just pop in RAM.
+    """mark_done() writes the removal of the counter to disk as well as to memory.
 
-    A committed event's attempt counter is stale the instant the event lands.
-    Leaving it on disk until the finally block means a kill in between resumes
-    carrying a phantom count against an already-completed key. Setup is a real
-    first pass that leaves both events bumped; the second pass commits event 0,
-    and event 1's probe reports what the counter file looked like right after.
+    The attempt counter of a committed event is stale as soon as the event
+    lands. If it stayed on disk until the finally block, a kill in between
+    would resume with a phantom count against a completed key. A real first
+    pass leaves both events bumped. The second pass commits event 0, and the
+    probe of event 1 reports the counter file as it was right after.
     """
     out = tmp_path / "inv"
     evs = events(2)
 
-    with fake_archive(evs, present=()):        # nothing present -> both bumped
+    with fake_archive(evs, present=()):        # nothing present, so both are bumped
         survey(out)
     assert read_attempts(out) == {key_of(evs[0]): 1, key_of(evs[1]): 1}
 
     sighting = FirstSighting(out)
-    # Event 0's files have now landed, so it commits; event 1 is still empty
-    # and is probed afterwards, from inside the same loop.
+    # The files of event 0 have landed, so it commits. Event 1 is still empty
+    # and is probed afterward in the same loop.
     with fake_archive(evs, present={evs[0]}, on_probe=sighting):
         survey(out)
 
     seen = sighting.seen
     assert sorted(seen) == sorted(evs)
-    # Before event 0 commits, both counters are on disk ...
+    # Before event 0 commits, both counters are on disk.
     assert seen[evs[0]] == {key_of(evs[0]): 1, key_of(evs[1]): 1}
-    # ... and its counter is off disk before anything else is probed.
+    # Its counter is off disk before anything else is probed.
     assert seen[evs[1]] == {key_of(evs[1]): 1}
-    # The end state is identical whether or not mark_done flushed, which is
-    # precisely why the assertion above has to be taken from inside the loop.
+    # The end state is the same with or without the flush in mark_done, which
+    # is why the assertion above is made during the loop.
     assert read_attempts(out) == {key_of(evs[1]): 2}
 
 
-# ================================ 2. probes joined at teardown =============
-LINGER = 0.5           # how long a probe deliberately outlives the interrupt
+# 2. probes joined at teardown
+LINGER = 0.5           # time (s) a probe runs on after the interrupt
 
 
 def test_survey_joins_in_flight_probes_before_it_returns(tmp_path):
-    """cadc.py:832 -- pool.shutdown(wait=True, cancel_futures=True) on the way out.
+    """survey() calls pool.shutdown(wait=True, cancel_futures=True) on the way out.
 
-    A SIGINT arrives with every probe of an event genuinely running. survey()
-    must not return -- releasing the output lock, telling the caller the
-    directory is theirs again -- while a probe is still executing against the
-    archive. The probes are barrier-synchronised so "in flight" is a fact and
-    not a timing hope, and their linger starts only after the signal has been
-    raised, so the window cannot close early under load.
+    A SIGINT arrives while every probe of an event is running. survey() must
+    not return, which releases the output lock and hands the directory back
+    to the caller, while a probe is still executing against the archive. The
+    probes are synchronized by a barrier, so all of them are known to be in
+    flight, and their linger starts only after the signal is raised, so the
+    window cannot close early under load.
     """
     out = tmp_path / "inv"
     evs = events(1)
@@ -233,7 +233,7 @@ def test_survey_joins_in_flight_probes_before_it_returns(tmp_path):
             interrupted.set()
         else:
             assert interrupted.wait(timeout=10)
-            time.sleep(LINGER)            # ...still working, post-interrupt
+            time.sleep(LINGER)            # still working after the interrupt
         with guard:
             exited.append((name, time.monotonic()))
 
@@ -244,14 +244,14 @@ def test_survey_joins_in_flight_probes_before_it_returns(tmp_path):
         with guard:
             started, finished = list(entered), dict(exited)
 
-    assert len(started) == len(FIDS)                # every probe really ran
-    # THE property: nothing was still executing when survey() returned.
+    assert len(started) == len(FIDS)                # every probe ran
+    # Nothing was still executing when survey() returned.
     assert sorted(finished) == sorted(started)
     assert max(finished.values()) <= returned_at
-    # Not vacuous: the other three were provably mid-probe when the signal
-    # landed and stayed there for the whole linger, so the join was real work.
+    # The other three probes were running when the signal landed and kept
+    # running for the whole linger, so the join had real work to do.
     t_sigint = fired[0]
     lingered = [t for t in finished.values() if t >= t_sigint + LINGER]
     assert len(lingered) == len(FIDS) - 1
-    with SurveyOutputLock(out):                     # ...and the lock was freed
+    with SurveyOutputLock(out):                     # the lock was freed
         pass

@@ -1,12 +1,12 @@
 """Publication plotting style with WVU colors and Latin Modern typography.
 
-Colors come from the shared WVU palette. Existing recorded figures are not
-modified; newly rendered figures use these defaults.
+Colors come from the shared WVU palette. These defaults apply to newly
+rendered figures, and figures already recorded are left as they are.
 
-The body text is Latin Modern (LaTeX ``lmodern``).  Submission figures render
-all text through the same LaTeX stack, at a fixed physical size, so labels are
-not silently substituted with DejaVu or shrunk differently from chapter to
-chapter.  This file also fixes the semantic palette and common line/axis rules.
+The body text is Latin Modern (LaTeX ``lmodern``). Submission figures render
+all text through the same LaTeX stack at a fixed physical size, so every
+chapter has the same label font and size, and DejaVu is never substituted.
+This file also fixes the semantic palette and the common line and axis rules.
 """
 from __future__ import annotations
 from . import wvu_palette as wvu
@@ -22,7 +22,8 @@ import matplotlib
 matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
-# Dissertation text block is 6.5 in; figures are included at 0.98 linewidth.
+# The dissertation text block is 6.5 in wide, and figures are set at 0.98
+# linewidth.
 TEXT_WIDTH = 6.35
 HALF_WIDTH = 3.05
 
@@ -36,17 +37,18 @@ LIGHT_GREEN, LIGHT_RED, LIGHT_GRAY = wvu.tint(CONDITIONAL), wvu.tint(FAILURE), w
 SERIES = wvu.SERIES
 
 # Fixed PDF metadata makes repeated figure builds byte-for-byte reproducible.
-# The date identifies the frozen dissertation-export interface revision; it is
-# not intended to represent the wall-clock time of a local rebuild.
+# The date names the revision of the frozen dissertation-export interface, so
+# a local rebuild keeps the same date.
 PDF_METADATA_DATE = datetime(2026, 8, 12, tzinfo=timezone.utc)
 
 
 def configure(*, require_tex: bool = True) -> None:
     """Apply the dissertation figure style.
 
-    The bundled build requires TeX and fails rather than silently substituting
-    another font.  ``require_tex=False`` is only for an explicitly requested
-    quick preview and is never used by the Makefile or audit.
+    The bundled build requires TeX and raises RuntimeError when it is
+    missing, so another font is never substituted. ``require_tex=False`` is
+    only for an explicitly requested quick preview and is never used by the
+    Makefile or audit.
     """
     have_tex = all(shutil.which(c) for c in ("latex", "dvipng", "kpsewhich"))
     if require_tex and not have_tex:

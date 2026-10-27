@@ -1,8 +1,9 @@
-"""Offline OTA protocol and single-slot simulation receipts; no hardware adapter.
+"""Offline over-the-air (OTA) protocol and single-slot simulation receipts.
 
-All acceptance here is protocol/fixture acceptance. Stationarity and RF-power
-reports are supplied evidence, not measurements made or certified by this module.
-The existing sdr_transfer worker must not be used as a single-slot adapter.
+This module has no hardware adapter, and its acceptance is limited to the
+protocol and its fixtures. The stationarity and RF-power reports are evidence
+supplied by the caller, and this module does not measure or certify them. The
+existing sdr_transfer worker must not be used as a single-slot adapter.
 """
 from __future__ import annotations
 
@@ -71,18 +72,22 @@ def _reference(record, name):
 
 
 def settings_identity(spec):
-    """Bind power evidence to the complete proposed waveform and radio settings."""
+    """Return the SHA-256 identity of the waveform, radio, noise model, and slots that the power evidence must match."""
     return identity({k: spec[k] for k in ("waveform", "radio", "noise_model", "slots")})
 
 
 def validate_spec(spec):
-    """Raise on missing evidence/limits; return the conservative stated power bound.
+    """Validate a protocol spec and return its conservative upper power bound.
 
-    No jurisdictional limit is invented. The supplied limit uses its named
-    average/peak conducted/EIRP convention. The conversion report must explicitly
-    cover every slot, its marker and transition, and total measurement uncertainty.
+    A ValueError is raised for any missing evidence or limit. No jurisdictional
+    limit is assumed, and the supplied limit is applied in its named convention
+    (average or peak, conducted or EIRP). The power conversion report must
+    explicitly cover every slot, its marker and transition, and the total
+    measurement uncertainty. The bound is the measured conducted power, plus the
+    antenna gain minus the cable loss for an EIRP metric, plus the total
+    uncertainty.
     """
-    identity(spec)  # Reject non-JSON/nonfinite fields before freezing.
+    identity(spec)  # reject non-JSON and nonfinite fields before freezing
     if spec.get("schema") != SCHEMA or not str(spec.get("run_id", "")).strip():
         raise ValueError("a versioned protocol and run_id are required")
     if spec.get("noise_model") not in NOISE_MODELS:
@@ -112,8 +117,9 @@ def validate_spec(spec):
             or not audit.get("method") or not audit.get("thresholds")
             or len(audit.get("segments", [])) < 3):
         raise ValueError("stationarity evidence must cover this exact interval and startup discard")
-    # The evidence report supplies the spectral definition and predeclared limits;
-    # three disjoint chronological slices are mandatory. This is not a new audit.
+    # The spectral definition and limits are predeclared in the evidence report,
+    # and the audit itself is not repeated here. The segments are checked to be
+    # at least three disjoint chronological slices that pass and span the interval.
     last_stop = start
     for segment in audit["segments"]:
         a = _integer(segment["start_sample"], "stationarity segment start")
@@ -219,7 +225,10 @@ def load_protocol(directory):
 
 
 def _state(directory):
-    """Verify every permanent receipt; pending attempts refuse further slots."""
+    """Verify the chain of sealed receipts and return the plan, completed slot count, and last digest.
+
+    An interrupted or failed slot raises, and no further slots are allowed.
+    """
     directory = Path(directory)
     plan = load_protocol(directory)
     previous = digest(directory/"plan.json")
@@ -254,7 +263,7 @@ def _state(directory):
 
 
 def next_simulation_request(directory):
-    """Return exactly one slot, never a hardware/transmit request."""
+    """Return the offline simulation request for the next planned slot, with no hardware or transmit request."""
     plan, index, previous = _state(directory)
     spec = plan["spec"]
     if index >= len(spec["slots"]):
@@ -266,11 +275,11 @@ def next_simulation_request(directory):
 
 
 def simulate_next_slot(directory, worker: Callable):
-    """Exercise an injected fake worker, saving its capture before checking guards.
+    """Run the next slot through an injected fake worker, saving its capture before the guards are checked.
 
     The callback receives one offline request and returns measurement-only
-    complex64 samples and health/alignment fields. No implementation supplied
-    here opens a device. A later hardware integration requires separate review.
+    complex64 samples with stream health and alignment fields. No worker in this
+    module opens a device, and a hardware integration requires its own review.
     """
     directory = Path(directory)
     request = next_simulation_request(directory)
@@ -293,7 +302,7 @@ def simulate_next_slot(directory, worker: Callable):
             stream.write(values.tobytes())
         receipt["capture_sha256"] = digest(capture_path)
         receipt["worker_report"] = deepcopy({k: v for k, v in response.items() if k != "samples"})
-        # Validate JSON report before accepting it or writing the durable receipt.
+        # the worker report must be valid JSON before the receipt is accepted or written
         identity(receipt["worker_report"])
         if values.size != spec["capture"]["capture_samples"] or not np.isfinite(values).all():
             raise ValueError("capture count or finiteness failed")
@@ -320,7 +329,8 @@ def simulate_next_slot(directory, worker: Callable):
             raise ValueError("capture lower level guard failed")
         receipt["status"] = "accepted_simulation"
     except BaseException as error:
-        # Preserve the failure, not its arbitrary callback object/nonfinite report.
+        # keep the error type and message, and drop the worker report, which can
+        # hold arbitrary callback objects or nonfinite values
         receipt.pop("worker_report", None)
         receipt["error_type"] = type(error).__name__
         receipt["error"] = str(error)
@@ -339,7 +349,12 @@ def _seal_receipt(directory, index, receipt):
 
 
 def draw_noise(signal, *, seed, model):
-    """Declared digital models, without RF I/O or signal-dependent AWGN rescaling."""
+    """Draw unit-power complex Gaussian noise from a declared digital model.
+
+    The orthogonal_unit_power model removes the noise component along the signal
+    and rescales the result to unit power. No RF I/O or signal-dependent AWGN
+    rescaling is performed.
+    """
     signal = np.asarray(signal, dtype=np.complex128).reshape(-1)
     if signal.size < 2 or not np.isfinite(signal).all() or not np.any(signal):
         raise ValueError("finite nonzero signal required")

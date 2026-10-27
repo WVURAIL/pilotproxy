@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
-"""Baseband framing audit for pilot-proxy weight ROMs.
+"""Baseband framing audit of the pilot-proxy weight ROM.
 
-Answers one question for one CHIME baseband file: does the deployed weight
-ROM look where the pilot actually is, or is there a frequency-frame mismatch
-(e.g. a half-band / fs/2 shift between the ROM's assumed baseband framing
-and the file's actual framing)?
+The audit determines if the target lobe of the deployed weight ROM lies on
+the pilot of one CHIME baseband file. A frequency-frame mismatch between the
+ROM's assumed baseband framing and the file's actual framing, such as a
+half-band (fs/2) shift, moves the lobe away from the pilot.
 
-Method: (1) incoherent full-channel fine spectrum (23.8 Hz bins, all feeds
-summed); (2) exact response curves of the deployed target/reference filters
-in the same raw-baseband frame (padded FFT of the conjugated,
-window-flipped weights, matching the production Nyquist-zone path);
-(3) line list above 5 sigma (MAD); (4) verdict comparing the strongest line
-against the target lobe center and the nominal ATSC pilot.
+First, an incoherent fine spectrum of the full channel is formed with
+23.8 Hz bins and all feeds summed. Next, the response of the deployed target
+and reference filters is measured in the same raw-baseband frame by passing
+tones on a 250 Hz grid through the production Nyquist-zone mapping and
+projection. Lines more than 5 sigma (MAD) above the median bin are then
+listed, each with its offset from the nominal ATSC pilot for both spectral
+senses. Finally, the strongest line that is not a DC or fs/5 spur is compared
+with the target lobe center. The file is reported as ALIGNED when this line
+is less than a quarter of a detector bin from the lobe center.
 
 Usage:
     python framing_audit.py FILE.h5 [--channel N] [--chunks 4]
         [--nyquist-zone 2] [--repo /path/to/pilotproxy] [--png out.png]
 
-Exit status: 0 = ALIGNED, 2 = MISMATCH, 3 = no line found (inconclusive).
+Exit status: 0 = ALIGNED, 2 = MISMATCH, 3 = inconclusive (no channel, no
+valid weights, or no line above 5 sigma other than a spur).
 """
 from __future__ import annotations
 
@@ -88,7 +92,7 @@ def main() -> int:
         apply_nyquist_zone_to_detector_matrix,
     )
     Wc = unpack_twos_complement_i4_to_complex(wp).astype(np.complex64)
-    # empirical response sweep: real tones through the exact production path
+    # response sweep with tones through the production path
     n = np.arange(NFFT)
     step = 250.0
     nu_grid = np.arange(-FS / 2, FS / 2, step)

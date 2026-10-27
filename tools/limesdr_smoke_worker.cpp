@@ -1,4 +1,4 @@
-// Finite uncalibrated LimeSDR smoke capture. No dependency on sdr_transfer.cpp.
+// Finite, uncalibrated LimeSDR smoke capture.
 #include <lime/LimeSuite.h>
 #include <algorithm>
 #include <atomic>
@@ -166,9 +166,10 @@ int run(const Options& o) {
         require(ret==0,"TX stream status failed");
         require(!require_active || delta.active,"TX stream inactive");
         require(delta.overrun==0 && delta.droppedPackets==0,"TX stream overrun/drop");
-        // Legacy LimeSuite underrun counts empty HOST FIFO waits, including
-        // deliberate empty startup and waits after the finite burst was queued.
-        // Preserve them; they do not alone establish a missing RF sample.
+        // The legacy LimeSuite underrun counter counts waits on an empty host
+        // FIFO. These waits occur during the intended empty startup and after
+        // the finite burst is queued. The counts are recorded but do not fail
+        // the stream, since a wait alone does not mean an RF sample was lost.
     };
     try {
         const int n=LMS_GetDeviceList(nullptr); require(n>0, "No LimeSDR found");
@@ -198,7 +199,7 @@ int run(const Options& o) {
         }
         check(LMS_SetAntenna(h.device,LMS_CH_RX,0,LMS_PATH_LNAW),"RX antenna");
         check(LMS_SetAntenna(h.device,LMS_CH_TX,0,LMS_PATH_NONE),"TX antenna remains off");
-        // No explicit LMS_Calibrate: this is transport smoke, not RF calibration.
+        // LMS_Calibrate is not called, since the smoke test covers sample transport only.
         check(LMS_GetSampleRate(h.device,false,0,&rx_rate,&rf_rate),"RX rate readback");
         check(LMS_GetSampleRate(h.device,true,0,&tx_rate,&rf_rate),"TX rate readback");
         check(LMS_GetLOFrequency(h.device,false,0,&rx_frequency),"RX LO readback");
@@ -212,8 +213,8 @@ int run(const Options& o) {
         require(std::abs(rx_lpf-o.rx_bandwidth)<=.05*o.rx_bandwidth && std::abs(tx_lpf-o.tx_bandwidth)<=.05*o.tx_bandwidth, "LPF readback differs");
         require(actual_tx_gain==o.expected_tx_gain && actual_rx_gain==o.rx_gain, "Gain readback differs");
         setup(h,false); setup(h,true);
-        // Complete path selection and stream starts before RX qualification.
-        // No tone samples are submitted until qualified RX is ready.
+        // Path selection and both stream starts are completed before RX
+        // qualification. No tone samples are submitted until qualified RX is ready.
         tx_attempted=true;
         check(LMS_SetAntenna(h.device,LMS_CH_TX,0,LMS_PATH_TX2),"TX antenna active before RX qualification");
         require(LMS_GetAntenna(h.device,LMS_CH_TX,0)==LMS_PATH_TX2,"TX path readback differs");
@@ -291,8 +292,9 @@ int run(const Options& o) {
                     }
                     if(valid_count) {expected=meta.timestamp+count;have_expected=true;} else have_expected=false;
                     if(!was_ready && candidate.size()>=clean_samples) {
-                        // Candidate is also retained verbatim in startup.cfile;
-                        // this explicit overlap seeds a contiguous analyzed file.
+                        // The candidate is also kept verbatim in startup.cfile.
+                        // It is copied to the start of rx.cfile so that the
+                        // analyzed file is contiguous from its first sample.
                         first_rx=candidate_first;qualification_overlap_offset=candidate_offset;qualification_samples=candidate.size();
                         rx_output.bytes(candidate.data(),candidate.size()*8);captured=candidate.size();
                         ready_at=expected;next_rx.store(expected);ready.store(true);candidate.clear();
@@ -303,8 +305,9 @@ int run(const Options& o) {
         });
         while (!ready.load()) { alive(); std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
         alive(); tx_start=next_rx.load()+static_cast<std::uint64_t>(o.rate*.15);
-        // Capture through the first half of the final zero tail, then stop TX
-        // before its FIFO empties. Submitted zero-tail samples can remain unsent.
+        // The capture ends halfway through the final 50 ms zero tail, and TX is
+        // stopped before its FIFO empties. Some submitted zero-tail samples may
+        // remain unsent.
         finish_at.store(tx_start+o.tx_samples-static_cast<std::uint64_t>(o.rate*.025));
         sample_tx_status("before_first_submission");
         while (sent<o.tx_samples) {
@@ -320,7 +323,8 @@ int run(const Options& o) {
         sample_tx_status("after_capture");tx_final_status_saved=true;
         require(sent==o.tx_samples,"Full finite TX waveform was not accepted");
     } catch (const std::exception& e) { error=e.what(); }
-    // Silence immediately on failure; receiver I/O has a bounded 100 ms timeout.
+    // TX is silenced at once on failure. The receiver join is bounded by the
+    // 100 ms read timeout.
     stop.store(true); h.silence(); if (receiver.joinable()) receiver.join();
     if (rx_failed.load() && (error.empty() || error=="Interrupted or smoke deadline reached")) error=rx_error;
     if(h.tx_setup && tx_started_before_qualification && !tx_final_status_saved) {

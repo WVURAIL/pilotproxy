@@ -1,28 +1,30 @@
-"""Read a per-pilot product through its validated scientific coordinates.
+"""Read a per-pilot product and validate it against the product and detector contracts.
 
-``open_product`` validates schema v6 or a v5 product of record, then exposes
-a ``ProductView``. The view contains the exact-integer coarse statistic
-``Q = F / mu_0``, the survey flag, estimated shelf level in dB, and acquisition
-coordinates. Missing schemas or incompatible contents raise
-``ProductContractError``.
+``open_product`` validates a schema v6 product or a v5 product of record and
+returns a ``ProductView``. The view holds the exact-integer coarse statistic
+``Q = F / mu_0``, the survey flag, the estimated shelf level in dB, and the
+acquisition coordinates. A product with neither schema, or with contents that
+break either contract, raises ``ProductContractError``.
 
-All coarse coordinates use the frame powers defined in kernel core 3.0.0:
-``P_r = sum_f fine_power_u64[:, r, f]``. A v6 product stores these powers and
-is checked against its fine sums. A v5 product stored row-domain powers;
-its view recomputes the coarse coordinates from the retained fine powers and
-records that choice in ``ProductView.frame_power_definition``. The v5 file
-itself stays unchanged.
+All coarse coordinates are formed from the frame powers defined in kernel
+core 3.0.0, ``P_r = sum_f fine_power_u64[:, r, f]``. A v6 product stores these
+powers, and they are checked against its fine sums on read. A v5 product
+stored row-domain powers. Its view recomputes the coarse coordinates from the
+stored fine powers, and the choice is recorded in
+``ProductView.frame_power_definition``. The v5 file itself is not modified.
 
-``Product`` adds lazy access to the NPZ file, which can be as large as 1.5 GB.
-Small frame and acquisition fields are cached. ``fine_terms`` and ``psd_rows``
-provide chunked access to the large fine-power and spectral arrays. The object
-also supplies the health-selected frames and the band's geometry.
+``Product`` reads the members of the NPZ file lazily, since a product can be
+as large as 1.5 GB. The small frame and acquisition fields are cached.
+``fine_terms`` returns the fine powers of the requested frame rows, and
+``psd_rows`` decodes the per-frame spectra in row chunks. The object also gives the frames
+selected by the health gate and the band geometry.
 
 Reported frequency offsets are measured from the nominal marker and increase
 with RF frequency. Internally, the fine axis wraps modulo ``f_s / K`` about
-the coarse grid. The nominal marker's residual from that grid sets its fine
-bin and lets us convert internal offsets to RF. Sample rate, frame length,
-detector window, and bin count come from the project profile.
+the coarse grid. The residual of the nominal marker from that grid sets its
+fine bin and is used to convert fine-axis offsets to RF. The sample rate,
+frame length, detector window, and bin count are read from the project
+profile.
 """
 from __future__ import annotations
 
@@ -56,9 +58,9 @@ PRODUCT_SCHEMA_REVISION = 6
 PRODUCT_SCHEMA_TOKEN = "pilotproxy_per_pilot_product_v6"
 V5_SCHEMA_REVISION = 5
 V5_SCHEMA_TOKEN = "pilotproxy_per_pilot_product_v5"
-# The schemas this reader opens, by revision. v5 is the archive of record
-# (kernel core 2.3.0, detector contract v1); v6 is current (core 3.0.0,
-# detector contract v2).
+# The schemas this reader opens, keyed by revision. v5 is the archive of
+# record (kernel core 2.3.0, detector contract v1), and v6 is the current
+# schema (core 3.0.0, detector contract v2).
 READABLE_SCHEMA_TOKENS = {
     V5_SCHEMA_REVISION: V5_SCHEMA_TOKEN,
     PRODUCT_SCHEMA_REVISION: PRODUCT_SCHEMA_TOKEN,
@@ -106,7 +108,7 @@ FINE_TARGET, FINE_REF_LOWER, FINE_REF_UPPER = 0, 1, 2
 
 
 class ProductContractError(ValueError):
-    """Raised when a product cannot support the declared residual mapping."""
+    """Raised when a product does not meet the per-pilot product or detector contract."""
 
 
 def _array(product: Mapping, name: str, dtype, shape) -> np.ndarray:
@@ -175,11 +177,13 @@ def _json_scalar(product: Mapping, name: str) -> dict:
 
 @dataclass(frozen=True)
 class ProductView:
-    """The residual coordinates of one per-pilot product (v6 or v5 of record).
+    """Residual coordinates of one per-pilot product (v6, or v5 of record).
 
     Every coarse coordinate is formed from the frame powers
-    ``P_r = sum_f fine_power_u64[:, r, f]``; ``frame_power_definition`` says
-    whether they were stored (v6, verified) or recomputed (v5).
+    ``P_r = sum_f fine_power_u64[:, r, f]``. ``frame_power_definition`` is
+    ``FRAME_POWER_DEFINITION_V6`` when these powers were stored and verified,
+    and ``FRAME_POWER_DEFINITION_V5`` when they were recomputed from the fine
+    powers.
     """
 
     schema: str
@@ -208,18 +212,26 @@ class ProductView:
 
     @property
     def columns(self) -> Mapping:
-        """The per-frame columns from the fine-power sums, each ``(N, 1)``.
+        """Per-frame columns formed from the fine-power sums, each of shape ``(N, 1)``.
 
-        The keys of ``product_contract.FINE_DERIVED_FRAME_COLUMNS``: for a
-        v6 product equal to the stored columns, for a v5 product the
-        replacement of its stored row-domain columns.
+        The keys are those of ``product_contract.FINE_DERIVED_FRAME_COLUMNS``.
+        For a v6 product the columns equal the stored columns. For a v5
+        product they replace the stored row-domain columns.
         """
         if self._columns is None:
             raise ProductContractError("view carries no frame-power columns")
         return self._columns
 
     def rejected_at_multiplier(self, eta: Real) -> np.ndarray:
-        """Return the coarse decision at a positive threshold multiplier."""
+        """Return the coarse decision at a positive threshold multiplier eta.
+
+        A frame is rejected when it is valid and ``F > eta * mu_0``. The test
+        is evaluated exactly in integers as
+        ``p_target * reference_norm_sum_sq * eta_den
+        > target_norm_sq * p_ref_sum * eta_num``,
+        where ``eta_num / eta_den`` is the exact ratio of the float ``eta``.
+        At ``eta = 1`` this is the stored mask rule.
+        """
         if isinstance(eta, bool) or not isinstance(eta, Real):
             raise TypeError("eta must be a number")
         value = float(eta)
@@ -338,9 +350,9 @@ def _current_view(product: Mapping) -> ProductView:
     for name in ("pilot_below_data_db", "bin_enbw_hz", "dtv_bandwidth_hz",
                  "pilot_capture_efficiency"):
         _float_scalar(product, name)
-    # The frame powers and every coordinate derived from them, from the fine
-    # powers. A mapping that is not a dict (an open NpzFile) decodes a member
-    # on every access, so the fine member is read once and passed along.
+    # The frame powers and every coordinate derived from them are formed from
+    # the fine powers. An open NpzFile decodes a member on every access, so
+    # the fine member is read once above and passed in this dict.
     source = {
         "fine_power_u64": fine_terms,
         "target_norm_sq": product["target_norm_sq"],
@@ -439,10 +451,11 @@ def _current_view(product: Mapping) -> ProductView:
 
 
 def open_product(product: Mapping) -> ProductView:
-    """Validate a product and expose its residual decision coordinates.
+    """Validate a product and return its residual decision coordinates.
 
-    A product that declares neither schema v6 nor the v5 schema of record is
-    refused. A v5 product is read through its fine-power sums.
+    A product that declares neither schema v6 nor the v5 schema of record
+    raises ``ProductContractError``. A v5 product is read through its
+    fine-power sums.
     """
     token = None
     revision = None
@@ -463,7 +476,7 @@ def open_product(product: Mapping) -> ProductView:
 
 
 def is_current_product(product: Mapping) -> bool:
-    """Return whether a product declares the current (v6) schema."""
+    """Return True when a product declares the current (v6) schema."""
     if "schema_version" not in product:
         return False
     values = np.asarray(product["schema_version"])
@@ -472,7 +485,7 @@ def is_current_product(product: Mapping) -> bool:
 
 
 def coarse_reject_mask(product: Mapping, eta: Real = 1.0) -> np.ndarray:
-    """Return a rethresholded coarse mask in the product's own coordinates."""
+    """Return the coarse reject mask at multiplier ``eta``, recomputed from the product's own powers."""
     revision = np.asarray(product.get("schema_revision"))
     declares_readable_revision = bool(
         revision.shape == ()
@@ -501,10 +514,21 @@ def sha256_of(path: Path | str) -> str:
 
 
 def fine_power_ratio(terms: np.ndarray) -> np.ndarray:
-    """``T[f] = 2 S_0[f] / (S_1[f] + S_2[f])`` from exact terms ``(n, 3, B)``.
+    """Return the fine statistic ``T[f] = 2 S_0[f] / (S_1[f] + S_2[f])``.
 
-    The deployed fine statistic, formed the way ``pilot_proxy.fine_reduction``
-    forms it: a zero denominator gives 0.0. Returned as float64 ``(n, B)``.
+    This is the deployed fine statistic, formed as in
+    ``pilot_proxy.fine_reduction``, with 0.0 where the denominator is zero.
+
+    Parameters
+    ----------
+    terms : ndarray, shape (n, 3, B)
+        Exact fine terms: the target ``S_0`` and the lower and upper
+        references ``S_1`` and ``S_2``.
+
+    Returns
+    -------
+    ndarray, shape (n, B)
+        Fine statistic T (float64).
     """
     terms = np.asarray(terms)
     if terms.ndim != 3 or terms.shape[1] != 3:
@@ -517,11 +541,12 @@ def fine_power_ratio(terms: np.ndarray) -> np.ndarray:
 
 def grid_residual_hz(pilot_hz: float, centre_hz: float, sense: int,
                      coarse_bin_hz: float = COARSE_BIN_HZ) -> float:
-    """Where an exactly-nominal pilot appears on the fine axis, in Hz.
+    """Return the fine-axis offset (Hz) of a pilot at its nominal frequency.
 
-    The receiver-frame offset ``sense * (pilot - centre)`` reduced to the
-    nearest coarse-grid frequency: the fine spectrum's origin is that grid
-    point, so a nominal pilot sits at this residual, not at zero.
+    The nearest multiple of the coarse bin width is subtracted from the
+    receiver-frame offset ``sense * (pilot - centre)``. The origin of the fine
+    spectrum is that coarse-grid point, so a nominal pilot appears at this
+    residual on the fine axis.
     """
     eff = float(np.sign(sense) or 1) * (float(pilot_hz) - float(centre_hz))
     return eff - round(eff / coarse_bin_hz) * coarse_bin_hz
@@ -539,12 +564,14 @@ def fine_hz_of_bin(bin_index, fine_bins: int = FINE_BINS, fine_bin_hz: float = F
 
 
 def fine_offset_to_rf_hz(fine_offset_hz, grid_residual: float, sense: int) -> np.ndarray:
-    """RF offset from the nominal pilot of a fine-axis offset.
+    """Return the RF offset (Hz) from the nominal pilot of a fine-axis offset.
 
-    The fine offset is unwrapped about the grid residual (so an anchor a few
-    bins above the residual is a small positive shift even when the wrap
-    puts it at the other end of the axis), then the receiver sense is
-    undone: ``rf = sign(sense) * (fine - residual)`` with ``sign(-1) = -1``.
+    The difference ``fine - residual`` is first wrapped into one coarse bin
+    about zero, ``[-f_s / (2 K), f_s / (2 K))``. An anchor a few bins above the
+    residual is then a small positive shift, even when the wrap of the fine
+    axis puts it at the other end of the axis. Finally, the receiver sense is
+    undone with ``rf = sign(sense) * (fine - residual)``, where a negative
+    sense flips the axis and a sense of 0 is taken as +1.
     """
     fine = np.asarray(fine_offset_hz, dtype=float)
     delta = fine - grid_residual
@@ -554,7 +581,7 @@ def fine_offset_to_rf_hz(fine_offset_hz, grid_residual: float, sense: int) -> np
 
 @dataclass(frozen=True)
 class Geometry:
-    """Channel constants: where the nominal pilot is on each axis."""
+    """Channel constants that place the nominal pilot on each frequency axis."""
 
     physical_channel: int
     freq_id: int
@@ -564,12 +591,12 @@ class Geometry:
     grid_residual_hz: float          # fine-axis offset of the nominal pilot (fine-array direction)
     nominal_fine_bin: int            # its padded fine bin (what fine_designated_bins is centered on)
     nominal_psd_bin: float           # its (real-valued) receiver-frame bin on the per-frame spectrum axis
-    centre_line_rf_offset_hz: float  # the instrumental channel-centre line, RF offset from nominal
+    centre_line_rf_offset_hz: float  # RF offset of the instrumental channel-center line from nominal
     stored_window_centre: int        # center of the product's fine_designated_bins (the scan's prediction)
 
     @property
     def matches_stored_window(self) -> bool:
-        """Whether the scan's designated window was centered on the same nominal bin."""
+        """True when the scan's designated window is centered on the nominal fine bin."""
         return self.stored_window_centre == self.nominal_fine_bin
 
     def psd_rf_offset_hz(self, bins) -> np.ndarray:
@@ -585,12 +612,13 @@ class Geometry:
 
 
 class Product:
-    """One open per-pilot product (v6, or v5 of record); nothing large is read
-    until asked for.
+    """One open per-pilot product (v6, or v5 of record), read lazily.
 
-    The coarse per-frame columns (``frame_column`` of a name in
-    ``product_contract.FINE_DERIVED_FRAME_COLUMNS``) are the view's columns
-    from the fine-power sums, never a v5 product's stored row-domain values.
+    A large member is read only when it is requested. A coarse per-frame
+    column (``frame_column`` of a name in
+    ``product_contract.FINE_DERIVED_FRAME_COLUMNS``) is taken from the view,
+    which forms it from the fine-power sums. For a v5 product, these columns
+    replace the stored row-domain values.
     """
 
     def __init__(self, path: Path | str, *, require_health: bool = False):
@@ -605,7 +633,7 @@ class Product:
             )
         self.schema_token = token
 
-    # ------------------------------------------------------------ raw access
+    # raw access
     @property
     def archive(self):
         return self._z
@@ -614,16 +642,16 @@ class Product:
         return np.asarray(self._z[name]).reshape(-1)[0] if np.asarray(self._z[name]).ndim else np.asarray(self._z[name]).item()
 
     def frame_column(self, name: str) -> np.ndarray:
-        """A per-frame field, shaped (N,); coarse columns come from the fine sums."""
+        """Return a per-frame field of shape (N,), with coarse columns taken from the fine sums."""
         if name in self.view.columns:
             return np.asarray(self.view.columns[name])[:, 0]
         arr = np.asarray(self._z[name])
         return arr[:, 0] if arr.ndim == 2 and arr.shape[1] == 1 else arr.reshape(arr.shape[0], -1)[:, 0] if arr.ndim == 2 else arr
 
-    # -------------------------------------------------------- small fields
+    # small fields
     @cached_property
     def view(self) -> ProductView:
-        """The exact-integer residual view (validates the v5 contracts)."""
+        """Exact-integer residual view, validated against the product and detector contracts."""
         return open_product(self._z)
 
     @cached_property
@@ -636,7 +664,7 @@ class Product:
 
     @cached_property
     def rejected(self) -> np.ndarray:
-        """The stored survey flag ``F > mu_0`` (eta = 1), re-derived exactly by the view."""
+        """Survey flag ``F > mu_0`` (eta = 1), recomputed exactly from the fine-power sums."""
         return self.view.rejected
 
     @cached_property
@@ -655,7 +683,7 @@ class Product:
 
     @cached_property
     def shelf_db(self) -> np.ndarray:
-        """Estimated data-shelf SNR (finite only where the normalized excess is positive)."""
+        """Estimated data-shelf SNR in dB (finite only where the normalized excess is positive)."""
         return self.view.shelf_db
 
     @cached_property
@@ -691,9 +719,9 @@ class Product:
     def frame_time(self) -> np.ndarray:
         """Unix UTC seconds of each frame's first sample.
 
-        ``unit_time0 + frame_in_unit * nfft * unit_delta_time``; NaN where the
-        unit's sample interval is unrecorded (1-2% of units), so calendar
-        statistics must state that denominator.
+        The frame time is ``unit_time0 + frame_in_unit * nfft * unit_delta_time``.
+        It is NaN for the frames of a unit with no recorded sample interval
+        (1-2% of units), so a calendar statistic must state that denominator.
         """
         t0 = self.unit_time0[self.frame_unit_index]
         dt = self.unit_delta_time[self.frame_unit_index]
@@ -701,7 +729,7 @@ class Product:
 
     @cached_property
     def unit_time(self) -> np.ndarray:
-        """Unit time of each frame (its acquisition's first sample), never NaN."""
+        """Unix UTC seconds of the first sample of each frame's acquisition unit, always finite."""
         return self.unit_time0[self.frame_unit_index]
 
     @cached_property
@@ -710,7 +738,7 @@ class Product:
 
     @cached_property
     def fine_designated_bins(self) -> np.ndarray:
-        """The scan-time predicted window (nominal bin +- 30); not a measured anchor."""
+        """Fine-bin window predicted at scan time (nominal bin +- 30), set before any anchor is measured."""
         return np.asarray(self._z["fine_designated_bins"], dtype=np.int64).reshape(-1)
 
     @cached_property
@@ -725,7 +753,7 @@ class Product:
     def fine_guard_bins(self) -> int:
         return int(self.scalar("fine_guard_fine_bins"))
 
-    # ------------------------------------------------------------ geometry
+    # geometry
     @cached_property
     def geometry(self) -> Geometry:
         pilot = float(self.scalar("pilot_frequency_hz"))
@@ -746,33 +774,36 @@ class Product:
             stored_window_centre=stored_centre,
         )
 
-    # -------------------------------------------------------- frame gating
+    # frame gating
     @cached_property
     def health(self) -> "HealthGate":
         return health_gate(self)
 
     @cached_property
     def selected(self) -> np.ndarray:
-        """Frames every downstream step may use: valid and passing the health gate."""
+        """Frames that are valid and pass the health gate, used by every downstream step."""
         return self.valid & self.health.include
 
-    # ---------------------------------------------------------- big members
+    # large members
     def fine_terms(self, rows) -> np.ndarray:
         """Exact fine terms for the given frame rows, shaped (len(rows), 3, 256)."""
         return np.asarray(self._z["fine_power_u64"])[np.asarray(rows)]
 
     def fine_terms_all(self) -> np.ndarray:
-        """The whole fine-terms member (about 240 MB per channel); prefer ``fine_terms``."""
+        """Return the whole fine-terms member (about 240 MB per channel).
+
+        ``fine_terms`` returns only the requested rows.
+        """
         return np.asarray(self._z["fine_power_u64"])
 
     def psd_rows(self, chunk: int = 2048) -> Iterator[tuple[slice, np.ndarray]]:
-        """Decoded per-frame spectra in row chunks: yields (row slice, linear power (n, 16384)).
+        """Yield the decoded per-frame spectra in row chunks as (row slice, linear power).
 
-        Decoding follows the product contract: ``psd_db_reference *
-        10 ** (code / 1000)`` with NaN at the invalid code. The int16 member is
-        read once in full (it is a compressed zip member and cannot be sliced
-        on disk); the decode is chunked so the float64 copy never exceeds the
-        chunk.
+        Each power block has shape (n, 16384). The codes are decoded as in the
+        product contract, ``psd_db_reference * 10 ** (code / 1000)``, with NaN
+        at the invalid code. The int16 member is read once in full because
+        it is a compressed zip member and cannot be sliced on disk. Only the
+        decode is chunked, so each float64 copy holds at most ``chunk`` rows.
         """
         codes = np.asarray(self._z["psd_frame_db_i16"])
         reference = self.frame_column("psd_db_reference").astype(np.float64)
@@ -797,7 +828,7 @@ class Product:
 
 @dataclass(frozen=True)
 class HealthGate:
-    """Which frames the frame-health gate admits, and which gate that was."""
+    """Frames admitted by the frame-health gate, the gate schema, and the frame count of each exclusion reason."""
 
     schema: str                  # HEALTH_GATE_SCHEMA
     include: np.ndarray          # bool (N,)
@@ -807,9 +838,10 @@ class HealthGate:
 def health_gate(product: Product) -> HealthGate:
     """Apply the v1 frame-health gate (:func:`pilot_proxy.archive_health.evaluate_frame_health`).
 
-    The gate excludes 192 of the campaign's 770,478 frames (saturated-ceiling
-    and detector-invalid frames). There is no valid-only substitute: the gate
-    is part of the product's population.
+    The gate excludes 192 of the campaign's 770478 frames, which are the
+    saturated-ceiling and detector-invalid frames. The gate defines the
+    frame population of the product, so the valid flag alone cannot replace
+    it.
     """
     from pilot_proxy.archive_health import evaluate_frame_health
     result = evaluate_frame_health(product.archive)

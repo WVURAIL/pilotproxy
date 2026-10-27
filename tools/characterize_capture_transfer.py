@@ -41,14 +41,14 @@ def digest_arrays(arrays):
 
 
 def require_frozen_input_map(protocol, raw_path, sorted_ids):
-    """Refuse changed input serial/column coordinates even when IDs still sort."""
+    """Check the sorted input map against the frozen protocol, so changed serials or columns fail even when the IDs still sort."""
     expected = protocol['raw_coordinates'][str(raw_path)]['input_map_sha256']
     if digest_arrays({'input_ids': sorted_ids}) != expected:
         raise ValueError('raw input map differs from frozen protocol')
 
 
 def require_saved_control_identity(control, exact_receipt):
-    """Bind the reread control autos to the arrays verified against native data."""
+    """Check that the reread control autos are the arrays verified against the native data."""
     actual = digest_arrays({'origins': control['frame_fpga0'], 'autos': control['autos']})
     if actual != exact_receipt['saved_used_arrays_sha256']:
         raise ValueError('saved control arrays differ from exact reduction receipt')
@@ -69,7 +69,7 @@ def read_checkpoint(path, protocol_hash, raw_hash, origin, source_hash):
 
 
 def write_summary_checkpoint(path, record, input_ids, provenance, protocol_hash, source_hash, channel, epoch):
-    """Preserve verified observations so interrupted summaries need not reread raw data."""
+    """Write the verified observations so that an interrupted summary does not reread the raw data."""
     arrays = {**record, 'input_ids': input_ids,
               'metadata': np.array(json.dumps(dict(protocol_sha256=protocol_hash,
                   source_sha256=source_hash, channel=channel, epoch=epoch,
@@ -130,7 +130,7 @@ def load_protocol(path, amendment_path=None):
 
 
 def freeze(args):
-    """Inspect identifiers and geometry only; no measured power/score values."""
+    """Write the frozen protocol from identifiers and geometry, without reading any measured power or score."""
     from pilot_proxy.detector_weights import DetectorWeightBank
     import h5py
 
@@ -322,9 +322,9 @@ def reduce_one(args):
                                                      kernel=kernel, emit_row_projections=True)
                 rows = cp.asnumpy(result['matched_filter_row_projections'])[0].astype(np.int64)
                 rows = rows.reshape(3, 2048, 128, 2)
-                # Per-input frame powers: each input's all-bin sum of its own
-                # fixed-point fine powers (kernel core 3.0.0), so the inputs
-                # sum exactly to the global frame powers.
+                # Each input's frame power is the sum of its fixed-point fine
+                # powers over all bins (kernel core 3.0.0). The per-input powers
+                # then sum exactly to the global frame powers.
                 spectra = fxfft256(rows).astype(np.int64)
                 per = np.sum(spectra * spectra, axis=(2, 3), dtype=np.uint64)
                 glob = np.array([result['results'][0][name] for name in
@@ -545,7 +545,7 @@ def summarize(args):
                  'frames': len(r['t']), 'kept': int(r['keep'].sum()), 'views': {}}
         valid_holdout = bool(live.any() and np.isfinite(y[:, live]).all()
                              and np.isfinite(residual[:, live]).all())
-        # Preserve the science-used east-west classes separately from long north-south classes.
+        # the east-west classes used for science and the long north-south classes are kept apart
         key = r['keys']
         copol = key[:, 2] == key[:, 3]
         east_west = np.isin(key[:, 0], [1, 2, 3]) & (key[:, 1] == 0) & copol

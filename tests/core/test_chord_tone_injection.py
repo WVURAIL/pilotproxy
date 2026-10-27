@@ -1,37 +1,39 @@
 # coding=utf-8
-"""CHORD tone-injection detection tests (signal-level physics guard).
+"""CHORD tone-injection tests of the detector at the signal level.
 
-The bit-exactness suites prove that every implementation of the detector
-contract computes the same integers; they cannot prove that the CHORD
-weight bank points at the right radio frequencies, because a sign or
-mapping error would be reproduced identically by every implementation.
-These tests close that gap from first principles:
+The bit-exact suites show that every implementation of the detector contract
+computes the same integers. They cannot show that the CHORD weight bank is
+tuned to the right radio frequencies, because a sign or mapping error would be
+reproduced identically by every implementation. These tests check the
+frequencies from first principles:
 
-* synthesize channelized baseband ``amp * exp(+2j*pi*f*n)`` for a tone at
-  the exact ATSC pilot RF (``physical_channel_to_pilot_hz``) in the coarse
-  channel the bundle binds (``chord_channel_id * 195312.5 Hz`` center,
-  upright frame of Nyquist zone 1, the kotekan chord data-product convention);
-* quantize to packed int4, apply the bundle's declared input preprocessing
-  (``time_reverse_detector_windows_before_kernel``), and run the exact
-  integer frame powers (row projections through the frozen fxfft256, summed
-  over fine bins: kernel core 3.0.0) plus the rational half-threshold mask,
-  the deployed kernel decision, computed independently with numpy integers;
-* require the pilot tone to assert the mask with the target term dominant
-  on every ATSC channel 14-36; require a mirrored (conjugated) tone to collapse
-  the target response (this is the check that catches Nyquist-zone and
-  window-reversal regressions); require tones at the manifest's reference
-  placements to drive the matching reference term and deassert the mask
-  (including channel 14's edge-wrapped upper reference and channel 21's
-  DC-shifted, edge-wrapped lower reference); and require a weak pilot in
-  unit-sigma noise to still assert the mask.
+* A tone ``amp * exp(+2j*pi*f*n)`` is synthesized as channelized baseband at
+  the exact ATSC pilot RF (``physical_channel_to_pilot_hz``), in the coarse
+  channel bound by the bundle. The channel center is
+  ``chord_channel_id * 195312.5 Hz`` in the upright frame of Nyquist zone 1,
+  the kotekan chord data-product convention.
+* The tone is quantized to packed int4, and the declared input preprocessing
+  of the bundle (``time_reverse_detector_windows_before_kernel``) is applied.
+  The exact integer frame powers (row projections through the frozen
+  fxfft256, summed over fine bins, kernel core 3.0.0) and the rational
+  half-threshold mask of the deployed kernel are then computed independently
+  with numpy integers.
+* The pilot tone must assert the mask with the target term dominant on every
+  ATSC channel 14-36. A mirrored (conjugated) tone must collapse the target
+  response, and this is the check that catches Nyquist-zone and
+  window-reversal regressions. Tones at the reference placements of the
+  manifest must drive the matching reference term and deassert the mask. This
+  holds also for the edge-wrapped upper reference of channel 14 and the
+  DC-shifted, edge-wrapped lower reference of channel 21. A weak pilot in
+  unit-sigma noise must still assert the mask.
 
-History: this suite was added after the first CHORD end-to-end kotekan
-integration exported bundles with
-``time_reverse_detector_windows_before_kernel = false`` (derived from the
-upright zone 1). The explicit-baseband-frame weight synthesis
-assumes the adapter flip for any zone, so that chain was blind to upright
-pilot tones: every bit-exact test passed while a real ATSC pilot would
-have sailed through undetected. A2/A3 below fail on that regression.
+The first end-to-end CHORD integration in kotekan exported bundles with
+``time_reverse_detector_windows_before_kernel = false``, derived from the
+upright zone 1. The explicit-baseband-frame weight synthesis assumes the
+adapter reversal in every zone, so these bundles were blind to upright pilot
+tones. Every bit-exact test passed, while a real ATSC pilot would have gone
+undetected. The pilot-tone and mirrored-tone tests below fail on that
+regression.
 """
 from __future__ import annotations
 
@@ -65,18 +67,18 @@ K = 64                      # detector window samples
 WINDOWS = 128               # synthesized windows per case: one whole fxfft256 stream
 BITS = 4
 ATSC_CHANNELS = list(range(14, 37))
-TONE_AMP = 5.5              # LSB; comfortably inside the int4 range
+TONE_AMP = 5.5              # LSB, in the int4 range
 DOMINANCE = 100             # required tone-term power dominance factor
 FLIP_COLLAPSE = 1000        # flip-collapse requirement cap
 FLIP_QUANTIZATION_MARGIN = 4.0  # power headroom for int4 weight leakage
 
 
 def dirichlet_power_collapse(separation_bins: float) -> float:
-    """Predicted pilot/flip target-power ratio for the unquantized filter.
+    """Return the pilot-to-flip target-power ratio predicted for the unquantized filter.
 
     The K-tap matched filter responds to a tone ``s`` fine bins away with
     the Dirichlet ratio ``sin(pi*s) / (K*sin(pi*s/K))``. The collapse is
-    the inverse power ratio; it is infinite on exact bin multiples.
+    the inverse of the power ratio, and it is infinite on exact bin multiples.
     """
     s = float(separation_bins)
     numerator = math.sin(math.pi * s)
@@ -117,11 +119,12 @@ def chord_bank() -> DetectorWeightBank:
 def synth_packed(
     f_norm: float, amp: float, seed: int, noise_std: float = 0.0
 ) -> np.ndarray:
-    """Packed int4 windows of ``amp * exp(+2j*pi*f_norm*n)`` plus noise.
+    """Return packed int4 windows of ``amp * exp(+2j*pi*f_norm*n)`` plus noise.
 
     The ``+`` sign is the upright (zone 1) baseband convention of the
-    kotekan chord data product (a tone above the coarse-channel center
-    rotates positively); it must NOT be derived from the weight bank.
+    kotekan chord data product. In this convention, a tone above the
+    coarse-channel center rotates positively. The sign is fixed here and must
+    never be derived from the weight bank.
     """
     rng = np.random.default_rng(seed)
     n = np.arange(WINDOWS * K, dtype=np.float64)
@@ -136,12 +139,12 @@ def synth_packed(
 def deployed_powers(
     packed_samples: np.ndarray, weight_bytes: bytes, time_reverse: bool
 ) -> list[int]:
-    """Exact integer P[target, ref_lower, ref_upper] per the deployed chain.
+    """Return the exact integer P[target, ref_lower, ref_upper] of the deployed chain.
 
-    Integer row projections ``z = x . conj(w)``, the frozen fxfft256 over each
-    128-window stream, and the all-bin sum of the fine powers (kernel core
-    3.0.0), computed here with numpy integers independently of the packed
-    CPU reference.
+    The integer row projections ``z = x . conj(w)`` are passed through the
+    frozen fxfft256 over each 128-window stream, and the fine powers are summed
+    over all bins (kernel core 3.0.0). The arithmetic is done here with numpy
+    integers, independently of the packed CPU reference.
     """
     from pilot_proxy.fxfft import fine_power_fx
 
@@ -182,9 +185,9 @@ def _channel_case(chord_bundle: dict, channel: int):
 
 
 def test_bundle_requires_window_time_reversal(chord_bundle) -> None:
-    # Regression pin for the explicit-frame adapter-flip contract. If this
-    # flips back to False, the detection tests below fail as well; this pin
-    # names the cause directly.
+    # The explicit-frame contract requires the adapter to reverse each window.
+    # If this flag is False, the detection tests below also fail, and this
+    # test names the cause directly.
     assert chord_bundle["time_reverse"] is True
 
 
@@ -227,18 +230,17 @@ def test_pilot_tone_asserts_mask(chord_bundle, channel) -> None:
 
 @pytest.mark.parametrize("channel", ATSC_CHANNELS)
 def test_mirrored_tone_is_rejected(chord_bundle, channel) -> None:
-    # A conjugated (mirrored) pilot must not look like a pilot: this is
-    # the discriminating check for Nyquist-zone/window-reversal errors.
-    # The achievable collapse depends on how far -f sits from +f on the
-    # channelized frequency circle, measured in K=64 fine bins. The bound is
-    # the unquantized Dirichlet prediction with 6 dB of headroom for int4
-    # weight leakage, capped at FLIP_COLLAPSE. For a pilot near the
-    # coarse-channel edge (channel 30, offset -96.8 kHz of the +/-97.66 kHz
-    # half-width) the flipped tone lands only ~0.56 fine bins away, inside
-    # the main lobe, so only a factor of about 3 is physically available and
-    # the bound falls to its floor of 2. A zone regression puts the full
-    # pilot response in p_flip and the collapsed response in p_pilot, so
-    # even the floor fails loudly.
+    # A conjugated (mirrored) pilot must be rejected, and this is the check
+    # that detects Nyquist-zone and window-reversal errors. The achievable
+    # collapse depends on the distance between -f and +f on the channelized
+    # frequency circle, in K=64 fine bins. The bound is the unquantized
+    # Dirichlet prediction with 6 dB of headroom for int4 weight leakage,
+    # capped at FLIP_COLLAPSE. For a pilot near the coarse-channel edge
+    # (channel 30, offset -96.8 kHz of the +/-97.66 kHz half-width), the
+    # flipped tone lands about 0.56 fine bins away, in the main lobe. Only a
+    # factor of about 3 is then available, and the bound falls to its floor
+    # of 2. A zone regression puts the full pilot response in p_flip and the
+    # collapsed response in p_pilot, so the test fails even at the floor.
     row, weight_bytes, _, _, f_norm = _channel_case(chord_bundle, channel)
     p_pilot = deployed_powers(
         synth_packed(f_norm, TONE_AMP, 1000 + channel),
@@ -264,10 +266,10 @@ def test_mirrored_tone_is_rejected(chord_bundle, channel) -> None:
 def test_reference_tones_drive_reference_terms(
     chord_bundle, chord_bank, channel
 ) -> None:
-    # Tones at the manifest's reference placements (target +/- offset bins;
-    # channel 14's upper reference wraps the coarse-channel edge and channel
-    # 21's lower reference is DC-shifted to -3 bins) must drive the matching
-    # reference term and deassert the mask.
+    # Tones at the reference placements of the manifest (target +/- offset
+    # bins) must drive the matching reference term and deassert the mask. The
+    # upper reference of channel 14 wraps the coarse-channel edge, and the
+    # lower reference of channel 21 is shifted away from DC to -3 bins.
     row, weight_bytes, _, _, f_norm = _channel_case(chord_bundle, channel)
     layout = chord_bank.layout_for_physical_channel(channel)
     lower_off = int(layout["lower_reference_offset_bins"])

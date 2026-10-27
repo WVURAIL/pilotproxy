@@ -63,7 +63,7 @@ def test_no_retired_spelling_is_also_a_current_name() -> None:
 
 
 def test_the_gate_body_does_not_name_retired_spellings() -> None:
-    """Retired names must live only in the migration map, not in gate logic."""
+    """Retired spellings appear in the gate module only through the migration map."""
     import inspect
 
     source = inspect.getsource(archive_health)

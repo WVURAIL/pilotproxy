@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Frozen CPU GNU Radio distribution study through the unchanged SDR adapter."""
+"""Freeze, run, and report a CPU GNU Radio distribution study through the unchanged SDR adapter."""
 from __future__ import annotations
 
 import argparse
@@ -121,13 +121,13 @@ def powers_and_ratio(z):
 
 
 def packed_ratio(result):
-    """The deployed integer path's ratio (kernel core 3.0.0).
+    """Return the frame ratio of the deployed integer path (kernel core 3.0.0).
 
-    Formed from the adapter's frame powers, the all-bin sums of the frozen
-    fxfft256 fine powers (which packed_recount checks independently), and
-    required to equal the adapter's coarse_ratio. The two float stages keep
-    the row-domain ratio of their float projections (powers_and_ratio); they
-    are prototypes, not the deployed statistic.
+    The ratio is formed from the adapter's frame powers, which are the all-bin
+    sums of the frozen fxfft256 fine powers and are checked independently by
+    packed_recount. It must equal the adapter's coarse_ratio. The two float
+    stages are prototypes and keep the row-domain ratio of their float
+    projections (powers_and_ratio).
     """
     powers = np.asarray(result['term_power_sums']).astype(np.float64)
     denominator = powers[:, 1]+powers[:, 2]
@@ -140,11 +140,13 @@ def packed_ratio(result):
 
 
 def packed_recount(result):
-    """Independent int64 nibble arithmetic (no projection or unpack helper).
+    """Recount the packed projections and frame powers with independent int64 nibble arithmetic.
 
-    The adapter's frame powers are the all-bin sums of the frozen fxfft256
-    fine powers of the same projections (kernel core 3.0.0) and are checked
-    against that definition. Returns the projection count.
+    No projection or unpack helper is used. The projections are recomputed
+    from the packed 4-bit frames and weights. The adapter's frame powers are
+    then checked against the all-bin sums of the frozen fxfft256 fine powers
+    of the same projections (kernel core 3.0.0). Returns the number of complex
+    projections checked.
     """
     x = result['packed_frames'].astype(np.uint8)
     w = result['packed_weights'].astype(np.uint8)
@@ -201,8 +203,8 @@ def run(out):
         weight_float = np.einsum('frk,tk->ftr', used, weights.conj())
         packed = (result['projections_i32'][..., 0]+1j*result['projections_i32'][..., 1])/(CONFIG.sample_scale*7)
         arrays = {name: z for name, z in zip(STAGES, (natural, weight_float, packed))}
-        # Float stages: row-domain ratios of their projections. The packed
-        # stage is the deployed statistic: the fine-sum ratio (core 3.0.0).
+        # The float stages store the row-domain ratios of their projections.
+        # The packed stage stores the deployed fine-sum ratio (core 3.0.0).
         arrays.update({name+'_ratio': powers_and_ratio(arrays[name])[1] for name in STAGES[:2]})
         arrays['packed_ratio'] = packed_ratio(result)
         arrays['frame_start_seconds'] = result['frame_start_seconds']
@@ -264,8 +266,8 @@ def report(out):
         edges = np.array(plan[case+'_histogram_edges'])
         for stage in STAGES:
             zs = cubes[stage]
-            # The ratio each stage stored: row-domain for the float stages,
-            # the fine-sum ratio for the packed (deployed) stage.
+            # row-domain ratios for the float stages, the deployed fine-sum
+            # ratio for the packed stage
             qs = ratios[stage]
             q = np.concatenate(qs)
             rows = [z.transpose(0, 2, 1).reshape(-1, 3) for z in zs]

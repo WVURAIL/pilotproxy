@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Offline tests for recon() -- the `--scopes-only` discovery walk, which
-otherwise only exercises on CANFAR against the live Datatrail service.
+Offline tests for recon(), the `--scopes-only` discovery walk, which
+otherwise runs only on CANFAR against the live Datatrail service.
 
-No datatrail access. The CLI is faked at the same boundary
-tests/archive/test_datatrail_adapter.py fakes it -- subprocess.run, BELOW the
-adapter -- so every test here drives the real `datatrail ls --json` parsing and
-therefore the real outage-vs-empty contract that recon is written against. A
-fake stubbed in above the adapter (patching list_datasets_checked) would have
-to re-state that contract itself, and could not tell a scope that did not
-answer from a scope that answered "nothing".
+No test reaches datatrail. The CLI is faked at subprocess.run, below the
+adapter, the same boundary faked by tests/archive/test_datatrail_adapter.py.
+Each test therefore drives the real `datatrail ls --json` parsing and the real
+contract between an outage and an empty answer that recon is written against.
+A fake above the adapter, patching list_datasets_checked, would have to
+restate that contract itself and could not distinguish between a scope that
+did not answer and a scope that answered "nothing".
 
 Run:  PYTHONPATH=src python -m pytest tests/archive/test_survey_recon.py
 """
@@ -28,16 +28,14 @@ from pilot_proxy.archive.interfaces import RunContext
 from pilot_proxy.archive.sources import cadc as src
 
 
-# ==========================================================================
-# the fake datatrail CLI. recon only ever calls `datatrail ls` (three
-# arities), so `listing` maps the ls argument tuple -- () for the namespace,
-# (scope,) for a scope's datasets, (scope, dataset) for one level of children
-# -- onto the list the service returns, or _OUTAGE for datatrail's error
-# envelope. An argument tuple the test did NOT stage trips an assertion: a
-# walk that recurses further than it should, or opens a dataset without
-# --expand, fails loudly here rather than passing quietly.
-# ==========================================================================
-_OUTAGE = object()                 # {"error": ...} + exit 1 -> checked ok=False
+# fake datatrail CLI
+# recon only calls `datatrail ls`, with three arities, so `listing` maps the
+# ls argument tuple onto the list the service returns, or onto _OUTAGE for the
+# error envelope of datatrail. The tuple is () for the namespace, (scope,) for
+# the datasets of a scope, and (scope, dataset) for one level of children. An
+# argument tuple the test did not stage trips an assertion, so a walk that
+# recurses too far or opens a dataset without --expand fails loudly here.
+_OUTAGE = object()                 # {"error": ...} and exit 1, read as ok=False
 
 _LS_KEY = {0: "scopes", 1: "larger_datasets", 2: "datasets"}
 
@@ -68,22 +66,20 @@ def _install_fake_cli(monkeypatch, listing, calls=None):
 
 
 def _rows(path):
-    """Every row of the map, decoded -- schema included, so an extra or
-    missing key (`parent`, say) shows up as an inequality."""
+    """Return every row of the map, decoded with its schema, so an extra or
+    missing key such as `parent` shows up as an inequality."""
     return [json.loads(line)
             for line in Path(path).read_text().splitlines() if line]
 
 
 class _Inst:
-    """The instrument shim survey() reads a telescope name off of."""
+    """Instrument shim that gives survey() a telescope name."""
 
     def __init__(self, name):
         self.name = name
 
 
-# ==========================================================================
-# the happy path: explicit scopes, no filter -- one row per dataset
-# ==========================================================================
+# normal path, where explicit scopes and no filter give one row per dataset
 def test_happy_path_writes_one_row_per_dataset(tmp_path, monkeypatch, capsys):
     listing = {
         ("chime.event.baseband.raw",): ["2023", "2024"],
@@ -105,8 +101,9 @@ def test_happy_path_writes_one_row_per_dataset(tmp_path, monkeypatch, capsys):
         {"scope": "gbo.acquisition.processed", "dataset": "20230530"},
     ]
     assert Path(path).read_text().endswith("}\n")
-    # explicit scopes win: the namespace is never listed, and without --expand
-    # no dataset is opened (either call would be unstaged and trip the fake)
+    # explicit scopes take priority, so the namespace is never listed, and
+    # without --expand no dataset is opened (either call would be unstaged and
+    # trip the fake)
     assert calls == [("chime.event.baseband.raw",),
                      ("gbo.acquisition.processed",)]
 
@@ -116,12 +113,10 @@ def test_happy_path_writes_one_row_per_dataset(tmp_path, monkeypatch, capsys):
     assert f"wrote {path}: 3 rows" in printed
     assert "dataset(s) expanded" not in printed        # only with --expand
     assert "--expand" in printed                       # the not-expanded tail
-    assert "[warn]" not in printed        # nothing failed -> no INCOMPLETE
+    assert "[warn]" not in printed        # nothing failed, so no INCOMPLETE
 
 
-# ==========================================================================
-# --match semantics, read off the real filter rather than assumed
-# ==========================================================================
+# --match semantics, read from the real filter
 def test_match_terms_folds_case_and_drops_empty_terms():
     assert rc.match_terms("Casa, GAIN ,, ") == ["casa", "gain"]
     assert rc.match_terms(None) == []
@@ -140,11 +135,11 @@ def test_match_terms_are_anded_case_insensitive_substrings(tmp_path,
                         str(tmp_path))
         return [row["dataset"] for row in _rows(path)]
 
-    # one term: a plain substring, case-folded on BOTH sides (the term by
-    # match_terms, the candidate by _keep) -- "Gain_A_CasA" matches "gain"
+    # one term is a plain substring, case-folded on both sides (the term by
+    # match_terms and the candidate by _keep), so "Gain_A_CasA" matches "gain"
     assert kept("gain") == ["complex_gains", "Gain_A_CasA"]
     assert kept("GAIN") == ["complex_gains", "Gain_A_CasA"]
-    # comma-separated terms are ANDed, not ORed
+    # comma-separated terms are ANDed
     assert kept("gain,casa") == ["Gain_A_CasA"]
     # so one unmatched term empties the map even when the other matches all
     assert kept("gain,nope") == []
@@ -153,13 +148,11 @@ def test_match_terms_are_anded_case_insensitive_substrings(tmp_path,
     assert kept("acquisition") == ["complex_gains", "Gain_A_CasA",
                                    "housekeeping"]
     assert kept("acquisition,casa") == ["Gain_A_CasA"]
-    # substring, NOT glob -- '*' is a literal character here
+    # a substring match with no glob, so '*' is a literal character here
     assert kept("gain*") == []
 
 
-# ==========================================================================
 # --expand: one level down, and what happens to a container with no children
-# ==========================================================================
 def test_expand_opens_each_match_exactly_one_level(tmp_path, monkeypatch,
                                                    capsys):
     listing = {
@@ -173,17 +166,17 @@ def test_expand_opens_each_match_exactly_one_level(tmp_path, monkeypatch,
     path = rc.recon(["gbo.acquisition.processed"], rc.match_terms("gains"),
                     str(tmp_path), expand=True)
 
-    # the children REPLACE their container as map rows, each carrying the
-    # container it came from
+    # the children replace their container as map rows, and each carries
+    # its container
     assert _rows(path) == [
         {"scope": "gbo.acquisition.processed", "dataset": "20230530",
          "parent": "complex_gains"},
         {"scope": "gbo.acquisition.processed", "dataset": "20230531",
          "parent": "complex_gains"},
     ]
-    # one level only, and only for MATCHES: the filtered-out container is
-    # never opened, and the children's own children are never asked for
-    # (both would be unstaged listings and trip the fake)
+    # one level only, and only for matches, so the filtered-out container is
+    # never opened and the children of the children are never requested (both
+    # would be unstaged listings and trip the fake)
     assert calls == [("gbo.acquisition.processed",),
                      ("gbo.acquisition.processed", "complex_gains")]
 
@@ -196,8 +189,8 @@ def test_expand_opens_each_match_exactly_one_level(tmp_path, monkeypatch,
 
 def test_expand_keeps_a_childless_container_in_the_map(tmp_path, monkeypatch,
                                                        capsys):
-    # answered, and the answer is "nothing under here" -- the container is
-    # itself the resolvable handle, so it stays a row
+    # the answer is "nothing under here", and the container is itself the
+    # resolvable handle, so it stays a row
     listing = {("s.one",): ["empty_container"],
                ("s.one", "empty_container"): []}
     _install_fake_cli(monkeypatch, listing)
@@ -208,7 +201,7 @@ def test_expand_keeps_a_childless_container_in_the_map(tmp_path, monkeypatch,
     printed = capsys.readouterr().out
     assert "(no children listed)" in printed
     assert "1 rows (0 dataset(s) expanded)" in printed
-    assert "[warn]" not in printed      # an empty answer IS an answer
+    assert "[warn]" not in printed      # an empty answer is an answer
 
 
 def test_all_children_are_written_even_when_the_printout_is_capped(
@@ -221,18 +214,16 @@ def test_all_children_are_written_even_when_the_printout_is_capped(
                     map_name="probe.jsonl")
 
     assert path == str(tmp_path / "probe.jsonl")
-    # the console cap is cosmetic: every child reaches the map
+    # the console cap is cosmetic, and every child reaches the map
     assert [row["dataset"] for row in _rows(path)] == kids
     printed = capsys.readouterr().out
     shown = [kid for kid in kids if f"            {kid}\n" in printed]
     assert shown == kids[:20]
-    # ...and the printout says where the rest went, by the real map name
+    # the printout names the real map that holds the rest
     assert "... and 3 more (all in probe.jsonl)" in printed
 
 
-# ==========================================================================
-# the INCOMPLETE map: what puts a gap in it, and what merely looks like one
-# ==========================================================================
+# the INCOMPLETE map: what puts a gap in it, and what only looks like one
 def test_unlistable_scope_is_not_an_empty_scope(tmp_path, monkeypatch, capsys):
     listing = {("s.down",): _OUTAGE,      # did not answer
                ("s.empty",): [],          # answered: nothing registered
@@ -245,8 +236,8 @@ def test_unlistable_scope_is_not_an_empty_scope(tmp_path, monkeypatch, capsys):
     printed = capsys.readouterr().out
     assert printed.count("NOT LISTED") == 1
     assert "s.down  -- NOT LISTED" in printed
-    # only the unanswered scope makes the map incomplete; the empty one is a
-    # verdict, and the walk must not confess to a gap it does not have
+    # only the unanswered scope makes the map incomplete, since the empty one
+    # is a verdict, and the walk must not report a gap it does not have
     warn = printed.rsplit("[warn]", 1)[1]   # the NOT LISTED line cites it too
     assert "the map is INCOMPLETE" in warn
     assert "datasets under scope s.down" in warn
@@ -268,15 +259,15 @@ def test_expand_children_outage_keeps_the_container_and_warns(
     path = rc.recon(["s.one"], [], str(tmp_path), expand=True)
 
     rows = _rows(path)
-    # the unopened container is still a row -- and its row is byte-identical
-    # in shape to the childless container of the test above, which is exactly
-    # why the unexpanded case has to be reported out of band
+    # the unopened container is still a row, with the same shape as the
+    # childless container of test_expand_keeps_a_childless_container_in_the_map,
+    # so the unexpanded case has to be reported out of band
     assert rows == [{"scope": "s.one", "dataset": "a"},
                     {"scope": "s.one", "dataset": "b1", "parent": "b"}]
     printed = capsys.readouterr().out
     assert "children NOT listed" in printed
-    # the retained container still counts toward the map size the operator
-    # is shown; a lost increment would under-report it with no other signal
+    # the kept container still counts toward the map size shown to the
+    # operator, and a lost increment would under-report it with no other signal
     assert "2 rows (1 dataset(s) expanded)" in printed
     warn = printed.rsplit("[warn]", 1)[1]
     assert "children of s.one a" in warn
@@ -295,9 +286,7 @@ def test_a_clean_walk_prints_no_incomplete_warning(tmp_path, monkeypatch,
     assert "[warn]" not in printed and "INCOMPLETE" not in printed
 
 
-# ==========================================================================
 # the namespace walk (no explicit --scope): outages, emptiness, --telescope
-# ==========================================================================
 def test_namespace_outage_aborts_before_writing_a_map(tmp_path, monkeypatch):
     _install_fake_cli(monkeypatch, {(): _OUTAGE})
 
@@ -332,9 +321,9 @@ def test_telescope_narrows_by_exact_first_scope_component(tmp_path,
 
     path = rc.recon(None, [], str(tmp_path), telescope="GBO")
 
-    # the first dot-component must EQUAL the telescope, case-insensitively:
-    # "gbo2.*" is a different instrument, and a prefix test would take it
-    # (then its unstaged datasets would trip the fake)
+    # the first dot component must equal the telescope, ignoring case, since
+    # "gbo2.*" is a different instrument that a prefix test would take (and its
+    # unstaged datasets would then trip the fake)
     assert _rows(path) == [{"scope": "gbo.acquisition.processed",
                             "dataset": "20230530"}]
     printed = capsys.readouterr().out
@@ -353,9 +342,7 @@ def test_telescope_matching_nothing_aborts_naming_what_was_visible(
     assert "'kko'" in message and "2 scope(s) visible" in message
 
 
-# ==========================================================================
-# the shipped entry point: options -> recon, at sources/cadc.py's dispatch
-# ==========================================================================
+# the shipped entry point, from options to recon at the dispatch in sources/cadc.py
 def test_scopes_only_dispatch_maps_survey_options_onto_recon(
         tmp_path, monkeypatch, capsys):
     listing = {(): ["gbo.acquisition.processed", "chime.event.baseband.raw"],
@@ -369,9 +356,9 @@ def test_scopes_only_dispatch_maps_survey_options_onto_recon(
 
     path = src.CadcDatatrailSource().survey(ctx, str(tmp_path))
 
-    # --name renames the map; --match is comma-split and case-folded;
-    # --expand opens the match; the instrument name becomes --telescope, so
-    # the chime scope is never walked (its listing is unstaged)
+    # --name renames the map, --match is comma-split and case-folded, and
+    # --expand opens the match. The instrument name becomes --telescope, so
+    # the chime scope is never walked (its listing is unstaged).
     assert path == str(tmp_path / "scopes-probe.jsonl")
     assert _rows(path) == [{"scope": "gbo.acquisition.processed",
                             "dataset": "20230530",
@@ -384,29 +371,27 @@ def test_scopes_only_dispatch_maps_survey_options_onto_recon(
 def test_scopes_only_dispatch_splits_the_scope_option(tmp_path, monkeypatch):
     listing = {("s.one",): ["d1"], ("s.two",): ["d2"]}
     _install_fake_cli(monkeypatch, listing)
-    # instrument name deliberately matches NEITHER scope: explicit scopes win
-    # outright, telescope narrowing does not apply to them
+    # the instrument name matches neither scope, to show that explicit scopes
+    # take priority and are not narrowed by telescope
     ctx = RunContext(instrument=_Inst("chime"),
                      options={"scopes_only": True, "scope": "s.one, s.two"})
 
     path = src.CadcDatatrailSource().survey(ctx, str(tmp_path))
 
-    assert path == str(tmp_path / "scopes.jsonl")     # no --name -> default
+    assert path == str(tmp_path / "scopes.jsonl")     # default name with no --name
     assert _rows(path) == [{"scope": "s.one", "dataset": "d1"},
                            {"scope": "s.two", "dataset": "d2"}]
 
 
-# ==========================================================================
-# durability: the map is streamed in place, deliberately un-staged
-# ==========================================================================
+# durability: the map is streamed in place with no staging
 def test_the_map_is_rewritten_in_place_not_atomically(tmp_path, monkeypatch):
-    """An interrupted recon leaves a PARTIAL map at the final path.
+    """An interrupted recon leaves a partial map at the final path.
 
-    recon opens the map and streams rows into it as the walk proceeds -- no
-    tempfile+replace staging -- so the previous map is gone the moment the
-    walk starts. That is the reason the INCOMPLETE warning tells you to re-run
-    the whole (cheap) walk instead of trusting what is on disk, and a reader
-    of a recon map must not assume it was published atomically.
+    recon opens the map and streams rows into it as the walk proceeds, with no
+    staging through a temp file and replace, so the previous map is gone as
+    soon as the walk starts. For this reason the INCOMPLETE warning asks the
+    operator to rerun the whole walk, which is cheap. A reader of a recon map
+    must not trust the file on disk or assume it was published atomically.
     """
     stale = tmp_path / "scopes.jsonl"
     stale.write_text('{"scope": "from.a.previous.run", "dataset": "old"}\n')
@@ -424,18 +409,14 @@ def test_the_map_is_rewritten_in_place_not_atomically(tmp_path, monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         rc.recon(["s.one", "s.two"], [], str(tmp_path))
 
-    # the stale row is already gone (truncated at open), the rows written
-    # before the interrupt are at the FINAL path, and nothing was staged
-    # beside it
+    # the stale row is gone (truncated at open), the rows written before the
+    # interrupt are at the final path, and nothing was staged beside it
     assert _rows(stale) == [{"scope": "s.one", "dataset": "d1"}]
     assert sorted(p.name for p in tmp_path.iterdir()) == ["scopes.jsonl"]
 
 
-# ==========================================================================
-# The CLI surface. recon() shipped for a long time with no way to invoke it
-# from the command line, so these pin the flags through to the options the
-# source actually reads.
-# ==========================================================================
+# CLI surface
+# These tests follow each flag through to the option the source reads.
 def test_scopes_only_flags_reach_the_source(monkeypatch):
     from pilot_proxy import cli
     from pilot_proxy.archive import commands
@@ -474,7 +455,8 @@ def test_the_recon_flags_default_off(monkeypatch):
 
 def test_match_and_expand_are_reported_as_ignored_without_scopes_only(
         tmp_path, capsys):
-    # they only mean something during discovery; saying so beats dropping them
+    # they apply only during discovery, and a printed notice is better than
+    # dropping them with no warning
     from pilot_proxy.archive.commands import survey_chime
 
     survey_chime(out_dir=tmp_path / "inv", match="gains", expand=True,

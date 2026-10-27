@@ -8,20 +8,20 @@ All notable changes to PilotProxy are recorded here. The project follows
 - Detector core 4.0.0 renames the native interface: the Python class to
   `PilotProxyKernel`, the C API to `PilotProxy_*`, macros to `PILOTPROXY_*`,
   the native library to `libpilotproxy.so`, and source files to
-  `pilotproxy_detector.*` / `pilotproxy_reference.*`. Rebuild consumers; the
-  earlier names are not aliases. Arithmetic and product schema v6 are
-  unchanged. `docs/TERMINOLOGY.md` maps the names.
+  `pilotproxy_detector.*` / `pilotproxy_reference.*`. Consumers must be
+  rebuilt, since the earlier names are not aliases. Arithmetic and product
+  schema v6 are unchanged. `docs/TERMINOLOGY.md` maps the names.
 - `STACK_AMPLITUDE_RATIO*`, `temporal_gain` and `minimum_family_gain` replace
   `COHERENT_FRACTION*`, `coherent_gain` and `admissible_min_gain`. The third
   argument of `strength` is `stack_amplitude_ratio`, including keyword calls.
 - Injection-recovery and result-summary schema v2 use `power_ratio` and
-  `power_ratio_histogram_png`; existing reports and weight bytes are unchanged.
+  `power_ratio_histogram_png`. Existing reports and weight bytes are unchanged.
 - The threshold rule defaults to the paper's ideal calendar year, `1 / kappa`.
   To reproduce the duty-based times and decisions of the frozen records, pass
   `calendar_factor=LEGACY_CALENDAR_FACTOR` (CLI: `--calendar-factor
   6.574444324363269`). The paper's outcomes and words are the same under the
   ideal-year convention. Saved records are not rewritten.
-- `--policy-budget` accepts the combined nominal-strength caps;
+- `--policy-budget` accepts the combined nominal-strength caps, and
   `--finite-budget` is an alias. Empty recent-year support rejects the
   candidate instead of raising an indexing error. Invalid budgets and time
   factors are refused.
@@ -41,20 +41,20 @@ All notable changes to PilotProxy are recorded here. The project follows
 - Older profiles, weight manifests, runtime bundles, products and command
   lines that use `spectral_sense` or the `post_spectral_sense_*` names are
   still read, and a manifest's receiver-profile digest of the old
-  serialization still binds its profile; nothing writes the old names.
+  serialization still binds its profile. Nothing writes the old names.
   Runtime bundles keep every key Kotekan reads.
 - The archive and validation studies share one exact sorted-rank scoring
-  routine, and JSON validation and capture-file hashing share helpers; the
+  routine, and JSON validation and capture-file hashing share helpers. The
   independent counting reference and the CUDA arithmetic are unchanged.
   Invalid UTF-8 JSON is reported as a validation error.
 - The capture-ratio study driver moves to
   `tools/archive/derive_stack_amplitude_ratio.py`.
-- The shipped weight manifests are regenerated; both weight banks are
+- The shipped weight manifests are regenerated, and both weight banks are
   byte-identical. The manuals use the current detector terminology and show
   the implemented Kotekan mask path, and the documentation describes the
   current code. Incremental builds track the CUDA twiddle header. No result
   changes.
-- Provenance records name the rewritten RFIsher and RadioFisher commits; no
+- Provenance records name the rewritten RFIsher and RadioFisher commits. No
   result changes.
 
 ## 1.0.0, October 22, 2026
@@ -69,7 +69,7 @@ Initial public release: detector core 3.0.0 and per-pilot product schema v6.
   `coarse_power_definition = sum_of_fxfft256_fine_powers`.
 - The kernel has no row-domain power branch. The fused entries'
   `d_power_out` carries the fine-power sums, and the staged path sums the
-  fine-power entry on the host; both equal
+  fine-power entry on the host. Both equal
   `fxfft.fine_power_fx(rows).sum(axis=-1)` exactly. `PilotProxyKernel` refuses a
   library of another core major before binding any entry.
 - Per-pilot products (`pilotproxy_per_pilot_product_v6`) keep the exact fine
@@ -82,12 +82,12 @@ Initial public release: detector core 3.0.0 and per-pilot product schema v6.
   `p_r[:, 0] == fine_power_u64[:, r, :].sum(axis=1)` exactly.
 - Readers open v5 (contract revision 1) and v6 (contract revision 2) products.
   A v5 view replaces the stored row-domain columns by `coarse_columns_from_fine`
-  and says so in `frame_power_definition`; the threshold rule and the
+  and says so in `frame_power_definition`. The threshold rule and the
   archive-health gate read the excess and ratios through
   `product_contract.frame_powers_from_fine`, `pilot_excess_from_fine_powers`
   and `coarse_columns_from_fine`. Earlier product schemas are refused.
-- CHIME run outputs of detector contract revision 1 are validated as records;
-  the CHIME plots and `injection_recovery` refuse them, and runtime weight
+- CHIME run outputs of detector contract revision 1 are validated as records.
+  The CHIME plots and `injection_recovery` refuse them, and runtime weight
   bundles must carry contract revision 2.
 - `chime-run` stores `fine_power_u64` and the reference split in
   `chime_detector_outputs.npz`, and refuses a detector result whose powers are

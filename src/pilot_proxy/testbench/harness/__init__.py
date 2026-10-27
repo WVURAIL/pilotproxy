@@ -1,1 +1,1 @@
-"""General validation harness: bench results from releases (estimator transfer, evaluate-snr sweeps)."""
+"""Validation harness for bench results from releases (estimator transfer and evaluate-snr sweeps)."""

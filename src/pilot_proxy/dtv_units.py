@@ -5,7 +5,7 @@ The deployed coarse detector stores
 
 ``R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)``,
 
-each frame power the all-bin sum of its exact fine power spectrum,
+where each frame power is the all-bin sum of its exact fine power spectrum,
 ``P_r = sum_f S_r[f]`` (kernel core 3.0.0).
 
 Exact squared norms of the packed target and reference weights set the
@@ -13,8 +13,8 @@ flat-noise null ratio
 
 ``R_null = 2 * target_norm_sq / reference_norm_sum_sq``.
 
-Scientific pilot excess is therefore ``R_coarse / R_null - 1``.  The raw
-quantity ``R_coarse - 1`` is retained only as an explicitly named diagnostic.
+The scientific pilot excess is therefore ``R_coarse / R_null - 1``. The raw
+quantity ``R_coarse - 1`` is kept only as a diagnostic with an explicit name.
 """
 
 from __future__ import annotations
@@ -114,10 +114,10 @@ def pilot_excess_db_to_data_shelf_snr_db(
 ):
     """Convert pilot excess in dB to the weak-shelf power proxy in dB.
 
-    Apply the linear conversion e/A. When e = A*s/(1+g*s), this returns
-    the proxy s/(1+g*s), which approaches a limit as shelf power grows.
-    Recovering physical s would instead require e/(A-g*e), an independently
-    calibrated g, and uncertainty treatment near saturation.
+    The linear conversion e/A is applied. When e = A*s/(1+g*s), the result
+    is the proxy s/(1+g*s), which approaches a limit as the shelf power
+    grows. Recovering the physical s requires e/(A-g*e), an independently
+    calibrated g, and a treatment of the uncertainty near saturation.
     """
     spreading = (
         spreading_loss_db_from_bin_enbw_hz(
@@ -216,7 +216,7 @@ def coarse_power_ratio_to_raw_pilot_excess(coarse_power_ratio):
 
 
 def power_terms_to_coarse_power_ratio(num, den):
-    """Return the raw ratio ``2*num/den``; zero reference power maps to NaN."""
+    """Return the raw ratio ``2*num/den``, or NaN when the reference power is zero."""
     numerator = np.asarray(num, dtype=np.float64)
     denominator = np.asarray(den, dtype=np.float64)
     out = np.full(

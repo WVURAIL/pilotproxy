@@ -1,18 +1,19 @@
 # coding=utf-8
-"""Name-carries-the-metadata guards.
+"""Guards that take scan and detect settings from the named artifact.
 
-The artifact a flag names already records the facts, so flags become optional
-(derived from the artifact), assertions (must agree with it), or conflicts
-(hard errors, never silent ignores):
+The artifact named by a flag already records the facts, so each flag is
+optional (derived from the artifact), an assertion (it must agree with the
+artifact), or a conflict (a hard error, so no flag is silently ignored). These
+tests cover:
 
-  * ``chime-scan --select`` defaults to every freq_id the inventory contains
-    (echoed before any staging), and stays required for ``--source local``;
-  * ``chime-scan --source`` is inferred from --inventory/--inventory-name;
-    conflicting pairings error instead of silently ignoring flags;
-  * ``--instrument`` must match the inventory sidecar's telescope;
-  * ``detect`` resolves the pilot from quantize's metadata.json sidecar,
-    asserts an explicit flag against it, and refuses a bare matrix rather
-    than guessing channel 14.
+  * ``chime-scan --select`` defaults to every freq_id in the inventory
+    (printed before any staging) and is still required for ``--source local``
+  * ``chime-scan --source`` is inferred from --inventory or --inventory-name,
+    and conflicting pairings are raised as errors
+  * ``--instrument`` must match the telescope in the inventory sidecar
+  * ``detect`` takes the pilot from the metadata.json sidecar written by
+    quantize, checks an explicit flag against it, and refuses a bare matrix
+    instead of assuming channel 14
 """
 from __future__ import annotations
 
@@ -43,13 +44,14 @@ NFFT = 16384
 N_FEEDS = 4
 K = 128
 
-# freq_id -> coarse-channel center (MHz)
+# freq_id to coarse-channel center (MHz)
 CHAN_MHZ = {844: 470.3125, 829: 476.171875, 752: 506.171875}
 
 
 def _stub_detector_fn(*, packed, weights, kernel):
-    # Fixed fine spectra (all power in bin 0) and their all-bin sums 10/10/10,
-    # the per-pilot v6 frame powers (plumbing only; no parity claim).
+    # The fine spectra are fixed, with all power in bin 0, and their all-bin
+    # sums (10, 10, 10) are the per-pilot v6 frame powers. The stub tests only
+    # the plumbing, and no parity is claimed.
     return stub_detector_fn(packed=packed, weights=weights, kernel=kernel)
 
 
@@ -88,7 +90,7 @@ def _write_meta(inv_path, **fields):
     inv_path.with_suffix(".meta.json").write_text(json.dumps(metadata) + "\n")
 
 
-# -- default selection: the inventory is the scope ----------------------------
+# default selection, where the inventory sets the scope
 
 def test_default_select_scans_every_inventory_freq_id(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(REPO_ROOT)
@@ -119,7 +121,8 @@ def test_default_select_scans_every_inventory_freq_id(tmp_path, monkeypatch, cap
     )
 
     out = tmp_path / "out"
-    # no source, no select: source inferred from --inventory, select from rows
+    # with no source and no select, the source is inferred from --inventory and
+    # the selection from the rows
     run_chime_scan(output_dir=out, inventory=inv,
                    analyzer="pilot-proxy-detector",
                    analyzer_options=_cpu_detector_options(), verbose=True)
@@ -133,7 +136,7 @@ def test_default_select_scans_every_inventory_freq_id(tmp_path, monkeypatch, cap
     assert "source: cadc-datatrail (inferred from --inventory)" in printed
     assert "scanning all 3 freq_id(s)" in printed
     assert "752,829,844" in printed
-    assert "note: survey requested" not in printed  # request == rows: no note
+    assert "note: survey requested" not in printed  # request equals rows, so no note
 
 
 def test_default_select_notes_requested_vs_found(tmp_path, capsys):
@@ -153,7 +156,7 @@ def test_default_select_notes_requested_vs_found(tmp_path, capsys):
 
 def test_empty_inventory_refuses_default_selection(tmp_path):
     inv = tmp_path / "inventory.jsonl"
-    # companion-only inventory: rows exist, none carry a freq_id
+    # companion-only inventory whose rows carry no freq_id
     _make_inventory(inv, common_path="cadc:TEST", event="evt1", channels=[],
                     extra_rows=[{"common_path": "cadc:TEST", "event": "evt1",
                                  "name": "gains.h5"}])
@@ -184,14 +187,14 @@ def test_parse_freq_id_list_grammar():
 
 
 def test_local_source_still_requires_select(tmp_path):
-    # bare --source-root keeps the historic local default, and local scans
-    # have no inventory to derive the scope from
+    # a bare --source-root keeps the local source as the default, and a local
+    # scan has no inventory to derive the scope from
     with pytest.raises(SystemExit, match="--select is required for --source local"):
         run_chime_scan(output_dir=tmp_path / "o", source_root=tmp_path,
                        analyzer="pilot-proxy-detector", verbose=False)
 
 
-# -- source inference and conflicts -------------------------------------------
+# source inference and conflicts
 
 def test_conflicting_source_flags_are_errors(tmp_path):
     with pytest.raises(SystemExit, match="belong to --source cadc-datatrail"):
@@ -258,7 +261,7 @@ def test_scan_rejects_incompatible_inventory_metadata(
         )
 
 
-# -- detect: the quantize sidecar is authoritative ----------------------------
+# detect, where the quantize sidecar is authoritative
 
 CH14_HZ = physical_channel_to_pilot_hz(14)
 

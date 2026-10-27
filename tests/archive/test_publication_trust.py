@@ -5,8 +5,8 @@ The tests exercise view determinism, schema migration, provenance, archive
 restoration, and frozen-bundle accounting. Bundle checks skip when their
 referenced artifacts are unavailable in the test environment.
 
-No network: the datatrail subprocess boundary is faked exactly as in
-tests/archive/test_datatrail_adapter.py.
+No network access is needed, since the datatrail subprocess boundary is faked
+as in tests/archive/test_datatrail_adapter.py.
 """
 from __future__ import annotations
 
@@ -25,16 +25,17 @@ from pilot_proxy.archive.survey_state import SurveyStore
 from pilot_proxy.chime.baseband_reader import baseband_filename
 
 
-# CHIME production geometry: one packed byte per feed per sample.
+# CHIME production geometry, with one packed byte per feed per sample
 NFFT, N_FEEDS = 16384, 2048
 BYTES_PER_FRAME = NFFT * N_FEEDS
 
-# Real-data inputs, read from the environment; the tests that need them skip when unset.
+# real-data inputs read from the environment, and the tests that need them
+# skip when the paths do not exist
 FROZEN_BUNDLE = Path(os.environ.get("PILOT_PROXY_ARCHIVE_BUNDLE", "archive_inputs/chime-pilots-v5"))
 JULY_REFERENCES = Path(os.environ.get("PILOT_PROXY_JULY_INVENTORIES", "Datatrawl-Inventories"))
 
-# A schema-1 ("July") pilots row, verbatim in shape: no "name", float
-# "n_frames", insertion-ordered keys.
+# a schema-1 ("July") pilots row in its original shape, with no "name", a
+# float "n_frames", and insertion-ordered keys
 SCHEMA1_ROW = {
     "scope": "chime.event.baseband.raw", "event": "100050005",
     "freq_id": 506, "size_bytes": 91311880,
@@ -73,13 +74,10 @@ def _fake_ps(monkeypatch, uris):
                         lambda cmd, **kw: _Proc(0, payload, ""))
 
 
-# ==========================================================================
-# 1. The legacy-schema migration story
-#
-# Measured on the real references: the July chime-pilots inventory has no
-# "name" on any of its 161,872 rows; the narrow adapter restores it.
-# The July chime-controls inventory does carry "name" and parses 32,614/32,614.
-# ==========================================================================
+# legacy-schema migration
+# On the real references, none of the 161872 rows of the July chime-pilots
+# inventory has a "name", and the narrow adapter restores it. The July
+# chime-controls inventory carries "name", and all 32614 of its rows parse.
 def test_parse_row_restores_only_identified_schema1_baseband_rows():
     parsed = parse_row(json.dumps(SCHEMA1_ROW), "inventory.jsonl", 1)
     assert parsed["name"] == baseband_filename(SCHEMA1_ROW["event"], 506)
@@ -97,13 +95,12 @@ def test_parse_row_restores_only_identified_schema1_baseband_rows():
 
 
 def test_schema1_row_carries_everything_the_upgrade_needs():
-    """The migration is a pure function of the row -- no archive access.
+    """The migration is a pure function of the row and needs no archive access.
 
-    ``name`` is recoverable from (event, freq_id) through THE naming
-    definition, and schema 2's ``n_frames_estimate`` is recoverable from
-    ``size_bytes`` and the instrument geometry. Nothing else is needed, which
-    is why the absence of a shipped migration is a packaging gap and not a
-    data-loss problem.
+    The ``name`` is recovered from (event, freq_id) through the one naming
+    definition, and the schema-2 ``n_frames_estimate`` is recovered from
+    ``size_bytes`` and the instrument geometry. Nothing else is needed, so the
+    lack of a shipped migration is a packaging gap and loses no data.
     """
     upgraded = dict(SCHEMA1_ROW)
     upgraded.pop("n_frames")
@@ -125,13 +122,12 @@ def test_schema1_row_carries_everything_the_upgrade_needs():
     2 * BYTES_PER_FRAME - 1, 91311880, 32890880, 10 * BYTES_PER_FRAME,
 ])
 def test_low_estimate_rule_survives_the_n_frames_semantics_change(size):
-    """schema 1 stored a float; schema 2 stores floor() as an int.
+    """Schema 1 stored a float, and schema 2 stores floor() as an int.
 
-    The frozen bundle's 4,693 low-estimate exclusions were selected with the
-    float column. This is the identity that makes that ledger re-derivable
-    against the int column: for a positive size, ``floor(x) < 1`` iff
-    ``x < 1``, so the exclusion SET is unchanged even though the recorded
-    VALUE is not.
+    The 4693 low-estimate exclusions of the frozen bundle were selected with
+    the float column. For a positive size, ``floor(x) < 1`` if and only if
+    ``x < 1``, so the same exclusion set is derived from the int column,
+    although the recorded values differ.
     """
     assert (size // BYTES_PER_FRAME < 1) == (size / BYTES_PER_FRAME < 1.0)
 
@@ -148,7 +144,7 @@ def test_completed_legacy_inventory_remains_readable():
 ])
 def test_july_reference_readability_is_exactly_as_measured(
         name, expect_readable):
-    """Pin the real, per-inventory readability split so it cannot drift."""
+    """Pin the measured readability of each real inventory so it cannot drift."""
     path = JULY_REFERENCES / name / "inventory.jsonl"
     accepted = rejected = 0
     with path.open() as handle:
@@ -166,12 +162,9 @@ def test_july_reference_readability_is_exactly_as_measured(
         f"{name}: {accepted} accepted / {rejected} rejected of {total}")
 
 
-# ==========================================================================
-# 2. Determinism of the durable views
-#
-# survey_state.py:10 claims inventory.jsonl and the text ledgers are
-# "deterministic views of the database". Nothing asserted it.
-# ==========================================================================
+# determinism of the durable views
+# The survey_state.py docstring states that inventory.jsonl and the text
+# ledgers are "deterministic views of the database", and these tests assert it.
 def _render(order, tmp_path, tag):
     out = tmp_path / tag
     out.mkdir()
@@ -185,10 +178,12 @@ def _render(order, tmp_path, tag):
 
 
 def test_render_views_is_independent_of_commit_order(tmp_path):
-    """Two runs that visit the same events in different orders -- because the
-    archive answered in a different order, or because one run resumed -- must
-    produce byte-identical views. This is the only thing that makes an
-    inventory comparable across runs at all."""
+    """Runs that commit the same events in different orders give identical views.
+
+    The order can differ because the archive answered in a different order or
+    because one run resumed. The views must be byte-identical for an inventory
+    to be compared between runs.
+    """
     events = [("chime.event.baseband.raw", ev,
                [_row(ev, f) for f in (844, 506, 721)])
               for ev in ("100050005", "1111116060", "999", "100200200")]
@@ -201,9 +196,11 @@ def test_render_views_is_independent_of_commit_order(tmp_path):
 
 
 def test_view_order_is_lexicographic_on_the_event_key(tmp_path):
-    """The ordering contract is SQLite BINARY collation on "scope|event", not
-    numeric order on the event id. A reader diffing two inventories must sort
-    the same way; state it once, here."""
+    """The views are ordered by SQLite BINARY collation on "scope|event".
+
+    The event id is sorted as text, so "10" comes before "1000" and "999". A
+    reader who diffs two inventories must sort the same way.
+    """
     out = tmp_path / "lex"
     out.mkdir()
     store = SurveyStore(out / "survey_state.sqlite3")
@@ -219,19 +216,19 @@ def test_view_order_is_lexicographic_on_the_event_key(tmp_path):
 
 
 def test_a_flaky_probe_silently_changes_inventory_content(tmp_path):
-    """The reproducibility hazard, made explicit.
+    """A flaky probe changes the inventory content with no in-band marker.
 
-    _commit_decision accepts a PARTIAL event once the retry allowance is
-    exhausted (cadc.py:270 -> ``True, True, True``). So an event whose probes
-    were clean writes every row, while the same event under transient CADC
-    errors writes a strict subset and is committed as done. The difference is
-    recorded in incomplete_events.txt, but inventory.jsonl itself is smaller
-    with no in-band marker -- two runs against an unchanged archive can
-    therefore disagree on CONTENT, not just presentation.
+    _commit_decision in cadc.py accepts a partial event once the retry
+    allowance is exhausted and returns ``True, True, True``. An event whose
+    probes were clean writes every row, while the same event under transient
+    CADC errors writes a strict subset and is committed as done. The difference
+    is recorded in incomplete_events.txt, but inventory.jsonl itself is smaller
+    and carries no marker. Two runs against an unchanged archive can therefore
+    disagree on the rows themselves as well as on their presentation.
     """
-    # clean: 0 errored, 3 present
+    # clean, with 0 errored and 3 present
     assert src._commit_decision(0, 0, 3) == (True, True, False)
-    # 1 of 3 keeps erroring; the third sighting accepts the partial event
+    # 1 of 3 keeps erroring, and the third sighting accepts the partial event
     assert src._commit_decision(1, 0, 2) == (False, False, False)
     assert src._commit_decision(1, 1, 2) == (False, False, False)
     assert src._commit_decision(1, 2, 2) == (True, True, True)
@@ -244,16 +241,14 @@ def test_a_flaky_probe_silently_changes_inventory_content(tmp_path):
     assert clean["inventory.jsonl"] != partial["inventory.jsonl"]
 
 
-# ==========================================================================
-# 3. Provenance: can a third party reconstruct how the inventory was made?
-# ==========================================================================
+# provenance a third party needs to reconstruct how the inventory was made
 REQUIRED_PROVENANCE = frozenset({
     "source_revision",          # which commit of this tree ran
     "package_source_sha256",    # provenance.package_source_sha256()
     "datatrail_cli_version",    # the CLI whose payloads were parsed
     "cadcdata_version",
-    "certificate_not_after",    # the cert identity/expiry that authorized it
-    "inventory_sha256",         # self-identification of the rows
+    "certificate_not_after",    # identity and expiry of the cert that authorized the run
+    "inventory_sha256",         # SHA-256 of the inventory file
     "row_count",
 })
 
@@ -297,15 +292,14 @@ def test_survey_manifest_records_execution_separately_from_configuration(tmp_pat
     assert json.loads((tmp_path / "survey_manifest.json").read_text())["latest_run"]["run_id"] != first_id
 
 
-# ==========================================================================
-# 4. Blast radius of the uncommitted collection-restore patch
-#
-# datatrail_client.py:157 _restore_collection() prefixes any replica path
-# beginning "data/" with "cadc:CHIMEFRB/". That converts a class of inputs
-# that USED to be a deterministic refusal into an accepted common path.
-# ==========================================================================
+# scope of the collection-restore rule
+# _restore_collection() in datatrail_client.py prefixes any replica path that
+# begins with "data/" with "cadc:CHIMEFRB/", so a path of this class is
+# accepted as a common path. These tests check the documented bare replica,
+# the lookalike and escaping paths that must still be refused, and the flag
+# that records a restored origin.
 def test_restore_collection_recovers_the_documented_bare_replica(monkeypatch):
-    """The case the patch exists for: every replica returned bare."""
+    """Every replica of the documented case comes back bare and is restored."""
     _fake_ps(monkeypatch, [
         "data/chime/baseband/raw/2025/03/31/astro_1111116060/"
         "baseband_1111116060_506.h5",
@@ -322,11 +316,11 @@ def test_restore_collection_recovers_the_documented_bare_replica(monkeypatch):
 
 @pytest.mark.parametrize("uri", [
     "database/chime/x/astro_1/f.h5",   # lookalike root, must not be restored
-    "/data/chime/x/astro_1/f.h5",      # absolute, not archive-relative
+    "/data/chime/x/astro_1/f.h5",      # absolute path, which is not archive-relative
     "cadc:SOMEONE_ELSE/data/chime/x/astro_1/f.h5",
 ])
 def test_restore_collection_stays_narrow(monkeypatch, uri):
-    """Restoration must not become a blanket accept."""
+    """Restoration applies only to the archive layout."""
     _fake_ps(monkeypatch, [uri, uri.replace("f.h5", "g.h5")])
     with pytest.raises(dt.DatatrailContractError):
         dt.DATATRAIL.files("chime.event.baseband.raw", "1", retries=0)
@@ -354,10 +348,9 @@ def test_a_restored_replica_retains_its_origin(monkeypatch):
     assert not from_prefixed[0].collection_restored
 
 
-# ==========================================================================
-# 5. The published bundle's own accounting, re-checked rather than asserted
-#    by the one-off script invocation recorded inside it.
-# ==========================================================================
+# accounting of the published bundle
+# The bundle records a one-off script run as its own check, and the tests below
+# check its accounting again directly.
 requires_bundle = pytest.mark.skipif(
     not (FROZEN_BUNDLE / "inventory_manifest.json").is_file(),
     reason="chime-pilots-v5 frozen bundle not on this host")
@@ -376,7 +369,11 @@ def _unit_keys(path: Path) -> set:
 
 @requires_bundle
 def test_frozen_inventory_is_an_exact_partition_of_the_source():
-    """source == frozen + exclusions, with no overlap and nothing invented."""
+    """The frozen inventory and the exclusions partition the source exactly.
+
+    The two sets do not overlap, and their union is the source with no extra
+    rows.
+    """
     source = _unit_keys(FROZEN_BUNDLE / "inventory.source.jsonl")
     frozen = _unit_keys(FROZEN_BUNDLE / "inventory.jsonl")
     excluded = _unit_keys(FROZEN_BUNDLE / "exclusions.jsonl")
@@ -405,15 +402,14 @@ def test_frozen_bundle_files_match_the_digests_it_publishes():
 
 @requires_bundle
 def test_only_three_frozen_exclusions_need_evidence_outside_the_archive():
-    """The re-derivability boundary, stated exactly.
+    """Only 3 frozen exclusions need evidence that the archive does not hold.
 
-    4,692 exclusions carry ``prior_product_zero_frames`` and every one of them
-    is ALSO caught by the pure size rule, so the prior detector product is
-    confirmatory, not load-bearing: a third party can re-derive them from the
-    archive alone. The 3 ``historical_quarantine`` units cannot be re-derived
-    -- they came from direct HDF5 reads that hit truncated files -- and 2 of
-    the 3 are invisible to any size rule. That 4,692 / 3 split is the honest
-    reproducibility claim and it belongs in a test, not in prose.
+    Each of the 4692 exclusions marked ``prior_product_zero_frames`` is also
+    caught by the size rule alone, so the prior detector product only confirms
+    them, and a third party can re-derive them from the archive. The 3
+    ``historical_quarantine`` units cannot be re-derived, since they came from
+    direct HDF5 reads that hit truncated files, and 2 of the 3 are invisible to
+    any size rule. This test pins that split of 4692 and 3.
     """
     size_derivable, external, invisible = set(), set(), 0
     with (FROZEN_BUNDLE / "exclusions.jsonl").open() as handle:
@@ -435,14 +431,16 @@ def test_only_three_frozen_exclusions_need_evidence_outside_the_archive():
 
 @requires_bundle
 def test_frozen_inventory_cannot_be_regenerated_by_todays_code():
-    """The pinned production input is schema 1.5: it has "name" (so it parses)
-    but still carries the float ``n_frames`` column, not schema 2's integer
-    ``n_frames_estimate``. Today's code cannot regenerate it byte-for-byte --
-    JSON key order, column name, and column type all differ -- so the locked
-    digest b2cfef75... is not reproducible by re-running the survey.
+    """The pinned production input is schema 1.5 and cannot be regenerated.
+
+    The input has "name", so it parses, and it carries the float ``n_frames``
+    column where schema 2 has the integer ``n_frames_estimate``. The current
+    code cannot regenerate it byte for byte, since the JSON key order, the
+    column name, and the column type all differ. The locked digest b2cfef75...
+    therefore cannot be reproduced by running the survey again.
     """
     with (FROZEN_BUNDLE / "inventory.jsonl").open() as handle:
         first = json.loads(handle.readline())
-    parse_row(json.dumps(first), "inventory.jsonl", 1)   # parses: has "name"
+    parse_row(json.dumps(first), "inventory.jsonl", 1)   # parses, since it has "name"
     assert "n_frames" in first and "n_frames_estimate" not in first
     assert list(first) != sorted(first)                  # insertion-ordered

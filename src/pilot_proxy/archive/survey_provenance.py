@@ -42,10 +42,11 @@ def _software():
 
 
 def runtime_provenance():
-    """Identify software and the public certificate; never record private keys.
+    """Return the software identity and the public CADC certificate identity.
 
-    Missing optional software/certificates remain explicitly unavailable. The
-    package digest follows the existing first-observation-per-process contract.
+    Private keys are never recorded. Optional software or a certificate that is
+    missing is recorded as unavailable. The package digest is fixed at its first
+    use in the process, as in ``package_source_sha256``.
     """
     result = dict(_software())
     result.update(certificate_not_after=None, certificate_sha256=None,
@@ -55,8 +56,8 @@ def runtime_provenance():
         from cryptography import x509
         from cryptography.hazmat.primitives import hashes
         cert = x509.load_pem_x509_certificate(certificate.read_bytes())
-        # Only the public X.509 certificate is fingerprinted, never its PEM
-        # container (which can also contain a private proxy key).
+        # The fingerprint is taken of the public X.509 certificate only. The
+        # PEM container can also hold a private proxy key.
         result.update(certificate_not_after=cert.not_valid_after_utc.isoformat(),
                       certificate_sha256=cert.fingerprint(hashes.SHA256()).hex(),
                       certificate_status="read")

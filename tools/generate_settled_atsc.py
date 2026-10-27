@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Generate a new ATSC waveform with an explicit discarded startup and receipt.
+"""Generate a new ATSC waveform with a declared startup discard and a receipt.
 
-The discard is a declared experiment setting, not a universal stationarity
-proof. Existing waveform files and historical identities are never overwritten.
+The discard length is a declared setting of this experiment. The retained
+samples are evaluated by the waveform audit and by power diagnostics on
+65536-sample segments. Existing waveform files and historical identities are
+never overwritten.
 """
 from __future__ import annotations
 import argparse

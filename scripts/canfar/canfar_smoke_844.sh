@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# CANFAR cross-arch smoke -- pilot-proxy v5 at the frozen tag.
-# Run in notebook1 AFTER the probe bootstrap succeeded:
+# CANFAR cross-arch smoke test for pilot-proxy v5 at the frozen tag.
+# Run in notebook1 after the probe bootstrap has succeeded:
 #   bash /arc/home/$CANFAR_USER/pp_switch/canfar_smoke_844.sh
 # Repeats the local B2d rehearsal scan shape (channel 844, first 8 files,
 # production worker profile) on the H100/sm90 kernel, then compares the
-# product against the local sm89 rehearsal product unit-by-unit.
-# v5 coarse/fine terms are exact integers: cross-arch agreement must be
-# bit-for-bit; only psd_frame_db_i16 is allowed +-1 code (0.01 dB).
+# product against the local sm89 rehearsal product unit by unit.
+# The v5 coarse and fine terms are exact integers, so cross-arch agreement
+# must be bit-for-bit. The one integer field allowed to differ is
+# psd_frame_db_i16, by +-1 code (0.01 dB). Float fields may differ by a
+# relative 1e-6.
 set -uo pipefail
-# Site configuration: the CANFAR account name; export it before running (see README.md).
-#   CANFAR_USER  the CANFAR account; the kit and the runs live under /arc/home/$CANFAR_USER/
+# Site configuration, exported before running (see README.md):
+#   CANFAR_USER  CANFAR account name. The kit and the runs are under /arc/home/$CANFAR_USER/.
 : "${CANFAR_USER:?}"
 say(){ printf '\n===== %s =====\n' "$*"; }
 

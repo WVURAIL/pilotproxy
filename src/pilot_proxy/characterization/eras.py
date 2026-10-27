@@ -1,132 +1,160 @@
-"""Stable-era identification: the section 8.1 procedure as versioned configuration.
+"""Find the stable eras of each channel by the section 8.1 procedure, with every policy value in a versioned configuration.
 
 The dissertation (chapter 8, ``sec:calibration:eras``) fixes a predeclared,
 calibration-free rule that reads each channel's era record from the survey
-products; this module is that rule, with every policy value a field of
-:class:`EraConfig` (versioned, and identified by the sha256 digest of its
-canonical JSON, recorded in every output row). The definitions implemented
-are quoted from the text:
+products. This module implements that rule, and every policy value is a field
+of :class:`EraConfig`. The configuration is versioned, and the sha256 digest of
+its canonical JSON is recorded in every output row. The definitions below are
+quoted from the text.
 
-- *Inputs.* "Per valid frame: UTC; the exact normalized coarse ratio
-  ``F/mu_0`` (``mu_0`` from weight norms alone); the fine peak location
-  within the *nominal* acquisition neighbourhood ``f_pred +- 30`` bins (never
-  the era-calibrated anchor); ... and the recorded receiver software tag and
-  input map."
-- *Aggregation.* "UTC calendar month. A month is populated only with at
-  least 30 valid frames drawn from at least 5 distinct acquisitions on at
-  least 3 distinct days; policy values, with sensitivity values (3, 5, 10)
-  acquisitions recorded." (``blocks.month_support`` applies the same gate.)
-  The monthly statistic is the median over the month's frames of the
-  per-frame ``10 log10(F/mu_0)`` (``Product.level_db``).
-- *State.* "A populated month is *proxy-high* if its median
-  ``10 log10(F/mu_0)`` is at least 1 dB, *proxy-low* if at most 0.5 dB, and
-  *ambiguous* between (sensitivity values 0.5, 1, 2 dB) ... A *station
-  change* is a shift of the monthly peak location by at least 3 fine bins
-  (36 Hz) against the running era. An *instrument change* is a change in the
-  recorded software tag or input map."
-- *Persistence.* "A new state or anchor must hold for at least 2 consecutive
-  populated months; a single-month excursion is flagged, not a transition.
-  Ambiguous months inherit the state of their populated neighbours if those
-  agree and open a transition otherwise."
-- *Placement and uncertainty.* "A transition is placed between the last
-  month of the old state and the first of the new; when unpopulated months
-  lie between them it is placed at that gap and the gap's span is the
-  boundary uncertainty."
-- *Fallback.* "A channel with no proxy-low month has its current era bounded
-  only by station and instrument changes."
-- *Naming.* "A boundary is a *transmitter sign-on* or *sign-off* only where a
-  station record confirms it; otherwise it is a *spectral-state transition*."
-- The latest era is the "latest archive-observed stable era", written
-  "current era", and is *stale-latest* when it ends before the snapshot.
+Inputs
+    "Per valid frame: UTC; the exact normalized coarse ratio
+    ``F/mu_0`` (``mu_0`` from weight norms alone); the fine peak location
+    within the *nominal* acquisition neighbourhood ``f_pred +- 30`` bins (never
+    the era-calibrated anchor); ... and the recorded receiver software tag and
+    input map."
+Aggregation
+    "UTC calendar month. A month is populated only with at
+    least 30 valid frames drawn from at least 5 distinct acquisitions on at
+    least 3 distinct days; policy values, with sensitivity values (3, 5, 10)
+    acquisitions recorded." The same gate is applied by
+    ``blocks.month_support``. The monthly statistic is the median over the
+    month's frames of the per-frame ``10 log10(F/mu_0)`` (``Product.level_db``).
+State
+    "A populated month is *proxy-high* if its median
+    ``10 log10(F/mu_0)`` is at least 1 dB, *proxy-low* if at most 0.5 dB, and
+    *ambiguous* between (sensitivity values 0.5, 1, 2 dB) ... A *station
+    change* is a shift of the monthly peak location by at least 3 fine bins
+    (36 Hz) against the running era. An *instrument change* is a change in the
+    recorded software tag or input map."
+Persistence
+    "A new state or anchor must hold for at least 2 consecutive
+    populated months; a single-month excursion is flagged, not a transition.
+    Ambiguous months inherit the state of their populated neighbours if those
+    agree and open a transition otherwise."
+Placement and uncertainty
+    "A transition is placed between the last
+    month of the old state and the first of the new; when unpopulated months
+    lie between them it is placed at that gap and the gap's span is the
+    boundary uncertainty."
+Fallback
+    "A channel with no proxy-low month has its current era bounded
+    only by station and instrument changes."
+Naming
+    "A boundary is a *transmitter sign-on* or *sign-off* only where a
+    station record confirms it; otherwise it is a *spectral-state transition*."
+Current era
+    The latest era is the "latest archive-observed stable era", written
+    "current era", and is *stale-latest* when it ends before the snapshot.
 
-Where the text leaves the procedure open this module takes the reading below
-(each a named, documented parameter or rule; ``docs/archive-results-design.md``
-section 6 records the instrument choice):
+Where the text leaves the procedure open, this module takes the readings
+below. Each is a named parameter or rule, and section 6 of
+``docs/archive-results-design.md`` records the instrument choice.
 
-- **Monthly fine-peak location.** Per frame, the fine statistic
-  ``T = 2 S_0 / (S_1 + S_2)`` on the exact terms, restricted to the window
-  ``nominal_fine_bin +- window_half_width`` (mod 256); the per-frame peak is
-  the argmax (ties to the lowest offset; a frame whose window is all zero has
-  no peak). The month's location is the median of the per-frame peaks over
-  the month's coarse-detected frames (the stored ``F > mu_0`` flag), in
-  unwrapped bins about the nominal; a month with fewer than
-  ``min_peak_cohort`` detected frames uses all its frames instead and is
-  flagged (``peak_cohort = 'all_selected'``).
-- **Inheritance and persistence to a fixed point.** Ambiguous months take the
-  state of the nearest definite month on each side when those agree; between
-  disagreeing states they form a *transition zone*. Runs of equal definite
-  state over consecutive populated months shorter than ``persistence_months``
-  are excursions: flagged, relabelled ambiguous, and re-resolved; the two
-  passes iterate until nothing changes (each pass only removes definite
-  labels, so it terminates). A leading or trailing ambiguous run has one
-  populated neighbour and inherits it (``one_sided_ambiguous = 'inherit'``,
-  the vacuous-agreement reading); ``'separate'`` makes such a run its own
-  ``ambiguous-only`` era when it is long enough to persist.
-- **Transition zone months belong to no era.** They lie inside the boundary
-  interval: the boundary uncertainty is the number of calendar months
-  strictly between the last month of the old state and the first month of the
-  new, reported with its unpopulated (gap) and populated-ambiguous parts.
-- **Station changes** are evaluated only on definite proxy-high months
-  (``station_check_states``): a proxy-low month has no pilot and its peak
-  location is noise. The running era location is the median of the accepted
-  months' locations; a month shifted by at least ``station_shift_bins`` opens a
-  station change only when the next tested month is also shifted against the
-  same running location, otherwise it is a station excursion. The zone of a
-  station change is the untested populated months between the last tested
-  month of the old location and the first of the new.
-- **Instrument change** is a change of ``unit_input_map_sha256`` (design
-  section 6); a month's instrument state is the set of map values its
-  acquisitions carry. A map that *enters* (present in a month, absent from
-  the previous populated month) and stays present for ``persistence_months``
-  consecutive populated months opens an instrument change at the month it
-  enters; a map that enters and leaves within one month is an instrument
-  excursion; a map that merely leaves is not a change. The software tag is
-  recorded as a count only (``software_tags``, ``software_tag_changes``).
-- **Eras** are the maximal runs of populated months not in any zone, cut at
-  every boundary; an era's evidence is the kinds of boundary that opened it
-  (``'+'``-joined when kinds coincide), ``'archive start'`` for the first.
-  An era's frames are every masked frame whose UTC month lies in
-  ``[first_month, last_month]``; a frame without a recorded sample interval
-  (NaN time) follows its acquisition's ``unit_time`` month.
-- **Stale-latest** compares the current era's last populated month with
-  ``campaign_last_month`` (the last populated month over the whole campaign,
-  from :func:`campaign_last_populated_month`): the era is stale when it ends
-  more than ``stale_grace_months`` (policy 1: the snapshot month is partial) before it,
-  and the lag is reported (``stale_lag_months``). When the caller cannot
-  supply the campaign month the channel's own last month is used and
-  ``stale_reference`` says so.
-- **Indeterminate** (reported, never resolved by hand): the ambiguous months
-  are a majority of the populated months (``indeterminate_fraction``), no
-  definite state persists, or the current era is ambiguous-only.
-- **Sensitivity** (no PELT): the segmentation is repeated under each
-  ``units_sensitivity`` gate and each ``threshold_sensitivity_db`` pair, and
-  whether the current era's first or last month moves is recorded.
+For the monthly fine-peak location, the fine statistic
+``T = 2 S_0 / (S_1 + S_2)`` is formed per frame from the exact terms on the
+window ``nominal_fine_bin +- window_half_width`` (mod 256). The per-frame peak
+is the argmax, with ties going to the lowest offset, and a frame whose window
+is all zero has no peak. The month's location is the median of the per-frame
+peaks over the month's coarse-detected frames (the stored ``F > mu_0`` flag),
+in unwrapped bins about the nominal bin. A month with fewer than
+``min_peak_cohort`` detected frames uses all its frames instead and is flagged
+(``peak_cohort = 'all_selected'``).
 
-Output, ``tables/eras.csv``, one row per era, columns in order:
-``channel, freq_id, era, n_eras, first_month, last_month, state, evidence,
-record_agreement, boundary_uncertainty_months, boundary_gap_months,
-boundary_ambiguous_months, units, frames, frames_without_time,
-populated_months, months_spanned, coverage, level_median_db,
-peak_offset_bins, is_current, stale_latest, fallback, config_version,
-config_digest``. ``state`` is ``proxy-high | proxy-low | ambiguous-only``;
-``coverage = populated_months / months_spanned``; ``peak_offset_bins`` is the
-median monthly location of the era's definite proxy-high months in fine bins
-from the nominal bin (fine-array direction; a feature of the record, not the
-anchor of chapter 8's next section). Months are ``YYYY-MM``.
+Inheritance and persistence are iterated to a fixed point. An ambiguous month
+takes the state of the nearest definite months on each side when those agree.
+Between disagreeing states, the ambiguous months form a *transition zone*. A
+run of equal definite state over consecutive populated months that is shorter
+than ``persistence_months`` is an excursion, and its months are flagged,
+relabeled ambiguous, and resolved again. The two passes are repeated until
+nothing changes. Each pass only removes definite labels, so the loop
+terminates. A leading or trailing ambiguous run has one populated neighbor and
+inherits its state (``one_sided_ambiguous = 'inherit'``, the vacuous-agreement
+reading). With ``'separate'``, such a run becomes its own ``ambiguous-only``
+era when it is long enough to persist.
 
-``tables/eras_channels.csv``, one row per channel: ``channel, freq_id,
-n_eras, current_era, current_first_month, current_last_month, current_state,
+Transition-zone months belong to no era and lie in the boundary interval. The
+boundary uncertainty is the number of calendar months strictly between the
+last month of the old state and the first month of the new state. It is
+reported with its unpopulated (gap) and populated-ambiguous parts.
+
+Station changes are tested only on definite proxy-high months
+(``station_check_states``), since a proxy-low month has no pilot and its peak
+location is noise. The running era location is the median of the accepted
+months' locations. A month shifted by at least ``station_shift_bins`` opens a
+station change only when the next tested month is also shifted from the same
+running location and lies less than ``station_shift_bins`` from the new
+location. Otherwise, the month is a station excursion. The zone of a station
+change is the untested populated months between the last tested month of the
+old location and the first of the new.
+
+An instrument change is a change of ``unit_input_map_sha256`` (design section
+6). A month's instrument state is the set of map values its acquisitions
+carry. A map *enters* when it is present in a month and absent from the
+previous populated month. A map that enters and stays present for
+``persistence_months`` consecutive populated months opens an instrument change
+at the month it enters. A map that enters and does not stay that long is an
+instrument excursion, and a map that only leaves is not a change. The software
+tag is recorded as a count only (``software_tags``, ``software_tag_changes``).
+
+Eras are the maximal runs of populated months that lie in no zone, cut at
+every boundary. An era's evidence is the kinds of boundary that opened it,
+joined with ``'+'`` when kinds coincide, and ``'archive start'`` for the first
+era. An era's frames are every masked frame whose UTC month lies in
+``[first_month, last_month]``. A frame without a recorded sample interval (NaN
+time) follows the ``unit_time`` month of its acquisition.
+
+For the stale-latest test, the current era's last populated month is compared
+with ``campaign_last_month``, the last populated month over the whole campaign
+(:func:`campaign_last_populated_month`). The era is stale when it ends more
+than ``stale_grace_months`` months before that month, and the lag is reported
+as ``stale_lag_months``. The policy value is 1 because the snapshot month is
+partial. When the caller cannot supply the campaign month, the channel's own
+last month is used and ``stale_reference`` records this.
+
+A channel is indeterminate when the ambiguous months are a majority of the
+populated months (``indeterminate_fraction``), when no definite state
+persists, or when the current era is ambiguous-only. This status is reported
+and never resolved by hand.
+
+For sensitivity, the same segmentation is repeated under each
+``units_sensitivity`` gate and each ``threshold_sensitivity_db`` pair, with no
+PELT change-point search, and any move of the current era's first or last
+month is recorded.
+
+The era table, ``tables/eras.csv``, has one row per era with the columns of
+``ERA_COLUMNS`` in order: ``channel, freq_id, era, n_eras, first_month,
+last_month, state, evidence, record_agreement, boundary_uncertainty_months,
+boundary_gap_months, boundary_ambiguous_months, units, frames,
+frames_without_time, populated_months, months_spanned, coverage,
+level_median_db, peak_offset_bins, peak_drift_bins_per_month, peak_range_bins,
+peak_months, is_current, stale_latest, fallback, boundary_source,
+config_version, config_digest``. ``state`` is ``proxy-high``, ``proxy-low``, or
+``ambiguous-only``, and ``coverage = populated_months / months_spanned``.
+``peak_offset_bins`` is the median monthly location of the era's definite
+proxy-high months, in fine bins from the nominal bin and in fine-array
+direction. This location is a feature of the record and is not used as the
+anchor, which is defined in the following section of chapter 8. Months are
+written ``YYYY-MM``.
+
+The channel table, ``tables/eras_channels.csv``, has one row per channel with
+the columns of ``CHANNEL_COLUMNS`` in order: ``channel, freq_id, n_eras,
+current_era, current_first_month, current_last_month, current_state,
 current_evidence, current_boundary_uncertainty_months, current_units,
 current_frames, stale_latest, stale_lag_months, stale_reference,
-campaign_last_month, fallback, indeterminate, populated_months, ambiguous_months, ambiguous_fraction,
-transition_zone_months, state_excursions, station_excursions,
-instrument_change_months, instrument_excursions, software_tags,
-software_tag_changes, frames_selected, frames_without_time,
-peak_cohort_fallback_months, sensitivity_units, sensitivity_units_moves,
-sensitivity_thresholds, sensitivity_thresholds_moves, config_version,
-config_digest``. List columns are ``;``-joined; the sensitivity columns give
-``value:first..last`` per setting and the settings under which the current
-era moves. The per-channel JSON carries the same plus every month's record.
+campaign_last_month, fallback, indeterminate, populated_months,
+ambiguous_months, ambiguous_fraction, transition_zone_months,
+state_excursions, station_excursions, unmatched_station_records,
+instrument_change_months, instrument_excursions,
+unconfirmed_instrument_change_last_month, current_peak_drift_bins_per_month,
+current_peak_range_bins, software_tags, software_tag_changes, frames_selected,
+frames_without_time, peak_cohort_fallback_months, sensitivity_units,
+sensitivity_units_moves, sensitivity_thresholds, sensitivity_thresholds_moves,
+boundary_source, rule_current_era, config_version, config_digest``. List
+columns are joined with ``;``. The sensitivity columns give
+``value:first..last`` for each setting and the settings that move the
+current era. The per-channel JSON holds the same fields and the record
+of every month.
 """
 from __future__ import annotations
 
@@ -185,7 +213,7 @@ CHANNEL_COLUMNS = (
 )
 
 
-# ------------------------------------------------------------------ config
+# configuration
 @dataclass(frozen=True)
 class EraConfig:
     """Every policy value of the section 8.1 procedure, versioned and digested."""
@@ -203,9 +231,9 @@ class EraConfig:
     one_sided_ambiguous: str = "inherit"       # 'inherit' | 'separate' for leading/trailing ambiguous runs
     station_check_states: tuple[str, ...] = (PROXY_HIGH,)
     instrument_field: str = "unit_input_map_sha256"
-    indeterminate_fraction: float = 0.5        # ambiguous majority -> rule indeterminate
+    indeterminate_fraction: float = 0.5        # the rule is indeterminate above this ambiguous fraction
     stale_grace_months: int = 1                # stale-latest when the era ends more than this before the snapshot
-                                               # (1: the snapshot month itself is partial and is not held against a channel)
+                                               # (1 because the snapshot month is partial and is not held against a channel)
     units_sensitivity: tuple[int, ...] = blocks.MONTH_MIN_UNITS_SENSITIVITY
     threshold_sensitivity_db: tuple[tuple[float, float], ...] = (
         (0.5, 0.5), (0.5, 1.0), (0.5, 2.0), (1.0, 1.0), (1.0, 2.0), (2.0, 2.0))
@@ -248,14 +276,14 @@ def state_of(level_db: float, config: EraConfig = DEFAULT_CONFIG) -> str:
     return AMBIGUOUS
 
 
-# ---------------------------------------------------------- month records
+# month records
 @dataclass(frozen=True)
 class MonthRecord:
     """The calibration-free monthly features of one UTC month with masked frames.
 
-    ``populated`` and ``state`` are evaluated under the policy configuration;
-    the sensitivity runs re-derive them from ``frames``, ``units``, ``days``
-    and ``level_db``.
+    ``populated`` and ``state`` are evaluated under the policy configuration.
+    The sensitivity runs derive them again from ``frames``, ``units``,
+    ``days``, and ``level_db``.
     """
 
     month: int
@@ -265,7 +293,7 @@ class MonthRecord:
     populated: bool
     level_db: float
     state: str
-    peak_offset_bins: float           # median per-frame peak, fine bins from the nominal bin; NaN if none
+    peak_offset_bins: float           # median per-frame peak, fine bins from the nominal bin, NaN if none
     peak_cohort: str                  # 'detected' | 'all_selected' | 'none'
     peak_frames: int
     input_maps: tuple[str, ...]
@@ -282,11 +310,12 @@ def is_populated(record: MonthRecord, config: EraConfig) -> bool:
 
 
 def frame_peak_offsets(product: Product, mask, *, half_width: int = DEFAULT_CONFIG.window_half_width) -> np.ndarray:
-    """Per-frame fine-peak offset from the nominal bin within ``+- half_width`` bins.
+    """Return the per-frame fine-peak offset from the nominal bin, searched over ``+- half_width`` bins.
 
-    The fine statistic is formed from the exact terms for the masked frames
-    only, on the window columns only; the whole ``fine_power_u64`` member is
-    read once. NaN outside the mask and where the window is all zero.
+    The fine statistic is formed from the exact terms of the masked frames on
+    the window columns only, and the whole ``fine_power_u64`` member is read
+    once. The offset is NaN for an unmasked frame and where the window is all
+    zero.
     """
     mask = np.asarray(mask, dtype=bool)
     out = np.full(product.n_frames, np.nan)
@@ -306,7 +335,7 @@ def frame_peak_offsets(product: Product, mask, *, half_width: int = DEFAULT_CONF
 
 
 def frame_months(product: Product) -> np.ndarray:
-    """UTC month of each frame; a frame without a recorded time follows its acquisition's month."""
+    """Return the UTC month of each frame, where a frame without a recorded time takes its acquisition's month."""
     months = blocks.month_index(product.frame_time)
     missing = months < 0
     if missing.any():
@@ -358,7 +387,7 @@ def month_records(product: Product, mask, config: EraConfig = DEFAULT_CONFIG) ->
     return tuple(out)
 
 
-# ------------------------------------------------------------ segmentation
+# segmentation
 @dataclass(frozen=True)
 class Boundary:
     """One transition: between the last month of the old segment and the first of the new."""
@@ -373,7 +402,7 @@ class Boundary:
 
 @dataclass(frozen=True)
 class Excursion:
-    """A single-month (or sub-persistence) departure that is flagged, not a transition."""
+    """A departure shorter than the persistence requirement, flagged without opening a transition."""
 
     month: int
     kind: str                         # 'state' | 'station' | 'instrument'
@@ -435,8 +464,8 @@ class Segmentation:
     eras: tuple[Era, ...]
     boundaries: tuple[Boundary, ...]
     populated: tuple[int, ...]                 # populated months in order
-    resolved: dict                             # month -> resolved state (or ZONE)
-    raw_states: dict                           # month -> raw state
+    resolved: dict                             # resolved state (or ZONE) of each month
+    raw_states: dict                           # raw state of each month
     excursions: tuple[Excursion, ...]
     zone_months: tuple[int, ...]
     instrument_change_months: tuple[int, ...]
@@ -512,7 +541,7 @@ def _resolve_states(raw: list[str], config: EraConfig) -> tuple[list[str], list[
 
 
 def _segments(resolved: list[str]) -> list[tuple[str, list[int]]]:
-    """Maximal runs of equal resolved state over consecutive positions; zone months break runs."""
+    """Return the maximal runs of equal resolved state over consecutive positions, broken at each zone month."""
     out: list[tuple[str, list[int]]] = []
     for i, s in enumerate(resolved):
         if s == ZONE:
@@ -558,7 +587,7 @@ def _station_boundaries(pop: Sequence[MonthRecord], raw: list[str], positions: l
         shift = loc - reference
         if abs(shift) >= config.station_shift_bins:
             nxt = tested[k + 1] if k + 1 < len(tested) else None
-            # a change holds when the next tested month sits at the new location, not merely away from the old one
+            # a change holds only when the next tested month is also shifted from the reference and lies at the new location
             holds = (nxt is not None and abs(pop[nxt].peak_offset_bins - reference) >= config.station_shift_bins
                      and abs(pop[nxt].peak_offset_bins - loc) < config.station_shift_bins)
             if holds:
@@ -603,12 +632,13 @@ def _month_of_label(label: str) -> int:
 
 def segment(records: Sequence[MonthRecord], config: EraConfig = DEFAULT_CONFIG,
             station_record: Mapping[str, str] | None = None) -> Segmentation:
-    """Run the procedure on monthly records; pure, so the sensitivity runs reuse it.
+    """Run the procedure on monthly records.
 
+    The function has no side effects, so the sensitivity runs reuse it.
     ``station_record`` maps ``YYYY-MM`` (the first month of the recorded new
-    state) to ``'sign-on'`` or ``'sign-off'``; a spectral-state transition
+    state) to ``'sign-on'`` or ``'sign-off'``. A spectral-state transition
     whose boundary interval contains the record month in the matching
-    direction is named a transmitter sign-on/sign-off.
+    direction is named a transmitter sign-on or sign-off.
     """
     pop = [r for r in records if is_populated(r, config)]
     if not pop:
@@ -696,10 +726,10 @@ def segment(records: Sequence[MonthRecord], config: EraConfig = DEFAULT_CONFIG,
                         ";".join(fallback), unmatched)
 
 
-# --------------------------------------------------------------- the table
+# era table
 @dataclass(frozen=True)
 class SensitivityOutcome:
-    """The current era under one alternative setting, and whether it moved."""
+    """The current era under one alternative setting, with ``moves`` set when the era moved."""
 
     parameter: str                    # 'min_units' | 'thresholds_db'
     value: str
@@ -727,7 +757,7 @@ class EraTable:
     resolved: dict
     current_index: int
     stale_latest: bool
-    stale_lag_months: int             # campaign last month minus the current era's last month; -1 without an era
+    stale_lag_months: int             # campaign last month minus the current era's last month, -1 without an era
     stale_reference: str              # 'campaign' | 'channel'
     campaign_last_month: int
     fallback: str
@@ -756,7 +786,7 @@ class EraTable:
         return sum(1 for m in self.months if m.populated)
 
     def era_mask(self, product: Product, index: int, mask=None) -> np.ndarray:
-        """Frames of one era: masked frames whose month lies within the era's months."""
+        """Return the frames of one era, the masked frames whose month lies in the era's span."""
         base = product.selected if mask is None else np.asarray(mask, dtype=bool)
         era = self.eras[index]
         months = frame_months(product)
@@ -785,8 +815,8 @@ def era_table(product: Product, mask=None, config: EraConfig = DEFAULT_CONFIG, *
 
     ``mask`` defaults to ``product.selected`` (valid frames passing the health
     gate). ``campaign_last_month`` is the last populated month over the whole
-    campaign (:func:`campaign_last_populated_month`); without it the channel's
-    own last month is used and ``stale_latest`` cannot be true.
+    campaign (:func:`campaign_last_populated_month`). Without it, the
+    channel's own last month is used and ``stale_latest`` cannot be true.
     """
     mask = product.selected if mask is None else np.asarray(mask, dtype=bool)
     records = month_records(product, mask, config)
@@ -857,16 +887,17 @@ def impose_eras(table: EraTable, product: Product, spec: Sequence[Sequence[str]]
                 source: str = SOURCE_AUTHOR) -> EraTable:
     """Replace the rule's eras with an externally dated list, keeping the rule's month record.
 
-    ``spec`` is the channel's whole era list in calendar order, each entry
-    ``(first_month, last_month, evidence)`` with months as ``YYYY-MM``. An era is
-    the populated months inside its span, bounded by the first and last of them;
-    a populated month inside no span belongs to no era and is reported as a
-    transition-zone month, so the placement convention is the rule's. The state
-    of an era is the section 8.1 state of its frame-median level. Everything the
-    rule recorded per month (states, excursions, instrument changes, peak
-    locations) is kept as it is; the rule's sensitivity outcomes are dropped,
-    because its thresholds no longer place the eras, and its own current era is
-    kept in ``rule_current_era``.
+    ``spec`` is the channel's whole era list in calendar order, and each entry
+    is ``(first_month, last_month, evidence)`` with months written ``YYYY-MM``.
+    An era is the set of populated months in its span, bounded by the first and
+    last of them. A populated month between the first and last eras that lies
+    in no span belongs to no era and is reported as a transition-zone month,
+    which is the rule's own placement convention. The state of an era is the
+    section 8.1 state of its frame-median level. Everything the rule recorded
+    per month (states, excursions, instrument changes, and peak locations) is
+    kept as it is. The rule's sensitivity outcomes are dropped, because its
+    thresholds no longer place the eras, and the rule's own current era is kept
+    in ``rule_current_era``.
     """
     mask = product.selected if mask is None else np.asarray(mask, dtype=bool)
     config = table.config
@@ -921,7 +952,7 @@ def impose_eras(table: EraTable, product: Product, spec: Sequence[Sequence[str]]
 
 def campaign_last_populated_month(products: Sequence[Product], config: EraConfig = DEFAULT_CONFIG,
                                   masks: Sequence[np.ndarray] | None = None) -> int:
-    """The last populated month over every product (the campaign snapshot); -1 if none."""
+    """Return the last populated month over every product (the campaign snapshot), or -1 if there is none."""
     last = -1
     for i, product in enumerate(products):
         mask = product.selected if masks is None else masks[i]
@@ -933,7 +964,7 @@ def campaign_last_populated_month(products: Sequence[Product], config: EraConfig
     return last
 
 
-# ------------------------------------------------------------------ writers
+# writers
 def _labels(months) -> str:
     return ";".join(blocks.month_label(m) for m in months)
 

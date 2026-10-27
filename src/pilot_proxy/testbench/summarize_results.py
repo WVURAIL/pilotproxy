@@ -19,7 +19,7 @@ from pilot_proxy.plot_style import setup_matplotlib
 DEFAULT_INPUT_JSON = Path("generated/dtv_snr_eval/dtv_snr_eval.json")
 DEFAULT_OUTPUT_DIR = Path("generated/summary")
 DEFAULT_HISTOGRAM_BINS = 40
-DEFAULT_PLOT_DPI = 300  # publication-grade raster; match chime FIGURE_DPI
+DEFAULT_PLOT_DPI = 300  # publication raster, same as the chime FIGURE_DPI
 FIGURE_WIDTH_IN = 7.0
 FIGURE_HEIGHT_IN = 4.5
 HISTOGRAM_MODE_AUTO = "auto"
@@ -98,7 +98,7 @@ def _column_summary(rows: list[dict[str, Any]], column: str) -> dict[str, Any]:
 
 
 def summarize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return compact numeric summaries for core detector quantities."""
+    """Return the finite count, mean, std, min, and max of the power ratio, pilot excess, and shelf SNR columns."""
     return [
         _column_summary(rows, POWER_RATIO_COLUMN),
         _column_summary(rows, PNR_BIN_COLUMN),

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Survey-level consequences of the _restore_collection patch.
+"""Survey-level consequences of _restore_collection.
 
-Unlike tests/archive/test_survey_contract_refusal.py these do NOT fake
-DATATRAIL.common_path -- they fake only `_run_json` (the datatrail HTTP/CLI
-boundary) and `_cadc_size` (the CADC boundary), so the real normalization,
-the real stray/span checks, and the real commonprefix derivation all run.
+The tests of tests/archive/test_survey_contract_refusal.py fake
+DATATRAIL.common_path. These tests fake only `_run_json`, the datatrail
+HTTP/CLI boundary, and `_cadc_size`, the CADC boundary, so the real
+normalization, the real stray and span checks and the real commonprefix
+derivation all run.
 
-Two claims are pinned:
+Two results are tested:
 
-  A. the patch's intended benefit -- an all-bare, single-directory event that
-     used to be refused now surveys to completion with the correct rows;
+  A. An all-bare event in a single directory, which is refused without
+     restoration, surveys to completion with the correct rows.
 
-  B. restoring collection prefixes must preserve the refusal of replica
-     sets that span directories, rather than treating them as missing data.
+  B. A replica set that spans directories is still refused after the
+     collection prefixes are restored, and is never treated as missing data.
 
 Run:  TMPDIR=/tmp PYTHONPATH=src python -m pytest \
       tests/archive/test_survey_bare_replica_consequences.py -q
@@ -59,7 +60,7 @@ def _replicas(event):
 
 @contextlib.contextmanager
 def fake_archive(events, unpatched=False):
-    """Fake ONLY the two external boundaries; the adapter itself runs."""
+    """Fake only the two external boundaries, so the adapter itself runs."""
     orig_enum = cadc_datatrail._enumerate_events
     orig_size = cadc_datatrail.CadcDatatrailSource._cadc_size
     orig_restore = dt._restore_collection
@@ -72,9 +73,10 @@ def fake_archive(events, unpatched=False):
                            {"minoc": _replicas(args[2])}},
                  "policies": {"p": 1}}, "")
 
-    # CADC knows exactly the artifacts the replica lists name (with the
-    # collection prefix restored); everything else is a definitive NotFound,
-    # which _cadc_size reports as (None, None) -- an answer, not an error.
+    # The fake CADC holds exactly the artifacts named by the replica lists,
+    # with the collection prefix restored. Any other URI is a definitive
+    # NotFound, which _cadc_size reports as the answer (None, None) with no
+    # error.
     real = set()
     for ev in events:
         for u in _replicas(ev):
@@ -114,9 +116,7 @@ def _rows(path):
     return [json.loads(line) for line in open(path) if line.strip()]
 
 
-# ======================================================================
-# A. the benefit
-# ======================================================================
+# A. an all-bare event surveys to completion
 def test_all_bare_event_surveys_to_completion_post_patch():
     with tempfile.TemporaryDirectory() as out, fake_archive([BARE_EVENT]):
         text, src = _survey(out)
@@ -143,9 +143,7 @@ def test_all_bare_event_was_refused_pre_patch():
         assert src.survey_completeness_issues(out)["refused"] == 1
 
 
-# ======================================================================
 # B. mixed directories remain a contract refusal
-# ======================================================================
 def test_mixed_directory_event_was_a_clean_first_pass_refusal_pre_patch():
     with tempfile.TemporaryDirectory() as out, fake_archive([MIXED_EVENT],
                                                             unpatched=True):
@@ -174,9 +172,9 @@ def test_mixed_directory_event_is_refused_after_collection_restoration():
 
 
 def test_the_derived_path_is_not_where_either_replica_lives():
-    """Independent of survey(): the derived common path is a strict prefix of
-    both replica directories, so joining a reader-supplied name to it can only
-    miss."""
+    """The derived common path, checked here with no call to survey(), is a
+    strict prefix of both replica directories, so a reader-supplied name
+    joined to it can only miss."""
     for u in MIXED_URIS:
         full = u if u.startswith("cadc:") else "cadc:CHIMEFRB/" + u
         assert full.startswith(MIXED_DERIVED_CP + "/")

@@ -1,21 +1,23 @@
 # coding=utf-8
-"""Core arithmetic for the current-geometry synthetic sensitivity study.
+"""Arithmetic of the current-geometry synthetic sensitivity study.
 
-The command-line driver lives in ``tools/current_geometry_sensitivity.py``.
-This module contains the small, testable pieces that define the experiment:
+The command-line driver is ``tools/current_geometry_sensitivity.py``. This
+module has the small, testable pieces that define the experiment: the
 order-independent common-random-number seeds, the float and exact fine
 statistics, conservative null calibration, exact Q16 decisions, detection
-intervals, crossing brackets, and a paired bootstrap comparison.
+intervals, crossing brackets, and a paired bootstrap of the fixed-minus-float
+crossing loss.
 
-The study intentionally stores a *response ratio* rather than a decision in
-its resumable shards.  For one frame the ratio is
+The resumable shards store a *response ratio* for each frame, and the decision
+is made only after all null shards have been collected. For one frame the
+ratio is
 
 ``max(F2 in designated set) / F2[null-bulk rank]``.
 
-That is sufficient to apply a float multiplier after all null shards have
-been collected.  The fixed-point path additionally stores the four exact
-integer numerator/denominator fields, so its Q16 comparison is replayed with
-Python integers and does not depend on a float value rounded into an NPZ.
+This allows for a float threshold multiplier to be applied once the null
+calibration is complete. The fixed-point path also stores the four exact
+integer numerator and denominator fields, so its Q16 decision is replayed
+with Python integers and does not depend on a float value rounded into an NPZ.
 """
 from __future__ import annotations
 
@@ -133,10 +135,11 @@ class ExactResponseComponents:
 def canonical_seed(base_seed: int, *coordinates: Any) -> int:
     """Return an order-independent uint64 seed from experiment coordinates.
 
-    The caller must include every coordinate that should create an independent
-    noise realization and omit SNR when common random numbers are required
-    across an SNR sweep.  JSON canonicalization and SHA-256 make resumption or
-    job-array reordering reproduce the same trial exactly.
+    The caller must pass every coordinate that should create an independent
+    noise realization, and must not pass SNR when common random numbers are
+    required across an SNR sweep. Since the coordinates are
+    canonicalized as JSON and hashed with SHA-256, a resumed run or a reordered
+    job array reproduces the same trial exactly.
     """
     payload = json.dumps(
         [int(base_seed), *coordinates],
@@ -155,11 +158,12 @@ def stage_seed(
     offset_fine_bins: float,
     trial_index: int,
 ) -> int:
-    """Common-random-number seed for one channel/offset/trial.
+    """Return the common-random-number seed for one channel, offset, and trial.
 
-    SNR and ablation stage are deliberately absent: all SNR points and all
-    stages see the same standardized noise draw.  ``purpose`` separates null,
-    signal, PFB-gain, and bootstrap streams.
+    SNR and ablation stage are not seed coordinates, so all SNR points and all
+    stages use the same standardized noise draw. ``purpose`` distinguishes
+    between the null, signal, PFB-gain, and bootstrap streams. The offset is
+    rounded to integer micro-bins before it is hashed.
     """
     offset_microbins = int(round(float(offset_fine_bins) * 1_000_000.0))
     return canonical_seed(
@@ -172,6 +176,7 @@ def stage_seed(
 
 
 def designated_bins(anchor_bin: int, half_width: int) -> np.ndarray:
+    """Return the fine bins anchor_bin +/- half_width, wrapped modulo 256."""
     anchor = int(anchor_bin)
     width = int(half_width)
     if not 0 <= anchor < FINE_BINS:
@@ -192,7 +197,11 @@ def float_fine_power_ratio(
     windows_per_stream: int = 128,
     pad_factor: int = 2,
 ) -> np.ndarray:
-    """Float reference from detector rows to the 256-bin fine statistic."""
+    """Return the 256-bin float fine statistic 2 P_target / (P_lower + P_upper) from detector rows.
+
+    The fine powers are summed over streams before the ratio is formed, and a
+    bin with zero reference power is set to zero.
+    """
     power = float_fine_powers_by_stream(
         detector_rows,
         weights,
@@ -219,10 +228,12 @@ def float_fine_powers_by_stream(
 ) -> np.ndarray:
     """Return float fine powers before the sufficient sum over streams.
 
-    The result has shape ``[3, num_streams, pad_factor * windows]``.  Keeping
-    this additive boundary explicit permits an accelerated current-geometry
-    simulator to model the distribution of the 2048-stream sum while a
-    stratified audit still traverses the literal packed full-frame path.
+    The rows are projected onto the three weight terms, and each stream's
+    projections are transformed by an FFT zero-padded to pad_factor * windows
+    points. The result has shape ``[3, num_streams, pad_factor * windows]``.
+    The powers are returned per stream so that an accelerated current-geometry
+    simulator can model the distribution of the 2048-stream sum, while a
+    stratified audit still runs the literal packed full-frame path.
     """
     rows = np.asarray(detector_rows)
     w = np.asarray(weights)
@@ -347,10 +358,11 @@ def order_statistic_threshold(
 ) -> dict[str, Any]:
     """Calibrate a conservative empirical threshold without interpolation.
 
-    The selected threshold is an observed order statistic.  A detection uses
-    strict ``>``; ties at the threshold therefore cannot increase the measured
-    null exceedance.  Small null samples may not resolve the requested false
-    alarm probability, which is recorded explicitly instead of extrapolated.
+    The selected threshold is an observed order statistic. A detection uses
+    strict ``>``, so ties at the threshold cannot increase the measured null
+    exceedance. A small null sample may not resolve the requested false alarm
+    probability. This is recorded explicitly in the result, and no
+    extrapolation is performed.
     """
     p = float(p_fa)
     if not 0.0 < p < 0.5:
@@ -360,7 +372,7 @@ def order_statistic_threshold(
     if values.size == 0:
         raise ValueError("null calibration has no finite response ratios.")
     values.sort()
-    # The smallest zero-based order index whose empirical CDF is >= 1-Pfa.
+    # smallest zero-based order index whose empirical CDF is >= 1 - Pfa
     index = min(values.size - 1, max(0, math.ceil((1.0 - p) * values.size) - 1))
     threshold = float(values[index])
     exceed = int(np.count_nonzero(values > threshold))
@@ -393,7 +405,7 @@ def exact_q16_decision(
     *,
     multiplier_q16: int,
 ) -> int:
-    """Apply the deployed strict Q16 comparison with arbitrary-precision ints."""
+    """Apply the deployed strict Q16 threshold test with arbitrary-precision ints."""
     q16 = int(multiplier_q16)
     if not components.valid:
         return 0
@@ -416,6 +428,7 @@ def wilson_interval(
     *,
     z: float = 1.959963984540054,
 ) -> tuple[float, float]:
+    """Return the Wilson score interval for successes in trials (95% for the default z)."""
     n = int(trials)
     if n <= 0:
         return float("nan"), float("nan")
@@ -430,13 +443,13 @@ def wilson_interval(
 
 
 def monotone_detection_rates(rates: Sequence[float]) -> np.ndarray:
-    """Pool only downward empirical fluctuations for crossing interpolation."""
+    """Return the running maximum of the detection rates, which removes only downward fluctuations."""
     values = np.asarray(rates, dtype=np.float64)
     if values.ndim != 1:
         raise ValueError("rates must be one-dimensional.")
-    # A cumulative maximum is intentionally simple and conservative about the
-    # first observed crossing.  Raw rates and Wilson intervals remain in the
-    # report; this adjusted sequence is used only for locating a bracket.
+    # A cumulative maximum is simple and conservative about the first observed
+    # crossing. The raw rates and Wilson intervals stay in the report, and this
+    # adjusted sequence is used only to locate a bracket.
     return np.maximum.accumulate(values)
 
 
@@ -448,8 +461,10 @@ def crossing_bracket(
 ) -> dict[str, Any]:
     """Return an adjacent sampled bracket and an interpolated crossing.
 
-    No extrapolation is performed.  When a target is not bracketed the result
-    says so and the crossing estimate is ``None``.
+    The rates are first made monotone with monotone_detection_rates, and the
+    crossing is interpolated linearly between the two bracketing SNR points.
+    No extrapolation is performed. When a target is not bracketed, the result
+    has ``bracketed`` set to False and the crossing estimate is ``None``.
     """
     x = np.asarray(snr_db, dtype=np.float64)
     y_raw = np.asarray(rates, dtype=np.float64)
@@ -522,13 +537,15 @@ def paired_crossing_bootstrap(
     replicates: int,
     seed: int,
 ) -> dict[str, Any]:
-    """Paired null+signal bootstrap of fixed-minus-float crossing loss.
+    """Paired null and signal bootstrap of the fixed-minus-float crossing loss.
 
     Null identities are shared across stages. H1 identities are intersected
     across the complete SNR grid, and one resample of those identities is
-    shared across SNR and stages. A replicate is retained only when both
-    sampled curves bracket ``target_pd``; the valid count is reported so a
-    sparse sweep cannot silently acquire an interval by extrapolation.
+    shared across SNR and stages. In each replicate, both thresholds are
+    recalibrated on the same null resample, and the fixed threshold is rounded
+    up to Q16. A replicate is kept only when both sampled curves bracket
+    ``target_pd``. The valid count is reported, so a sparse sweep cannot
+    acquire an interval by extrapolation.
     """
     x = [float(value) for value in snr_db]
     float_null = np.asarray(float_null_ratios, dtype=np.float64)
@@ -675,6 +692,7 @@ def paired_crossing_bootstrap(
 def components_from_columns(
     columns: Mapping[str, Sequence[int]],
 ) -> list[ExactResponseComponents]:
+    """Rebuild exact response components from stored integer columns."""
     required = (
         "designated_num",
         "designated_den",
@@ -703,6 +721,7 @@ def components_from_columns(
 
 
 def exact_columns(components: Iterable[ExactResponseComponents]) -> dict[str, np.ndarray]:
+    """Return the exact response fields as uint64 numerator and denominator columns and int16 bin columns."""
     values = list(components)
     return {
         "designated_num": np.asarray(

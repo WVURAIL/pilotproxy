@@ -69,14 +69,15 @@ SAMPLE_RATE_HZ = default_project().instrument.sample_rate_hz
 
 
 def require_current_detector_contract(run_dir: Path) -> None:
-    """Refuse to analyze a run whose detector outputs use another power definition.
+    """Raise ValueError when a run's detector outputs use another power definition.
 
-    ``chime_detector_outputs.npz`` carries no schema token; the run's
-    ``run_config.json`` names its detector contract. Revision 2
-    (kernel core 3.0.0) defines the frame powers as the all-bin sums of the
-    fine powers. A revision-1 run (written before core 3.0.0) stores row-domain
-    powers that cannot be re-expressed, so it is a record: ``validate-products``
-    validates it, and analyses of it under the current definition are refused.
+    ``chime_detector_outputs.npz`` carries no schema token, so the detector
+    contract is read from the run's ``run_config.json``. Under revision 2
+    (kernel core 3.0.0) the frame powers are the all-bin sums of the fine
+    powers. A revision-1 run, written before core 3.0.0, stores row-domain
+    powers that cannot be expressed in the current definition, so it is kept
+    as a record. It is checked by ``validate-products``, and analyses of it
+    under the current definition are refused.
     """
     path = Path(run_dir) / "run_config.json"
     try:
@@ -106,7 +107,7 @@ def require_current_detector_contract(run_dir: Path) -> None:
 
 
 def atomic_savez_compressed(path: Path, **arrays: np.ndarray) -> Path:
-    """Write and CRC-read an NPZ beside its destination before atomic replace."""
+    """Write an NPZ to a temporary sibling file and atomically move it to ``path``."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = create_temporary_sibling(
@@ -115,8 +116,8 @@ def atomic_savez_compressed(path: Path, **arrays: np.ndarray) -> Path:
     os.close(fd)
     try:
         np.savez_compressed(temporary, **arrays)
-        # Force every member through NumPy/zip CRC validation before the file
-        # can replace a prior canonical product.
+        # Every member is read back through NumPy, so its zip CRC is checked
+        # before the file can replace an earlier product.
         with np.load(temporary, allow_pickle=False) as archive:
             for name in archive.files:
                 np.asarray(archive[name])
@@ -161,11 +162,11 @@ def _optional_frequency_array(
     *,
     shape_like: Sequence[float] | np.ndarray,
 ) -> np.ndarray:
-    """Return frequency metadata without inventing a different coordinate.
+    """Return the receiver coarse-channel centers (Hz), or all NaN when they are unknown.
 
-    A nominal pilot frequency is not a substitute for an unknown receiver
-    coarse-channel centre.  Missing metadata is represented by NaN and remains
-    visibly unavailable to downstream validation and plotting.
+    The nominal pilot frequency is never used in place of an unknown receiver
+    coarse-channel center. Missing metadata is stored as NaN, so it shows as
+    unavailable in later validation and plots.
     """
     reference = np.asarray(shape_like)
     if values is None:
@@ -252,7 +253,7 @@ def check_detector_frame_powers(
     p_ref_sum_u64: np.ndarray,
     fine_power_u64: np.ndarray | None = None,
 ) -> list[str]:
-    """Problems with the frame powers (and fine powers) of a detector output.
+    """Return the problems found in the frame powers and fine powers of a detector output.
 
     ``p_ref_sum_u64`` must be ``p_ref_lower_u64 + p_ref_upper_u64`` exactly.
     When ``fine_power_u64`` is given, kernel core 3.0.0 defines each frame
@@ -330,11 +331,11 @@ def write_detector_outputs(
 ) -> Path:
     """Write ``chime_detector_outputs.npz``.
 
-    Besides the frame-level columns it stores the reference split
-    ``p_ref_lower_u64`` / ``p_ref_upper_u64`` and, when given (``chime-run``
-    always gives them), the fine powers ``fine_power_u64`` (num_frames,
-    num_pilots, 3, 256) whose all-bin sums are the frame powers. The writer
-    refuses arrays that disagree (:func:`check_detector_frame_powers`).
+    The file holds the frame-level columns, the reference split
+    ``p_ref_lower_u64`` and ``p_ref_upper_u64``, and, when given, the fine
+    powers ``fine_power_u64`` (num_frames, num_pilots, 3, 256), whose all-bin
+    sums are the frame powers. ``chime-run`` always gives the fine powers.
+    Arrays that disagree raise ValueError (:func:`check_detector_frame_powers`).
     """
     problems = check_detector_frame_powers(
         p_target_u64=np.asarray(p_target_u64, dtype=np.uint64),
@@ -429,16 +430,18 @@ def write_integrated_spectra(
     nfft: int,
     freq_id: np.ndarray | None = None,
 ) -> Path:
-    """Per-pilot integrated power spectra stacked along the pilot axis.
+    """Write the integrated power spectrum of each pilot, stacked along the pilot axis.
 
-    ``integrated_spectrum_*`` are ``[n_pilots, nfft]`` (rectangular-window |FFT|^2
-    summed over feeds, accumulated over frames): ``before`` over every valid frame,
-    ``after`` over kept (not-rejected) frames, so ``before - after`` is the
-    spectrum the positive-excess mask removed. Bin ``k`` maps to baseband frequency
+    Each ``integrated_spectrum_*`` array is ``[n_pilots, nfft]``, the
+    rectangular-window |FFT|^2 summed over feeds and accumulated over frames.
+    ``before`` is accumulated over every valid frame and ``after`` over the
+    frames the positive-excess mask keeps, so ``before - after`` is the
+    spectrum the mask removes. Bin ``k`` maps to baseband frequency
     ``((k + nfft//2) % nfft - nfft//2) * sample_rate_hz / nfft``.
 
-    Reporting-only convenience: the authoritative per-channel copy lives in each
-    ``<freq_id>.npz``; this is the 23-up stack so a report need open one file.
+    This file is for reports. The per-channel copy of record is in each
+    ``<freq_id>.npz``, and this file stacks the 23 pilots so that a report
+    needs to open only one file.
     """
     path = Path(run_dir) / CHIME_INTEGRATED_SPECTRA_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)

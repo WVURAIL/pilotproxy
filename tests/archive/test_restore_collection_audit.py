@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Adversarial audit of the uncommitted _restore_collection patch.
+"""Tests of _restore_collection on hostile minoc replica lists.
 
-Every test drives the REAL derivation in
-pilot_proxy.archive.datatrail_client.Datatrail.files() through the same
-fake-CLI subprocess boundary tests/archive/test_datatrail_adapter.py uses, so
-nothing here touches Datatrail or CADC.
+Each test drives the real derivation in
+pilot_proxy.archive.datatrail_client.Datatrail.files() through the fake CLI
+subprocess boundary of tests/archive/test_datatrail_adapter.py, so no test
+reaches Datatrail or CADC.
 
-`unpatched=True` monkeypatches _restore_collection back to the identity
-function, which is byte-for-byte the pre-patch normalization line -- that gives
-a clean pre/post differential for every hostile input.
+With `unpatched=True`, _restore_collection is replaced by the identity
+function, which is the normalization with no collection restored. A test can
+then run the same hostile input with and without restoration.
 """
 from __future__ import annotations
 
@@ -50,10 +50,11 @@ _ORIGINAL_RESTORE = dt._restore_collection
 
 
 def _resolve(monkeypatch, uris, extra_ses=None, unpatched=False):
-    """Run files() over a minoc replica list; return (cp, names) or the error.
+    """Run files() over a minoc replica list and return its verdict.
 
-    Set explicitly on EVERY call so a pre/post differential inside one test
-    function cannot leak the identity stub into the second half.
+    The verdict is ("OK", cp, names, ok) or ("REFUSED", message).
+    _restore_collection is set on every call, so the identity stub used in
+    the first half of a test cannot leak into the second half.
     """
     monkeypatch.setattr(dt, "_restore_collection",
                         (lambda u: u) if unpatched else _ORIGINAL_RESTORE)
@@ -75,9 +76,7 @@ _D2020 = "cadc:CHIMEFRB/data/chime/baseband/raw/2020/07/15/astro_100200200/"
 _B2025 = "data/chime/baseband/raw/2025/03/31/astro_1111116060/"
 
 
-# =====================================================================
-# 6. IDEMPOTENCY -- brute force over a generated corpus
-# =====================================================================
+# idempotency over a generated corpus
 def test_restore_collection_is_idempotent_over_generated_corpus():
     heads = ["", "/", "//", "data", "data/", "/data/", "cadc:CHIMEFRB",
              "cadc:CHIMEFRB/", "cadc:CHIMEFRB//", "cadc:OTHER/", "datax/",
@@ -99,9 +98,7 @@ def test_restore_collection_never_changes_an_already_prefixed_uri():
         assert dt._restore_collection(u) == u
 
 
-# =====================================================================
-# 1. TOO NARROW -- a bare path that is not spelled exactly "data/..."
-# =====================================================================
+# bare paths not spelled exactly "data/..."
 @pytest.mark.parametrize("uri", [
     "/data/chime/baseband/raw/2025/03/31/astro_1/b_0.h5",   # leading slash
     "//data/chime/baseband/raw/2025/03/31/astro_1/b_0.h5",  # collapses to above
@@ -110,17 +107,14 @@ def test_restore_collection_never_changes_an_already_prefixed_uri():
     "chime/baseband/raw/2025/03/31/astro_1/b_0.h5",         # "data/" also dropped
 ])
 def test_narrowness_bare_variants_still_refused(monkeypatch, uri):
-    """_BARE_REPLICA_ROOTS=('data/',) is an exact literal: any other spelling
-    of the same bare path is still a hard refusal."""
+    """_BARE_REPLICA_ROOTS = ('data/',) is matched as an exact literal, so any
+    other spelling of the same bare path is refused."""
     r = _resolve(monkeypatch, [uri])
     assert r[0] == "REFUSED", r
     assert "outside the expected collection" in r[1]
 
 
-# =====================================================================
-# 2. TOO BROAD -- "data/" is the root of every CHIME product, not just
-#    the CHIMEFRB baseband the collection names
-# =====================================================================
+# bare paths of other CHIME products, which also sit under "data/"
 @pytest.mark.parametrize("bare,expect", [
     ("data/kko/baseband/raw/2025/01/01/astro_9/b_0.h5",
      "cadc:CHIMEFRB/data/kko/baseband/raw/2025/01/01/astro_9"),
@@ -147,11 +141,9 @@ def test_broadness_pre_patch_refused_the_same_input(monkeypatch):
     assert r[0] == "REFUSED", r
 
 
-# =====================================================================
-# 3. INTERACTION WITH .replace("//","/")
-# =====================================================================
+# interaction with .replace("//", "/")
 def test_triple_slash_survives_the_collapse(monkeypatch):
-    """str.replace is a single non-overlapping pass: '///' -> '//'."""
+    """str.replace makes a single non-overlapping pass, so '///' becomes '//'."""
     assert "cadc:CHIMEFRB///data/x".replace("//", "/") == \
         "cadc:CHIMEFRB//data/x"
     r = _resolve(monkeypatch, ["cadc:CHIMEFRB///data/chime/a/b_0.h5",
@@ -176,40 +168,37 @@ def test_empty_and_blank_uris_never_reach_restoration(monkeypatch):
 
 
 def test_bare_root_only_uri_is_caught_by_the_split_guard(monkeypatch):
-    """'data/' restores to a valid-looking collection URI whose relative part
-    is empty; the no-usable-split guard is what stops it, not the predicate."""
+    """'data/' restores to a valid-looking collection URI with an empty
+    relative part. The collection check passes it, and the canonical-path
+    check refuses it."""
     assert dt._restore_collection("data/") == "cadc:CHIMEFRB/data/"
     r = _resolve(monkeypatch, ["data/"])
     assert r[0] == "REFUSED" and "canonical path" in r[1]
 
 
-# =====================================================================
-# 4. THE "spans multiple collections" CHECK
-# =====================================================================
+# the "spans multiple collections" check
 def test_bare_paths_with_multiple_collections_are_refused(monkeypatch):
     """Both bare and mixed replies remain ambiguous with two collections."""
     monkeypatch.setattr(dt, "_MINOC_COLLECTIONS",
                         ("cadc:CHIMEFRB/", "cadc:CHIMEOUTRIGGER/"))
-    # both replicas really live in CHIMEOUTRIGGER; both come back bare
+    # both replicas live in CHIMEOUTRIGGER and both come back bare
     r = _resolve(monkeypatch, ["data/kko/baseband/raw/2025/01/01/a/b_0.h5",
                                "data/kko/baseband/raw/2025/01/01/a/b_1.h5"])
     assert r[0] == "REFUSED" and "outside the expected collection" in r[1]
-    # ...the genuinely mixed case IS still caught, because the prefixed half
-    # still votes for its own collection
+    # a mixed reply is refused too, since a bare path is not restored when
+    # two collections are configured
     r2 = _resolve(monkeypatch, ["cadc:CHIMEOUTRIGGER/data/kko/a/b_0.h5",
                                 "data/chime/a/b_1.h5"])
     assert r2[0] == "REFUSED" and "outside the expected collection" in r2[1], r2
 
 
-# =====================================================================
-# 5. commonprefix vs commonpath -- restoration widens the population that
-#    reaches the character-wise prefix
-# =====================================================================
+# commonprefix and commonpath, where restoration lets more replica sets
+# reach the character-wise prefix
 def test_restoration_admits_a_mixed_directory_event_that_used_to_refuse(
         monkeypatch):
-    """Pre-patch this was a deterministic refusal. Post-patch it resolves to a
-    common path two levels ABOVE either replica's directory, and the derived
-    'names' silently become multi-segment paths."""
+    """Without restoration this set is refused. With restoration it resolves
+    to a common path four levels above either replica's directory, and the
+    derived names become multi-segment paths with no warning."""
     uris = [_D2020 + "baseband_100200200_0.h5",
             _B2025 + "baseband_1111116060_832.h5"]
     before = _resolve(monkeypatch, uris, unpatched=True)
@@ -227,8 +216,9 @@ def test_restoration_admits_a_mixed_directory_event_that_used_to_refuse(
 
 def test_sibling_directories_sharing_a_character_prefix(monkeypatch):
     """commonprefix is character-wise, so two sibling event directories whose
-    names share a prefix trim to their PARENT. Restoration is what lets this
-    set through: pre-patch the bare half was a stray."""
+    names share a prefix are trimmed to their parent. This set reaches
+    commonprefix only through restoration, since without it the bare half is
+    a stray."""
     uris = ["cadc:CHIMEFRB/data/chime/baseband/raw/2020/07/15/"
             "astro_100200200/baseband_100200200_0.h5",
             "data/chime/baseband/raw/2020/07/15/"
@@ -242,19 +232,17 @@ def test_sibling_directories_sharing_a_character_prefix(monkeypatch):
 
 
 def test_restoration_never_changes_an_all_prefixed_replica_set(monkeypatch):
-    """The July-era guarantee: when every URI carries the prefix, the patch is
-    a no-op, so no previously recorded common_path can move."""
+    """When every URI carries the prefix, restoration has no effect, so no
+    common_path recorded by an earlier survey can move."""
     uris = [_D2020 + f"baseband_100200200_{i}.h5" for i in (0, 156, 1023)]
     assert _resolve(monkeypatch, uris) == _resolve(monkeypatch, uris,
                                                    unpatched=True)
 
 
-# =====================================================================
-# 7. NON-MINOC STORAGE ELEMENTS
-# =====================================================================
+# storage elements other than minoc
 def test_arc_and_other_storage_elements_are_untouched(monkeypatch):
-    """files() reads locations['minoc'] only, so no other SE reaches
-    normalization -- with or without the patch."""
+    """files() reads only locations['minoc'], so no other storage element
+    (SE) reaches normalization, with or without restoration."""
     extra = {"arc": ["/arc/projects/chime_frb/data/chime/baseband/raw/x.h5"],
              "chime": ["data/whatever/y.h5"]}
     uris = [_D2020 + "baseband_100200200_0.h5",
@@ -266,8 +254,9 @@ def test_arc_and_other_storage_elements_are_untouched(monkeypatch):
 
 
 def test_arc_only_dataset_is_a_no_data_verdict_not_a_refusal(monkeypatch):
-    """No 'minoc' key at all -> (None, [], True) = queried OK, no minoc files.
-    The patch cannot turn this into a refusal or a path."""
+    """A reply with no 'minoc' key returns (None, [], True), meaning the query
+    succeeded and found no minoc files. Restoration cannot turn this into a
+    refusal or a path."""
     _install_fake_cli(monkeypatch, lambda a: (0, _ps_payload(
         {"file_replica_locations":
          {"arc": ["/arc/projects/chime_frb/data/x.h5"]}}), ""))

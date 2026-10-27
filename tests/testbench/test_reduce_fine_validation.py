@@ -211,7 +211,7 @@ def test_frame_level_ratios_are_the_fine_bin_sums_of_every_stage():
 def test_fixed_frame_power_at_the_signed_capacity_is_refused_not_wrapped():
     floating = np.zeros((1, 5, 3, 256))
     fixed = np.zeros((1, 3, 256), dtype=np.uint64)
-    fixed[0, 0, :2] = 1 << 62  # every bin is legal; their sum reaches 2**63
+    fixed[0, 0, :2] = 1 << 62  # each bin is legal, and their sum reaches 2**63
     with pytest.raises(ValueError, match="capacity"):
         REDUCER.frame_powers(floating, fixed)
     fixed[0, 0, 1] -= 1

@@ -1,8 +1,9 @@
-"""CPU-only, single-input digital SDR adapter for the upgrade frame geometry.
+"""Single-input digital SDR adapter for the upgrade frame geometry (CPU only).
 
-This adapter has no hardware API and no RF-frequency mapping. It accepts one
-contiguous 2 MHz complex-IQ record with an explicit digital mixer and scale.
-SciPy is required (the ``test`` extra supplies it).
+One contiguous complex IQ record at 2 MS/s is mixed by an explicit digital
+frequency, resampled by 25/128 to 390625 S/s, and quantized with an explicit
+scale. The adapter has no hardware API and no mapping to RF frequency. SciPy
+is required (the ``test`` extra supplies it).
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ QUALIFIED_DIGITAL_PASSBAND_HZ = 135_000.0
 
 
 def array_sha256(array: np.ndarray, dtype: str) -> str:
-    """Hash canonical C-order, explicitly endian-typed array bytes."""
+    """Return the SHA-256 of the C-order array bytes in an explicit-endian dtype."""
     return hashlib.sha256(np.asarray(array, dtype=dtype).tobytes(order="C")).hexdigest()
 
 
@@ -60,7 +61,7 @@ class DigitalAdapterConfig:
                 raise ValueError("All three projector centers must lie inside the qualified passband.")
             if abs(self.mixer_hz + frequency) >= INPUT_RATE_HZ / 2:
                 raise ValueError("A requested input projector frequency crosses input Nyquist.")
-        # Keep the entire anti-alias band away from the raw input wrap boundary.
+        # the whole anti-alias band must lie in the input Nyquist interval
         if abs(self.mixer_hz) + OUTPUT_RATE_HZ / 2 >= INPUT_RATE_HZ / 2:
             raise ValueError("The translated output band crosses input Nyquist.")
 
@@ -71,7 +72,11 @@ class DigitalAdapterConfig:
 
 
 def resampler_coefficients() -> np.ndarray:
-    """Unity-DC low-pass at 50 MHz, before the upfirdn interpolation gain."""
+    """Return the unity-DC Kaiser low-pass designed at the 50 MS/s interpolated rate.
+
+    The interpolation gain of 25 is not applied here. Callers multiply the
+    coefficients by UP before upfirdn.
+    """
     return firwin(
         FIR_TAPS, FIR_CUTOFF_HZ, window=("kaiser", 8.6),
         fs=INPUT_RATE_HZ * UP, scale=True,
@@ -81,11 +86,12 @@ def resampler_coefficients() -> np.ndarray:
 def digital_resample(
     iq: np.ndarray, config: DigitalAdapterConfig,
 ) -> tuple[np.ndarray, dict]:
-    """Mix, anti-alias and rationally resample a contiguous finite record.
+    """Mix, anti-alias filter, and resample one contiguous finite record by 25/128.
 
-    Only output samples whose entire FIR support is inside the input are
-    retained. No padding-based edge sample enters a detector frame. This is
-    a batch adapter; calling it separately on chunks does not preserve state.
+    Only output samples whose full FIR support lies in the input are kept, so
+    no edge sample computed from zero padding enters a detector frame. State
+    is not carried between calls. A record that arrives in chunks is processed
+    with StreamingDigitalAdapter (sdr_upgrade_streaming).
     """
     x = np.asarray(iq)
     if x.ndim != 1 or not np.iscomplexobj(x) or x.size == 0:
@@ -96,6 +102,8 @@ def digital_resample(
     phase = -2j * np.pi * config.mixer_hz * np.arange(x.size) / INPUT_RATE_HZ
     mixed = np.asarray(x, dtype=np.complex128) * np.exp(phase)
     y = upfirdn(h * UP, mixed, up=UP, down=DOWN)
+    # first output with full FIR support, and one past the last output that
+    # needs no sample after the end of the record
     first = (h.size - 1 + DOWN - 1) // DOWN
     stop = ((x.size - 1) * UP) // DOWN + 1
     if stop <= first:
@@ -123,7 +131,12 @@ def digital_resample(
 
 
 def projector_weights(config: DigitalAdapterConfig) -> tuple[np.ndarray, np.ndarray]:
-    """Natural +phase weights; projection is x dot conjugate(w)."""
+    """Return the natural and the packed 4-bit weights of the three projector terms.
+
+    Each natural weight is exp(+2j*pi*f*n/output_rate) for n = 0, ..., K - 1,
+    and a row x is projected as x dot conj(w). The packed weights are
+    quantized with scale 7.
+    """
     n = np.arange(K)
     weights = np.exp(2j * np.pi * np.array(config.term_frequencies_hz)[:, None] * n / OUTPUT_RATE_HZ)
     return weights, quantize_complex_numpy(weights, bits=4, scale=7.0)
@@ -137,10 +150,10 @@ RATIO_DEFINITION = (
 
 
 def frame_power_sums(projections: np.ndarray) -> np.ndarray:
-    """Exact uint64 [3] frame powers of one single-input frame.
+    """Return the exact uint64 frame powers (shape [3]) of one single-input frame.
 
-    The kernel's definition (core 3.0.0): the 128 exact row projections of
-    each term go through the frozen fxfft256 and the fine powers are summed
+    As in the kernel (core 3.0.0), the 128 exact row projections of each term
+    are passed through the frozen fxfft256, and the fine powers are summed
     over all 256 bins, ``P_r = sum_f S_r[f]``.
     """
     return frame_powers_from_fine_u64(
@@ -149,7 +162,12 @@ def frame_power_sums(projections: np.ndarray) -> np.ndarray:
 
 
 def frame_ratio(powers: np.ndarray) -> tuple[float, str]:
-    """``2 P_0 / (P_1 + P_2)`` in float64 with the zero-denominator status."""
+    """Return the coarse ratio ``2 P_0 / (P_1 + P_2)`` in float64 and its status.
+
+    The status is "finite" for a positive denominator, "infinite" when only
+    the target power is nonzero, and "undefined_both_zero" when all three
+    powers are zero.
+    """
     target = int(powers[0])
     denominator = int(powers[1]) + int(powers[2])
     if denominator > 0:
@@ -160,14 +178,17 @@ def frame_ratio(powers: np.ndarray) -> tuple[float, str]:
 
 
 def adapt_record(iq: np.ndarray, config: DigitalAdapterConfig) -> dict:
-    """Return exact packed CPU row projections and per-frame frame powers.
+    """Return the exact packed CPU row projections and frame powers of one record.
 
-    Frame powers pool 128 rows of one input through the frozen fxfft256 and
-    sum the fine powers over all bins (:func:`frame_power_sums`). The ideal
-    unfiltered, unquantized IID equal-power null has F(256,512), not the
-    2048-input array degrees of freedom; the fixed-point transform departs
-    from it only by its rounding. Filtered or measured SDR data need empirical
-    validation.
+    Each frame of 16384 resampled samples is cut into L = 128 rows of K = 128
+    samples and quantized to 4 bits with the configured scale. For each term,
+    the 128 rows of the input are pooled through the frozen fxfft256, and the
+    fine powers are summed over all bins (:func:`frame_power_sums`). Under the
+    ideal null of unfiltered, unquantized IID samples of equal power, the
+    coarse ratio follows F(256, 512). These degrees of freedom are for a
+    single input and do not apply to the 2048-input array. The fixed-point
+    transform departs from this null only by its rounding. Filtered or
+    measured SDR data must be validated empirically.
     """
     y, timing = digital_resample(iq, config)
     count = y.size // FRAME_SAMPLES

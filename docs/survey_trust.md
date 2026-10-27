@@ -1,54 +1,61 @@
 # Survey identity and recovery contract
 
-New surveys preserve `survey_manifest.json` as a stable configuration guard.
-Software versions, the source revision and source-tree digest, public certificate
-expiry/fingerprint, start/end time, result inventory hash and row count belong to
-separate execution records in `survey_runs/`. Resuming creates a new execution
-record and updates `latest_run`; it does not silently rewrite the producer of
-an earlier run. Software identity follows the package's first-observation per
-process contract. A commit alone does not describe uncommitted source; use the
-source digest alongside it. Missing optional provenance is explicitly null.
-Certificate fingerprints cover only the public certificate, never private keys.
+The purpose of this contract is to record which software wrote each survey and
+to let an interrupted survey resume safely. A new survey keeps
+`survey_manifest.json` as a stable configuration guard. Each execution writes
+its own record in `survey_runs/` with the software versions, the source revision
+and source-tree digest, the expiry and fingerprint of the public certificate,
+the start and end times, and the hash and row count of the result inventory. A
+resume creates a new execution record and updates `latest_run`, and the producer
+recorded for an earlier run is never rewritten. Software identity is taken at
+its first observation in each process, as in the rest of the package. A commit
+does not describe uncommitted source, so the source digest is recorded beside
+it. Missing optional provenance is written as null. Certificate fingerprints
+cover the public certificate only, and private keys are never fingerprinted.
 
-`inventory.meta.json` identifies its metadata writer, hashes the inventory it
-actually describes and points to available execution history. Adding metadata
-to an existing inventory does not recover the survey toolchain that wrote it.
-Run history is not a row-by-row reconstruction of an inventory's producer.
+`inventory.meta.json` names its metadata writer, hashes the inventory it
+describes, and points to the available execution history. Adding metadata to an
+existing inventory does not recover the survey toolchain that wrote it, and the
+run history does not record which run wrote each inventory row.
 
-A survey holds the existing exclusive output lock. Before working, it writes
-`.survey.views-stale`; after the final SQLite-to-JSON/text render it removes the
-marker. The marker survives SIGKILL. Inventory enumeration refuses marked views.
-Rerun the same survey command and configuration to refresh views and continue;
-do not remove the marker to certify a stale file. An ordinary interruption
-records its outcome, refreshes committed views when possible, and prints the
-resume instruction. An unfinished execution record has no known finish time.
+A survey holds the existing exclusive output lock. The marker
+`.survey.views-stale` is written before any work and removed after the final
+render from SQLite to the JSON and text views. The marker survives SIGKILL, and
+inventory enumeration refuses views that carry it. Rerunning the same survey
+command with the same configuration refreshes the views and continues the
+survey. The marker is never removed by hand, since the view it marks is still
+stale. An ordinary interruption records its outcome, refreshes the committed
+views when possible, and prints the resume instruction. An unfinished execution
+record has no finish time.
 
-Archive exclusions have different meanings:
+Each archive exclusion code has its own meaning:
 
-- `no-selected-candidates`: the reader selected no files. It is an explicit
-  `empty-selection` disposition and fails strict completeness; it proves nothing
-  about archive holdings.
-- `below-reader-floor`: objects exist but are too small for the reader. The
-  ledger retains their names, sizes and byte floor separately from absent counts.
+- `no-selected-candidates`: the reader selected no files. The event is given an
+  explicit `empty-selection` disposition and fails strict completeness. The code
+  carries no information about the archive holdings.
+- `below-reader-floor`: the objects exist but are too small for the reader. The
+  ledger keeps their names, sizes, and byte floor apart from the absent counts.
 - `aged-out` / `max-attempts`: the existing empty-event policy accepted an event
-  whose selected objects were absent, under its recorded age/retry rule.
+  whose selected objects were absent, under its recorded age and retry rule.
 - `unverified-restored-collection`: a bare replica needed a collection prefix,
-  and no selected object could establish that inferred location. The event stays
-  pending regardless of its age or number of retries; details live in
-  `pending_events.json`. A later successful pass clears the pending entry.
+  and no selected object could confirm the inferred location. The event stays
+  pending at any age or retry count, with the details in `pending_events.json`.
+  A later successful pass clears the pending entry.
 
-Bare `data/` paths are restored only when exactly one collection is configured.
-Resolved rows record `collection_restored`. Multiple possible collections and
-parent traversal are refused. This records a reconstruction, not independent
-archive provenance; source-qualified replies remain preferable.
+Bare `data/` paths are restored only when exactly one collection is configured,
+and each resolved row records `collection_restored`. A path that could belong to
+more than one collection, or that uses parent traversal, is refused. The
+restored path is a reconstruction made by this package, and a reply that names
+its source collection remains the better provenance.
 
 The read-only schema-1 adapter reconstructs `baseband_<event>_<freq_id>.h5` only
-for documented schema-1 CHIME raw-baseband rows with matching event-directory
-identity and geometry fields. It accepts a trailing-directory slash, labels the
-compatibility conversion and keeps the floating `n_frames` value as an estimate.
-It does not turn that size-derived estimate into an observed HDF5 frame count,
-rewrite existing files, or permit unrelated partial rows.
+for documented schema-1 CHIME raw-baseband rows whose event directory and
+geometry fields match. It accepts a trailing slash on the directory and labels
+the converted rows. The floating `n_frames` value is derived from the file size
+and is kept as an estimate, never as an observed HDF5 frame count. The adapter
+rewrites no existing file and refuses unrelated partial rows.
 
-The regression suite includes real SIGINT/SIGKILL and concurrent-output tests.
-It uses local archive fakes; passing it does not verify remote CADC availability
-or relabel any existing CANFAR product.
+The regression suite sends real SIGINT and SIGKILL signals and runs
+concurrent-output tests against local archive fakes. A passing suite therefore
+says nothing about remote CADC availability, and it changes no label on an
+existing CANFAR product.

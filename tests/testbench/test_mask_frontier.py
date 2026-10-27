@@ -55,7 +55,7 @@ def test_required_boundary_is_the_exact_upward_rounded_ratio() -> None:
         powers, designated=designated, bulk_mask=bulk
     )
     assert len(boundaries) == int(bulk.sum())
-    # F2 = 2 p_target / (p_lower + p_upper); the designated maximum is 700.
+    # F2 = 2 p_target / (p_lower + p_upper), with a designated maximum of 700
     for rank_index, offset in enumerate(range(len(bulk_bins))):
         rank_target = 100 + offset
         exact = Fraction(700, rank_target) * Q16_SCALE

@@ -1,12 +1,12 @@
 # coding=utf-8
-"""Reader-contract guards for the Pilot Proxy archive analyzers.
+"""Reader-contract guards for the PilotProxy archive analyzers.
 
-The archive survey writes inventory metadata with the telescope's canonical
-reader. For CHIME that canonical reader is ``chime-baseband`` (complex64), but
-the detector analyzer needs the PilotProxy-specific ``chime-baseband-packed``
-reader so it can losslessly repack native uint8 samples.
-These tests make wrong reader pairings fail with a clear error instead of silently producing
-nonsense.
+The archive survey writes inventory metadata with the canonical reader of the
+telescope. For CHIME the canonical reader is ``chime-baseband`` (complex64).
+The detector analyzer, however, needs the PilotProxy ``chime-baseband-packed``
+reader, which keeps the native uint8 samples so they can be repacked without
+loss. These tests check that a wrong reader pairing raises a clear
+error before any detector output is produced.
 """
 from __future__ import annotations
 

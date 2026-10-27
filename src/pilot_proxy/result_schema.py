@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Stable public result-schema helpers."""
+"""Build the public PilotProxy result schema and its contracts."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ from pilot_proxy.detector_constants import (
 from pilot_proxy.schema_identity import schema_token
 
 RESULT_SCHEMA_NAME = "pilotproxy_result_schema"
-# Revision 2 (kernel core 3.0.0): the statistic's frame powers are the
-# all-bin sums of the fxfft256 fine powers (frame_power_definition). Revision
-# 1 results carry row-domain powers under the same field names.
+# In revision 2 (kernel core 3.0.0), each frame power of the statistic is the
+# sum of the fxfft256 fine powers over all bins (frame_power_definition).
+# Revision 1 results carry row-domain powers under the same field names.
 RESULT_SCHEMA_REVISION = 2
 RESULT_SCHEMA_TOKEN = schema_token(RESULT_SCHEMA_NAME, RESULT_SCHEMA_REVISION)
 COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO = "all_rows_summed_before_ratio"
@@ -75,7 +75,7 @@ REFERENCE_OFFSET_LOCK_REASON = (
 
 
 def statistic_contract() -> dict[str, str]:
-    """Return exact definitions for current detector measurements."""
+    """Return the exact definitions of the detector measurements in a result."""
     return {
         "frame_power_definition": FRAME_POWER_DEFINITION,
         "coarse_power_ratio_definition": COARSE_POWER_RATIO_DEFINITION,
@@ -148,7 +148,7 @@ def result_layout(
     detector_window_samples: int = DEFAULT_DETECTOR_WINDOW_SAMPLES,
     num_selected_channels: int = 1,
 ) -> dict[str, Any]:
-    """Return current layout metadata for one combined detector frame."""
+    """Return the layout metadata of one combined detector frame."""
     frame = int(frame_size_samples)
     streams = int(num_input_streams)
     window = int(detector_window_samples)
@@ -193,7 +193,7 @@ def calibration_contract(
 
 
 def threshold_contract(threshold: dict[str, Any] | None) -> dict[str, Any]:
-    """Return current threshold fields, using null values when unset."""
+    """Return the threshold fields, with None for every field that is unset."""
     names = (
         "threshold_data_shelf_snr_db",
         "threshold_pilot_excess_db",
@@ -212,7 +212,7 @@ def threshold_contract(threshold: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def mask_convention() -> dict[str, Any]:
-    """Return the generic mask convention for before/after averages."""
+    """Return the mask convention used for averages before and after masking."""
     return {
         "schema_version": MASK_CONVENTION_SCHEMA_TOKEN,
         "mask_value_excluded": int(MASK_VALUE_EXCLUDED),
@@ -235,7 +235,7 @@ def result_schema_object(
     reference_offset_bins: int = LOCKED_REFERENCE_OFFSET_BINS,
     num_selected_channels: int = 1,
 ) -> dict[str, Any]:
-    """Build the current public result-schema object for a run."""
+    """Build the public result-schema object for a run."""
     return {
         "schema_version": RESULT_SCHEMA_TOKEN,
         "statistic": statistic_contract(),

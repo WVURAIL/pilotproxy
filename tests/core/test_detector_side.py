@@ -1,4 +1,8 @@
-"""The detector side carries no cosmology: no forecast, tolerance or survey term in the library or the profile."""
+"""Check that the detector library and profiles contain no cosmology term.
+
+A forecast, tolerance or survey term must not appear in the library or in the
+project profiles.
+"""
 from __future__ import annotations
 
 import re
@@ -9,16 +13,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "pilot_proxy"
 TOKENS = re.compile(r"redshift|\br_tol\b|fisher|cosmolog|bao|omega", re.IGNORECASE)
-# Frozen on-disk values: exempt by name, and only these.
+# Frozen on-disk values are exempted by name, and no other value is exempt.
 FROZEN = (
     # the archive health view's schema name, written into every view
     "pilotproxy_baonoise_health_view_v1",
 )
-# The sibling repository's name (in a provenance path, a command it runs, or the repository itself) is not a cosmology
-# term; importing it is refused by test_no_rfisher_import.
+# The name of the sibling repository (in a provenance path, in a command it runs, or the repository itself) is not a
+# cosmology term. An import of it is refused by test_no_rfisher_import.
 REPOSITORY = re.compile(r"\bRFIsher\b|\brfisher\b")
-# The detector register cites the release code each entry was read from; the sibling repository's name in a
-# provenance path is not a cosmology term.
+# Each entry of the detector register cites the release code it was read from, and the name of the sibling
+# repository in such a provenance path is not a cosmology term.
 PROVENANCE = re.compile(r"(src/)?rfisher/[A-Za-z_/]+\.py|RFIsher|rfisher-threshold-decisions-v\d+")
 
 

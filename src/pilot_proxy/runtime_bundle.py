@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Export compact runtime weight bundles for future deployment paths."""
+"""Export and validate the compact runtime weight bundles for receiver pipelines."""
 
 from __future__ import annotations
 
@@ -468,7 +468,7 @@ def _validate_manifest_profile_bindings(
     expected_profile_nbytes: int,
     errors: list[dict[str, str]],
 ) -> None:
-    """Bind manifest channel/layout order to weight-bank profile rows."""
+    """Check that the manifest channels and layouts match the profile rows in order."""
     manifest_channels = weights_manifest.get("physical_channels")
     if not isinstance(manifest_channels, list):
         _add_error(
@@ -649,9 +649,10 @@ def _validate_manifest_profile_bindings(
 
 FINE_CALIBRATION_STATUS_PENDING = "pending_campaign"
 FINE_CALIBRATION_STATUS_CALIBRATED = "calibrated"
-# The noise control: a complete calibration that consumers decide and record but
-# never apply to a mask. Only channel 37 (608-614 MHz, reserved for radio
-# astronomy, no DTV) may carry it, and that channel is never "calibrated".
+# A control block is a complete calibration whose decisions a consumer records
+# and never applies to a mask. It is the noise control, and only channel 37
+# (608-614 MHz, reserved for radio astronomy, no DTV) may carry it. Channel 37
+# is never "calibrated".
 FINE_CALIBRATION_STATUS_CONTROL = "control"
 CONTROL_PHYSICAL_CHANNEL = 37
 FINE_CALIBRATION_DEFAULT_HALF_WIDTH = 2  # survey window convention
@@ -792,17 +793,16 @@ def _validate_fine_calibration_provenance(
 
 
 def _default_fine_calibration_block() -> dict[str, Any]:
-    """Per-channel fine decision calibration, exported pending-campaign.
+    """Return the per-channel fine decision calibration, exported as pending_campaign.
 
-    The fused entry points consume these values as runtime arguments:
+    These values are passed as runtime arguments to the fused entry points
     ``PilotProxy_Compute_FusedFineMask_U64`` and
-    ``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` (the entry kotekan
-    calls when its support buffer is bound).
-    The decision arithmetic is frozen (``fine_decision_v1``); the operating
-    point is bundle data. The
-    calibration campaign replaces the null fields and flips ``status`` to
-    ``calibrated`` with provenance; until then a consumer must treat the
-    channel's fine mask path as not deployable.
+    ``PilotProxy_Compute_FusedFineMaskWithSupport_U64``. The second is called
+    by kotekan when its support buffer is bound. The decision arithmetic is
+    frozen (``fine_decision_v1``), and the operating point is bundle data.
+    The calibration campaign fills the null fields, sets
+    ``status`` to ``calibrated``, and records the provenance. Until then, a
+    consumer must treat the channel's fine mask path as not deployable.
     """
     return {
         "status": FINE_CALIBRATION_STATUS_PENDING,
@@ -880,14 +880,14 @@ def _validate_fine_calibration(
     profiles: list[Any],
     errors: list[dict[str, str]],
 ) -> None:
-    """Validate required per-profile ``fine_calibration`` blocks.
+    """Validate the required ``fine_calibration`` block of each profile.
 
-    A block must declare the frozen decision version and a known status; a
+    Each block must declare the frozen decision version and a known status. A
     ``calibrated`` or ``control`` block must carry complete, range-checked
-    values whose bulk mask excludes the designated set, its optional
-    ``marker_guard_bins`` guard band and the anchor's guard, and is deep enough
-    for the rank. ``control`` is admitted only on channel 37, which is never
-    ``calibrated``.
+    values. Its bulk mask must exclude the designated set, the optional
+    ``marker_guard_bins`` guard band, and the anchor's guard, and it must hold
+    more bins than the rank. ``control`` is accepted only on channel 37, which
+    is never ``calibrated``.
     """
     for index, row in enumerate(profiles):
         if not isinstance(row, dict):
@@ -1218,18 +1218,18 @@ def _validate_receiver_channel_ids(
 def _resolve_profile_channel_id_map(profile: Any) -> tuple[str, int] | None:
     """Return (namespace, offset_from_coarse_channel_index) when declared.
 
-    A receiver profile opts into runtime-bundle channel-id population by
-    declaring ``metadata.channel_id_map`` with a ``namespace`` string and an
-    integer ``offset_from_coarse_channel_index`` such that::
+    The channel-id fields of the bundle are populated for a receiver profile
+    that declares ``metadata.channel_id_map`` with a ``namespace`` string and
+    an integer ``offset_from_coarse_channel_index`` such that::
 
         receiver_channel_id = coarse_channel_index + offset
 
     For the CHORD/kotekan integration the namespace is ``chord_freq_id`` with
     offset 0 (kotekan ``chordMetadata.coarse_freq`` entries are
     ``CHORDTelescope::to_freq_id`` values, which equal the profile's
-    coarse-channel index in the first Nyquist zone). Profiles without the
-    declaration keep the legacy behavior: channel-id fields exported as null
-    pending a verified metadata mapping.
+    coarse-channel index in the first Nyquist zone). For a profile without the
+    declaration, None is returned, and the channel-id fields are exported as
+    null until a verified metadata mapping exists.
     """
     metadata = getattr(profile, "metadata", None)
     if not isinstance(metadata, dict):
@@ -1383,7 +1383,12 @@ def validate_runtime_weight_bundle(
     bundle_dir: Path,
     output_json: Path | None = None,
 ) -> dict[str, Any]:
-    """Validate a runtime weight bundle for deployment use."""
+    """Validate a runtime weight bundle for deployment use.
+
+    Each failed check adds one entry to the report's error list, and the
+    bundle is valid when the list is empty. The report is returned and, when
+    ``output_json`` is given, also written there.
+    """
     bundle = Path(bundle_dir)
     errors: list[dict[str, str]] = []
     for filename in REQUIRED_RUNTIME_BUNDLE_FILES:
@@ -1567,8 +1572,8 @@ def export_runtime_weight_bundle(
     profile = load_receiver_profile(receiver_profile_path)
     core = load_detector_core_profile(detector_core_profile_path)
     validate_integration_compatibility(profile=profile, detector_core=core)
-    # The receiver profile owns the deployed window length (K); the core
-    # declares which lengths the compiled kernel family supports.
+    # The deployed window length K is set by the receiver profile. The core
+    # lists the lengths that the compiled kernel family supports.
     core = core.with_detector_window_samples(int(profile.detector_window_samples))
     coordinate_system = normalize_weight_coordinate_system(weight_coordinate_system)
     channels = [
@@ -1619,11 +1624,11 @@ def export_runtime_weight_bundle(
             coarse_index + channel_id_offset if channel_id_map else None
         )
         channel_id_fields: dict[str, Any] = {
-            # Telescope channel identifiers for first-frame profile selection
-            # in a receiver pipeline stage (for example the kotekan
-            # cudaPilotProxyDetector). Populated only when the receiver
-            # profile declares metadata.channel_id_map; otherwise null,
-            # pending a verified metadata mapping.
+            # Telescope channel IDs, used to select the profile on the
+            # first frame in a receiver pipeline stage such as the kotekan
+            # cudaPilotProxyDetector. They are populated only when the
+            # receiver profile declares metadata.channel_id_map, and they are
+            # null otherwise until a verified metadata mapping exists.
             "receiver_channel_id": receiver_channel_id,
             "receiver_channel_id_namespace": channel_id_namespace,
             "chime_channel_id": None,
@@ -1643,10 +1648,11 @@ def export_runtime_weight_bundle(
                 "weight_bank_index": int(index),
                 "weight_bank_offset_bytes": int(offset),
                 "weight_bank_nbytes": int(profile_nbytes),
-                # Exact integer weight-norm zero-point for this channel. The
-                # kernel's rational half-threshold half_num:half_den = nt:(nl+nu)
-                # sets the mask threshold at F = null_power_ratio (the norm-corrected
-                # positive-excess rule) with zero kernel changes.
+                # Exact integer weight-norm zero point of this channel. The
+                # kernel's rational half threshold half_num:half_den = nt:(nl+nu)
+                # places the mask threshold at F = null_power_ratio, so the
+                # norm-corrected positive-excess rule is set with the kernel's
+                # half-threshold arguments.
                 "target_norm_sq": int(row_nt),
                 "reference_norm_sum_sq": row_nrs,
                 "null_power_ratio": float(null_power_ratio_from_weight_norms(row_nt, row_nrs)),
@@ -1656,8 +1662,8 @@ def export_runtime_weight_bundle(
                     layout["reference_placement_status"]
                 ),
                 "placement_warnings": str(layout["placement_warnings"]),
-                # Fine decision calibration (kernel core 2.3.0): frozen
-                # arithmetic, data-driven operating point; exported
+                # Fine decision calibration (kernel core 2.3.0), with frozen
+                # arithmetic and a data-driven operating point. It is exported
                 # pending until the campaign supplies measured values.
                 "fine_calibration": _default_fine_calibration_block(),
             }

@@ -1,4 +1,4 @@
-"""Offline fixtures only: no devices, SDR bindings, streams or radio commands."""
+"""SDR protocol tests on offline fixtures, with no devices, SDR bindings, streams, or radio commands."""
 import json
 from pathlib import Path
 

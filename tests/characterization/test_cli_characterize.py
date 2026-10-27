@@ -1,4 +1,4 @@
-"""The command groups: characterize, products and bench dispatch to their modules."""
+"""The characterize, products, and bench command groups dispatch to their modules."""
 from __future__ import annotations
 
 import json

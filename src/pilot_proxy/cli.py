@@ -56,7 +56,7 @@ from pilot_proxy.secondary_python import (
 )
 
 # GNU Radio is typically installed into the system Python on Linux/WSL, while
-# CUDA/CuPy lives in the active detector environment.
+# CUDA/CuPy is installed in the active detector environment.
 DEFAULT_GNURADIO_PYTHON = "/usr/bin/python3"
 DEFAULT_CLEAN_ATSC_IQ_SAMPLES = 600_000
 DEFAULT_TS_PACKETS = 4096
@@ -83,7 +83,7 @@ def _run_module(
             prepend_pythonpath(env, package_bridge)
         elif SOURCE_CHECKOUT_ROOT is not None:
             # Same-interpreter source runs still need the checkout import root
-            # when invoked outside an editable installation.
+            # when invoked without an editable installation.
             prepend_pythonpath(env, SOURCE_CHECKOUT_ROOT / "src")
         if env_updates:
             env.update(env_updates)
@@ -126,10 +126,10 @@ def _cmd_generate_atsc(args: argparse.Namespace) -> None:
 def _cmd_evaluate_snr(args: argparse.Namespace) -> None:
     from pilot_proxy.testbench.evaluate_snr import run as evaluate_snr_run
 
-    # The subparser inherits the testbench parser via parents=, so the parsed
-    # namespace is exactly what the testbench expects: call it directly
-    # instead of hand-rebuilding argv (the old pattern silently dropped any
-    # option added to the testbench but not mirrored here).
+    # The subparser inherits the testbench parser through parents=, so the
+    # parsed namespace is passed to the testbench unchanged. An argv rebuilt by
+    # hand here would drop any testbench option that is not mirrored in this
+    # file.
     code = evaluate_snr_run(args)
     if code:
         raise SystemExit(code)
@@ -713,8 +713,8 @@ def _cmd_list_channels(args: argparse.Namespace) -> None:
     _print_adaptive_reference_diagnostics(layouts)
 
 
-# The detector characterization, product checks and bench figures. Each step is a
-# module with its own ``main(argv)``; the group passes the remaining arguments on.
+# Steps of the characterize, products and bench groups. Each step is a module
+# with its own ``main(argv)``, and the group passes the remaining arguments to it.
 CHARACTERIZE_STEPS = {
     "archive": "pilot_proxy.characterization.run",
     "histogram-frames": "pilot_proxy.characterization.histogram_frames",
@@ -759,8 +759,9 @@ def _print_adaptive_reference_diagnostics(
         if bool(layout.get("upper_reference_edge_wrapped", False)):
             details.append("upper_reference=edge_wrapped")
         if details and "frame_origin_description" not in layout:
-            # Manifests written before the origin description was recorded:
-            # say what the wrap means rather than letting "edge" stand alone.
+            # A manifest written before the origin description was recorded
+            # gets a note on the wrap, since "edge" alone would read as the
+            # channel edge.
             details.append(
                 "edge_wrapped=wrap across the baseband-frame origin nu=0 "
                 "(the coarse-channel center/DC for a center-at-DC profile, "
@@ -788,13 +789,13 @@ def _print_adaptive_reference_diagnostics(
 def _reference_crosses_channel_edge(
     layout: Mapping[str, Any], side: str
 ) -> bool:
-    """True when a reference was requested beyond +-fs/2 of the channel center.
+    """True when a reference was requested more than fs/2 from the channel center.
 
-    Recorded manifests carry ``*_crosses_channel_edge`` directly. Older
-    manifests still expose the test: the stored reference offset is the
-    circular (aliased) offset, so it differs from ``target_offset_hz`` plus the
-    reference's relative offset only when the request crossed the physical
-    coarse-channel edge.
+    Manifests that record ``*_crosses_channel_edge`` are read directly. In an
+    older manifest the stored reference offset is the circular (aliased)
+    offset, so it differs from ``target_offset_hz`` plus the reference's
+    relative offset only when the request crossed the physical coarse-channel
+    edge.
     """
     key = f"{side}_reference_crosses_channel_edge"
     if key in layout:
@@ -894,7 +895,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def _add_command(name: str, summary: str) -> argparse.ArgumentParser:
-        # One string serves as both the one-liner in `pilot-proxy --help` and
+        # One string is both the one-liner in `pilot-proxy --help` and
         # the description at the top of `pilot-proxy <command> --help`.
         return subparsers.add_parser(name, help=summary, description=summary)
 
@@ -1850,8 +1851,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     # A detached launcher (``nohup cmd &`` in a script) starts the process
-    # with SIGINT ignored and Python leaves it that way, so an interrupt is a
-    # silent no-op and a scan cannot be asked to drain. Take the default back.
+    # with SIGINT ignored, and Python keeps that setting. An interrupt is then
+    # lost and a scan cannot be asked to drain, so the default handler is
+    # restored here.
     if signal.getsignal(signal.SIGINT) is signal.SIG_IGN:
         signal.signal(signal.SIGINT, signal.default_int_handler)
     parser = build_parser()

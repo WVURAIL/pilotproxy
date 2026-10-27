@@ -63,7 +63,7 @@ def test_matched_raw_gaussian_simulation_matches_independent_analytic_cdf(lam):
     if lam==0:
         p=np.abs(z)**2
         np.testing.assert_allclose(p.mean(axis=0),128,rtol=.025)
-        # Realizations are not forcibly orthogonalized or normalized to exact energy.
+        # realizations are neither orthogonalized nor normalized to exact energy, so their powers vary
         assert np.std(p[:,0])>100
 
 

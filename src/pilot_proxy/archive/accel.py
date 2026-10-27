@@ -1,12 +1,13 @@
 """Resolve the CuPy build used by archive analyzers.
 
-CuPy must match the CUDA environment in which the analysis runs. CANFAR images
+CuPy must match the CUDA environment where the analysis runs. CANFAR images
 usually supply that build already, so the package leaves its GPU extra empty
 and resolves CuPy at runtime:
 
 * ``import_cupy()`` returns the environment's CuPy, or None when absent.
 * ``get_array_module(g)`` selects NumPy or, when g is true, CuPy.
-* ``detect_cuda_major()`` attempts to identify the environment's CUDA version.
+* ``detect_cuda_major()`` returns the CUDA major version of the environment,
+  or None when it cannot be found.
 * ``ensure_cupy(install)`` can install the matching ``cupy-cuda<major>x`` wheel
   if CuPy is absent and installation was explicitly requested.
 
@@ -55,7 +56,7 @@ def _cuda_major_from_text(text: str) -> Optional[int]:
 
 
 def _cuda_major_from_file(path: str) -> Optional[int]:
-    """Read NVIDIA's JSON or text version-file formats."""
+    """Return the CUDA major version from an NVIDIA version file (JSON or text)."""
     try:
         with open(path) as fh:
             text = fh.read()
@@ -89,11 +90,11 @@ def _cuda_major_from_command(command: list[str]) -> Optional[int]:
 
 
 def detect_cuda_major() -> Optional[int]:
-    """Best-effort CUDA major version of the running image.
+    """Return the CUDA major version of the running image, or None.
 
-    Prefer the installed toolkit (active nvcc, then its version file) over
-    ``nvidia-smi``, whose header is the driver's maximum supported CUDA version
-    and may not identify the toolkit a CuPy wheel must match.
+    The installed toolkit is read first (the active nvcc, then its version
+    file). The ``nvidia-smi`` header gives the maximum CUDA version the driver
+    supports, which may differ from the toolkit that a CuPy wheel must match.
     """
     configured_home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH")
     cuda_home = configured_home or _DEFAULT_CUDA_HOME
@@ -117,23 +118,24 @@ def detect_cuda_major() -> Optional[int]:
             if major:
                 return major
 
-    # Last resort only: this is driver capability, not proof of an installed
-    # toolkit, but it still gives setup-cupy a useful best-effort wheel choice.
+    # driver's maximum CUDA version, used as the wheel guess for setup-cupy
+    # only when no toolkit is found
     return _cuda_major_from_command(["nvidia-smi"])
 
 
 def cupy_package(major: int) -> str:
-    """The pip wheel name for a given CUDA major version, e.g. 12 -> cupy-cuda12x."""
+    """Return the pip wheel name for a CUDA major version (cupy-cuda12x for 12)."""
     return f"cupy-cuda{int(major)}x"
 
 
 def ensure_cupy(install: bool = False, quiet: bool = False):
-    """Return the image's cupy, optionally installing the matching wheel.
+    """Return the image's CuPy, optionally installing the matching wheel.
 
-    If cupy is already importable (the common CANFAR case), it is returned as-is.
-    Otherwise, when install=True, the image's CUDA major version is detected and
-    `cupy-cuda<major>x` is pip-installed into the active environment, then imported.
-    Raises RuntimeError with an actionable message if it cannot be resolved.
+    If CuPy can already be imported (the common CANFAR case), it is returned
+    unchanged. Otherwise, when install=True, the CUDA major version of the image
+    is detected, and ``cupy-cuda<major>x`` is installed with pip into the active
+    environment and imported. Raises RuntimeError with the setup step to take
+    if CuPy cannot be resolved.
     """
     cp = import_cupy()
     if cp is not None:
@@ -167,9 +169,9 @@ def ensure_cupy(install: bool = False, quiet: bool = False):
 
 
 def get_array_module(use_gpu: bool):
-    """numpy, or the image's cupy when use_gpu is true.
+    """Return NumPy, or the image's CuPy when use_gpu is true.
 
-    A scan path calls this; a missing cupy raises a clear setup error.
+    A scan calls this, and a missing or broken CuPy exits with the setup step.
     """
     import numpy as np
     if not use_gpu:

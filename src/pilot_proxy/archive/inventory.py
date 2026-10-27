@@ -129,7 +129,8 @@ def write_inventory_meta(
         **runtime_provenance(),
         **inventory_identity(inventory_path),
     }
-    # Writing a sidecar for an older inventory must not invent its producer.
+    # For an older inventory with no survey run records, the original producer
+    # is unknown, and the sidecar records only its own writer.
     runs = sorted((inventory_path.parent / "survey_runs").glob("*.json"))
     payload["provenance_basis"] = (
         "survey execution records; top-level software identifies this metadata writer"

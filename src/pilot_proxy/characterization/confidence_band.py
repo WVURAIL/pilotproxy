@@ -1,8 +1,9 @@
 """Joint event-pairs bootstrap upper bands for a retained, signed proxy mean.
 
-This is a sampling diagnostic for supplied words and windows, not a physical
-contamination bound. See docs/RETAINED_PROXY_CONFIDENCE_BAND.md for the estimand,
-selection assumptions, support rules, and the treatment of failed replicates.
+The band describes the sampling error for the supplied words and windows and
+does not bound the physical contamination. The estimand, selection
+assumptions, support rules, and treatment of failed replicates are described
+in docs/RETAINED_PROXY_CONFIDENCE_BAND.md.
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ def _vector(value, name, length, kind=None):
 
 
 def _prefix_by_event(values, event):
-    """Cumulative sums on contiguous event groups, avoiding inter-group cancellation."""
+    """Return cumulative sums restarted at each contiguous event group, so one group cannot cancel another."""
     result = np.empty_like(values)
     starts = np.r_[0, np.flatnonzero(event[1:] != event[:-1]) + 1, len(event)]
     for left, right in zip(starts[:-1], starts[1:]):
@@ -59,14 +60,21 @@ class _Window:
     kept_events: np.ndarray
 
     def sums(self, multiplicity):
-        """Sum squared event prefixes with multiplicity m, never m squared."""
+        """Return the cumulative window sums with each event weighted by its multiplicity m.
+
+        Each drawn copy of an event is its own cluster, so the event's squared
+        prefix enters the sums m times.
+        """
         m = multiplicity[self.event]
         return tuple(np.cumsum(np.bincount(self.bucket, weights=m * delta, minlength=self.points))
                      for delta in self.increments)
 
 
 def _prepare_window(required, weight, excess, event, selected, words):
-    """Sparse event/word increments; memory is linear in selected frames and words."""
+    """Return the sparse event and word increments of one window.
+
+    The memory grows linearly with the number of selected frames and words.
+    """
     rows = np.flatnonzero(selected & (required <= words[-1]))
     points = len(words)
     if not len(rows):
@@ -79,8 +87,8 @@ def _prepare_window(required, weight, excess, event, selected, words):
     rows, bucket = rows[order], bucket[order]
     ev = event[rows]
     center = float(np.median(excess[rows]))
-    # Combine all frames of an event entering at one grid point before making
-    # squared-prefix increments. No event-by-threshold matrix is constructed.
+    # The frames of an event that enter at one grid point are summed before the
+    # squared-prefix increments are formed. No event-by-threshold matrix is built.
     starts = np.r_[0, np.flatnonzero((ev[1:] != ev[:-1]) | (bucket[1:] != bucket[:-1])) + 1]
     a = np.add.reduceat(weight[rows] * (excess[rows] - center), starts)
     b = np.add.reduceat(weight[rows], starts)
@@ -103,8 +111,8 @@ def _statistics(sums, center, shelf):
         centered_mean = a / b
         variance = aa - 2 * centered_mean * ab + centered_mean * centered_mean * bb
         magnitude = np.abs(aa) + 2 * np.abs(centered_mean * ab) + np.abs(centered_mean * centered_mean * bb)
-        # Cancellation-dominated moments cannot justify a narrow band. Refuse
-        # both negative and spuriously positive residues at the rounding scale.
+        # A variance dominated by cancellation cannot support a narrow band, so both
+        # negative and spuriously positive residues at the rounding scale become NaN.
         rounding = 64 * np.finfo(float).eps * magnitude
         bad = (variance < -rounding) | ((magnitude > 0) & (variance <= rounding))
         variance = np.where(bad, np.nan, np.maximum(variance, 0.))
@@ -130,19 +138,20 @@ def simultaneous_upper_band(
     batch_size: int = 16,
     shelf: float = SHELF,
 ) -> dict:
-    """One-sided bootstrap-t band jointly over supplied Q16 words and windows.
+    """Return a one-sided bootstrap-t upper band taken jointly over the supplied Q16 words and windows.
 
-    Original frame weights are preserved. Each draw resamples all original
-    events (or supplied clusters), including those with no retained frames,
-    and uses the SAME multiplicities in every window. A cluster cannot split
-    an original event. Support thresholds select the family once, on the
-    original data. Ineligible points have infinite upper limits, not a pass.
+    The original frame weights are preserved. Each draw resamples every
+    original event (or supplied cluster), even an event with no retained
+    frames, and the same multiplicities are used in every window. A cluster
+    cannot split an original event. The family of eligible points is set once
+    by the support thresholds on the original data. An ineligible point has an
+    infinite upper limit, so it never passes.
 
     The upper pivot is (original_mean - bootstrap_mean) / bootstrap_SE. An
-    undefined or zero-SE eligible point makes that replicate's maximum +inf;
-    the replicate is included in the critical-value quantile. This method
-    does not certify nominal coverage without its sampling assumptions and
-    a relevant validation of the supplied grid/selection procedure.
+    eligible point with an undefined or zero SE sets that replicate's maximum
+    to +inf, and the replicate is still counted in the critical-value
+    quantile. Nominal coverage needs the sampling assumptions and a validation
+    of the supplied grid and selection procedure.
     """
     confidence = _real(confidence, "confidence", lower=0, upper=1)
     shelf = _real(shelf, "shelf", lower=0)
@@ -187,8 +196,8 @@ def simultaneous_upper_band(
             raise ValueError("window names must be nonempty strings")
         masks[name] = _vector(mask, f"windows[{name!r}]", n, "b")
     weight_sum = float(weight.sum())
-    # One common normalization is harmless to ratios and errors; no window or
-    # resampling cluster is reweighted to equal mass.
+    # One common normalization leaves the ratios and errors unchanged. No window
+    # or resampling cluster is reweighted to equal mass.
     weight = weight / weight_sum
     prepared = {name: _prepare_window(required, weight, excess, event, supported & mask, words)
                 for name, mask in masks.items()}
@@ -283,12 +292,13 @@ def simultaneous_upper_band(
 
 
 def widen_upper_band(band, multiplier, *, minimum_critical=1.):
-    """Apply a separately calibrated model-specific widening to a band.
+    """Widen a band by a multiplier calibrated on declared models.
 
-    This preserves every original statistic and resampling draw. It does not
-    assert that the calibration models describe the caller's data. A finite
-    positive critical floor makes multiplying the margin conservative even
-    when the original upper-tail bootstrap quantile is negative.
+    Every original statistic and resampling draw is kept. The calibration
+    models are not checked against the caller's data. The critical value is
+    floored at ``minimum_critical`` before it is multiplied, so the widened
+    margin stays conservative even when the original upper-tail bootstrap
+    quantile is negative.
     """
     multiplier = _real(multiplier, "multiplier", lower=0)
     minimum_critical = _real(minimum_critical, "minimum_critical", lower=0)

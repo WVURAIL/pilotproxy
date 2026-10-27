@@ -1,12 +1,13 @@
 # coding=utf-8
 """Combine per-pilot archive products into PilotProxy's canonical products.
 
-Each detector analyzer writes one product per coarse channel. To combine them,
-we first align frames by their event and position within the file. Pilots that
-processed different event sets contribute only their common frame identities;
-the alignment report records the dropped frames.
+Each detector analyzer writes one product per coarse channel. Before the
+products are stacked, their frames are aligned by event and by position in the
+file. Pilots that processed different event sets contribute only the frames
+they have in common, and the dropped frames are recorded in the alignment
+report.
 
-The aligned arrays then pass through the same writer functions as
+The aligned arrays are then passed through the same writer functions as
 ``run_chime_analysis``. This produces ``chime_detector_outputs``,
 ``chime_spectrogram_cache``, ``chime_reductions_10s``, and ``mask_summary`` in
 the canonical formats used by plotting and ``validate-products``.
@@ -88,7 +89,7 @@ class _PublishOwnership:
     owner_token: str
 
     def assert_owned(self) -> None:
-        """Fail if the fixed lock path no longer names our locked inode/token."""
+        """Raise RuntimeError if the lock path no longer names our inode and token."""
         try:
             descriptor_stat = os.fstat(self.fd)
             path_stat = os.stat(self.path, follow_symlinks=False)
@@ -132,12 +133,13 @@ def _unlock_and_close(fd: int) -> None:
 
 @contextmanager
 def _exclusive_publish_ownership(run_dir: Path) -> Iterator[_PublishOwnership]:
-    """Acquire a crash-recoverable single-writer lock for one run directory.
+    """Acquire the single-writer lock of one run directory, recoverable after a crash.
 
-    ``O_EXCL`` owns a fresh path. If a crashed process left the path behind,
-    acquiring its kernel ``flock`` proves that no live publisher still holds
-    it; the same inode is then safely retokenized without an unlink/recreate
-    race. A live holder makes acquisition fail closed.
+    A fresh lock path is created with ``O_EXCL``. If a crashed process left the
+    path behind, the kernel ``flock`` on it can be acquired only when no live
+    publisher holds it. The same inode is then given a new owner token, which
+    avoids an unlink and recreate race. When a live process holds the lock,
+    acquisition fails and nothing is published.
     """
     run = Path(run_dir).absolute()
     _resolved_directory_root(run, what="run directory")
@@ -165,10 +167,10 @@ def _exclusive_publish_ownership(run_dir: Path) -> Iterator[_PublishOwnership]:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
-            # A failed kernel-lock call must not leak this descriptor. A path
-            # freshly created by this attempt may also be removed, but only
-            # while it still names our one-link inode; an existing publisher's
-            # path is never unlinked here.
+            # The descriptor is always closed after a failed flock. A path
+            # created by this attempt is removed only while it still names our
+            # one-link inode. The path of an existing publisher is never
+            # unlinked here.
             try:
                 descriptor_stat = os.fstat(fd)
                 try:
@@ -265,11 +267,11 @@ def _write_json(path: Path, obj: Any) -> None:
 
 
 class CombineIntegrityError(ValueError):
-    """The per-pilot products are intact but cannot be stacked as handed over.
+    """The per-pilot products are intact but cannot be stacked as given.
 
-    Base for every condition combine's validation pass raises about the
-    products themselves, so the scan layer can soft-fail the optional terminal
-    combine as one family instead of enumerating members.
+    This is the base class of every error that the combine validation raises
+    about the products themselves. The scan layer catches this one class to
+    soft-fail the optional final combine step.
     """
 
 
@@ -280,16 +282,16 @@ class CombineEmptyIntersectionError(CombineIntegrityError):
 class CombineDuplicateIdentityError(CombineIntegrityError):
     """One product carries the same (event, frame) identity more than once.
 
-    Frame identity here is ``(source_event_key, frame_in_unit)`` -- deliberately
-    not the unit index -- so any two units whose keys reduce to the same event
-    key contribute colliding frames. Listing one event under two archive scopes
-    does *not* do this: the archive source keys a unit by ``(scope, event, name)`` and
-    ``source_event_key`` only strips a trailing freq_id token, so those two
-    units keep distinct event keys and merely stack as separate events.
+    The frame identity is ``(source_event_key, frame_in_unit)`` and has no
+    unit index, so any two units whose keys reduce to the same event key give
+    colliding frames. One event listed under two archive scopes is a different
+    case. The archive source keys a unit by ``(scope, event, name)``, and
+    ``source_event_key`` strips only a trailing freq_id token, so those two
+    units keep distinct event keys and are stacked as two events.
 
     The duplicate must be explained before these products can be combined.
-    The per-pilot products remain intact. Start by inspecting ``unit_scope``
-    to determine which source units contributed the repeated identity.
+    The per-pilot products remain intact, and ``unit_scope`` shows which source
+    units contributed the repeated identity.
     """
 
 
@@ -395,24 +397,27 @@ def _known_event_metadata(field: str, value: Any) -> bool:
     return bool(np.isfinite(numeric) and (field != "unit_delta_time" or numeric > 0.0))
 
 
-# One burst's baseband is captured per frequency over that frequency's own
-# DM-delayed window, so the per-channel file start times of one event differ
-# by the burst's dispersion sweep. In the 2026-09 archive run, over 8,906
-# events seen on ten or more channels, the spread was 1.5 s at the median and
-# 12.5 s at most, with lower frequencies later in every monotonic case and an
-# implied DM up to ~2,200 pc cm^-3. The sweep across the whole 400-800 MHz
-# band at DM 3,000 is 58 s; twice that is wider than any one capture can be.
-# Path-matched units further apart than this are not one acquisition.
+# The baseband of one burst is captured for each frequency over that
+# frequency's own DM-delayed window, so the per-channel file start times of one
+# event differ by the dispersion sweep of the burst. In the 2026-09 archive
+# run, over 8906 events seen on ten or more channels, the spread was 1.5 s at
+# the median and 12.5 s at most. Lower frequencies started later in every
+# monotonic case, and the implied DM was up to about 2200 pc cm^-3. The sweep
+# across the full 400-800 MHz band at a DM of 3000 pc cm^-3 is 58 s, and twice
+# that is wider than any one capture can be. Path-matched units further apart
+# than this are not one acquisition.
 MAX_EVENT_START_SPREAD_S = 120.0
 
-# Acquisition identity: must agree across every pilot that carries it, and be
-# carried by all if by any. Path-matched units that differ here are not one
-# acquisition. (2026-09 run, 8,906 events on >= 10 channels: 0 disagreed.)
+# Acquisition identity fields. Each must agree across every pilot that carries
+# it, and if one pilot carries it, every pilot must. Path-matched units that
+# differ here are not one acquisition. In the 2026-09 run, none of the 8906
+# events on ten or more channels disagreed.
 _IDENTITY_FIELDS = ("unit_scope", "archive_version")
-# Per-node provenance: each frequency's file is written by its own baseband
-# node, so a rolling software deploy or input-map change leaves one burst
-# carrying two values across channels (same run: 4 events with two writer
-# tags, 1 with two input maps). Mixed values are recorded, never refused.
+# Per-node provenance fields. The file of each frequency is written by its own
+# baseband node, so a rolling software deploy or an input-map change can leave
+# two values across the channels of one burst. The same run had 4 events with
+# two writer tags and 1 event with two input maps. Mixed values are recorded
+# and accepted.
 _RECORDED_FIELDS = ("unit_git_version_tag", "unit_input_map_sha256")
 _TIMING_FIELDS = ("unit_time0_fpga", "unit_time0_ctime", "unit_delta_time")
 
@@ -420,18 +425,19 @@ _TIMING_FIELDS = ("unit_time0_fpga", "unit_time0_ctime", "unit_delta_time")
 def _validate_common_event_metadata(
     products: Sequence[Mapping[str, Any]], common_events: set[str]
 ) -> dict[str, Any]:
-    """Refuse path-matched events that are not one acquisition.
+    """Raise ValueError for path-matched events that are not one acquisition.
 
-    The acquisition ID, scope and archive version must agree wherever known,
-    and if any pilot knows one, every pilot must. The writer version and
-    input map are per-node provenance and may legitimately differ across one
-    burst's channels; mixed values are counted and listed, not refused. Timing
-    fields are compared only among the pilots that carry them: a missing
-    start time or sample period is a gap in the archive file's metadata, not
-    evidence of a different acquisition, and is counted rather than refused.
-    Start times may differ across pilots by up to the dispersion sweep bound.
-    The stack is event-keyed, never time-aligned, so the offset is recorded
-    in the alignment report instead of being treated as a disagreement.
+    The acquisition ID, scope, and archive version must agree wherever they
+    are known, and if any pilot knows one, every pilot must. The writer version
+    and input map are per-node provenance and can differ across the channels of
+    one burst, so mixed values of these two are counted and listed. Timing
+    fields are compared only among the pilots that carry them. A missing start
+    time or sample period is a gap in the metadata of the archive file and is
+    counted. Start times may differ across pilots by up to the dispersion sweep
+    bound. Since the stack is keyed by event and is not aligned in time, this
+    offset is recorded in the alignment report and accepted.
+
+    Returns the timing and provenance counts for the alignment report.
     """
     metadata = [_unit_metadata_by_event(z) for z in products]
     spread_max = 0.0
@@ -447,8 +453,9 @@ def _validate_common_event_metadata(
             if "unit_delta_time" in row
             and _known_event_metadata("unit_delta_time", row["unit_delta_time"])
         ]
-        # FPGA counts advance once per coarse-channel sample; a unit that does
-        # not record its own period is scaled by the instrument's.
+        # FPGA counts advance once per coarse-channel sample. The shortest
+        # recorded sample period is used, or the CHIME coarse-channel sample
+        # period when no pilot records one.
         period = min(periods) if periods else 1.0 / CHIME_COARSE_WIDTH_HZ
         for field in (
             "unit_event_id", *_TIMING_FIELDS, *_IDENTITY_FIELDS, *_RECORDED_FIELDS
@@ -524,15 +531,15 @@ def _validate_common_event_metadata(
 def _align_frames(
     products: Sequence[Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], np.ndarray, dict[str, Any]]:
-    """Event-keyed frame alignment: subset and reorder every product onto the
-    per-frame identities they all share.
+    """Subset and reorder every product onto the frame identities they all share.
 
-    A frame's identity is ``(source event, frame position within its file)``,
-    which the analyzer records for every frame. The canonical order is the
-    reference (lowest-channel) product's own order restricted to the common
-    identities, so a fully aligned set passes through untouched (byte-parity
-    with ``run_chime_analysis``) and a ragged set stacks exactly its overlap,
-    reporting what each pilot dropped. Event-keyed identity is mandatory.
+    The identity of a frame is ``(source event, frame position in its file)``,
+    and the analyzer records it for every frame. The canonical order is the
+    order of the reference (lowest-channel) product, restricted to the common
+    identities. A fully aligned set therefore passes through unchanged and is
+    byte-identical to the output of ``run_chime_analysis``. For a ragged set,
+    only the overlap is stacked, and the frames dropped by each pilot are
+    reported. Every product must carry event-keyed identities.
     """
     identities = [_frame_identity(z) for z in products]
     for z, ids in zip(products, identities):
@@ -614,7 +621,7 @@ def _align_frames(
 def _validate_source_event_key_derivation(
     product: Mapping[str, Any], *, context: str
 ) -> None:
-    """Recompute namespaced keys; a marker alone is not identity evidence."""
+    """Check that source_event_keys are derived from unit_order and freq_id."""
     try:
         freq_id = exact_integer_scalar(
             product, "freq_id", dtype=np.int64, minimum=0, maximum=1023
@@ -646,10 +653,15 @@ def _validate_source_event_key_derivation(
 
 
 def report_products(product_paths: Sequence[str | Path]) -> str:
-    """Event-presence report for a set of per-pilot products: per-pilot counts,
-    the presence histogram, the all-pilot intersection, and the greedy
-    drop-curve (intersection after removing the most-constraining pilot,
-    repeatedly). This is the decision input for choosing a combine subset."""
+    """Return the event-presence report for a set of per-pilot products.
+
+    The report has the event count of each pilot, the presence histogram, the
+    intersection over all pilots, and the greedy drop-curve. The drop-curve is
+    the intersection left after the most constraining pilot is removed, which
+    is repeated until max(2, n // 2) of the n pilots remain. The most
+    constraining pilot is the one whose removal leaves the largest
+    intersection. The report is used to choose the channel subset for a
+    combine."""
     import collections
     ev: dict[str, set[str]] = {}
     for p in product_paths:
@@ -699,7 +711,7 @@ def report_products(product_paths: Sequence[str | Path]) -> str:
 def _detector_contract_from(
     products: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Return the required analyzer-stored detector contract."""
+    """Return the detector contract that the analyzer stored in the first product."""
     try:
         contract = json.loads(
             str(np.asarray(products[0]["detector_contract_json"]).reshape(()).item())
@@ -791,29 +803,31 @@ def _frame_identity(z: Mapping[str, Any]) -> np.ndarray:
 
 def _check_invariants(products: Sequence[Mapping[str, Any]],
                       keys, what: str) -> dict[str, Any]:
-    """Assert all per-pilot products agree on geometry/config scalars before stacking.
+    """Check that all per-pilot products agree on geometry and configuration scalars.
 
-    The combiner takes per-pilot frame arrays and the first product's metadata; it
-    must verify the rest of the products were produced with the same geometry/config
-    (nfft, K, Nyquist-zone sign, schema, sample rate), or stacking would silently fuse
-    inconsistent products into one canonical output.
+    The combined product takes the frame arrays of every pilot and the metadata
+    of the first product only. The other products must therefore have the same
+    geometry and configuration (nfft, K, Nyquist-zone sign, schema, and sample
+    rate), since inconsistent products would otherwise be stacked into one
+    canonical output without warning.
 
-    `detector_version` gets token-aware treatment: its `pilot-proxy/<version>`
-    and `source=` components are build provenance rather than geometry, so products
-    from different mid-survey builds (including builds on either side of a
-    release version bump) stack freely as long as every other token (kernel
-    hash, K, schema) matches. Returns provenance notes:
-    {"detector_versions": [...]} when more than one build contributed, so the
-    full stamps survive into the combined product.
+    `detector_version` is compared token by token. Its `pilot-proxy/<version>`
+    and `source=` components are build provenance, so products from different
+    builds of one survey, even builds on either side of a release version
+    bump, are stacked when every other token (kernel hash, K, and schema)
+    matches. When more than one build contributed, the full stamps are
+    returned as {"detector_versions": [...]} and kept in the combined product.
 
-    `detector_contract_json` gets the same treatment for
-    `fine_reduction.designated_bins`: the designated window targets each
-    pilot's own predicted carrier line, so it is per-pilot data rather than
-    shared geometry, and it steers only the fine diagnostic CFAR; no
-    combined output stacks fine arrays. Every other contract field must
-    still match exactly. When windows differ, the per-pilot windows are
-    returned as {"fine_designated_bins_by_pilot": [...]} so they survive
-    into the combined provenance.
+    `detector_contract_json` is compared with `fine_reduction.designated_bins`
+    removed. The designated window is placed on the predicted carrier line of
+    each pilot, so it is per-pilot data. It is used only by the fine diagnostic
+    CFAR, and no combined output stacks fine arrays. Every other contract field
+    must match exactly. When the windows differ, they are returned as
+    {"fine_designated_bins_by_pilot": [...]} and kept in the combined
+    provenance.
+
+    Returns these provenance notes, an empty dict when all builds and windows
+    agree.
     """
     notes: dict[str, Any] = {}
     ref = products[0]
@@ -896,7 +910,7 @@ def _check_invariants(products: Sequence[Mapping[str, Any]],
 
 
 def _common_sample_rate_hz(products: Sequence[Mapping[str, Any]]) -> float:
-    """Return the common rate from explicit or canonical timing metadata."""
+    """Return the common sample rate from sample_rate_hz or unit_delta_time."""
     per_product: list[float] = []
     for z in products:
         recorded = np.asarray(z.get("sample_rate_hz", []), dtype=np.float64).reshape(-1)
@@ -1036,10 +1050,11 @@ def _combine_detector_products(
 ) -> dict[str, Path]:
     """Stack per-pilot detector products and write the canonical detector products.
 
-    Frames are aligned by (event, frame-in-file) identity: pilots that
-    processed different event sets stack over their common identities, with
-    per-pilot drops reported and recorded. ``drop_freq_ids`` excludes whole
-    pilots up front (the subset-selection knob the drop-curve report feeds).
+    Frames are aligned by their (event, frame-in-file) identity. Pilots that
+    processed different event sets are stacked over their common identities,
+    and the frames dropped by each pilot are reported and recorded.
+    ``drop_freq_ids`` removes whole pilots before alignment, and its values are
+    chosen from the drop-curve of ``report_products``.
     """
     products = _load_sorted(product_paths)
     if drop_freq_ids:
@@ -1062,16 +1077,16 @@ def _combine_detector_products(
          "dtv_bandwidth_hz", "pilot_capture_efficiency"),
         "detector geometry",
     )
-    # Validate the shared serialized contract before producing any output. The
-    # invariant check above proves every selected product carries the same
-    # document modulo the per-pilot designated windows, so validating the
-    # decoded document once covers the entire stack.
+    # The shared contract is validated once, before any output is written. The
+    # invariant check has already shown that every selected product carries the
+    # same document apart from the per-pilot designated windows, so one
+    # validation covers the stack.
     contract = _detector_contract_from(products)
     if "fine_designated_bins_by_pilot" in invariant_notes:
-        # The combined document is scan-level provenance: record the union of
-        # the per-pilot windows (schema-valid unique list); the exact window
-        # per pilot travels in detector_provenance_by_pilot and the stats
-        # notes.
+        # The combined contract is scan-level provenance, so the union of the
+        # per-pilot windows is recorded as one sorted list of unique bins. The
+        # window of each pilot is kept in detector_provenance_by_pilot and in
+        # the stats notes.
         contract = dict(contract)
         fine = dict(contract.get("fine_reduction") or {})
         fine["designated_bins"] = sorted({
@@ -1084,9 +1099,10 @@ def _combine_detector_products(
     products, frame_index, align_info = _align_frames(products_full)
     nfft = int(np.asarray(products[0]["nfft"]))
 
-    # per-channel diagnostic paired with the integrated spectra, which are
-    # accumulated at analyzer time over each pilot's FULL processed frame set
-    # and cannot be re-subset here, so it is computed over the full set to match.
+    # The masked fraction is paired with the integrated spectra. The spectra are
+    # accumulated by the analyzer over the full processed frame set of each
+    # pilot and cannot be subset here, so the masked fraction is also computed
+    # over the full set.
     def _masked_fraction(z: Mapping[str, Any]) -> float:
         rej = np.asarray(z["reject_mask"]).reshape(-1).astype(np.float64)
         n_valid = float(np.asarray(z["valid"]).reshape(-1).sum())
@@ -1098,8 +1114,8 @@ def _combine_detector_products(
     physical_channel = _scalars(products, "physical_channel", np.int32)
     pilot_frequency_hz = _scalars(products, "pilot_frequency_hz", np.float64)
     chime_frequency_hz = _scalars(products, "chime_frequency_hz", np.float64)
-    # freq_id is required by the current schema and identifies the receiver
-    # coarse channel used by the later 6 MHz mask-expansion step.
+    # freq_id is required by the current schema and gives the receiver coarse
+    # channel for the later 6 MHz mask-expansion step.
     freq_id = _scalars(products, "freq_id", np.int64)
 
     p_target_u64 = _stack_cols(products, "p_target_u64", np.uint64)
@@ -1110,17 +1126,17 @@ def _combine_detector_products(
     normalized_coarse_power_ratio_db = _stack_cols(products, "normalized_coarse_power_ratio_db", np.float64)
     pilot_excess_db = _stack_cols(products, "pilot_excess_db", np.float64)
     estimated_data_shelf_snr_db = _stack_cols(products, "estimated_data_shelf_snr_db", np.float64)
-    # Per-pilot products use the unambiguous reject_mask name (1 = discard,
-    # positive excess); canonical combined outputs retain their mask field.
+    # Per-pilot products name the mask reject_mask (1 = discard, positive
+    # excess). The canonical combined outputs keep the field name mask.
     mask = _stack_cols(products, "reject_mask", np.uint8)
     valid = _stack_cols(products, "valid", np.uint8)
     baseband_power_linear = _stack_cols(products, "baseband_power_linear", np.float64)
     # The current schema always carries the exact quantized-weight null point.
     target_norm_sq = _scalars(products, "target_norm_sq", np.int64)
     reference_norm_sum_sq = _scalars(products, "reference_norm_sum_sq", np.int64)
-    # Derived, not read: the per-pilot product stores the exact integer
-    # pair and never the float. The combined output publishes the derived
-    # value because that is the artifact the analysis layer reads.
+    # The null power ratio is derived from the exact integer pair stored in the
+    # per-pilot product, which has no float copy. The combined output publishes
+    # the derived value, since the analysis layer reads it.
     null_power_ratio = np.asarray(
         [null_power_ratio_of(p) for p in products], dtype=np.float64
     )
@@ -1128,9 +1144,11 @@ def _combine_detector_products(
         products, "normalized_pilot_excess", np.float64
     )
 
-    # integrated spectra are per-channel 1-D [nfft] (not per-frame): stack along the
-    # pilot axis -> [n_pilots, nfft]. masked fraction = valid-and-rejected / valid
-    # per channel (NaN if a channel has no valid frames, e.g. out-of-band).
+    # The integrated spectra have one 1-D [nfft] array per channel and are
+    # stacked along the pilot axis to [n_pilots, nfft]. The masked fraction of a
+    # channel is the number of valid, rejected frames over the number of valid
+    # frames, and is NaN for a channel with no valid frames, such as an
+    # out-of-band channel.
     spec_before = np.stack([
         np.asarray(z["integrated_spectrum_before_mask"], np.float64).reshape(-1)
         for z in products])
@@ -1214,10 +1232,11 @@ def _combine_detector_products(
         valid=valid,
     )
 
-    # run_config / stats / input_manifest, so validate-products accepts scan output.
-    # These carry the schema-gated fields (detector_contract, mask_policy, geometry)
-    # honestly labeled as chime-scan provenance rather than a byte-faithful imitation of
-    # a single run_chime_analysis run.
+    # run_config, stats, and input_manifest are written so that validate-products
+    # accepts the scan output. They carry the schema-gated fields
+    # (detector_contract, mask_policy, and geometry) and are labeled as
+    # chime-scan provenance, since they do not come from a single
+    # run_chime_analysis run.
     reference_placement = _combined_reference_placement_summary(products)
     if reference_placement is not None:
         contract = dict(contract)
@@ -1605,9 +1624,9 @@ def _recover_interrupted_publish(
             )
         _resolved_directory_root(backup_dir, what="backup directory")
 
-    # Validate every journal-controlled path before changing any canonical file.
-    # The recovery generation manifest inventories the complete allowlist, so
-    # reject a symlink anywhere in that namespace up front as well.
+    # Every path named by the journal is validated before any canonical file is
+    # changed. The recovery generation manifest lists the full allowlist, so a
+    # symlink anywhere in that namespace is also refused here.
     for name in CHIME_COMBINE_CANONICAL_RELATIVE_PATHS:
         _safe_descendant(
             destination,
@@ -1660,9 +1679,9 @@ def _recover_interrupted_publish(
         elif canonical.exists():
             canonical.unlink()
             fsync_directory(canonical.parent)
-    # A rollback also advances generation identity. A validator that overlaps
-    # even a fast failed-and-recovered publication therefore cannot mistake its
-    # transient reads for one stable generation.
+    # A rollback also writes a new generation ID, so a validator that reads
+    # during even a fast failed and recovered publication cannot take its reads
+    # for one stable generation.
     _write_recovery_generation_manifest(destination)
     _unlink_owned_journal(
         journal_path,
@@ -1837,10 +1856,11 @@ def _cleanup_unreferenced_staging(run_dir: Path, staging_dir: Path) -> bool:
         try:
             transaction, _entries, _owner = _load_publish_journal(run)
         except RuntimeError:
-            # An unreadable journal may describe a partially published copy
-            # whose only rollback material is this tree. Fail safe: without a
-            # valid different transaction identity, we cannot prove staging is
-            # an unrelated concurrent loser's disposable work.
+            # An unreadable journal may describe a partial publication whose
+            # only rollback copy is this tree. The staging tree is kept, since
+            # without a valid journal that names a different transaction it
+            # cannot be shown to belong to a concurrent process that lost the
+            # lock.
             preserve = True
         else:
             preserve = transaction == staging
@@ -1858,7 +1878,11 @@ def combine_detector_products(
     chunk_seconds: float = 10.0,
     drop_freq_ids: Sequence[int] | None = None,
 ) -> dict[str, Path]:
-    """Build the complete canonical set off-path, then publish it together."""
+    """Combine per-pilot products and publish the canonical set as one generation.
+
+    The full set is first built in a staging directory under ``run_dir``.
+    Returns the published paths keyed by output label.
+    """
     destination = Path(run_dir)
     destination_existed = destination.exists()
     destination.mkdir(parents=True, exist_ok=True)

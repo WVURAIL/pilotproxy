@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Freeze and generate finite GNU Radio Gaussian-plus-tone IQ; no SDR APIs.
+"""Freeze a plan, then generate finite GNU Radio IQ of Gaussian noise plus a tone.
 
-Run with PYTHONNOUSERSITE=1 /usr/bin/python3. The actual GNU Radio noise_source_c,
-sig_source_c and add_cc blocks produce the saved streams. NumPy only summarizes
-those files after generation; it does not generate or normalize their samples.
+No SDR API is used. Run with PYTHONNOUSERSITE=1 /usr/bin/python3. The saved
+streams are produced by the GNU Radio noise_source_c, sig_source_c, and add_cc
+blocks. NumPy is used only to summarize those files after generation, and it
+never generates or normalizes their samples.
 """
 from __future__ import annotations
 import argparse

@@ -1,8 +1,9 @@
 """Acceptance gate for a complete archive cohort of per-pilot products.
 
-The cohort is one product per screened band of the project's frequency plan,
-each at the band's target freq_id; the detector and instrument dimensions come
-from the project profile. ``pilot-proxy products check-archive DIR`` runs it.
+A cohort has one product for each screened band of the project's frequency
+plan, each at the band's target freq_id. The expected detector and instrument
+dimensions are read from the project profile. The gate is run with
+``pilot-proxy products check-archive DIR``.
 """
 from __future__ import annotations
 
@@ -55,7 +56,7 @@ _KERNEL_PATTERN = re.compile(r"(?:^| )kernel_sha256=([0-9a-f]{64})(?: |$)")
 
 
 class ArchiveAcceptanceError(ValueError):
-    """Raised when a cohort is unsafe to use downstream."""
+    """Raised when a product or cohort does not meet the archive contract."""
 
 
 @dataclass(frozen=True)
@@ -107,8 +108,8 @@ class ArchiveAcceptanceReport:
         """Units whose acquisition recorded no sample interval.
 
         Their frames have no frame time, so a calendar or exposure statement
-        made from this cohort has to name them as its missing denominator
-        rather than average over them silently.
+        made from this cohort must report them as missing from its
+        denominator.
         """
         return sum(item.untimed_units for item in self.products)
 
@@ -273,12 +274,15 @@ def _fine_identity(product: Mapping, detector: dict,
 
 def validated_source_event_keys(product: Mapping, freq_id: int, *,
                                 expected_units: int | None = None) -> tuple[str, ...]:
-    """Validate unique source keys in processing order against unit identity.
+    """Validate unique source-event keys in processing order against the unit identities.
 
     ``unit_keys`` is an inventory and need not be in processing order.
-    ``unit_order`` binds each indexed acquisition to its namespaced source
-    key. Callers with an already validated unit coordinate array can supply
-    its length to check that these identities cover exactly that array.
+    ``unit_order`` gives the namespaced identity of each indexed acquisition.
+    The expected source key of each unit is formed by removing the product's
+    ``_{freq_id}`` suffix from the filename in that identity. A caller with an
+    already validated unit coordinate array can pass its length as
+    ``expected_units`` so that the identities are checked to cover exactly
+    that array.
     """
     source_values = np.asarray(product.get("source_event_keys"))
     if source_values.ndim != 1 or source_values.dtype.kind not in {"U", "S"}:
@@ -349,13 +353,14 @@ def _unit_accounting(product: Mapping, frame_count: int, freq_id: int,
                        provenance["unit_scope"], unit_event_id))):
         raise ArchiveAcceptanceError("unit event or time provenance is invalid")
     sample_rate = _float_scalar(product, "sample_rate_hz", positive=True)
-    # Some acquisitions have no recorded sample interval. The v5 contract
-    # represents this with NaN, as allowed by unit_delta_time's allow_nan=True.
-    # Product.frame_time preserves those NaNs, and the score bundle requires
-    # finite timing only for selected frames. Calendar summaries must report
-    # the missing timing in their denominator.
-    # Recorded intervals must agree with the sample rate. At least one unit
-    # must be timed so the product can support exposure and era calculations.
+    # Some acquisitions have no recorded sample interval, and their
+    # unit_delta_time is stored as NaN (the v5 contract declares the field
+    # with allow_nan=True). Product.frame_time keeps these NaNs, and the score
+    # bundle requires finite timing only for the selected frames. A calendar
+    # summary must therefore report the untimed units in its denominator.
+    # The recorded intervals must agree with the sample rate, and at least
+    # one unit must be timed so the product has a time axis for exposure and
+    # era calculations.
     recorded = np.isfinite(delta)
     if not recorded.any():
         raise ArchiveAcceptanceError("no unit records a sampling interval")
@@ -390,9 +395,8 @@ def _unit_accounting(product: Mapping, frame_count: int, freq_id: int,
     )
     if sum(frames_by_unit) != frame_count or sum(valid_by_unit) != int(valid.sum()):
         raise ArchiveAcceptanceError("unit frame accounting does not close")
-    # Accepting untimed units silently would hand downstream code a frame-time
-    # vector with unannounced NaNs, so the report carries their count: any
-    # calendar statement built on this cohort has to quote this denominator.
+    # The untimed units and their frames are counted in the report. A calendar
+    # statement built on this cohort must quote this count in its denominator.
     untimed_units = int(np.count_nonzero(~recorded))
     untimed_frames = int(np.isin(frame_unit, np.flatnonzero(~recorded)).sum())
     return (unit_count, frames_by_unit, valid_by_unit,
@@ -446,10 +450,11 @@ def _product_record(path: Path) -> tuple[ArchiveProductAccounting, dict]:
         raise ArchiveAcceptanceError(f"{path.name} is not an NPZ product")
     try:
         with loaded as product:
-            # A cohort is per-pilot v6 products, or the v5 products of
-            # record; open_product reads either through its fine-power sums
-            # (and verifies a v6 product stores exactly those). One cohort
-            # cannot mix the two: their detector contracts differ.
+            # A cohort holds either per-pilot v6 products or the v5 products
+            # of record. open_product reads both through their fine-power
+            # sums and verifies that a v6 product stores exactly those sums.
+            # The two schemas cannot be mixed in one cohort because their
+            # detector contracts differ.
             view = open_product(product)
             if view.schema not in READABLE_SCHEMA_TOKENS.values():
                 raise ArchiveAcceptanceError(
@@ -483,7 +488,9 @@ def _product_record(path: Path) -> tuple[ArchiveProductAccounting, dict]:
                 "per_frequency_threshold": False,
                 "threshold_mode": "none",
             }
-            # Products of record carry the coordinate names of their release.
+            # Products of record use the coordinate names of their release.
+            # These names are mapped to the current names before the values
+            # are compared.
             stated = dict(detector)
             for name, rename in (
                     ("weight_coordinate_system", OLD_WEIGHT_COORDINATE_NAMES),
@@ -582,7 +589,7 @@ def _product_record(path: Path) -> tuple[ArchiveProductAccounting, dict]:
 
 def validate_archive_products(paths: Sequence[str | Path]
                               ) -> ArchiveAcceptanceReport:
-    """Validate one complete, non-overlapping cohort: one product per screened band."""
+    """Validate a complete cohort with exactly one product for each screened band."""
     resolved = tuple(Path(path).expanduser().resolve() for path in paths)
     if len(resolved) != len(EXPECTED_CHANNELS):
         raise ArchiveAcceptanceError(
@@ -668,7 +675,7 @@ def _input_paths(values: Sequence[str]) -> tuple[Path, ...]:
 
 
 def report_json(report: ArchiveAcceptanceReport) -> str:
-    """Every field of the report as canonical JSON (``dataclasses.asdict``)."""
+    """Return every field of the report as JSON with sorted keys (``dataclasses.asdict``)."""
     import dataclasses
 
     def enc(o):

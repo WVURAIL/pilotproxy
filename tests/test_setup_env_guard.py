@@ -200,8 +200,9 @@ def test_guard_refuses_stale_sidecar_for_recreated_target(
     claimed_identity = (target.stat().st_dev, target.stat().st_ino)
 
     shutil.rmtree(target)
-    # Some filesystems immediately reuse the just-freed inode. Keep that inode
-    # occupied so this regression deterministically models a distinct target.
+    # Some filesystems reuse a freed inode at once. A placeholder directory is
+    # created first to take that inode, so the recreated target always has a
+    # different identity from the claimed one.
     inode_holder = target.parent / "inode-holder"
     inode_holder.mkdir()
     target.mkdir()

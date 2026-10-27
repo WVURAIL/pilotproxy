@@ -1,20 +1,23 @@
 # coding=utf-8
-"""Transmitter-census case study: carrier-offset dispersion by service class.
+"""Transmitter-census case study of carrier-offset dispersion by service class.
 
-Consumes two declared inputs and produces the paper's two case-study figures
-plus their supporting tables. Nothing here touches the archive; both inputs
-already exist: the scan's per-pilot high-resolution spectra or a
-pre-detected line CSV, and the FCC/ISED 500-mile census.
+The purpose of this module is to produce the paper's two case-study figures
+and their supporting tables from two declared inputs. The first input is the
+scan's per-pilot high-resolution spectra or a pre-detected line CSV, and the
+second is the FCC/ISED 500-mile census. Both inputs already exist, and the
+archive is not read.
 
-Input schemas (CSV with a header row; extra columns are ignored)
------------------------------------------------------------------
+Input schemas (CSV with a header row, extra columns ignored)
+------------------------------------------------------------
 census:  rf_channel:int, callsign:str, service_class:str, and either
-         detectability_db:float (a precomputed received-strength score, e.g.
-         a propagation-model field strength; blanks rank last, tie-broken by
-         distance_km when present) or erp_kw:float + distance_km:float
-         (score = ERP / distance^2) [, bearing_deg, lat, lon, ...]
-         service_class is normalized case-insensitively (punctuation and
-         parentheticals collapse to underscores):
+         detectability_db:float or erp_kw:float + distance_km:float
+         [, bearing_deg, lat, lon, ...]
+         detectability_db is a precomputed received-strength score, such
+         as a propagation-model field strength. Blanks rank last, and ties
+         are broken by distance_km when it is present. When the census has
+         no detectability_db column, the score is ERP / distance^2.
+         service_class is normalized case-insensitively, with punctuation
+         and parentheticals collapsed to underscores:
            full_service / full-power / primary        -> primary
            translator (lptv) / repeater / relay /
            lptv / low-power (lptv) / class a          -> non_primary
@@ -22,30 +25,32 @@ census:  rf_channel:int, callsign:str, service_class:str, and either
 lines:   rf_channel:int, offset_hz:float (about the channel's nominal
          pilot), snr_db:float [, epoch, ...]
          Alternatively, --lines-from-run extracts the line list directly
-         from a scan work dir's per-pilot products: each carries the
-         high-resolution time-averaged spectrum of its coarse channel
-         (integrated_spectrum_before/after_mask; natural FFT order, bin 0
-         at the coarse-channel center, `sense` flipping the frequency
-         axis). The spectrum's bin spacing is fs/nfft, derived from the
-         product as bin_enbw_hz * detector_window_samples / nfft --
-         `bin_enbw_hz` itself is the DETECTOR's bin width (fs/K) rather than the
-         spectrum's.
+         from the per-pilot products of a scan work dir. Each product has
+         the high-resolution time-averaged spectrum of its coarse channel
+         (integrated_spectrum_before_mask or integrated_spectrum_after_mask)
+         in natural FFT order, with bin 0 at the coarse-channel center and
+         `sense` flipping the frequency axis. The spectrum's bin spacing is
+         fs/nfft, found from the product as
+         bin_enbw_hz * detector_window_samples / nfft. Here, `bin_enbw_hz`
+         is the detector's bin width fs/K, so it is scaled by K / nfft to
+         give the spectrum's bin spacing.
 
 Association rule (pluggable, recorded per line in association.csv)
 ------------------------------------------------------------------
-Measured lines cannot be matched to transmitters by frequency alone --
-co-channel transmitters share the nominal pilot; their *offsets* are the
-unknown being studied. Per RF channel, lines are ranked by SNR and census
-entries by a detectability score (ERP / distance^2); ranks are paired
-positionally. Confidence tiers:
-  dominant     strongest line paired with the top-scoring entry when that
-               entry is primary (the usual case: one full-power station
-               dominates the channel)
-  ranked       remaining positional pairs
-  unassociated line count exceeds census count (a finding, reported)
-The alternative "dominant/secondary" strategy labels only the strongest
-line per channel (primary where the census has one) and pools the rest as
-non_primary without per-transmitter claims.
+Measured lines cannot be matched to transmitters by frequency alone, since
+co-channel transmitters share the nominal pilot and their *offsets* are the
+unknown under study. For each RF channel, the lines are ranked by SNR and the
+census entries by their detectability score, and the two rankings are paired
+by position. Each line is given a confidence tier:
+  dominant      strongest line paired with the top-scoring entry when that
+                entry is primary (the usual case, where one full-power
+                station dominates the channel)
+  ranked        remaining positional pairs
+  unassociated  lines ranked below the channel's last census entry
+                (reported as a finding)
+The alternative dominant_secondary strategy labels only the strongest line in
+each channel, with the class of the top-scoring census entry, and pools the
+rest as non_primary without per-transmitter claims.
 
 Outputs (into --output-dir)
 ---------------------------
@@ -57,6 +62,7 @@ fig_spread_vs_composition.png/.pdf
                                per-channel spread vs non-primary fraction
                                among associated lines (Figure B)
 threshold_stability.csv        per-channel MAD vs SNR threshold sweep
+extracted_lines.csv            extracted line list (--lines-from-run only)
 """
 from __future__ import annotations
 
@@ -93,8 +99,8 @@ class Transmitter:
     callsign: str
     service_class: str          # normalized
     raw_class: str
-    detectability: float        # higher ranks first; -inf when unscored
-    distance_km: float          # tiebreak among unscored; inf when absent
+    detectability: float        # higher ranks first, -inf when unscored
+    distance_km: float          # tiebreak among unscored, inf when absent
 
 
 @dataclass
@@ -137,8 +143,11 @@ def load_census(path: Path) -> list[Transmitter]:
 
 def _bin_offsets_hz(nfft: int, sense: int, center_hz: float,
                     pilot_hz: float, bin_spacing_hz: float) -> np.ndarray:
-    """Offset from the nominal pilot for every spectrum bin (natural FFT
-    order: bin 0 = DC = coarse-channel center, upper half negative)."""
+    """Return the offset from the nominal pilot of every spectrum bin.
+
+    The bins are in natural FFT order, with bin 0 at DC (the coarse-channel
+    center) and the upper half negative.
+    """
     k = np.arange(int(nfft))
     f_bb = np.where(k < nfft // 2, k, k - nfft).astype(np.float64) * bin_spacing_hz
     return center_hz + sense * f_bb - pilot_hz
@@ -151,9 +160,13 @@ _SPECTRUM_KEYS = {
 
 
 def _prominence_db(snr: np.ndarray, i: int) -> float:
-    """Topographic prominence of peak i in a 1-D dB array: height above the
-    higher of the two key saddles (the minimum between the peak and the
-    nearest higher sample on each side; the window edge if none)."""
+    """Return the topographic prominence of peak i in a 1-D dB array.
+
+    The prominence is the height of the peak above the higher of its two key
+    saddles. On each side, the key saddle is the minimum between the peak and
+    the nearest higher sample, or the minimum out to the window edge when
+    there is no higher sample.
+    """
     peak = snr[i]
     saddles = []
     for step in (-1, 1):
@@ -170,16 +183,18 @@ def extract_lines_from_run(work_dir: Path, *, spectrum: str = "before",
                            min_snr_db: float = 6.0,
                            min_separation_hz: float = 100.0,
                            min_prominence_db: float = 6.0) -> list[Line]:
-    """Detected carrier lines from a scan work dir's per-pilot spectra.
+    """Return the carrier lines detected in the per-pilot spectra of a scan work dir.
 
-    Within +/- search_window_hz of each channel's nominal pilot, local maxima
-    at least min_snr_db above the window's median floor AND at least
-    min_prominence_db above their key saddle become lines, greedily thinned
-    (strongest first) to min_separation_hz. The prominence criterion rejects
-    window-leakage sidelobes: a strong carrier's accumulated skirt carries
-    ripples a few dB above their local valleys, while a real isolated carrier
-    rises its full SNR from the floor. This is the case study's line source;
-    it replaces the retired pilotcal offset survey."""
+    For each channel, the search covers +/- search_window_hz about the nominal
+    pilot. A local maximum becomes a line when it is at least min_snr_db above
+    the window's median floor and at least min_prominence_db above its key
+    saddle. The lines are then thinned greedily, strongest first, to a
+    separation of min_separation_hz. The prominence criterion rejects
+    window-leakage sidelobes. A strong carrier's accumulated skirt has ripples
+    only a few dB above their local valleys, while a real isolated carrier
+    rises its full SNR from the floor. These lines are the line source of the
+    case study.
+    """
     key = _SPECTRUM_KEYS.get(spectrum)
     if key is None:
         raise SystemExit(f"unknown --spectrum {spectrum!r} (before/after)")
@@ -203,14 +218,14 @@ def extract_lines_from_run(work_dir: Path, *, spectrum: str = "before",
             kwin = int(np.asarray(z["detector_window_samples"]).reshape(-1)[0])
         if spec.size != nfft:
             continue
-        # spectrum bin spacing = fs / nfft; the product self-describes fs as
-        # bin_enbw_hz * K (the detector's rectangular-window bin is fs/K)
+        # spectrum bin spacing is fs / nfft, with fs = bin_enbw_hz * K from the
+        # product, since the detector's rectangular-window bin is fs / K
         spacing = enbw * kwin / nfft
         offs = _bin_offsets_hz(nfft, sense, center, pilot, spacing)
         sel = np.abs(offs) <= float(search_window_hz)
-        # DC guard: the coarse-channel center bin carries the known DC spur
-        # (dominant on the translator-oscillator channels); never call it a
-        # carrier line
+        # the coarse-channel center bin carries the known DC spur (dominant on
+        # the translator-oscillator channels), so bins at most 1.5 bins from
+        # the center are never called carrier lines
         k = np.arange(nfft)
         f_bb = np.where(k < nfft // 2, k, k - nfft).astype(np.float64) * spacing
         sel &= np.abs(f_bb) > 1.5 * spacing
@@ -249,11 +264,11 @@ def load_lines(path: Path) -> list[Line]:
             for r in _read_rows(path)]
 
 
-# ------------------------------------------------------------- association
+# association
 
 def associate(lines: list[Line], census: list[Transmitter], *,
               strategy: str = "ranked") -> list[dict]:
-    """Per-line association records. See module docstring for the rule."""
+    """Return one association record per line, by the rule in the module docstring."""
     if strategy not in ("ranked", "dominant_secondary"):
         raise SystemExit(f"unknown association strategy: {strategy!r}")
     records: list[dict] = []
@@ -284,7 +299,7 @@ def associate(lines: list[Line], census: list[Transmitter], *,
     return records
 
 
-# --------------------------------------------------------------- statistics
+# statistics
 
 def mad_hz(values: np.ndarray) -> float:
     v = np.asarray(values, dtype=np.float64)
@@ -321,6 +336,7 @@ def spearman(x: np.ndarray, y: np.ndarray) -> float:
 
 def bootstrap_ci(x: np.ndarray, y: np.ndarray, *, n_boot: int = 2000,
                  seed: int = 0) -> tuple[float, float]:
+    """Return the 95% percentile bootstrap interval of the Spearman rho."""
     rng = np.random.default_rng(seed)
     n = len(x)
     stats = []
@@ -367,7 +383,7 @@ def threshold_sweep(records: list[dict], thresholds: np.ndarray) -> list[dict]:
     return rows
 
 
-# ------------------------------------------------------------------ figures
+# figures
 
 def _figures(records, chan_stats, rho, ci, out_dir: Path,
              qualifying=None) -> None:
@@ -414,7 +430,7 @@ def _figures(records, chan_stats, rho, ci, out_dir: Path,
     fig, ax = plt.subplots(figsize=(5.2, 3.4))
     ax.plot(xs[qual], ys[qual], "o", ms=5)
     excl = finite & ~qual
-    if excl.any():   # pre-registered exclusions are shown rather than hidden
+    if excl.any():   # pre-registered exclusions are drawn as hollow gray markers
         ax.plot(xs[excl], ys[excl], "o", ms=4, mfc="none", color="0.6")
     for c, q, f in zip(chan_stats, qual, finite):
         if f:
@@ -434,7 +450,7 @@ def _figures(records, chan_stats, rho, ci, out_dir: Path,
     plt.close(fig)
 
 
-# --------------------------------------------------------------------- main
+# command line
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(

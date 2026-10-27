@@ -1,36 +1,38 @@
 #!/usr/bin/env python3
-"""Historical stack-to-proxy amplitude-ratio derivation (October 2026).
+"""Derive the stack-to-proxy amplitude ratio of the October 2026 records.
 
-This reproduces the original capture comparison and its old duty scenario.
-The ratio is not an intrinsic coherent fraction; use tools/threshold_rule.py
-for current conditional threshold assignments. The archived record is
-``src/pilot_proxy/characterization/data/coherent_fraction.json``.
+The script reproduces those records and their duty scenario from the capture and
+archive inputs. On the calibrated scale, the ratio is the amplitude ratio gamma of
+docs/TERMINOLOGY.md, the redundant-stack amplitude over the archive shelf proxy. Current
+conditional thresholds are assigned by tools/threshold_rule.py. The archived
+record is ``src/pilot_proxy/characterization/data/coherent_fraction.json``.
 
-Definition that reproduces the five hard-coded values of
+The following definition reproduces the five hard-coded values of
 simple-threshold-rule-2026-10-11/channel6mhz/coherent_rule.json to machine precision:
 
     c = (A_bao[ch] - A_bao[37]) / x_all[ch]
 
 A_bao   capture class amplitude on the three east-west (inter-cylinder, 22/44/66 m) classes,
-        amendment 7 of the frame analysis (the table of record's column A_bao_keep_all):
-        per dump, for each class the larger of the XX and YY readings of excess_inband_median
-        (Eq. tolerance:classamp on the raw frame, normalized to single-sample noise, in-band
-        per-bin median less the sky reference), then the median over the three classes;
-        then the median over the four dumps (pilot 2026-09-16, D1-D3 2026-09-17; keep_all).
-        RAW scale (no gain solution applied).
-A_bao[37]  the same quantity on the channel 37 control = capture_floor 7.934e-05.
+        from amendment 7 of the frame analysis (column A_bao_keep_all of the table of record).
+        For each dump and class, the larger of the XX and YY values of excess_inband_median
+        is taken. This value is equation tolerance:classamp on the raw frame, normalized to
+        single-sample noise, as the in-band per-bin median less the sky reference. The median
+        is then taken over the three classes, and then over the four dumps (pilot 2026-09-16,
+        D1-D3 2026-09-17, keep_all). The scale is raw, with no gain solution applied.
+A_bao[37]  the same quantity on the channel 37 control, capture_floor = 7.934e-05.
 x_all   archive per-input DTV shelf power over noise, all frames of the current era, no mask
         (last element of threshold-rule-latest-2026-10-12/sweeps/chNN.npz).
 
-The original values were computed from the 4-significant-figure table-of-record CSV; this
-script recomputes A_bao from the frame-residual products as well and reports both.
+The hard-coded values were computed from the table-of-record CSV, which carries 4
+significant figures. The script also recomputes A_bao from the frame-residual products and
+reports both.
 
-Also: calibrated-scale c, the sensitivity of the per-channel rule to c, and the capture
-cross-check a_cap = A_net^2 * 16384 * G against a_tol = 1/|R|, with G the admissible minimum of the
-33-frame dumps that measured c, the same for every band
+The report also gives c on the calibrated scale, the sensitivity of the per-channel rule to
+c, and the capture cross-check a_cap = A_net^2 * 16384 * G against a_tol = 1/|R|. Here G is
+the admissible minimum of the 33-frame dumps that measured c, the same for every band
 (pilot_proxy.characterization.threshold_rule.temporal_gain), as the rule prices it.
-Read-only on every input; writes c.json (the full report) in --out and, with --data-file, the
-coherent-fraction record the threshold rule reads.
+The inputs are only read. The full report is written to c.json in --out, and with
+--data-file the coherent-fraction record that the threshold rule reads is written as well.
 
     python tools/archive/derive_stack_amplitude_ratio.py --record <dissertation figure_src/data/record> \\
         --rule <threshold rule output> --scores <score cache> --channel-table <RFIsher channel_table.json> \\
@@ -126,7 +128,7 @@ def sweep(ch):
 
 
 def rule(sw, knee_word, R, c, gain, years_per=CAL_PER_ONSKY):
-    """Per-channel rule at coherent fraction c and gain G. Returns (outcome, where, kappa, years, r_hi)."""
+    """Apply the per-channel rule at ratio c and gain G and return a dict of outcome, at, kappa, years, r_hi and knee_r_hi."""
     r_hi = (c * (sw['x'] + 2 * sw['se'])) ** 2 * N * gain * abs(R)
     i = int(np.flatnonzero(sw['word'] == knee_word)[0])
     yk = years_per / sw['kappa'][i]
@@ -193,7 +195,7 @@ def derive():
         if ch == 35:
             e['ch35_direct_calibrated'] = d35
             e['c_cal_direct'] = e['c_raw'] * d35['ratio']
-        # membership
+        # channel set membership
         if ch == CONTROL:
             e.update(in_set=False, reason='control channel (defines the floor; no DTV, c = 0 by construction)')
         elif ch == 33:
@@ -225,7 +227,7 @@ def derive():
         excluded={ch: chans[ch]['reason'] for ch in chans if not chans[ch]['in_set']},
     )
 
-    # sensitivity
+    # sensitivity of the rule to c
     c0 = old['c']
     cgrid = {'0.011': 0.011, '0.0156': 0.0156, '0.0192': 0.0192, '0.026': 0.026, '0.032': 0.032,
              '2x (0.0384)': 2 * c0, '5x (0.096)': 5 * c0,
@@ -258,7 +260,7 @@ def derive():
         if len(set(outs)) > 1:
             changes[ch] = {l: f"{row[l]['outcome']} ({row[l]['at']})" for l in cgrid}
 
-    # capture cross-check in the rule's own units (each band's G)
+    # capture cross-check in the rule's units, with the G of each band
     xc = {}
     floor_a1 = floor_rec ** 2 * N
     for ch, e in chans.items():
@@ -332,7 +334,7 @@ WHY_CALIBRATED = "Science data are gain-calibrated before redundant baselines ar
 
 
 def data_record(out):
-    """The coherent-fraction record the threshold rule reads: the calibrated median over the measured bands."""
+    """Return the coherent-fraction record that the threshold rule reads, valued at the calibrated median over the measured bands."""
     s, chans = out['summary'], out['channels']
     return {'schema': 'coherent-fraction-v1', 'value': s['c_cal']['median'], 'scale': 'calibrated',
             'statistic': 'median over the bands below',

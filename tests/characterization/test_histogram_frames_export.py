@@ -52,8 +52,8 @@ def fine_with_sums(target,reference):
 
 
 def test_export_archive_gate_matches_the_original_and_forms_frame_powers_from_fine(tmp_path):
-    # The frame powers are the fine powers' sums, so the gate needs the fine
-    # values: the export archive decodes the member once and still forbids PSD.
+    # The frame powers are the sums of the fine powers, so the gate needs the fine
+    # values. The export archive decodes the fine power member once and still refuses PSD reads.
     fine=fine_with_sums([1,2,0,3],[2,2,0,2])
     data=fixture_product(fine);path=tmp_path/"product.npz";np.savez_compressed(path,**data)
     expected=m.evaluate_frame_health(data)
@@ -67,7 +67,7 @@ def test_export_archive_gate_matches_the_original_and_forms_frame_powers_from_fi
 
 
 def test_gate_follows_the_fine_sums_not_the_stored_powers(tmp_path):
-    # Stored powers say frame 2 is invalid; its fine powers say it is valid.
+    # frame 2 is invalid by its stored powers and valid by its fine powers
     data=fixture_product(fine_with_sums([1,2,5,3],[2,2,4,2]))
     health=m.evaluate_frame_health(data)
     assert health.include.tolist()[2] and "detector_invalid" not in health.reason_counts

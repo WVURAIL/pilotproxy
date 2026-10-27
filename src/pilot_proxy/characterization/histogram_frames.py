@@ -1,12 +1,15 @@
 """Export small coarse-frame fields against a characterization release's era and health records.
 
-No era refitting; no PSD/fine payload decoding; no hardware access. Histograms
-retain every finite Q on timed health-selected frames, including zero if present.
+The eras are not refitted, and no hardware is accessed. The fine member is
+decoded only to form the frame powers, and no fine value or PSD is exported.
+The histogram keeps every finite Q of the timed, health-selected frames, and a
+Q at or below zero is kept and flagged.
 
-``--control-product`` exports one control band instead: a band the project
-profile's frequency plan gives role ``control``, read at its declared
-``target_freq_id``. It has no ledger, no dated era, no threshold, no tolerance
-and no verdict; its archive is one period (``CONTROL_PERIOD_RULE``).
+With ``--control-product``, one control band is exported instead. A control
+band has role ``control`` in the frequency plan of the project profile and is
+read at its declared ``target_freq_id``. It has no ledger, dated era,
+threshold, tolerance, or verdict, and its archive is one period
+(``CONTROL_PERIOD_RULE``).
 
     pilot-proxy characterize histogram-frames --products DIR --release DIR --output DIR
     pilot-proxy characterize histogram-frames --control-product FILE [--profile DIR] --output DIR
@@ -74,11 +77,11 @@ def member_header(path,name):
 class FrameExportArchive(Mapping):
     """Cache the fields a frame export reads, and forbid the spectral members.
 
-    Since kernel core 3.0.0 the frame powers, and so Q, the valid flag and the
-    health gate, are the all-bin sums of ``fine_power_u64``: the fine member is
-    decoded (once, cached) to form them. Its header and full byte length are
-    validated first. No fine value is exported; PSD, integrated spectra and
-    any other fine member stay forbidden.
+    In kernel core 3.0.0, the frame powers (and so Q, the valid flag, and the
+    health gate) are the all-bin sums of ``fine_power_u64``. The fine member is
+    therefore decoded once and cached to form them, after its header and full
+    byte length are validated. No fine value is exported, and PSD, integrated
+    spectra, and every other fine member stay forbidden.
     """
     def __init__(self,archive,path):
         self.archive=archive;self.files=archive.files;self.cache={};self.read_fields=[]
@@ -135,7 +138,7 @@ def process_channel(product_path,ledger_path,eras_path,output,preflight):
         view=product.view
         if view.physical_channel!=channel or view.freq_id!=fid:raise ValueError("product identity differs")
         if int(product.scalar("nfft"))!=NFFT:raise ValueError("unexpected frame geometry")
-        # Mandatory original gate, over the frame powers from the fine sums.
+        # the original health gate is required and runs on the frame powers from the fine sums
         health=evaluate_frame_health(proxy)
         valid=np.asarray(view.valid,dtype=bool);health_include=np.asarray(health.include,dtype=bool)
         selected=valid&health_include;Q=np.asarray(view.statistic,dtype=np.float64)
@@ -218,10 +221,11 @@ CONTROL_PERIOD_RULE=("A control band has no emitter, so no era is dated: its arc
 
 
 def control_band(project,channel,freq_id,pilot_hz):
-    """The profile's control band for a product; ValueError for any other band.
+    """Return the profile's control band for a product, or raise ValueError for any other band.
 
-    The frequency plan decides, not a channel list here: the band must have role control, the product must be
-    read at the band's declared target_freq_id, and the product's nominal marker must lie inside the band."""
+    The band is taken from the frequency plan, so this module keeps no channel list. The band must have role
+    control, the product must be read at the band's declared target_freq_id, and the product's nominal marker
+    must lie in the band."""
     try:band=project.frequency_plan.band(str(channel))
     except KeyError as error:raise ValueError(f"channel {channel} is not a band of the frequency plan") from error
     if band.role!="control":raise ValueError(f"channel {channel} has role {band.role!r} in the frequency plan, not control")

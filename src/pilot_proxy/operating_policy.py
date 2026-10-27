@@ -1,33 +1,36 @@
-"""Compile the threshold rule's decisions into the channel operating policy kotekan reads.
+"""Compile the threshold rule's decisions into the channel operating policy that kotekan reads.
 
 The plan names the receiver profile and its frequency-ID namespace
 (``chime_freq_id`` for the CHIME upgrade, ``chord_freq_id`` for CHORD), the
-threshold rule's ``decisions.json`` (``tools/threshold_rule.py``), the runtime
-bundle, the consumer and the era. Every ATSC channel 14 to 36 of the decisions
-becomes one assignment at its receiver frequency ID:
+``decisions.json`` of the threshold rule (``tools/threshold_rule.py``), the
+runtime bundle, the consumer, and the era. Each ATSC channel 14 to 36 of the
+decisions becomes one assignment at its receiver frequency ID:
 
 - deployed (outcome ``useful``): a finite threshold at the decided Q16 word.
   The bundle's profile for the channel must carry that word
-  (``fine_calibration`` calibrated with ``cfar_multiplier_q16`` equal to it);
-  until it does, the channel is pending and the configuration is incomplete;
+  (``fine_calibration`` calibrated with ``cfar_multiplier_q16`` equal to
+  it). Until it does, the channel is pending and the configuration is
+  incomplete.
 - not deployed (outcome ``not useful``): ``reject_all``, the permanent mask,
-  with the rule's reason; except a channel whose reason is in
-  ``UNMASKED_REASONS`` (DTV without a matching pilot: the detector has no
-  pilot to act on and would never fire), which is ``pass_all``, left unmasked
-  and listed under ``unmasked_freq_ids``.
+  with the rule's reason. A channel whose reason is in ``UNMASKED_REASONS``
+  is DTV without a matching pilot, so the detector has no pilot to act on
+  and would never fire. Such a channel is compiled as ``pass_all``, left
+  unmasked, and listed under ``unmasked_freq_ids``.
 
-A decision outside channels 14 to 36 (the channel 37 control band) is not a
-DTV channel and is reported, not assigned; except that when the bundle's
-channel 37 profile has status ``control`` at the decided word, channel 37 is
-compiled as the noise control: listed in ``control_freq_ids``, which the
-detector evaluates and records and the consumer never applies. A control needs
-the consumer capability ``dtv_control_freq_ids_v1``. On ``chime_freq_id`` the
-frequency ID of each channel is the project's (``Project.target_freq_id``), and
-the bundle must agree with it.
+A decision for any channel other than 14 to 36 (the channel 37 control
+band) is not a DTV channel and is reported with no assignment. When the
+bundle's channel 37 profile has status ``control`` at the decided word,
+channel 37 is compiled as the noise control. It is listed in
+``control_freq_ids``, which the detector evaluates and records and the
+consumer never applies. A control needs the consumer capability
+``dtv_control_freq_ids_v1``. On ``chime_freq_id``, the frequency ID of each
+channel is the project's (``Project.target_freq_id``), and the bundle must
+agree with it.
 
-The reject-all limit is encoded explicitly, not as a zero Q16 multiplier.
-Compilation authenticates declared inputs; it never activates a configuration,
-verifies consumer capability implementations, or certifies scientific recovery.
+The reject-all limit is encoded explicitly as ``reject_all``, and a zero Q16
+multiplier is never used for it. Compilation authenticates the declared
+inputs. It does not activate a configuration, verify the consumer's
+capability implementations, or certify scientific recovery.
 """
 
 from __future__ import annotations
@@ -65,8 +68,8 @@ NAMESPACES = tuple(sorted(CHANNEL_ID_NAMESPACE_FIELD_ALIASES))
 FIRST_CHANNEL, LAST_CHANNEL = 14, 36        # the ATSC UHF television channels a DTV policy covers
 CHANNEL_WIDTH_HZ = 6_000_000
 OUTCOMES = {"useful": "finite", "not useful": "reject_all"}
-# not deployed and not masked: the rule's reasons for which the detector has nothing to act on
-UNMASKED_REASONS = frozenset({"DTV without a matching pilot", "pilot not seen"})   # the 2026-10-12 wording of the same verdict
+# reasons of the rule that leave the detector nothing to act on, so the channel is neither deployed nor masked
+UNMASKED_REASONS = frozenset({"DTV without a matching pilot", "pilot not seen"})   # "pilot not seen" is the 2026-10-12 wording of the same reason
 
 
 def _require(condition, message):
@@ -112,8 +115,8 @@ def _q16(value):
 
 
 def _decisions(path):
-    """The threshold rule's per-channel decisions, checked: useful carries its word, not useful its reason."""
-    # the rule may write a non-finite diagnostic (a time at zero retention); the fields read here are checked below
+    """Return the checked per-channel decisions of the threshold rule, each useful row with its word and each not-useful row with its reason."""
+    # the rule may write a non-finite diagnostic (a time at zero retention), so only the fields read here are checked below
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     _require(isinstance(data, dict) and isinstance(data.get("channels"), list) and data["channels"],
              "decisions.json must list its channels")
@@ -151,7 +154,7 @@ def _bundle(plan, base, bindings, receiver):
 
 
 def _binding(channel, freq, eta, bound, status="calibrated"):
-    """The deployed word as the bundle carries it, or None while the bundle's profile is pending."""
+    """Return the deployed word as the bundle carries it, or None while the bundle's profile is pending."""
     fine = bound["fine_calibration"]
     if fine["status"] != status:
         return None
@@ -165,7 +168,7 @@ def _binding(channel, freq, eta, bound, status="calibrated"):
 
 
 def _frequency_mapping(channel, bound, project, offset, receiver):
-    """The bundle profile's receiver frequency ID, checked against the exact receiver grid."""
+    """Return the bundle profile's receiver frequency ID, checked against the exact receiver grid."""
     freq = bound["receiver_channel_id"]
     calibration._integer(freq, f"channel {channel} receiver_channel_id")
     if project is not None:
@@ -183,7 +186,7 @@ def _frequency_mapping(channel, bound, project, offset, receiver):
 
 
 def _control(channel, decision, bound, mapping):
-    """The channel 37 noise control at its decided word: evaluated and recorded, never applied."""
+    """Return the channel 37 noise control at its decided word, which is evaluated and recorded and never applied."""
     freq = mapping["receiver_channel_id"]
     _require(decision["outcome"] == "useful",
              f"channel {channel}: the bundle carries a control profile but the decision has no word")
@@ -246,7 +249,7 @@ def analyze_policy(plan_path):
                 freq, mapping = _frequency_mapping(channel, bound[0], project, offset, receiver)
                 row, binding = _control(channel, decision, bound[0], mapping)
                 _require(binding is not None, f"channel {channel}: the control profile differs from the decided word")
-                # the detector refuses archive-review thresholds, the control's included
+                # the detector rejects every archive-review threshold, the control's as well
                 if bound[0]["fine_calibration"]["provenance"].get("threshold_selection") is not None:
                     row["bundle_status"] = "archive review candidate at the decided word"
                     review_candidates.append(freq)

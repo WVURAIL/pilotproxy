@@ -1,19 +1,21 @@
-"""Statistical bookkeeping for separately frozen fine-detector experiments.
+"""Statistical bookkeeping for individually frozen fine-detector experiments.
 
-These helpers do not certify a detector, physical residual or telescope policy.
-Trials must be independent across IDs; stages/SNRs may deliberately be paired.
-The single-look ideal fine F(2,4) has infinite variance: a finite sample standard
-deviation at M=1 is descriptive, not a finite theoretical scaling benchmark.
-SciPy is required for exact binomial intervals (available in the test extra).
+These helpers do not certify a detector, a physical residual, or a telescope
+policy. Trials must be independent across IDs, and stages or SNRs may be
+paired by design. The single-look ideal fine statistic F(2,4) has infinite
+variance. Thus, a finite sample standard deviation at M=1 only describes the
+sample and cannot be used as a theoretical scaling benchmark. SciPy is
+required for exact binomial intervals and is available in the test extra.
 
 The order-statistic calibration and the fixed-sample binomial acceptance
 diagnostics (:func:`higher_index` to :func:`family_power_lower_bound`) are
-design and reference calculations, not permission to extend or retune an
-experiment after evaluation; policies may share trials, and no independence
-between policies is assumed by the family lower bound. A fixed-rank one-sided
-tolerance limit's rank depends only on n, the false-alarm target and the
-confidence, through the integer binomial count whose upper bound is at most
-the target; strict exceedances keep ties.
+design and reference calculations. They do not permit an experiment to be
+extended or retuned after evaluation. Policies may share trials, and the
+family lower bound assumes no independence between policies. The rank of a
+fixed-rank one-sided tolerance limit depends only on n, the false-alarm
+target, and the confidence, through the integer binomial count whose upper
+bound is at most the target. Exceedances are strict, so scores tied with the
+threshold are kept.
 """
 from __future__ import annotations
 
@@ -85,7 +87,7 @@ def higher_index(n, pfa):
 
 
 def empirical_threshold(responses, *, pfa):
-    """Observed higher (1-pfa) quantile; no interpolation or finite-row trimming."""
+    """Return the observed higher (1-pfa) quantile with no interpolation and no trimming to finite rows."""
     values = _real_vector(responses, "null responses")
     index = higher_index(len(values), pfa)
     threshold = float(np.partition(values, index)[index])
@@ -100,9 +102,10 @@ def empirical_threshold(responses, *, pfa):
 def exact_q16_threshold(requirements, *, pfa):
     """Higher quantile of decoded exact keep boundaries, with ties kept.
 
-    Sentinel 2**64 remains in every denominator and in sorting. If selected,
-    there is no legal threshold; it is not replaced with the uint64 maximum.
-    Serialized zero+bitset encodings must be decoded before calling.
+    The sentinel 2**64 stays in every denominator and in the sort. When the
+    sentinel is selected, no legal threshold exists, and the sentinel is never
+    replaced with the uint64 maximum. Serialized zero+bitset encodings must be
+    decoded before the call.
     """
     values = _requirements(requirements)
     index = higher_index(len(values), pfa)
@@ -131,12 +134,13 @@ def higher_rank(trials: int, nominal_pfa: float) -> int:
 
 
 def calibration_reference(trials: int, nominal_pfa: float) -> dict:
-    """Continuous-IID repeated-calibration distribution of strict exceedance p.
+    """Return the distribution of the strict exceedance p over repeated continuous IID calibrations.
 
-    If T is order statistic r from n draws, 1-F(T) ~ Beta(n-r+1,r).
-    This is a sampling distribution, not a posterior or a confidence interval
-    conditional on one observed threshold. For atoms and a strict comparison,
-    it provides an upper stochastic reference under the same IID null law.
+    If T is order statistic r of n draws, then 1-F(T) ~ Beta(n-r+1,r). This
+    is a sampling distribution over calibrations. It is neither a posterior
+    nor a confidence interval conditional on one observed threshold. For
+    atoms and a strict comparison, it gives an upper stochastic reference
+    under the same IID null law.
     """
     rank = higher_rank(trials, nominal_pfa)
     a, b = trials-rank+1, rank
@@ -226,9 +230,10 @@ def _confidence_threshold(values, *, pfa, confidence, independent_null, independ
 def confidence_threshold(responses, *, pfa, confidence=0.95, independent_null=False, independence_source=""):
     """Smallest fixed-rank score threshold with the declared iid coverage.
 
-    Same-sample selection is valid because the rank is fixed by n, pfa and
-    confidence. Ties keep the design-count bound, not a tighter random bound.
-    Unknown dependence is diagnostic only; no input observations are dropped.
+    Selection on the same sample is valid because the rank is fixed by n,
+    pfa, and confidence. With ties, the design-count bound is kept, and no
+    tighter random bound is used. A result with unknown dependence is
+    diagnostic only. No input observations are dropped.
     """
     values = _real_vector(responses, "null responses").tolist()
     return _confidence_threshold(values, pfa=pfa, confidence=confidence, independent_null=independent_null,
@@ -239,8 +244,9 @@ def exact_q16_confidence_threshold(requirements, *, pfa, confidence=0.95,
                                    independent_null=False, independence_source=""):
     """Smallest integer keep boundary with fixed-rank iid coverage.
 
-    Sentinel requirements remain trials. Selecting the sentinel refuses a
-    finite threshold. Decode serialized zero+bitset requirements first.
+    Sentinel requirements are counted as trials. When the sentinel is
+    selected, no finite threshold is returned. Serialized zero+bitset
+    requirements must be decoded first.
     """
     return _confidence_threshold(_requirements(requirements), pfa=pfa, confidence=confidence,
                                  independent_null=independent_null, independence_source=independence_source, q16=True)
@@ -248,9 +254,10 @@ def exact_q16_confidence_threshold(requirements, *, pfa, confidence=0.95,
 
 def gate_count_limit(trials: int, nominal_pfa: float, *, family_tests: int = 1334,
                      confidence: float = .95, cap_multiple: float = 2.) -> int:
-    """Full low-tail acceptance region, including pointwise CP width.
+    """Return the end of the full low-tail acceptance region, with the pointwise CP width applied.
 
-    Refuses a noncontiguous region instead of presuming cap-only acceptance.
+    A noncontiguous region is refused instead of presuming acceptance on the
+    cap alone.
     """
     end = accepted_count_limit(trials, cap_multiple*nominal_pfa,
                                family_tests=family_tests, confidence=confidence)
@@ -276,7 +283,7 @@ def prospective_power(calibration_trials: int, validation_trials: int,
     """Reference power for fresh independent calibration and validation."""
     ref = calibration_reference(calibration_trials, nominal_pfa)
     limit = gate_count_limit(validation_trials, nominal_pfa, family_tests=family_tests)
-    # Sum the rejection tail directly: 1-CDF loses precision for large designs.
+    # the rejection tail is summed directly because 1-CDF loses precision for large designs
     failure = float(np.exp(logsumexp(betabinom.logpmf(
         np.arange(limit+1, validation_trials+1), validation_trials,
         ref['beta_a'], ref['beta_b'])))) if limit >= 0 else 1.
@@ -289,20 +296,20 @@ def prospective_power(calibration_trials: int, validation_trials: int,
 
 
 def family_power_lower_bound(policy_failure_probabilities: list[float]) -> float:
-    """Union-bound lower bound; valid without independence among policies."""
+    """Union-bound lower bound, valid without independence between policies."""
     if any(not math.isfinite(p) or not 0 <= p <= 1 for p in policy_failure_probabilities):
         raise ValueError("failure probabilities must be finite and within [0,1]")
     return max(0., 1-math.fsum(policy_failure_probabilities))
 
 
-# the names this module has always exported (the dissertation's null replay imports the first two)
+# compatibility aliases (the dissertation's null replay imports the first two)
 empirical_null_threshold = empirical_threshold
 _higher_index = higher_index
 exact_q16_null_threshold = exact_q16_threshold
 
 
 def binomial_interval(successes, trials, *, confidence=0.95, side="two-sided"):
-    """Exact Clopper-Pearson bounds; k counts events, which may be false alarms."""
+    """Exact Clopper-Pearson bounds, where k counts events such as false alarms."""
     from scipy.stats import beta
 
     n = _integer(trials, "trials", 1)
@@ -323,11 +330,12 @@ def binomial_interval(successes, trials, *, confidence=0.95, side="two-sided"):
 
 def false_alarm_validation(exceedances, trials, *, nominal_pfa, cap_pfa,
                            family_tests=1, confidence=0.95):
-    """Pointwise precision plus a separate Bonferroni family upper-cap check.
+    """Return the pointwise precision and a Bonferroni family check of the upper cap.
 
-    The cap is an explicit engineering tolerance, not the nominal calibration
-    target. Dependence between policies is allowed; trials within a policy must
-    be independent. Call with the complete predeclared family size.
+    The cap is an explicit engineering tolerance and differs from the nominal
+    calibration target. Policies may depend on each other, but the trials of
+    each policy must be independent. The function must be called with the
+    complete predeclared family size.
     """
     nominal = float(_probability(nominal_pfa, "nominal_pfa"))
     cap = float(_probability(cap_pfa, "cap_pfa"))
@@ -351,8 +359,8 @@ def raw_crossing_brackets(snr_db, rates, *, target):
     """Report every raw adjacent crossing and target plateau, without smoothing.
 
     A unique result needs one upward crossing, no downward crossing and no
-    multi-point target plateau. Endpoints outside the sampled range are never
-    extrapolated. Linear interpolation is labeled as a display estimate.
+    multi-point target plateau. No crossing is extrapolated past the ends of
+    the sampled range. Linear interpolation is labeled as a display estimate.
     """
     x = np.asarray(snr_db, dtype=float)
     y = np.asarray(rates, dtype=float)

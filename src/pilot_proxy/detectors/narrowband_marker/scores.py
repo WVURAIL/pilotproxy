@@ -1,14 +1,15 @@
-"""The narrowband-marker detector's per-frame scores: exact Q16 keep
-boundaries per background rank (the OS-CFAR statistic), and the fixed rank.
+"""Per-frame scores of the narrowband-marker detector.
 
-For one frame, the fine statistic ``T[f] = 2 S_0[f] / (S_1[f] + S_2[f])`` of
-the marker bins ``D`` and of the bulk ``B`` is ranked in exact rational
-arithmetic; for every one-based background rank ``rho`` the frame's *keep
-boundary* is the smallest Q16 multiplier ``eta_q16`` at which
-``max_D T <= (eta_q16 / 2^16) T_(rho)`` (:func:`required_eta_q16_by_rank`).
-A frame is kept when the multiplier is at least its boundary; a frame that no
-deployable multiplier keeps carries :data:`ALWAYS_MASKED_Q16`. The arithmetic
-is release-authoritative and must equal the detector's own fine decision
+This module computes the exact Q16 keep boundaries for each background rank of
+the order-statistic constant false alarm rate (OS-CFAR) test, and the fixed
+rank. For one frame, the fine statistic ``T[f] = 2 S_0[f] / (S_1[f] + S_2[f])``
+of the marker bins ``D`` and of the bulk ``B`` is ranked in exact rational
+arithmetic. For each one-based background rank ``rho``, the smallest Q16
+multiplier ``eta_q16`` that satisfies ``max_D T <= (eta_q16 / 2^16) T_(rho)``
+is known as the frame's *keep boundary* (:func:`required_eta_q16_by_rank`). A
+frame is kept when the multiplier is at least its boundary. A frame that no
+deployable multiplier keeps is given :data:`ALWAYS_MASKED_Q16`. This arithmetic
+is authoritative for the release and must equal the detector's own fine decision
 (``pilot_proxy.fine_decision.fine_required_multiplier_q16``).
 
 The rank is the median of the intended bulk geometry
@@ -31,7 +32,7 @@ from pilot_proxy.rank_scores import required_multipliers_by_rank
 
 
 class ScoreRefused(RuntimeError):
-    """Raised when a score bundle cannot be established exactly."""
+    """Raised when a score bundle cannot be computed exactly."""
 
 
 def _declared_bins(anchor_bin, designated_half_width) -> np.ndarray:
@@ -56,7 +57,7 @@ def required_eta_q16_by_rank(
         designated_half_width: int,
         bulk_mask,
 ) -> tuple[int, ...]:
-    """Return every exact one-based-rho Q16 boundary for one frame."""
+    """Return the exact Q16 keep boundary of one frame for each one-based rank rho."""
     powers = np.asarray(fine_power_u64)
     if powers.dtype != np.dtype(np.uint64) or powers.shape != (3, FINE_BINS):
         raise ScoreRefused(

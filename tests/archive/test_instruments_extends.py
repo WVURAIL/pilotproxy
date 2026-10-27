@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Tests for instrument config resolution: `extends:` inheritance and `scopes`.
+Tests for instrument config resolution with `extends:` inheritance and `scopes`.
 
-These cover the data-as-config behavior that the CHIME outriggers rely on -- a
-station that shares CHIME's channelization is a few lines (`extends: chime` plus
-the feed count and its scope) instead of a near-duplicate YAML -- and the scope
-list that drives the survey default. They run fully offline.
+The CHIME outriggers share the channelization of CHIME, so the config of each
+outrigger is a few lines (`extends: chime` plus the feed count and its scope)
+instead of a near-duplicate YAML. These tests cover that inheritance and the
+scope list that sets the survey default. They run offline.
 
-Run:  PYTHONPATH=src python tests/test_instruments_extends.py
+Run:  PYTHONPATH=src python tests/archive/test_instruments_extends.py
 """
 from __future__ import annotations
 
@@ -17,9 +17,8 @@ import tempfile
 from pilot_proxy.archive import instruments as inst_mod
 
 
-# ---------------------------------------------------------------------------
-# extends: shipped outriggers inherit CHIME geometry, override only what differs
-# ---------------------------------------------------------------------------
+# extends: the shipped outriggers inherit the CHIME geometry and override only
+# the station fields
 def test_outrigger_inherits_chime_geometry():
     chime = inst_mod.load_instrument("chime")
     for name in ("gbo", "hco", "kko"):
@@ -35,7 +34,7 @@ def test_outrigger_inherits_chime_geometry():
         assert o.name == name
         assert o.n_feeds == 256 and chime.n_feeds == 2048
         assert o.scopes == (f"{name}.event.baseband.raw",)
-        # any frequency<->freq_id mapping therefore matches CHIME's
+        # so the mapping between frequency and freq_id matches CHIME
         assert o.freq_of_freq_id(844) == chime.freq_of_freq_id(844)
 
 
@@ -54,7 +53,7 @@ def test_extends_overrides_and_deep_merges():
                "nfft: 16384\n"
                "scopes: [base.scope]\n"
                "reader: chime-baseband\n")
-        # child overrides n_feeds + scopes + one band key, inherits the rest
+        # child overrides n_feeds, scopes, and one band key, and inherits the rest
         _write(d, "child",
                "name: child\n"
                "extends: base\n"
@@ -83,9 +82,7 @@ def test_extends_cycle_raises():
             raise AssertionError("expected a ValueError on a circular extends chain")
 
 
-# ---------------------------------------------------------------------------
-# scopes: accept a list or a comma-separated string; drive readiness
-# ---------------------------------------------------------------------------
+# scopes: a list or a comma-separated string, which also sets readiness
 def test_scopes_accepts_list_and_csv():
     with tempfile.TemporaryDirectory() as d:
         body = ("band: {f0_mhz: 800.0, bandwidth_mhz: 400.0, n_channels: 1024}\n"
@@ -97,7 +94,7 @@ def test_scopes_accepts_list_and_csv():
 
 
 def test_readiness_tracks_scopes():
-    # shipped chime declares scopes -> ready
+    # shipped chime declares scopes, so it is ready
     assert inst_mod.instrument_readiness("chime").ready is True
     with tempfile.TemporaryDirectory() as d:
         _write(d, "noscope",

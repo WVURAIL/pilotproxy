@@ -1,20 +1,22 @@
-"""The knee: each channel's fine threshold word on its current era.
+"""Find the knee, each channel's fine threshold word on its current era.
 
-The knee is an exact Q16 keep word read from the equal-event distribution of a
-channel's current-era fine keep boundaries: the word that maximizes the absolute difference between the
-cumulative curve and the straight line between the smallest and largest
-words, plotted against log word. Every source event carries equal weight and
-its frames share that weight equally. The curve can bend two ways: above the
-line, where a population of low-scoring frames ends (the usual case), or below
-it, where nearly every frame carries the signal and a population of
-high-scoring frames begins. The knee is the stronger of the two bends, the word
-where the curve stands farthest from the line on either side (rule v2). Rule
-v1, the bend above the line only, reproduces the knees stored in v1 score
-caches. The rule describes the data it is read
-from. It is not a false-alarm calibration, a residual estimate or an
-observing-time optimum, and it never chooses reject-all; whether a channel is
-assigned a threshold at its knee is the threshold rule's decision
-(:mod:`pilot_proxy.characterization.threshold_rule`).
+The knee is an exact Q16 keep word read from the equal-event distribution of
+a channel's current-era fine keep boundaries. Every source event carries equal
+weight, and its frames share that weight equally. The cumulative curve is
+plotted against log word and compared with the straight line between the
+smallest and largest words. The knee is the word where the curve is farthest
+from that line.
+
+The curve can bend two ways. Above the line, a population of low-scoring
+frames ends, which is the usual case. Below the line, nearly every frame
+carries the signal and a population of high-scoring frames begins. Rule v2
+takes the stronger of the two bends. Rule v1 takes the bend above the line
+only and reproduces the knees stored in v1 score caches.
+
+The knee describes only the data it is read from. It carries no false-alarm
+calibration, residual estimate, or observing-time optimum, and it never
+chooses reject-all. The assignment of a threshold at the knee is decided by
+the threshold rule (:mod:`pilot_proxy.characterization.threshold_rule`).
 """
 
 from __future__ import annotations
@@ -61,8 +63,8 @@ def propose(requirements: Sequence, event_ids: Sequence[str], *, valid=None, alw
     """The knee of one channel's current-era frames.
 
     ``requirements`` are the exact Q16 keep boundaries (2**64 means always
-    masked), ``event_ids`` the source event of each frame. ``valid`` marks
-    frames whose score exists; ``always_masked`` marks sentinel frames.
+    masked), and ``event_ids`` the source event of each frame. ``valid`` marks
+    frames whose score exists, and ``always_masked`` marks sentinel frames.
     ``rule`` is ``RULE_ID`` (v2, the stronger bend) or ``RULE_ID_V1`` (the
     bend above the line, the knees recorded before 2026-10-19).
     """
@@ -111,7 +113,7 @@ def propose(requirements: Sequence, event_ids: Sequence[str], *, valid=None, alw
         if grid[-1] == grid[0]:
             objective = 0.0
         else:
-            # The threshold stays an exact input word; logarithms only shape
+            # The threshold stays an exact input word. Logarithms only shape
             # the knee objective.
             span = math.log1p((grid[-1] - grid[0]) / grid[0])
             location = math.log1p((word - grid[0]) / grid[0])
@@ -146,8 +148,8 @@ def _month_index(label: str) -> int:
 def cohort_rows(data: Mapping, months: Sequence[str]) -> np.ndarray:
     """Rows of a fine histogram export that fall in the given calendar months.
 
-    A cohort must hold whole source events; a month list that splits one is
-    refused rather than silently reweighted.
+    A cohort must hold whole source events. A month list that splits an event
+    raises :class:`CohortSupportError`, and no reweighting is applied.
     """
     wanted = np.asarray([_month_index(month) for month in months], dtype=np.int64)
     timed = data["selected"] & data["finite_time"]
@@ -166,8 +168,8 @@ def propose_from_export(data: Mapping, months: Sequence[str], *, rule: str = RUL
     requirements = data["fine_required_multiplier_q16"][rows]
     always = data["fine_always_masked"][rows]
     valid = data["fine_score_computed"][rows] & data["fine_rank_valid"][rows]
-    # A zero requirement is a supported zero score only when the export says
-    # so; it must not hide an unknown score.
+    # A zero requirement is a supported zero score only when the export flags it
+    # as one, so an unknown score cannot pass as zero.
     if np.any(valid & ~always & (requirements == 0) & ~data["fine_score_zero"][rows]):
         raise ValueError("zero encoded requirement lacks explicit zero-score support")
     events = data["source_event_keys"][data["frame_unit_index"][rows]]

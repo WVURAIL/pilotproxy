@@ -101,7 +101,7 @@ def stream(x, cfg, sizes, origin=9_001_003):
 
 
 def scalar_projections(packed, weights):
-    # Independent integer scalar loops; do not call the projector or unpacker.
+    # scalar integer loops, independent of the projector and unpacker
     def decode(v):
         value = int(v) & 255
         real, imag = value // 16, value % 16
@@ -120,8 +120,12 @@ def scalar_projections(packed, weights):
 
 
 def direct_samples(x, cfg, frames):
-    # Exact FIR support indices and scalar exp independently reproduce selected
-    # full convolutions, including samples on either side of internal blocks.
+    # Selected output samples are recomputed as full convolutions with scalar
+    # arithmetic. Untrimmed output sample j is
+    # 25 * sum_n h[128 j - 25 n] x[n] exp(-2 pi i f_mix n / f_s), where f_mix
+    # is the mixer frequency, f_s is the input rate and n runs over the exact
+    # support of the 8193-tap FIR. The indices cover samples on either side of
+    # the internal block boundaries.
     h = resampler_coefficients()
     indices = [0, 1, 127, 128, 1535, 1536, 4095, 8191, 16383]
     maximum_error = 0.
@@ -141,7 +145,7 @@ def direct_samples(x, cfg, frames):
                 total += 25 * h[j * 128 - n * 25] * mixed
             error = float(abs(actual[i] - total))
             maximum_error = max(maximum_error, error)
-            # Scalar trig evaluation can differ with expression/kernel order.
+            # scalar trig results depend on expression and kernel order
             assert error < 2e-10 * max(1., float(np.max(abs(x))))
             checked += 1
     return {"sample_checks": checked, "max_absolute_error": maximum_error}
@@ -158,8 +162,9 @@ def compare_record(spec):
     assert complex_error < 2e-12 * max(1., float(np.max(abs(x))))
     margins = [r["minimum_unclipped_quantizer_half_step_distance"] for r in baseline]
     margin = min(v for v in margins if v is not None) if any(v is not None for v in margins) else None
-    # The measured error is far smaller than all active quantizer-boundary
-    # distances for these fixtures; saturated-only records are exempt.
+    # For these fixtures, the measured error is far smaller than the distance
+    # of every active sample to a quantizer half-step. Records with only
+    # saturated samples have no active margin and are exempt.
     if margin is not None:
         assert margin > component_error * cfg.sample_scale
     comparisons = []
@@ -180,7 +185,7 @@ def compare_record(spec):
         np.testing.assert_array_equal(frame["projections_i32"], batch["projections_i32"][index])
         independent = scalar_projections(frame["packed_frame"], weights)
         np.testing.assert_array_equal(frame["projections_i32"], independent)
-        # Frame powers are the all-bin sums of the frozen fxfft256 fine powers.
+        # frame powers are the all-bin sums of the frozen fxfft256 fine powers
         independent_power = fine_power_fx(
             independent.astype(np.int64), num_streams=1
         ).sum(axis=1, dtype=np.uint64)

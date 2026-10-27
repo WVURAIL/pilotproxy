@@ -1,11 +1,12 @@
 # coding=utf-8
-"""Nyquist-zone frequency axis: current form, and the older key it replaced.
+"""Tests of the Nyquist-zone frequency axis and the pre-1.1.0 key it replaced.
 
 Profiles, weight manifests and runtime bundles written before 1.1.0 state the
 frequency axis as ``spectral_sense: normal|inverted`` and the detector weight
-coordinate as ``post_spectral_sense_normalization``. They must still load and
-validate, read as zone 1 (odd, upright) or zone 2 (even, mirrored), while
-everything written now uses ``nyquist_zone`` and the new coordinate names.
+coordinate as ``post_spectral_sense_normalization``. These files must still
+load and validate, and they are read as zone 1 (odd, upright) or zone 2
+(even, mirrored). Every file written by the current code uses
+``nyquist_zone`` and the current coordinate names.
 """
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ OLD_INPUT_COORDINATE = "post_spectral_sense_normalized"
 
 
 def _old_form(profile: ReceiverProfile) -> dict:
-    """The profile as a pre-1.1.0 file stated its frequency axis."""
+    """Return the profile with its frequency axis in the pre-1.1.0 form."""
     data = copy.deepcopy(profile.to_dict())
     axis = data["channelizer"]["frequency_axis"]
     data["channelizer"]["frequency_axis"] = {

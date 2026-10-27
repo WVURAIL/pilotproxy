@@ -1,4 +1,4 @@
-"""The transmitter-off record: channels 20 and 32 are independently verified (N1), the others are not."""
+"""The transmitter-off record, where only channels 20 and 32 are independently verified (N1)."""
 from __future__ import annotations
 
 import json

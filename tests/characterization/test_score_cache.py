@@ -26,8 +26,8 @@ def test_equal_event_weights_and_conditional_mean_use_original_population():
     assert fraction(row['g']) == Fraction(54, 95)
     np.testing.assert_array_equal(arrays['weight_numerator'], [3, 1, 1, 1])
     assert arrays['weight_denominator_decimal'].item() == '6'
-    # Re-equalizing surviving events would give 20; conditioning the original
-    # event/frame measure gives 18 instead.
+    # Equal weights over the surviving events would give 20. The original
+    # event/frame measure, conditioned on the kept frames, gives 18.
     assert fraction(row['conditional_mean_word']) != 20
 
 

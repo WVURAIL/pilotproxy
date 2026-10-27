@@ -110,8 +110,8 @@ def _product(
         "num_input_streams": np.asarray(num_streams, dtype=np.int64),
         "sense": np.asarray(-1, dtype=np.int64),
         "mu0": np.asarray([1.0]),
-        # The correction is derived from these; mu0 above is the
-        # archived float the migration still accepts.
+        # mu_0 is computed from these two norms. The mu0 entry above is the
+        # archived float, which is read through the migration map.
         "target_norm_sq": np.asarray([1], dtype=np.int64),
         ARCHIVED_REFERENCE_NORM_SUM_SQ: np.asarray([2], dtype=np.int64),
         "weight_bank_sha256": np.asarray("a" * 64),
@@ -171,9 +171,10 @@ def test_archive_pdf_metadata_suppresses_wall_clock_dates() -> None:
 
 
 def test_lmst_matches_hard_coded_j2000_and_usno_reference_vectors() -> None:
-    # J2000 is also an algebraic anchor for the declared polynomial: T=0 and
-    # GMST=280.46061837 degrees.  The modern reference values are copied from
-    # the USNO Sidereal Time API v4.0.1 (queried as UT1, longitude -119.6175).
+    # At J2000, T = 0 and GMST = 280.46061837 deg, so the first value checks
+    # the declared polynomial directly. The 2023 and 2024 reference values are
+    # copied from the USNO Sidereal Time API v4.0.1 (queried as UT1, longitude
+    # -119.6175).
     unix = np.asarray([946_728_000.0, 1_700_000_000.0, 1_717_200_000.0])
     got = unix_utc_to_lmst_hours(unix)
     assert got[0] == pytest.approx(10.722874558, abs=1.0e-10)
@@ -350,8 +351,8 @@ def test_ceiling_spectrum_is_exactly_reconstructible() -> None:
         num_streams=2,
     )
     health = evaluate_frame_health(product)
-    # The production CuPy expression abs(complex64 FFT)**2 rounds before the
-    # float64 stream sum.  The helper must reproduce that exact contribution.
+    # In production, abs(complex64 FFT)**2 is rounded in CuPy before the
+    # float64 sum over streams. The helper must reproduce that exact value.
     dc_per_stream = 34_359_736_320.0
     ceiling_dc = 2 * dc_per_stream
     healthy_parseval_sum = float(NFFT**2 * 2 * 4.0)
@@ -407,12 +408,12 @@ def test_residual_view_filters_frames_and_records_source(tmp_path) -> None:
         assert int(view["health_included_frame_count"]) == 2
         assert int(view["health_excluded_frame_count"]) == 2
         assert view["frame_index"].tolist() == [0, 1]
-        # The view is a published interface, so it keeps
-        # the archived column names until that migration is coordinated.
+        # The view is a published interface, so the archived column names are
+        # kept until the rename is coordinated with its readers.
         assert view[ARCHIVED_COARSE_POWER_RATIO][:, 0].tolist() == [1.0, 2.0]
         assert "coarse_power_ratio" not in view.files
-        # RFIsher's residual reader refuses a view without the per-frame
-        # shelf estimate beside the statistic.
+        # RFIsher's residual reader rejects a view that lacks the per-frame
+        # shelf estimate next to the statistic.
         assert view[ARCHIVED_DATA_SHELF_SNR_DB].shape == (2, 1)
         assert np.all(view["valid"] == 1)
         assert ARCHIVED_FINE_POWER_RATIO not in view.files
@@ -618,9 +619,12 @@ def test_inventory_scope_join_exports_health_filtered_observation_classes(
 
 
 def _current_form(product: dict[str, np.ndarray], fine_sums: np.ndarray) -> dict[str, np.ndarray]:
-    """The fixture with exact fine powers (per-pilot v5/v6) whose all-bin sums
-    are ``fine_sums`` (frames x [target, lower, upper]); the stored coarse
-    columns are left as they were, as in a v5 product of record."""
+    """Return the fixture with exact fine powers whose all-bin sums are ``fine_sums``.
+
+    The exact fine powers are stored as in the per-pilot v5 and v6 products.
+    ``fine_sums`` has shape (frames, 3) for [target, lower, upper]. The stored
+    coarse columns are left unchanged, as in a v5 product of record.
+    """
     product = dict(product)
     product.pop(ARCHIVED_FINE_POWER_RATIO)
     n = len(product["frame_index"])
@@ -632,9 +636,10 @@ def _current_form(product: dict[str, np.ndarray], fine_sums: np.ndarray) -> dict
 
 
 def test_release_summaries_and_gate_read_the_fine_sums(tmp_path) -> None:
-    # Stored (row-domain) powers say F = 1 on every frame and frame 1 invalid;
-    # the fine powers sum to F = 0.5, 0.8, 0.5, 0.8 with every frame valid.
-    # The gate, the ledger and the released distributions follow the fine sums.
+    # The stored (row-domain) powers give F = 1 on every frame and mark frame 1
+    # invalid. The fine powers sum to F = 0.5, 0.8, 0.5, 0.8 with every frame
+    # valid. The gate, the ledger and the released distributions must follow
+    # the fine sums.
     product = _product(
         valid=[1, 0, 1, 1],
         reject=[0, 0, 0, 0],
@@ -646,9 +651,9 @@ def test_release_summaries_and_gate_read_the_fine_sums(tmp_path) -> None:
         [[500, 1000, 1000], [800, 1000, 1000], [500, 1000, 1000], [800, 1000, 1000]]
     )
     product = _current_form(product, sums)
-    # The writer accumulated the spectra with its stored masks: frame 1 was
-    # stored invalid, so one ceiling frame's DC and two healthy frames'
-    # Parseval total in both spectra.
+    # The writer accumulated the spectra with its stored masks. Frame 1 was
+    # stored invalid, so both spectra hold the DC of one ceiling frame and the
+    # Parseval total of two healthy frames.
     for name in ("integrated_spectrum_before_mask", "integrated_spectrum_after_mask"):
         product[name] = np.zeros(NFFT)
         product[name][0] = 2 * 34_359_736_320.0
@@ -657,7 +662,7 @@ def test_release_summaries_and_gate_read_the_fine_sums(tmp_path) -> None:
 
     with np.load(path, allow_pickle=False) as archive:
         health = evaluate_frame_health(archive)
-    # only the ceiling frame is excluded: frame 1 is valid by its fine sums
+    # only the ceiling frame is excluded, since frame 1 is valid by its fine sums
     assert health.include.tolist() == [True, True, True, False]
     assert "detector_invalid" not in health.reason_counts
 
@@ -678,10 +683,11 @@ def test_release_summaries_and_gate_read_the_fine_sums(tmp_path) -> None:
 
 
 def test_stored_spectra_are_checked_with_the_masks_they_were_accumulated_with() -> None:
-    # A v5 product of record: the stored (row-domain) reject_mask kept frames
-    # 0 and 2, the fine sums (F = 1.2, 0.5, 0.5 against mu_0 = 1) reject frame
-    # 0 and keep 1 and 2. The stored after-mask spectrum holds the frames the
-    # stored mask kept, so its Parseval check must use that mask.
+    # In a v5 product of record, the stored (row-domain) reject_mask kept
+    # frames 0 and 2. The fine sums (F = 1.2, 0.5, 0.5 against mu_0 = 1)
+    # reject frame 0 and keep frames 1 and 2. The stored after-mask spectrum
+    # holds the frames kept by the stored mask, so its Parseval check must use
+    # that mask.
     product = _product(
         valid=[1, 1, 1],
         reject=[0, 1, 0],

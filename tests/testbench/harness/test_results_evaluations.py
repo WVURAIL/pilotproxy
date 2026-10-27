@@ -1,4 +1,4 @@
-"""The results layer's evaluation reader: dtv_snr_eval directories, pooling, release reproduction."""
+"""Tests of the dtv_snr_eval directory reader, trial pooling, and release reproduction."""
 from __future__ import annotations
 
 import csv
@@ -17,7 +17,7 @@ CAL = Calibration(pilot_below_data_db=11.918446870168612, bin_enbw_hz=3051.75781
 
 
 def _write_evaluation(root: Path, snr_db: tuple[float, ...], *, trials: int = 6, seed: int = 1) -> Path:
-    """A small evaluate-snr directory: exact power terms per trial, pooled summary, report."""
+    """Write a small evaluate-snr directory with exact power terms per trial, a pooled summary, and a report."""
     root.mkdir(parents=True)
     rng = np.random.default_rng(seed)
     target_norm, ref_norm = 6338, 12650
@@ -64,7 +64,7 @@ def test_reader_loads_report_trials_and_summary(tmp_path):
     e = ev.load_evaluation(_write_evaluation(tmp_path / "e", (-30.0, -27.0)))
     assert e.requested_snr_db == (-30.0, -27.0) and len(e.trials) == 12 and not e.is_radio
     assert e.calibration == CAL
-    assert math.isnan(e.trials[0]["noise_seeds"])          # non-numeric cells read as NaN, not errors
+    assert math.isnan(e.trials[0]["noise_seeds"])          # non-numeric cells read as NaN
 
 
 def test_reader_refuses_an_unknown_report_schema(tmp_path):

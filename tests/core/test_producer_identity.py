@@ -1,4 +1,4 @@
-"""The producer record of a run: informational, and fixed at first use."""
+"""The producer record of a run is informational and is fixed at first use."""
 from __future__ import annotations
 
 import hashlib

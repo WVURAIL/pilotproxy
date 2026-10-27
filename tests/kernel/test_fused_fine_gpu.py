@@ -1,33 +1,36 @@
 # coding=utf-8
-"""GPU gates for the fused fine kernel (kernel core 2.2.0 / 3.0.0).
+"""GPU gates for the fused fine kernel (kernel core 2.2.0 and 3.0.0).
 
 ``PilotProxy_Compute_FusedFine_U64`` is the fused form of the deployed fine
-path: one launch from packed int4 samples to exact uint64 fine powers,
-with row projections held in shared memory and materialized to global
-only through the optional debug tap, followed by the stream-ordered
-reduction of the finalized fine sums to the three frame powers
-``P_r = sum_f S_r[f]`` (kernel core 3.0.0; ``d_power_out``).
+path. In one launch, exact uint64 fine powers are computed from the packed
+int4 samples. The row projections are held in shared memory and are written to
+global memory only through the optional debug tap. The finalized fine sums
+are then reduced in stream order to the three frame powers
+``P_r = sum_f S_r[f]`` (``d_power_out``, kernel core 3.0.0).
 
-Acceptance is bit-equality --- no tolerances:
+Each gate requires bit equality, with no tolerance.
 
-1. single block: fused fine powers == composed
-   (``RowSums_I32 -> FinePowers_U64``); fused ``d_power_out`` == the host
-   sum over bins of the composed fine powers == the host sum of the fused
-   fine powers == ``fine_power_fx(rows).sum(axis=-1)``; tap == the
-   composed row-projection buffer; fine == the fxfft reference chain;
-2. batch case: same equalities per batch entry with a batched handle;
-3. production form: tap pointer NULL, fine + frame-power outputs unchanged
-   (the tap is optional; row projections never touch global
-   memory);
-4. an impulse frame: the frozen transform of a unit impulse is exactly one
-   in every bin, so the fused kernel must report ``S_target[f] = 1`` and
-   ``P_target = 256`` with both reference terms zero --- device exactness
-   with no reference involved.
+1. For a single block, the fused fine powers must equal the composed path
+   (``RowSums_I32`` followed by ``FinePowers_U64``). The fused
+   ``d_power_out`` must equal the host sum over bins of the composed fine
+   powers, the host sum of the fused fine powers, and
+   ``fine_power_fx(rows).sum(axis=-1)``. The tap must equal the composed
+   row-projection buffer, and the fine powers must equal the fxfft
+   reference chain.
+2. For a batched handle, the same equalities must hold for each batch entry.
+3. In the production form, the tap pointer is NULL, and the fine and
+   frame-power outputs must not change. The tap is optional, and without it
+   the row projections never reach global memory.
+4. The frozen transform of a unit impulse is exactly one in every bin. For
+   an impulse frame, the fused kernel must therefore report
+   ``S_target[f] = 1`` and ``P_target = 256`` with both reference terms
+   zero. The expected values follow from the transform alone, so this case
+   tests the device arithmetic independently of any reference.
 
-The timing report (printed rather than asserted) gives the deployment-footprint
-numbers: fused without tap (production), fused with tap, and the composed
-chain (two launches plus the device-side bin sum), against the ~41.9 ms
-CHIME frame cadence.
+The timing report is printed only. It gives the time per 2048-stream frame of
+the fused kernel without the tap (production), the fused kernel with the tap,
+and the composed chain (two launches and the device-side bin sum), against the
+41.9 ms CHIME frame cadence.
 """
 from __future__ import annotations
 
@@ -76,13 +79,13 @@ def _random_frames(rng, batch: int, rows: int):
 
 
 def _reference_chain(matched_filter_row_projections: np.ndarray, streams: int):
-    """fine powers + frame powers from an int32 [terms, rows, 2] buffer."""
+    """Return the fine powers and frame powers of an int32 [terms, rows, 2] buffer."""
     fine = fine_power_fx(
         matched_filter_row_projections.astype(np.int64),
         num_streams=streams,
         windows_per_stream=WINDOWS,
     )
-    # Kernel core 3.0.0: P_r is the exact all-bin sum of S_r.
+    # P_r is the exact all-bin sum of S_r (kernel core 3.0.0).
     return fine, fine.sum(axis=-1, dtype=np.uint64)
 
 
@@ -103,7 +106,7 @@ def test_fused_matches_composed_path_bit_exact():
     d_pow_fused = cp.full(TERMS, 123, dtype=cp.uint64)
     d_tap = cp.zeros(TERMS * rows * 2, dtype=cp.int32)
     try:
-        # Composed path: the validated 2.0.0/2.1.0 chain.
+        # composed path, the validated 2.0.0 and 2.1.0 chain
         kernel.compute_row_projections_i32(
             handle, weights.ctypes.data, d_matched_filter_row_projections.data.ptr
         )
@@ -111,7 +114,7 @@ def test_fused_matches_composed_path_bit_exact():
             int(d_matched_filter_row_projections.data.ptr), streams, WINDOWS, 1,
             int(d_fine_composed.data.ptr),
         )
-        # Fused path: one launch, tap bound.
+        # fused path in one launch, with the tap bound
         kernel.compute_fused_fine_u64(
             handle,
             weights.ctypes.data,
@@ -129,14 +132,14 @@ def test_fused_matches_composed_path_bit_exact():
     finally:
         kernel.destroy(handle)
 
-    # Fused == composed, bit for bit.
+    # fused and composed paths must agree bit for bit
     np.testing.assert_array_equal(tap, composed_rows)
     np.testing.assert_array_equal(fine_f, fine_c)
-    # The frame-power identity: device reduction == host sum over bins of
-    # either fine buffer.
+    # frame-power identity: the device reduction must equal the host sum over
+    # bins of either fine buffer
     np.testing.assert_array_equal(pow_f, fine_c.sum(axis=-1, dtype=np.uint64))
     np.testing.assert_array_equal(pow_f, fine_f.sum(axis=-1, dtype=np.uint64))
-    # Both == the frozen reference chain.
+    # both must equal the frozen reference chain
     fine_ref, pow_ref = _reference_chain(composed_rows, streams)
     np.testing.assert_array_equal(fine_f, fine_ref)
     np.testing.assert_array_equal(pow_f, pow_ref)
@@ -228,10 +231,14 @@ def test_fused_production_form_without_tap():
 
 @pytest.mark.cuda
 def test_fused_impulse_frame_is_exact_without_a_reference():
-    """One nonzero sample against a unit target weight: z_target = (1, 0) in
-    one row, zero elsewhere. The impulse only ever enters a butterfly as the
-    top leg, every bottom leg is an exact zero, so the frozen transform is
-    exactly one in every bin: S_target[f] = 1, P_target = 256, references 0."""
+    """Test the fused kernel on an impulse frame, whose exact output is known.
+
+    One nonzero sample is projected onto a unit target weight, so
+    z_target = (1, 0) in one row and zero elsewhere. The impulse enters each
+    butterfly only as the top leg, and every bottom leg is an exact zero. The
+    frozen transform is therefore exactly one in every bin, which gives
+    S_target[f] = 1, P_target = 256, and zero reference powers.
+    """
     cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rows = WINDOWS
@@ -299,7 +306,7 @@ def test_fused_rate_margin_report():
         d_fine.sum(axis=-1, out=d_pow)
 
     def measure(fn, n=50):
-        fn()  # warmup + JIT/caches
+        fn()  # warm-up launch for the JIT and caches
         cp.cuda.Device().synchronize()
         t0 = time.perf_counter()
         for _ in range(n):

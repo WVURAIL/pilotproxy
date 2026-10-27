@@ -1,17 +1,18 @@
 """Assign a conditional threshold to each channel, or record why none passes.
 
-Sweep the exact keep words and compare the upper retained-power estimate
-with the science tolerance in RFIsher's table. Test the knee first, then the
-loosest usable word below it. An assigned word must also pass on the era's
-last year, one full seasonal cycle. The last-year guard tightens the word
-only when that window fails. Write the decisions, sweeps, and channel plates.
+The exact keep words are swept, and the upper retained-power estimate at
+each word is compared with the science tolerance in RFIsher's table. The knee
+is tested first, then the loosest usable word below it. An assigned word must
+also pass on the era's last year, one full seasonal cycle, and the last-year
+guard tightens the word only when that window fails. The decisions, sweeps,
+and channel plates are written to the output directory.
 
-Two serialized diagnostics refer to different points. ``coherence_limit_s``
-is the full-era effective-gain-time value at the final assigned word, or at
-the knee when no word is assigned. ``last_year_r_hi`` is evaluated at the
-original ``full_era_word``, before tightening. They therefore cannot generally
-be combined into a joint full-era/last-year limit, and neither describes a
-physical phase lifetime.
+Two serialized diagnostics are recorded for each channel.
+``coherence_limit_s`` is the full-era effective-gain-time value at the final
+assigned word, or at the knee when no word is assigned. ``last_year_r_hi`` is
+evaluated at the original ``full_era_word``, before tightening. Since the two
+can refer to different words, they do not in general give a joint full-era and
+last-year limit. Neither is a physical phase lifetime.
 
     python tools/threshold_rule.py --scores <score cache dir> --out <dir>
 

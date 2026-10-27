@@ -1,18 +1,22 @@
-"""The power-era inputs and the era list: monthly power features, the power-era proposals and the working cohorts.
+"""Build the monthly power features, power-era proposals, and working cohorts that form the era list.
 
-Two steps, run in order by ``pilot-proxy characterize power-eras``:
+The command ``pilot-proxy characterize power-eras`` runs two steps in order.
+First, :func:`prepare_features` turns the era-review monthly reduction of each
+channel's fine export into monthly power features. Each feature is the monthly
+median, over the month's events, of each event's median frame maximum in the
+pilot neighborhood. The features are checked against the export's own frames,
+months, and events.
 
-1. :func:`prepare_features` turns the era-review monthly reduction of each
-   channel's fine export into monthly power features (the frame maximum in the
-   pilot neighborhood, event median, monthly median across events), checked
-   against the export's own frames, months and events;
-2. :func:`review` runs the power-era rule (:mod:`.power_eras`) on the features
-   and forms each channel's working cohort: the saved current era, refined by a
-   confirmed sustained power change inside it, kept as reviewed on the
-   user-reviewed channels, and held with a stated reason otherwise.
+Following this, :func:`review` runs the power-era rule (:mod:`.power_eras`) on
+the features and forms each channel's working cohort. The working cohort is
+the saved current era, refined by a confirmed sustained power change in it.
+On the user-reviewed channels, the reviewed span is kept as it is. On the
+other channels, the saved era is held with a stated reason when no refinement
+is confirmed.
 
-The cohorts (``threshold_cohorts.json``) are the era list: each channel's
-current months, the cohort the score cache is built on. The list of record is
+The cohorts, written to ``threshold_cohorts.json``, form the era list. They
+give each channel's current months, which are the cohort the score cache is
+built on. The list of record is
 ``projects/chime_atsc/eras/power_eras_2026-10-04.json``.
 
     pilot-proxy characterize power-eras --review DIR --plates DIR --exports DIR --control-export DIR --output DIR
@@ -93,7 +97,7 @@ def prepare_features(review, plates, exports, control_export, output):
         assert np.isfinite(times).all()
         assert len(set(zip(event_ids.tolist(), event_keys.tolist()))) == len(np.unique(event_ids)) == len(np.unique(event_keys))
         days = np.floor(times / 86400).astype(np.int64)
-        # Verify that UTC timestamp and the stored calendar month agree.
+        # the UTC timestamp and the stored calendar month must agree
         inferred = np.array([datetime.fromtimestamp(float(t), timezone.utc).year * 12
                              + datetime.fromtimestamp(float(t), timezone.utc).month - 1 for t in times])
         np.testing.assert_array_equal(months, inferred)
@@ -181,9 +185,9 @@ def working_cohort(channel, proposal, saved):
     unresolved = [b for b in boundaries if b['proposed_cohort_first_month'] is None]
     if unresolved:
         # An unrelated historical ambiguity cannot invalidate an independently
-        # confirmed recent change. Require complete timing strictly before both
-        # the saved current span and the chosen confirmation evidence; unknown,
-        # overlapping, or later timing still holds the prior cohort.
+        # confirmed recent change. Its timing must be complete and strictly before
+        # both the saved current span and the chosen confirmation evidence.
+        # Unknown, overlapping, or later timing still holds the prior cohort.
         chosen_confirmation = usable[-1].get('confirmation_months', []) if usable else []
         historical_limit = min([first, *chosen_confirmation]) if chosen_confirmation else None
         for candidate in unresolved:

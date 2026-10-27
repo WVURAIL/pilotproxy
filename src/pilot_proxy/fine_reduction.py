@@ -2,52 +2,61 @@
 """Time-coherent fine reduction over exact kernel row sums.
 
 Stage 1 (CUDA or reference) emits exact int32 complex row sums
-``z[n, m]`` for every weight term ``n`` and detector row ``m``
-(term-major, stream-major rows, interleaved re/im — see
-``PilotProxy_Compute_RowSums_I32`` in ``cuda/pilotproxy_detector.h``). This module is
-stage 2:
+``z[n, m]`` for every weight term ``n`` and detector row ``m``. Rows are
+term-major and stream-major, with re and im interleaved (see
+``PilotProxy_Compute_RowSums_I32`` in ``cuda/pilotproxy_detector.h``). This
+module is stage 2:
 
-1. reshape each term's rows to ``[num_streams, windows_per_stream]``
-   (no gather: rows are stream-major),
-2. FFT along the window axis with ``FINE_PAD_FACTOR``x zero padding,
-3. square and sum incoherently over streams -> ``S[n, b]``,
-4. form the fine-bin statistic ``F2[b] = 2 S_t[b] / (S_l[b] + S_u[b])``.
+1. the rows of each term are reshaped to
+   ``[num_streams, windows_per_stream]``, with no gather since the rows
+   are stream-major,
+2. an FFT is taken along the window axis with ``FINE_PAD_FACTOR``x zero
+   padding,
+3. the spectra are squared and summed incoherently over streams to give
+   ``S[n, b]``,
+4. the fine-bin statistic ``F2[b] = 2 S_t[b] / (S_l[b] + S_u[b])`` is
+   formed.
 
-The deployed transform is the frozen fixed-point ``fxfft256``
-(:func:`pilot_proxy.fxfft.fine_power_fx`), and the frame powers are defined
-from it: ``P[n] = sum_b S[n, b]`` over the exact
-uint64 fine powers (:func:`frame_powers_from_fine_u64`, the reference for
-``PilotProxy_Compute_FinePowers_U64`` summed over bins and for the fused entry's
-``d_power_out``). The rounded transform does not conserve energy exactly, so
-``P[n]`` is not ``pad * windows * sum_m |z[n, m]|^2``, and nothing compares
-the two.
+In deployment, the transform is the frozen fixed-point ``fxfft256``
+(:func:`pilot_proxy.fxfft.fine_power_fx`), and the frame powers are
+defined from it as ``P[n] = sum_b S[n, b]`` over the exact uint64 fine
+powers (:func:`frame_powers_from_fine_u64`). This sum is the reference for
+``PilotProxy_Compute_FinePowers_U64`` summed over bins and for the
+``d_power_out`` of the fused entry point. Since the rounded transform does
+not conserve energy exactly, ``P[n]`` differs from
+``pad * windows * sum_m |z[n, m]|^2``, and the two are never compared.
 
-:func:`fine_reduce` is the float prototype (``numpy.fft``/``cupy.fft``). It is
-not the deployed statistic. Its float Parseval identity
-``sum_b S[n, b] == pad * windows * sum_m |z[n, m]|^2`` is a property of the
-float prototype only, gated at ULP tolerance in its own tests.
+:func:`fine_reduce` is the float prototype (``numpy.fft`` or
+``cupy.fft``), and the deployed statistic is the fixed-point one above.
+For the float prototype only, the Parseval identity
+``sum_b S[n, b] == pad * windows * sum_m |z[n, m]|^2`` holds, and it is
+checked at ULP tolerance in its own tests.
 
-Properties of the CFAR prototype:
+The CFAR prototype uses a pre-registered null-bulk calibration. Here, the
+location is the median and the scale is the left-side spread (the median
+minus the 15.87th percentile) of the independent, non-designated fine
+bins. These are every ``FINE_PAD_FACTOR``-th bin, with the designated
+transmitter bins and a guard margin removed, along with any
+census-excluded bins. The mean of the full mixture is never used. When
+the null bulk itself is contaminated (a flag fraction above
+``fallback_flag_fraction``), the calibration falls back to lower
+quantiles (location = P25, scale = (P25 - P2.275) / 2) and records the
+mode.
 
-* **Null-bulk CFAR calibration** (pre-registered): location = median and
-  scale = left-side spread (median minus the 15.87th percentile) of the
-  *independent, non-designated* fine bins — every ``FINE_PAD_FACTOR``-th
-  bin, excluding designated transmitter bins with a guard margin and any
-  census-excluded bins. Never the mean of the full mixture. When the null
-  bulk itself is contaminated (flag fraction above
-  ``fallback_flag_fraction``), fall back to lower-quantile calibration
-  (location = P25, scale = (P25 - P2.275) / 2) and record the mode.
-* **Any-bin detection.** Detections are declared on all bins against the
-  null calibration, removing the census dependency of designated-only
-  rules. The fraction of those same null-bulk bins that exceed the fitted
-  threshold is reported as ``null_bulk_exceedance_fraction``. It is an
-  in-sample threshold diagnostic, not an independent false-alarm-rate estimate.
+Detections are declared on any bin against the null calibration, which
+removes the census dependency of designated-only rules. For the same
+null-bulk bins, the fraction that exceeds the fitted threshold is reported
+as ``null_bulk_exceedance_fraction``. Since this fraction is measured on the
+bins that set the threshold, it is an in-sample diagnostic and gives no
+independent estimate of the false-alarm rate.
 
-The float prototype is backend-agnostic: pass ``xp=numpy`` (default) or
-``xp=cupy``. Its integer row energies are computed with integer dtypes on either
-backend; FFTs use complex128 under numpy (prototype/parity reference) and
-complex64 under cupy (production), with the GPU-vs-prototype comparison
-gated at ULP tolerance in ``tests/kernel/test_matched_filter_row_projections_gpu.py``.
+The float prototype runs on either backend, selected with ``xp=numpy``
+(default) or ``xp=cupy``. Its integer row energies are computed with
+integer dtypes on both backends. Under numpy, the FFTs use complex128
+(the prototype and parity reference), and under cupy they use complex64
+(production). The GPU result is compared with the prototype at ULP
+tolerance in the CUDA test
+``test_cupy_fine_reduction_matches_float64_prototype_within_ulp_gate``.
 """
 from __future__ import annotations
 
@@ -104,10 +113,11 @@ def independent_bin_mask(
     guard_fine_bins: int = CFAR_DEFAULT_GUARD_FINE_BINS,
     census_excluded_bins: Sequence[int] = (),
 ) -> np.ndarray:
-    """Boolean mask of independent, non-designated, non-excluded fine bins.
+    """Return the boolean mask of independent, non-designated, non-excluded fine bins.
 
-    Zero padding correlates adjacent bins; every ``pad_factor``-th bin is
-    an independent sample of the underlying ``windows``-point spectrum.
+    Zero padding correlates adjacent bins, so every ``pad_factor``-th bin is
+    taken as an independent sample of the underlying ``windows``-point
+    spectrum.
     Designated bins are removed together with ``guard_fine_bins`` unpadded
     fine bins (``guard_fine_bins * pad_factor`` padded bins) on each side.
     """
@@ -155,11 +165,11 @@ class CfarCalibration:
 class FineReductionResult:
     """Per-frame products of the float prototype.
 
-    ``coarse_power_by_term`` is the prototype's row energy
-    ``sum_m |z[n, m]|^2`` (exact int64 for integer input), which its float
-    spectra reproduce as ``sum_b fine_power[n, b] / (pad * windows)`` by the
-    float transform's Parseval identity. It is not the deployed frame power;
-    that is :func:`frame_powers_from_fine_u64`.
+    ``coarse_power_by_term`` is the row energy ``sum_m |z[n, m]|^2`` of the
+    prototype (exact int64 for integer input). By the Parseval identity of
+    the float transform, the float spectra reproduce it as
+    ``sum_b fine_power[n, b] / (pad * windows)``. The deployed frame power
+    is given by :func:`frame_powers_from_fine_u64`.
     """
 
     fine_power: np.ndarray  # [num_weight_terms, num_bins] float
@@ -175,7 +185,7 @@ class FineReductionResult:
 
 
 def _as_complex_rows(matched_filter_row_projections: Any, num_weight_terms: int, xp: Any) -> Any:
-    """Normalize kernel/reference output to complex [terms, rows]."""
+    """Normalize kernel or reference output to complex [terms, rows] or integer [terms, rows, 2]."""
     arr = xp.asarray(matched_filter_row_projections)
     if arr.dtype.kind == "c":
         if arr.ndim != 2 or arr.shape[0] != int(num_weight_terms):
@@ -195,8 +205,7 @@ def _as_complex_rows(matched_filter_row_projections: Any, num_weight_terms: int,
 
 
 def _row_energy_by_term(arr: Any, num_weight_terms: int, xp: Any) -> np.ndarray:
-    """Exact int64 ``sum_m |z[n, m]|^2`` of integer rows (the float prototype's
-    Parseval reference; not a frame power)."""
+    """Return the exact int64 ``sum_m |z[n, m]|^2`` of integer rows for the Parseval check of the float prototype."""
     rows = _as_complex_rows(arr, num_weight_terms, xp)  # [terms, rows, 2] ints
     wide = rows.astype(xp.int64)
     mags = wide[..., 0] * wide[..., 0] + wide[..., 1] * wide[..., 1]
@@ -220,9 +229,9 @@ def frame_powers_from_fine_u64(
     summed over streams. This is the CPU reference for the host sum of
     PilotProxy_Compute_FinePowers_U64 and the fused entry's d_power_out.
 
-    The deployed per-bin bound keeps the 256-bin sum below 2**64. Check
-    the total with Python integers before conversion, because NumPy's
-    uint64 addition would otherwise wrap on overflow.
+    The deployed per-bin bound keeps the 256-bin sum below 2**64. The
+    uint64 sum of each term is compared with its Python integer sum, since
+    NumPy uint64 addition wraps on overflow with no error.
     """
     from pilot_proxy.fxfft import fine_power_fx
 
@@ -240,7 +249,7 @@ def frame_powers_from_fine_u64(
 
 
 def coarse_power_ratio_from_powers(powers: Sequence[int]) -> float:
-    """F = 2 P_t / (P_l + P_u), zero when the denominator vanishes."""
+    """Return F = 2 P_t / (P_l + P_u), or zero when the denominator vanishes."""
     p = np.asarray(powers, dtype=np.float64)
     den = float(p[WEIGHT_TERM_REF_LOWER] + p[WEIGHT_TERM_REF_UPPER])
     if den <= 0.0:
@@ -257,15 +266,16 @@ def fine_reduce(
     pad_factor: int = FINE_PAD_FACTOR,
     xp: Any = np,
 ) -> FineReductionResult:
-    """The float prototype: row sums to fine-bin spectra and the fine statistic.
+    """Reduce row sums to fine-bin spectra and the fine statistic (float prototype).
 
-    ``matched_filter_row_projections`` accepts the kernel's flat int32 buffer, an
-    ``[terms, rows, 2]`` integer array, or a complex ``[terms, rows]``
-    array (integer forms record the exact integer row energy; complex input
-    records ``coarse_power_by_term`` from the float spectra's Parseval sum,
-    rounded — prefer integers). The deployed spectra and frame powers are
-    the fixed-point ones (:func:`pilot_proxy.fxfft.fine_power_fx`,
-    :func:`frame_powers_from_fine_u64`), not these.
+    ``matched_filter_row_projections`` accepts the kernel's flat int32
+    buffer, an ``[terms, rows, 2]`` integer array, or a complex
+    ``[terms, rows]`` array. Integer input records the exact integer row
+    energy. Complex input records ``coarse_power_by_term`` from the rounded
+    Parseval sum of the float spectra, so integer input is preferred. The
+    deployed spectra and frame powers are the fixed-point ones of
+    :func:`pilot_proxy.fxfft.fine_power_fx` and
+    :func:`frame_powers_from_fine_u64`.
     """
     terms = int(num_weight_terms)
     streams = int(num_streams)
@@ -335,7 +345,7 @@ def calibrate_cfar(
     p_fa: float = CFAR_DEFAULT_P_FA,
     fallback_flag_fraction: float = CFAR_DEFAULT_FALLBACK_FLAG_FRACTION,
 ) -> CfarCalibration:
-    """Pre-registered null-bulk calibration of the fine statistic.
+    """Return the pre-registered null-bulk calibration of the fine statistic.
 
     Location and scale come from the independent non-designated bins
     (median + left-side spread), never from the mean of the full mixture.

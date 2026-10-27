@@ -20,7 +20,7 @@ DEFAULT_ROOT = "~/datatrawl-inventories"
 
 
 def inventory_root() -> Path:
-    """The canonical inventory root (env override, else the default)."""
+    """Return the inventory root, from ``$PILOT_PROXY_INVENTORY_ROOT`` or the default."""
     root = Path(os.environ.get(ENV, DEFAULT_ROOT)).expanduser()
     if not root.is_absolute():
         raise ValueError(
@@ -29,7 +29,7 @@ def inventory_root() -> Path:
 
 
 def inventory_dir_for_write(name: str) -> Path:
-    """Where a new inventory named ``name`` is written."""
+    """Return the directory where a new inventory named ``name`` is written."""
     return inventory_root() / validate_identifier(name, label="inventory name")
 
 

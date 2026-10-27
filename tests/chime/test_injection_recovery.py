@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Tests for the injection-recovery / radiometer-baseline analysis."""
+"""Tests for the injection-recovery analysis and its radiometer baseline."""
 from __future__ import annotations
 
 import json
@@ -55,8 +55,9 @@ def _write_point(point_dir, amplitude: float, *, seed: int,
         "null_power_ratio": np.asarray([MU0]),
     }
     np.savez_compressed(point_dir / CHIME_DETECTOR_OUTPUTS_FILENAME, **detector)
-    # Radiometer statistic: weakly shifted by the tone (a one-bin tone barely
-    # moves total band power), so its Pd must trail the power-ratio's.
+    # The radiometer statistic is shifted only weakly by the tone, since a
+    # one-bin tone barely moves the total band power. Its Pd must therefore
+    # trail the Pd of the power ratio.
     power = 100.0 + radiometer_shift + 1.0 * rng.standard_normal((N_FRAMES, 1))
     np.savez_compressed(
         point_dir / CHIME_SPECTROGRAM_CACHE_FILENAME,
@@ -81,7 +82,7 @@ def _ladder(tmp_path, amplitudes=(0.0, 1.0, 2.0, 4.0)):
     dirs = []
     for index, amplitude in enumerate(amplitudes):
         point = tmp_path / f"a{index}"
-        # Total power shift ~ a^2 * tiny: keeps the radiometer weak.
+        # small total power shift (0.05 a^2) keeps the radiometer weak
         _write_point(point, amplitude, seed=100 + index,
                      radiometer_shift=0.05 * amplitude**2)
         dirs.append(point)
@@ -108,8 +109,8 @@ def test_pilotproxy_beats_radiometer_at_matched_pfa(tmp_path) -> None:
     weakest_signal = report["points"][1]
     assert strongest["pd_power_ratio_pfa0.01"] > 0.99
     assert strongest["pd_power_ratio_pfa0.01"] >= strongest["pd_radiometer_pfa0.01"]
-    # At the weak point the power-ratio already separates; the radiometer
-    # stays near its false-alarm rate.
+    # At the weakest nonzero amplitude, the tone is already detected by the
+    # power ratio. The radiometer stays near its false-alarm rate.
     assert weakest_signal["pd_power_ratio_pfa0.01"] > 0.5
     assert weakest_signal["pd_radiometer_pfa0.01"] < 0.2
     # Wilson bounds bracket every rate.

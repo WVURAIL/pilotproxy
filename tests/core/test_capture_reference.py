@@ -1,4 +1,8 @@
-"""Native ABI refusal gates and independent exact arithmetic replay checks."""
+"""Tests of the native capture ABI checks and of the exact capture replay.
+
+The replay of the detector arithmetic is compared with an independent scalar
+computation in exact integers.
+"""
 from __future__ import annotations
 
 import ctypes
@@ -32,7 +36,7 @@ class BeamCoord(ctypes.LittleEndianStructure):
 
 
 class NativeMetadata(ctypes.LittleEndianStructure):
-    # Mirror the native declaration, so fixtures do not share parser offsets.
+    # copy of the native declaration, so the fixtures do not reuse the parser offsets
     _fields_ = [
         ("limits", ctypes.c_int32 * 6), ("frame_counter", ctypes.c_int32),
         ("fpga_seq_num", ctypes.c_int64), ("time_downsampling_fpga", ctypes.c_int32),

@@ -10,10 +10,10 @@ LOCKED_PACKED_COMPLEX_BITS = 8
 LOCKED_SAMPLE_BITS_PER_COMPONENT = 4
 LOCKED_INPUT_FORMAT = "complex_int4_packed_int8"
 LOCKED_POWER_ACCUMULATOR = "uint64"
-# Kernel core 3.0.0: each frame power is the all-bin sum of that term's exact
-# fixed-point fine power spectrum, P_r = sum_f S_r[f]. The transform length
-# cancels in the ratio, so R_coarse keeps its form; the powers are no longer
-# the row-domain sums of |z|^2 (detector contract revision 1).
+# In kernel core 3.0.0, each frame power is the all-bin sum of that term's
+# exact fixed-point fine power spectrum, P_r = sum_f S_r[f]. The transform
+# length cancels in the ratio, so R_coarse has the same form as the ratio of
+# the row-domain sums of |z|^2 used by detector contract revision 1.
 LOCKED_COARSE_POWER_RATIO_DEFINITION = (
     "R_coarse = 2 * sum_f S_target[f] / "
     "(sum_f S_ref_lower[f] + sum_f S_ref_upper[f]); "

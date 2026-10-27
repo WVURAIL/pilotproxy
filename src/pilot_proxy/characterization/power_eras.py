@@ -1,7 +1,8 @@
-"""Exploratory power-era proposals from calendar-month, equal-event features.
+"""Propose exploratory power eras from calendar-month, equal-event features.
 
-This module is separate from the archived era rule. Relative power changes
-do not establish transmitter on/off states, residual RFI, or science tolerance.
+This module is independent of the archived era rule. A relative power change
+is evidence for review only, and no transmitter on/off state, residual RFI, or
+science tolerance is inferred from it.
 """
 from __future__ import annotations
 
@@ -91,7 +92,7 @@ def _strict_fields(value: Mapping, allowed: set[str], required: set[str], name: 
 
 @dataclass(frozen=True)
 class MonthlyPower:
-    """One calendar month; level_db is already reduced with equal event weight."""
+    """Power features of one calendar month, with ``level_db`` already reduced at equal event weight."""
 
     month: str
     level_db: float | None
@@ -128,7 +129,7 @@ class MonthlyPower:
 
 @dataclass(frozen=True)
 class PowerEraConfig:
-    """Versioned exploratory defaults, not a calibrated false-alarm policy."""
+    """Versioned exploratory defaults, chosen without a false-alarm calibration."""
 
     version: str = CONFIG_VERSION
     min_events: int = 5
@@ -253,8 +254,9 @@ def _compare(left: list[MonthlyPower], right: list[MonthlyPower],
     new_observations = [row.month for row in all_rows if abs(row.level_db - b) <= b_band]
     old_last = max(a_consistent) if a_consistent else None
     new_first = min(b_consistent) if b_consistent else None
-    # Refine only contiguous edge evidence, never an isolated opposite-regime
-    # interior outlier. This separates observation bounds from a tied edge.
+    # The bounds are moved only through months contiguous with the edge, so an
+    # isolated opposite-regime outlier in the interior cannot move them. This
+    # distinguishes the observation bounds from a tied edge.
     for row in right:
         if abs(row.level_db - a) > a_band:
             break
@@ -380,11 +382,12 @@ def _excursions(runs: list[list[int]], eligible: dict[int, MonthlyPower],
 
 def propose_power_eras(months: Sequence[MonthlyPower], *, channel: int,
                        provenance: Mapping, config: PowerEraConfig | None = None) -> dict:
-    """Return reviewable candidate clusters; never replace accepted eras.
+    """Return candidate clusters of power changes for review, leaving the accepted eras unchanged.
 
-    Input values must already use the declared equal-event monthly reduction.
-    Provenance is preserved and digested, not independently authenticated here.
-    Frequency offsets and metadata are diagnostics, never boundary triggers.
+    The input values must already use the declared equal-event monthly
+    reduction. The provenance is kept and digested, and it is not authenticated
+    here. Frequency offsets and metadata are kept as diagnostics and never
+    trigger a boundary.
     """
     _integer(channel, "channel", 1)
     if config is None:
@@ -473,7 +476,7 @@ def propose_power_eras(months: Sequence[MonthlyPower], *, channel: int,
             if set(boundary["confirmation_months"]) & set(other["confirmation_months"]):
                 boundary["overlapping_confirmation_windows"].append(other["candidate_id"])
                 other["overlapping_confirmation_windows"].append(boundary["candidate_id"])
-    # Do not duplicate a confirmed candidate as a short-window endpoint warning.
+    # a pending change already covered by a confirmed candidate is dropped, so it is not reported twice
     pending = [item for item in pending
                if not any(boundary["candidate_edge_interval"]["old_last_month"]
                           <= item["old_last_month"]
@@ -512,14 +515,14 @@ def propose_power_eras(months: Sequence[MonthlyPower], *, channel: int,
             "Overlapping confirmation windows require explicit review before any production partition.",
         ],
     }
-    # Finite input scalars can still overflow derived differences or scales.
-    # Refuse such a result rather than emitting nonfinite diagnostic evidence.
+    # Finite input scalars can still overflow the derived separations or scales.
+    # _canonical raises on a nonfinite value, so such a result is never returned.
     _canonical(result)
     return result
 
 
 def input_from_dict(value: Mapping) -> tuple[tuple[MonthlyPower, ...], int, dict, PowerEraConfig]:
-    """Validate one single-channel document without interpreting extra fields."""
+    """Validate one single-channel input document and return its months, channel, provenance, and configuration."""
     value = _strict_fields(value, {"schema_version", "channel", "provenance", "months", "config"},
                            {"schema_version", "channel", "provenance", "months"}, "input")
     if value["schema_version"] != INPUT_VERSION:

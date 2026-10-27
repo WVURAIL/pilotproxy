@@ -637,8 +637,11 @@ def test_parser_accepts_repeated_summary_and_trial_inputs() -> None:
 
 
 def test_clean_terms_refuse_results_without_the_fine_sum_frame_powers(tmp_path) -> None:
-    """Trial powers from before kernel core 3.0.0 are row-domain sums, which
-    the fine-sum clean terms cannot be compared with."""
+    """Results without the fine-sum frame powers are refused.
+
+    Trial powers from before kernel core 3.0.0 are row-domain sums and cannot
+    be compared with the fine-sum clean terms.
+    """
     from pilot_proxy.testbench.plot_results import _clean_packed_terms
 
     for metadata in (

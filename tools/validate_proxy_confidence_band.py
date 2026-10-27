@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Independent-dataset diagnostics for the approximate retained-proxy band.
+"""Evaluate the approximate retained-proxy band on independent datasets.
 
-No detector policy is changed. Analytic populations have known signed proxy
-means. Resampling stored power rows instead defines an empirical population;
-its independent dataset draws are not new physical waveform realizations.
+This tool does not change the detector policy. An analytic population is
+drawn from eight event templates with known signed proxy means. An empirical
+population is formed by resampling stored power rows with replacement. The
+datasets drawn from it are independent. Each one, however, reuses the saved
+waveform realizations.
 """
 from __future__ import annotations
 
@@ -59,7 +61,13 @@ def template(name, q):
 
 
 def analytic_target(name, words):
-    """Exact ratio of expected equally weighted event numerator/denominator."""
+    """Return the exact signed proxy target for each Q16 word.
+
+    Each event is one of eight equally probable templates, and its frames share
+    the event weight equally. The target is the expected weighted proxy sum of
+    the kept frames divided by their expected weight, and NaN where no frame is
+    kept.
+    """
     a = np.zeros(len(words))
     b = np.zeros(len(words))
     for q in range(8):
@@ -123,8 +131,9 @@ def miss_interval(misses, trials, alpha):
 
 
 def evaluate_dataset(frames, windows, clusters, target, args, seed, selection_budget):
-    # This observed grid and its support eligibility are reconstructed in EVERY
-    # independent dataset. It is not a fixed nonrandom threshold design.
+    # The word grid and its support eligibility are rebuilt from each
+    # independent dataset. Hence, the tested thresholds vary from one
+    # dataset to the next.
     words = np.unique(frames.required[frames.supported])
     band = simultaneous_upper_band(frames, words, windows=windows, cluster_labels=clusters,
         confidence=.95, bootstrap_replicates=args.bootstrap_replicates, seed=seed,
@@ -132,8 +141,9 @@ def evaluate_dataset(frames, windows, clusters, target, args, seed, selection_bu
     truth = np.asarray(target(words), dtype=float)
     if truth.shape != words.shape or not np.isfinite(truth).all():
         raise ValueError("target must provide finite truth for every supplied word")
-    # A held-out calibration driver may widen the margin. The standalone
-    # original protocol keeps multiplier one and its original critical value.
+    # The calibration driver (tools/calibrate_proxy_confidence_band.py) may
+    # widen the band by a multiplier calibrated on held-out datasets. A
+    # standalone run keeps a multiplier of one and the original critical value.
     raw_critical = float(band["critical"])
     multiplier = getattr(args, "critical_multiplier", None)
     critical_floor = getattr(args, "minimum_critical", 1.)
@@ -167,8 +177,10 @@ def evaluate_dataset(frames, windows, clusters, target, args, seed, selection_bu
     full, last = band["windows"]["full"], band["windows"]["last"]
     eligible_both = full["eligible"] & last["eligible"]
     finite_both = eligible_both & np.isfinite(full["signed_upper"]) & np.isfinite(last["signed_upper"])
-    # An explicitly diagnostic version of knee-or-loosest-usable selection.
-    # The budget is fixed per target scale, not fitted to observed outcomes.
+    # This is a diagnostic form of the knee-or-loosest-usable selection. For
+    # each scenario, the budget is set before any dataset is drawn, at 0.75
+    # times the largest magnitude of the complete-population target with a
+    # floor of 1e-7.
     budget = selection_budget
     candidate = np.flatnonzero(finite_both & (words <= knee_word) &
         (full["upper"] <= budget) & (last["upper"] <= budget) &
@@ -201,10 +213,10 @@ def load_frontier():
             scores = fixed_scores(z["fine_power_u64"], construct_geometry(255))
             if not scores["valid"][:, 1].all() or scores["always_masked"][:, 1].any():
                 raise ValueError("Unsupported fixture score")
-            # Kernel core 3.0.0: the frame powers are the all-bin sums of the
-            # stored exact fine powers. The shard's coarse_marginals_u64 and
-            # normalized_excess are the retired row-domain powers and are not
-            # read.
+            # In kernel core 3.0.0 the frame power P_r is the sum of the stored
+            # exact fine powers over all bins. The coarse_marginals_u64 and
+            # normalized_excess arrays of the shard hold the row-domain powers
+            # of the removed coarse branch and are not read.
             powers = z["fine_power_u64"].sum(axis=2, dtype=np.uint64).astype(float)
             excess = powers[:, 0] * c["reference_norm_sum_sq"] / (
                 (powers[:, 1] + powers[:, 2]) * c["target_norm_sq"]) - 1
@@ -213,11 +225,16 @@ def load_frontier():
 
 
 def campaign_diagnostics(campaign):
-    """Nine saved cells compared with the requested model data-shelf coordinate.
+    """Compare nine saved campaign cells with the requested model data-shelf coordinate.
 
-    That coordinate is not measured total digital input INR. The contrast
-    combines waveform, response/offset, quantization, and sampling effects; it
-    does not isolate the effect of threshold selection.
+    Here, the cells are the three channel and case pairs of CASES, each at the
+    grid levels nearest REQUESTED_LEVELS (dB). The requested coordinate is the
+    model shelf SNR set in the campaign plan and is not a measurement of the
+    total digital input INR. The difference between the signed proxy and this
+    coordinate contains waveform, response and offset, quantization, and
+    sampling effects, so the effect of threshold selection alone is not
+    isolated. For channel 14, case 0, the cell at the level nearest -50 dB is
+    also returned as the empirical campaign population.
     """
     plan_path = campaign / "plan.json"
     plan = json.loads(plan_path.read_text())
@@ -256,8 +273,9 @@ def campaign_diagnostics(campaign):
             levels = selected_levels
             with np.load(path, allow_pickle=False) as z:
                 fine = z["fixed_fine"][:, columns]
-                # Frame powers are the all-bin fine sums (kernel core 3.0.0);
-                # the shard's row-domain fixed_coarse is not read.
+                # As in kernel core 3.0.0, the frame powers are the all-bin
+                # fine sums.
+                # The row-domain fixed_coarse array of the shard is not read.
                 coarse = fine.sum(axis=-1, dtype=np.uint64).astype(float)
                 scored = fixed_scores(fine.reshape(-1, 3, 256), geometry)
                 if not scored["valid"][:, 1].all() or scored["always_masked"][:, 1].any():
@@ -314,7 +332,7 @@ def run(args):
     protocol_path = args.output / "protocol.json"
     if protocol_path.exists() and json.loads(protocol_path.read_text()) != protocol:
         raise ValueError("Output directory contains a different frozen protocol")
-    write_json(protocol_path, protocol)  # Frozen before any validation outcomes.
+    write_json(protocol_path, protocol)  # frozen before any validation outcome
     print(f"frozen protocol: {sha(protocol_path)}", flush=True)
     frontier, fixture_receipts = load_frontier()
     populations = {"empirical_frontier": frontier}

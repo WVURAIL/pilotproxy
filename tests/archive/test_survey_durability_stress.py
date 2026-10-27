@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """Durability, resume and concurrency stress tests for the cadc-datatrail survey.
 
-Every test here drives the REAL survey() loop -- the real SurveyStore
-transaction, the real SurveyOutputLock, the real view renderer -- with only the
-three live seams faked: event enumeration, `datatrail ps`, and cadcinfo. No
-network, no Datatrail CLI, no CADC certificate.
+Each test drives the real survey() loop, with the real SurveyStore
+transaction, the real SurveyOutputLock and the real view renderer. Only the
+three live seams are faked: event enumeration, `datatrail ps`, and cadcinfo.
+No test needs the network, the Datatrail CLI or a CADC certificate.
 
-The claims under test are the ones a third party must be able to trust:
+The tests check the properties that a third party must be able to trust:
 
-  * a committed event is durable and is never committed partially;
-  * an interrupted run resumes with zero duplicate rows and zero re-probes of
-    already-committed events;
+  * a committed event is durable and is never committed partially
+  * an interrupted run resumes with zero duplicate rows and with no second
+    probe of an event already committed
   * inventory.jsonl and the text ledgers are pure views of SQLite and are
-    regenerated after any stop between commit and render;
-  * the worker count is a performance knob only -- it cannot change one byte of
-    the inventory; and
+    regenerated after any stop between commit and render
+  * the worker count sets performance only and cannot change one byte of the
+    inventory
   * two surveys can never interleave in one directory, and an incompatible
-    configuration can never append to an existing one.
+    configuration can never append to an existing one
 """
 from __future__ import annotations
 
@@ -41,27 +41,27 @@ from pilot_proxy.archive.survey_state import SurveyOutputLock
 
 SCOPE = "chime.event.baseband.raw"
 FLOOR = 1 << 20                       # ChimeBasebandReader.minimum_archive_bytes
-OBS_DIR = "raw/2020/07/15"            # matches _DATE_RE (cadc.py:111)
+OBS_DIR = "raw/2020/07/15"            # matches _DATE_RE in cadc.py
 FIDS = [614, 706, 800]
 
 pytestmark = pytest.mark.skipif(
     os.name == "nt", reason="POSIX signal and flock semantics under test")
 
 
-# ---------------------------------------------------------------- fixture ---
+# fixtures
 def events(n, start=100000000):
     return [str(start + i) for i in range(n)]
 
 
 def size_for(event, name):
-    """Deterministic above-floor size, so the inventory bytes are a pure
-    function of the event set and never of thread scheduling."""
+    """Return a deterministic size above the floor, so the inventory bytes
+    depend only on the event set and never on thread scheduling."""
     digest = hashlib.sha256(f"{event}/{name}".encode()).digest()
     return FLOOR + int.from_bytes(digest[:4], "big") % 1000
 
 
 class Probes:
-    """What the survey actually asked the archive for."""
+    """Record what the survey asked the archive for."""
 
     def __init__(self):
         self.uris = []
@@ -76,7 +76,7 @@ class Probes:
 
 @contextlib.contextmanager
 def fake_archive(evs, present=None, size_hook=None, cp_hook=None, jitter=0.0):
-    """Patch the three live seams survey() leans on; restore them on exit."""
+    """Patch the three live seams of survey() and restore them on exit."""
     present = set(evs) if present is None else set(present)
     probes = Probes()
     saved = (C._enumerate_events, C.DATATRAIL.common_path,
@@ -127,8 +127,11 @@ OMIT = object()
 
 
 def survey(out, freq_ids=FIDS, workers=4, **options):
-    """One survey pass; returns its stdout. freq_ids=OMIT leaves the option
-    unset, which is how a real CLI run reaches _resolve_freq_ids with None."""
+    """Run one survey pass and return its stdout.
+
+    freq_ids=OMIT leaves the option unset, which is how a real CLI run reaches
+    _resolve_freq_ids with None.
+    """
     options = {"workers": workers, **options}
     if freq_ids is not OMIT:
         options["freq_ids"] = list(freq_ids)
@@ -140,7 +143,7 @@ def survey(out, freq_ids=FIDS, workers=4, **options):
     return buffer.getvalue()
 
 
-# ------------------------------------------------------------- inspection ---
+# inspection
 def db_state(out):
     db = sqlite3.connect(Path(out) / "survey_state.sqlite3")
     try:
@@ -174,15 +177,15 @@ def digests(out, exclude=(".survey.lock",)):
             if p.is_file() and p.name not in exclude}
 
 
-# ============================================================= 1. SIGINT ====
+# 1. SIGINT
 def interrupt_before_event(target):
-    """Raise a real SIGINT on the MAIN thread just as survey() starts `target`.
+    """Raise a real SIGINT on the main thread as survey() starts `target`.
 
-    DATATRAIL.common_path is called on the main thread (cadc.py:616), before
+    DATATRAIL.common_path is called on the main thread in survey(), before
     the probe pool is involved, so the default SIGINT handler raises
-    KeyboardInterrupt at the very next bytecode boundary. That makes the
-    committed prefix exact -- every event before `target` and nothing else --
-    with no sleep and no race.
+    KeyboardInterrupt at the next bytecode boundary. The committed prefix is
+    then exact, with every event before `target` and nothing else, and the
+    test needs no sleep and has no race.
     """
     fired = []
 
@@ -208,24 +211,24 @@ def test_sigint_mid_run_commits_whole_events_only_and_releases_the_lock(
     state = db_state(out)
     assert state["integrity"] == "ok"
     assert state["orphans"] == 0
-    # Exactly the events BEFORE the interrupted one are committed ...
+    # Exactly the events before the interrupted one are committed.
     assert sorted(state["status"]) == [f"{SCOPE}|{ev}" for ev in evs[:5]]
-    # ... and every one of them is whole: no half-written event.
+    # Every one of them is whole, with no half-written event.
     assert set(state["records"].values()) == {len(FIDS)}
-    # The finally block (cadc.py:827-848) still rendered the views.
+    # The finally block of survey() still rendered the views.
     assert len(views(out)["inventory.jsonl"]) == 5 * len(FIDS)
     assert len(views(out)["surveyed_events.txt"]) == 5
-    # The OS lock is gone -- a second survey can start immediately.
+    # The OS lock is gone, so a second survey can start immediately.
     with SurveyOutputLock(out):
         pass
 
 
 def test_sigint_while_probes_are_in_flight_commits_nothing_partial(tmp_path):
-    """The harder case: the signal arrives while the pool is mid-event.
+    """The signal arrives while the pool is in the middle of an event.
 
-    The interrupted event has probes that already returned. None of them may
-    be persisted, and pool.shutdown(wait=True) in the finally (cadc.py:832)
-    must still join every worker before the lock is released.
+    Some probes of the interrupted event have already returned. None of them
+    may be persisted, and pool.shutdown(wait=True) in the finally block must
+    still join every worker before the lock is released.
     """
     out = tmp_path / "inv"
     evs = events(10)
@@ -248,7 +251,7 @@ def test_sigint_while_probes_are_in_flight_commits_nothing_partial(tmp_path):
     assert f"{SCOPE}|{evs[5]}" not in state["status"]     # never half-landed
     assert set(state["records"].values()) <= {len(FIDS)}
     assert len(state["status"]) == 5
-    assert evs[5] in probes.events                        # it really was probed
+    assert evs[5] in probes.events                        # it was probed
     with SurveyOutputLock(out):                           # workers were joined
         pass
 
@@ -289,7 +292,7 @@ def test_an_interrupted_run_reports_the_interruption(tmp_path):
     run = json.loads((out / "survey_manifest.json").read_text())["latest_run"]
     assert run["status"] == "interrupted" and run["views_current"]
 
-# ============================================================ 2. SIGKILL ====
+# 2. SIGKILL
 KILL_CHILD = '''
 """Run one faked survey pass and park at a chosen point so the parent can
 SIGKILL this process there. Configured by a JSON blob on argv[1]."""
@@ -420,14 +423,14 @@ def _kill_at(tmp_path, phase, target, out=None, n_events=10, **extra):
                                              ("post-commit", 4)])
 def test_sigkill_inside_the_commit_transaction_is_atomic(
         tmp_path, phase, committed):
-    """SIGKILL with the transaction open discards ALL of that event's writes.
+    """SIGKILL with the transaction open discards every write of that event.
 
-    The park point is the last statement inside `with self._db:`
-    (survey_state.py:381-383): the events row, the records DELETE and every
-    records INSERT are staged and only the COMMIT is missing. Killing one
-    statement later ("post-commit") lands exactly one more WHOLE event, and
-    that difference of exactly one -- with no partial event in either case --
-    is the atomicity proof.
+    The park point is the last statement in `with self._db:` in
+    SurveyStore.commit. The events row, the records DELETE and every records
+    INSERT are staged, and only the COMMIT is missing. A kill one statement
+    later ("post-commit") lands exactly one more whole event. The count rises
+    by exactly one, with no partial event in either case, which shows that
+    the commit is atomic.
     """
     out = _kill_at(tmp_path, phase, target=4)
     state = db_state(out)
@@ -439,13 +442,14 @@ def test_sigkill_inside_the_commit_transaction_is_atomic(
 
 
 def test_sigkill_leaves_stale_views_that_the_next_run_repairs(tmp_path):
-    """The known hazard: a killed run leaves a truthful-LOOKING but stale
-    inventory.jsonl on disk. Nothing warns; only the next run repairs it."""
+    """A killed run leaves a stale inventory.jsonl on disk that looks correct.
+    The next run repairs it."""
     out = _kill_at(tmp_path, "post-commit", target=4)
-    # Checked before db_state(): opening the DB checkpoints the WAL away.
+    # This is checked before db_state(), since opening the DB checkpoints the
+    # WAL away.
     assert (out / "survey_state.sqlite3-wal").exists()
     assert (out / ".survey.lock").exists()              # OS lock already gone
-    assert views(out)["inventory.jsonl"] == []          # <- the hazard
+    assert views(out)["inventory.jsonl"] == []          # the stale view
     assert len(db_state(out)["status"]) == 4
 
     with fake_archive(events(10)) as probes:
@@ -461,10 +465,10 @@ def test_sigkill_leaves_stale_views_that_the_next_run_repairs(tmp_path):
 
 def test_a_kill_between_commit_and_checkpoint_leaves_no_stale_attempt_count(
         tmp_path):
-    """The one-statement window cadc.py:601-605 leaves attempts.json claiming
-    a retry for an event SQLite has already committed. The resume
-    reconciliation at cadc.py:580-582 must drop it; otherwise the checkpoint
-    accumulates entries for finished events forever.
+    """A kill in the one-statement window between the SQLite commit and the
+    checkpoint in mark_done() leaves attempts.json with a retry for an event
+    that SQLite has already committed. The reconciliation at resume must drop
+    it, or the checkpoint gathers entries for finished events forever.
     """
     out = tmp_path / "inv"
     evs = events(3)
@@ -475,14 +479,14 @@ def test_a_kill_between_commit_and_checkpoint_leaves_no_stale_attempt_count(
             return None, OSError("transient")
         return None
 
-    # Pass 1: the last event is partial, so it is bumped rather than committed.
+    # Pass 1: the last event is partial, so it is bumped and not committed.
     with fake_archive(evs, size_hook=size_hook):
         survey(out, workers=1)
     assert json.loads((out / "attempts.json").read_text()) == {
         f"{SCOPE}|{stalled}": 1}
 
-    # Pass 2: it now resolves cleanly. Kill immediately after its transaction
-    # commits and before the checkpoint is rewritten.
+    # Pass 2: the event resolves cleanly. The child is killed right after its
+    # transaction commits and before the checkpoint is rewritten.
     _kill_at(tmp_path, "post-commit", target=1, out=out, n_events=3)
     assert len(db_state(out)["status"]) == 3
     assert json.loads((out / "attempts.json").read_text()) == {
@@ -507,12 +511,13 @@ def test_a_killed_run_marks_views_stale_until_resume(tmp_path):
     assert len(views(out)["inventory.jsonl"]) == 10 * len(FIDS)
     assert db_state(out)["integrity"] == "ok"
 
-# ========================================================= 3. STALE LOCK ====
+# 3. stale lock
 def test_a_stale_lock_file_does_not_strand_the_directory(tmp_path):
-    """flock is kernel-released, so a dead owner's lock FILE is not a lock.
+    """flock is released by the kernel, so the lock file of a dead owner is
+    not a lock.
 
-    Refusing here would be the real bug: one SIGKILL would strand the output
-    directory permanently with no documented way to clear it.
+    A refusal here would be a bug, since one SIGKILL would then strand the
+    output directory permanently with no documented way to clear it.
     """
     out = tmp_path / "inv"
     out.mkdir()
@@ -526,8 +531,8 @@ def test_a_stale_lock_file_does_not_strand_the_directory(tmp_path):
 
 
 def test_takeover_after_a_real_kill_is_correct_not_merely_permitted(tmp_path):
-    """Take over the lock left by an actually-killed process and prove the
-    resulting inventory equals a clean single-pass run."""
+    """The lock left by a killed process is taken over, and the resulting
+    inventory is checked against a clean single-pass run."""
     out = _kill_at(tmp_path, "post-commit", target=4)
     stale = json.loads((out / ".survey.lock").read_text())["pid"]
     with fake_archive(events(10)):
@@ -543,16 +548,16 @@ def test_takeover_after_a_real_kill_is_correct_not_merely_permitted(tmp_path):
 
 
 def test_a_lock_file_alone_does_not_trip_the_legacy_state_guard(tmp_path):
-    """.survey.lock is deliberately absent from _STATE_NAMES
-    (survey_state.py:36-41). If it were listed, __enter__ creating it would
-    make ensure_manifest refuse every fresh directory."""
+    """_STATE_NAMES in survey_state.py does not list .survey.lock. If it did,
+    the file created by __enter__ would make ensure_manifest refuse every
+    fresh directory."""
     from pilot_proxy.archive.survey_state import _STATE_NAMES
     assert ".survey.lock" not in _STATE_NAMES
     out = tmp_path / "inv"
     out.mkdir()
     (out / ".survey.lock").write_text("{}\n")
     with fake_archive(events(2)):
-        survey(out)                     # a manifest is created, not refused
+        survey(out)                     # a manifest is created
     assert (out / "survey_manifest.json").exists()
 
 
@@ -566,10 +571,10 @@ def test_a_live_holder_is_never_taken_over(tmp_path):
     assert "already in use by another active survey" in str(excinfo.value)
 
 
-# ======================================================= 4. VIEW DELETION ===
+# 4. view deletion
 def test_views_deleted_mid_run_are_fully_regenerated(tmp_path):
-    """Delete every view while the survey is running; the final render
-    (cadc.py:835) restores them from SQLite alone."""
+    """Every view is deleted while the survey is running, and the final
+    render in the finally block of survey() restores them from SQLite alone."""
     out = tmp_path / "inv"
     evs = events(8)
     deleted = []
@@ -594,7 +599,7 @@ def test_views_deleted_mid_run_are_fully_regenerated(tmp_path):
 
 
 def test_views_deleted_between_runs_are_restored_before_any_new_work(tmp_path):
-    """cadc.py:585 renders the views at startup, before phase 2 probes."""
+    """survey() renders the views at startup, before the probes of phase 2."""
     out = tmp_path / "inv"
     evs = events(3)
     with fake_archive(evs):
@@ -611,20 +616,20 @@ def test_views_deleted_between_runs_are_restored_before_any_new_work(tmp_path):
 
 
 def test_view_order_is_by_event_key_not_by_commit_history(tmp_path):
-    """The lowest-keyed event is committed LAST, three passes later.
+    """The lowest-keyed event is committed last, three passes later.
 
     inventory.jsonl must still equal a clean single-pass run, because
-    render_views orders by (event_key, ordinal) (survey_state.py:390) and not
-    by insertion. A view ordered by rowid would put the retried event at the
-    end -- and would still look perfectly sorted on any run that never
-    retried, which is why a plain happy-path survey cannot see this.
+    render_views orders the rows by (event_key, ordinal) and never by
+    insertion. A view ordered by rowid would put the retried event at the
+    end. That view would still look sorted on any run with no retry, so a
+    plain survey with no failures cannot detect the fault.
     """
     out = tmp_path / "inv"
     evs = events(3)
     passes = []
 
     def size_hook(uri, event, name):
-        # The FIRST event fails one probe on the first two passes, so it is
+        # The first event fails one probe on the first two passes, so it is
         # committed only on the third, long after its higher-keyed siblings.
         if event == evs[0] and len(passes) < 2 and name.endswith("_800.h5"):
             return None, OSError("transient")
@@ -655,17 +660,17 @@ def test_view_order_is_by_event_key_not_by_commit_history(tmp_path):
 
 def test_a_view_write_killed_part_way_leaves_the_previous_view_intact(
         tmp_path):
-    """atomic_write_lines writes a temp file and os.replace()s it
-    (survey_state.py:134-150), so a kill during a render can never expose a
-    truncated inventory: the reader sees the previous complete file."""
+    """atomic_write_lines writes a temp file and moves it into place with
+    os.replace(), so a kill during a render can never expose a truncated
+    inventory. The reader sees the previous complete file."""
     out = tmp_path / "inv"
     with fake_archive(events(3)):
         survey(out, workers=1)
     intact = (out / "inventory.jsonl").read_bytes()
     assert intact.count(b"\n") == 3 * len(FIDS)
 
-    # Kill part-way through the SECOND render of this child (the first is the
-    # startup recovery render at cadc.py:585; the second is the final one).
+    # The child is killed part-way through its second render. The first is the
+    # recovery render at startup, and the second is the final one.
     _kill_at(tmp_path, "render-cursor", target=2, out=out, n_events=6,
              after_rows=4)
 
@@ -680,8 +685,8 @@ def test_a_view_write_killed_part_way_leaves_the_previous_view_intact(
 
 
 def test_a_hand_edited_view_is_silently_overwritten(tmp_path):
-    """Characterisation: the views are outputs, never inputs. Anyone editing
-    no_files_events.jsonl by hand loses the edit at the next render."""
+    """This characterization test shows that the views are outputs and never
+    inputs. A hand edit to inventory.jsonl is lost at the next render."""
     out = tmp_path / "inv"
     with fake_archive(events(2)):
         survey(out)
@@ -693,8 +698,9 @@ def test_a_hand_edited_view_is_silently_overwritten(tmp_path):
 
 
 def test_deleting_the_database_between_runs_re_surveys_from_scratch(tmp_path):
-    """The DB is the source of truth; losing it loses resume, not correctness.
-    Note the views are NOT consulted to rebuild it -- they are pure views."""
+    """The DB is the source of truth. Losing it costs the resume, and the
+    result stays correct. The views are never read to rebuild it, since they
+    are pure views."""
     out = tmp_path / "inv"
     with fake_archive(events(4)):
         survey(out)
@@ -710,7 +716,7 @@ def test_deleting_the_database_between_runs_re_surveys_from_scratch(tmp_path):
     assert (out / "inventory.jsonl").read_bytes() == first  # same bytes
 
 
-# ========================================================= 5. CONCURRENCY ===
+# 5. concurrency
 WORKER_COUNTS = (1, 4, 12, 32)
 WORKER_EVENTS = 8
 WORKER_FIDS = list(range(614, 646))               # 32 candidates per event
@@ -728,17 +734,18 @@ def worker_reference(tmp_path_factory):
 @pytest.mark.parametrize("workers", WORKER_COUNTS)
 def test_inventory_is_byte_identical_at_every_worker_count(
         tmp_path, workers, worker_reference):
-    """--workers is a throughput knob; it may not change one inventory byte.
+    """--workers sets throughput only and may not change one inventory byte.
 
-    Jitter derived from the URI digest makes probe completion order genuinely
-    differ between worker counts, so a scheduling-dependent write order shows
-    up as a byte mismatch rather than passing by luck.
+    Jitter derived from the URI digest makes the probe completion order differ
+    between worker counts, so a write order that depends on scheduling shows
+    up as a byte mismatch instead of passing by luck.
     """
     out = tmp_path / f"w{workers}"
     with fake_archive(events(WORKER_EVENTS), jitter=0.001) as probes:
         survey(out, freq_ids=WORKER_FIDS, workers=workers)
-    # Prove the parallelism was real: the pool grows a thread per queued
-    # candidate up to its cap, so this equals min(workers, candidates).
+    # The pool grows one thread per queued candidate up to its cap, so the
+    # thread count equals min(workers, candidates) and shows that the probes
+    # ran in parallel.
     assert len(probes.threads) == min(workers, len(WORKER_FIDS))
     payload = (out / "inventory.jsonl").read_bytes()
     assert payload == worker_reference
@@ -746,8 +753,8 @@ def test_inventory_is_byte_identical_at_every_worker_count(
 
 
 def test_record_ordinals_follow_candidate_order_not_completion_order(tmp_path):
-    """pool.map preserves input order (cadc.py:650), so records.ordinal is
-    freq_id order however the probes finish."""
+    """pool.map in survey() preserves the input order, so records.ordinal
+    follows freq_id order however the probes finish."""
     out = tmp_path / "inv"
     with fake_archive(["100000000"], jitter=0.002):
         survey(out, freq_ids=WORKER_FIDS, workers=32)
@@ -761,8 +768,9 @@ def test_record_ordinals_follow_candidate_order_not_completion_order(tmp_path):
 
 
 def test_workers_do_not_touch_the_store_or_the_checkpoint(tmp_path):
-    """sqlite3.connect defaults to check_same_thread=True, so any future move
-    of commit() into a pool worker raises instead of corrupting silently."""
+    """sqlite3.connect defaults to check_same_thread=True, so if commit() is
+    ever moved into a pool worker it raises an error instead of corrupting
+    the store with no warning."""
     out = tmp_path / "inv"
     seen = []
     main = threading.get_ident()
@@ -777,10 +785,10 @@ def test_workers_do_not_touch_the_store_or_the_checkpoint(tmp_path):
     assert len(views(out)["inventory.jsonl"]) == 4 * len(WORKER_FIDS)
 
 
-# ======================================================== 6. INTERLEAVING ===
+# 6. interleaving
 def test_two_surveys_in_one_directory_are_refused_not_interleaved(tmp_path):
     """flock excludes per open file description, so a second SurveyOutputLock
-    is refused whether it lives in this process or another one."""
+    is refused in this process and in any other."""
     out = tmp_path / "inv"
     with fake_archive(events(4)):
         survey(out)
@@ -799,8 +807,8 @@ def test_two_surveys_in_one_directory_are_refused_not_interleaved(tmp_path):
 
 
 def test_the_lock_is_held_for_the_whole_call_including_enumeration(tmp_path):
-    """with_survey_output_lock wraps survey() itself (cadc.py:487), so the
-    window covers the manifest check, enumeration and every commit."""
+    """with_survey_output_lock wraps survey() itself, so the lock covers the
+    manifest check, enumeration and every commit."""
     out = tmp_path / "inv"
     contended = []
 
@@ -829,7 +837,7 @@ def test_a_refused_second_survey_creates_no_state_in_a_fresh_directory(
 
 
 def test_two_processes_cannot_both_survey_one_directory(tmp_path):
-    """The cross-process case, proven with a real second interpreter."""
+    """The cross-process case, tested with a real second interpreter."""
     out = tmp_path / "inv"
     out.mkdir()
     src_root = str(Path(C.__file__).resolve().parents[3])
@@ -848,7 +856,7 @@ def test_two_processes_cannot_both_survey_one_directory(tmp_path):
     assert "already in use by another active survey" in result.stdout
 
 
-# ================================================ 7. CONFIGURATION CHANGE ===
+# 7. configuration change
 def test_a_different_freq_id_set_is_refused_by_the_manifest_guard(tmp_path):
     out = tmp_path / "inv"
     with fake_archive(events(4)):
@@ -861,13 +869,13 @@ def test_a_different_freq_id_set_is_refused_by_the_manifest_guard(tmp_path):
     message = str(excinfo.value)
     assert "survey configuration does not match the state in" in message
     assert "use a fresh --name/output directory" in message
-    assert probes.uris == []                # refused before any probe ...
-    assert digests(out) == before           # ... and before any mutation
+    assert probes.uris == []                # refused before any probe
+    assert digests(out) == before           # and before any mutation
 
 
 def test_the_manifest_guard_runs_before_any_enumeration(tmp_path):
-    """ensure_manifest (cadc.py:552) precedes _enumerate_events (cadc.py:566),
-    so an incompatible run cannot reuse or overwrite the event cache."""
+    """ensure_manifest runs before _enumerate_events in survey(), so an
+    incompatible run cannot reuse or overwrite the event cache."""
     out = tmp_path / "inv"
     with fake_archive(events(4)) as first:
         survey(out, freq_ids=[614, 706])
@@ -903,8 +911,8 @@ def test_every_row_affecting_option_is_refused_on_resume(tmp_path, changed):
 ])
 def test_operational_options_may_change_freely_on_resume(
         tmp_path, operational):
-    """_OPERATIONAL_OPTIONS (survey_state.py:31-35) is the allow-list; these
-    change throughput or scheduling, never a durable row."""
+    """_OPERATIONAL_OPTIONS in survey_state.py is the allow-list. These
+    options change throughput or scheduling and never a durable row."""
     out = tmp_path / "inv"
     with fake_archive(events(4)):
         survey(out, freq_ids=[614, 706])
@@ -914,11 +922,10 @@ def test_operational_options_may_change_freely_on_resume(
 
 
 def test_reordering_freq_ids_is_normalised_and_therefore_allowed(tmp_path):
-    """_resolve_freq_ids sorts (cadc.py:149), so [706, 614] and [614, 706]
-    yield the same manifest. build_configuration itself does NOT sort freq_ids
-    (survey_state.py:210, unlike scopes on :209), so this invariant lives
-    entirely in the resolver -- pin it, because a resolver that stopped
-    sorting would strand every existing inventory directory.
+    """_resolve_freq_ids sorts its result, so [706, 614] and [614, 706] yield
+    the same manifest. build_configuration sorts the scopes and does not sort
+    freq_ids, so this invariant lives entirely in the resolver. A resolver
+    that stopped sorting would strand every existing inventory directory.
     """
     out = tmp_path / "inv"
     with fake_archive(events(2)):
@@ -946,7 +953,7 @@ def test_a_corrupt_manifest_refuses_rather_than_re_fingerprinting(tmp_path):
                                  "survey_manifest.json")) == before
 
 
-# ======================================================== 8. SIZE EXTREMES ==
+# 8. size extremes
 def test_one_event_with_1024_replicas_commits_as_a_single_transaction(
         tmp_path):
     out = tmp_path / "inv"
@@ -970,8 +977,8 @@ def test_one_event_with_1024_replicas_commits_as_a_single_transaction(
 
 
 def test_a_1024_replica_event_is_all_or_nothing_under_sigint(tmp_path, monkeypatch):
-    """One event is one transaction, so interrupting it late commits nothing --
-    not 1000 of 1024 rows."""
+    """One event is one transaction, so a late interrupt commits none of its
+    1024 rows, even after 1000 of them are assembled."""
     out = tmp_path / "inv"
     fids = list(range(1024))
     fired = []
@@ -1004,7 +1011,8 @@ def test_a_1024_replica_event_is_all_or_nothing_under_sigint(tmp_path, monkeypat
 
 def test_an_event_with_zero_selected_freq_ids_has_selection_status(
         tmp_path):
-    """No selected files must not imply archive absence."""
+    """An event with no selected files is never recorded as absent from the
+    archive."""
     out = tmp_path / "inv"
     with fake_archive(events(3)) as probes:
         log = survey(out, freq_ids=OMIT)
@@ -1047,11 +1055,11 @@ def test_an_event_whose_selected_freq_ids_are_all_absent_is_empty_not_clean(
     assert set(db_state(out)["status"].values()) == {"empty"}
 
 
-# ================================ 9. RESUME OVER NON-COMPLETE DISPOSITIONS ==
-# A resume must treat EVERY terminal disposition as done, not only "complete".
-# completed_keys() selects every row of `events` (survey_state.py:351-353); a
-# narrower query would silently re-probe written-off events on every pass and
-# rewrite their ledger timestamps, so the write-off would never settle.
+# 9. resume over dispositions other than complete
+# A resume treats every terminal disposition as done, and "complete" is only one.
+# completed_keys() selects every row of `events`. A narrower query would probe
+# written-off events again on every pass with no warning and rewrite their
+# ledger timestamps, so the write-off would never settle.
 def test_an_accepted_empty_event_is_never_re_probed_on_resume(tmp_path):
     out = tmp_path / "inv"
     evs = events(3)
@@ -1068,8 +1076,8 @@ def test_an_accepted_empty_event_is_never_re_probed_on_resume(tmp_path):
 
 
 def test_a_contract_refused_event_is_never_re_probed_on_resume(tmp_path):
-    """A refusal is committed as done with its reason in the ledger
-    (cadc.py:724-748), so a resume must skip it too."""
+    """A refusal is committed as done with its reason in the ledger, so a
+    resume must skip it too."""
     from pilot_proxy.archive.datatrail_client import DatatrailContractError
     out = tmp_path / "inv"
     evs = events(3)
@@ -1096,7 +1104,7 @@ def test_a_contract_refused_event_is_never_re_probed_on_resume(tmp_path):
 
 def test_a_terminal_incomplete_event_is_never_re_probed_on_resume(tmp_path):
     """After _MAX_ATTEMPTS a partial event is accepted with its unresolved
-    names in incomplete_events.txt (cadc.py:795-802) and must then settle."""
+    names in incomplete_events.txt and must then settle."""
     out = tmp_path / "inv"
     evs = events(2)
 
@@ -1112,7 +1120,7 @@ def test_a_terminal_incomplete_event_is_never_re_probed_on_resume(tmp_path):
     assert status[f"{SCOPE}|{evs[0]}"] == "incomplete"
     incomplete = (out / "incomplete_events.txt").read_text()
     assert f"{SCOPE}|{evs[0]}\tunresolved=baseband_{evs[0]}_800.h5" in incomplete
-    # The two files that DID verify were kept.
+    # The two files that verified were kept.
     assert len(views(out)["inventory.jsonl"]) == (len(FIDS) - 1) + len(FIDS)
 
     with fake_archive(evs, size_hook=size_hook) as probes:

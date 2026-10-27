@@ -1,13 +1,15 @@
 # coding=utf-8
-"""Guards for selection + per-file/per-product validation (review cluster A).
+"""Guards for the selection and for per-file and per-product validation.
 
-Covers the reviewer's requested cases:
-  #1  an omitted selection fails cleanly instead of mixing channels;
-  #2  a file whose channel disagrees with the product is a hard error;
-and the combiner refusing to stack products with mismatched geometry.
+The numbered cases are items of review cluster A:
 
-All GPU-free: the channel guard fires before any detector work, so the detector
-analyzer needs only a stub kernel / weights / dummy detector_fn to reach it.
+- #1, a missing selection fails cleanly and never mixes channels
+- #2, a file whose channel disagrees with the product is a hard error
+
+The combiner is also tested for refusing to stack products with mismatched
+geometry. No test needs a GPU. The channel guard fires before any detector
+work, so the detector analyzer needs only a stub kernel, weights and a dummy
+detector_fn to reach it.
 """
 from __future__ import annotations
 
@@ -42,8 +44,8 @@ from pilot_proxy.product_contract import (
 )
 
 K = 128
-CH14_HZ = 470.3125e6   # -> ATSC channel 14, CHIME freq_id 844
-CH20_HZ = 506.3125e6   # -> a clearly different ATSC channel / freq_id
+CH14_HZ = 470.3125e6   # ATSC channel 14, CHIME freq_id 844
+CH20_HZ = 506.3125e6   # a different ATSC channel and freq_id
 FREQ_ID14 = 844        # chime_freq_id_from_hz(CH14_HZ)
 
 
@@ -75,7 +77,7 @@ def _detector_ctx():
     })
 
 
-# -- #1: omitted selection must fail, not silently mix -----------------------
+# #1: a missing selection fails and never mixes channels
 
 @pytest.mark.parametrize("analyzer_cls", [PilotProxyDetectorAnalyzer])
 def test_plan_runs_rejects_empty_selection(analyzer_cls):
@@ -93,12 +95,12 @@ def test_run_chime_scan_requires_select(tmp_path):
                            select=empty, analyzer="pilot-proxy-detector", verbose=False)
 
 
-# -- #2: a file from the wrong channel is a hard error -----------------------
+# #2: a file from the wrong channel is a hard error
 
 def test_detector_rejects_channel_mismatch():
     red = PilotProxyDetectorAnalyzer()
     red.begin(_detector_ctx(), {"f_center_hz": CH14_HZ, "nfft": 16384})
-    # a later file that belongs to a different coarse channel must not be absorbed
+    # a later file from a different coarse channel is refused
     with pytest.raises(ValueError, match="Refusing to mix coarse channels"):
         red.consume_file(iter(()), {"f_center_hz": CH20_HZ})
 
@@ -128,7 +130,7 @@ def test_detector_rejects_archive_unit_without_receiver_state(missing):
         red.consume_file(iter(()), meta)
 
 
-# -- combiner refuses mismatched geometry (F10) ------------------------------
+# F10: the combiner refuses mismatched geometry
 
 def _write_min_detector_product(
     path,
@@ -195,8 +197,8 @@ def _write_min_detector_product(
         integrated_spectrum_before_mask=np.zeros(int(nfft), dtype=np.float64),
         integrated_spectrum_after_mask=np.zeros(int(nfft), dtype=np.float64),
         fine_power_ratio=np.zeros((int(n_frames), 0), dtype=np.float32),
-        # One fine bin per term carrying the whole frame power, so the
-        # frame powers 1/1/1 are their all-bin sums (per-pilot v6).
+        # One fine bin per term holds the whole frame power, so each frame
+        # power of 1 is its sum over all bins (per-pilot schema v6).
         fine_power_u64=np.ones((int(n_frames), 3, 1), dtype=np.uint64),
         psd_frame_db_i16=np.zeros((int(n_frames), 0), dtype=np.int16),
         psd_db_reference=np.ones((int(n_frames), 1), dtype=np.float64),
@@ -285,8 +287,8 @@ def test_combine_and_report_recompute_namespaced_event_keys(tmp_path) -> None:
     )
     with np.load(product_path, allow_pickle=False) as archive:
         forged = {name: archive[name] for name in archive.files}
-    # The current marker is present, but the event key intentionally drops the
-    # campaign namespace that remains available in unit_order.
+    # The current marker is present, and the event key is forged without the
+    # campaign namespace that unit_order still holds.
     forged["unit_keys"] = np.asarray(
         ["/campaign-a/baseband_100_786.h5"], dtype=str
     )
@@ -489,9 +491,9 @@ def test_combine_aligns_shorter_frame_grid_by_event_identity(tmp_path):
         assert product["frame_index"].size == 2
 
 
-# -- review round 2 -----------------------------------------------------------
+# review cluster A, round 2
 
-# #1: equal frame counts but different source events must NOT stack as aligned.
+# #1: equal frame counts with different source events are not stacked as aligned
 def test_combine_intersects_same_count_different_events(tmp_path):
     a = tmp_path / "14.npz"
     b = tmp_path / "20.npz"
@@ -515,7 +517,7 @@ def test_combine_intersects_same_count_different_events(tmp_path):
         assert product["frame_index"].size == 1
 
 
-# #9: two coarse channels that resolve to the same ATSC channel must be rejected.
+# #9: two coarse channels that resolve to the same ATSC channel are refused
 def test_combine_rejects_duplicate_physical_channel(tmp_path):
     a = tmp_path / "399.npz"
     b = tmp_path / "400.npz"
@@ -527,7 +529,7 @@ def test_combine_rejects_duplicate_physical_channel(tmp_path):
         combine_detector_products([a, b], tmp_path / "out")
 
 
-# #9: a duplicate freq_id in --select must be rejected.
+# #9: a duplicate freq_id in --select is refused
 @pytest.mark.parametrize("analyzer_cls", [PilotProxyDetectorAnalyzer])
 def test_plan_runs_rejects_duplicate_freq_id(analyzer_cls):
     red = analyzer_cls()
@@ -536,7 +538,7 @@ def test_plan_runs_rejects_duplicate_freq_id(analyzer_cls):
         red.plan_runs(ctx, "844,844")
 
 
-# #7: a callable combine must reject products with different detector contracts.
+# #7: a callable combine refuses products with different detector contracts
 def test_combine_rejects_contract_mismatch(tmp_path):
     a = tmp_path / "14.npz"
     b = tmp_path / "20.npz"
@@ -572,7 +574,7 @@ def test_combine_rejects_noncurrent_contract_before_writing(tmp_path):
     assert not output.exists()
 
 
-# #2: the FIRST file must match the requested freq_id rather than only later files.
+# #2: the first file is also checked against the requested freq_id
 def test_detector_rejects_first_file_freq_id_mismatch():
     red = PilotProxyDetectorAnalyzer()
     # ctx requests freq_id 844, but the first file's center is a different channel
@@ -580,8 +582,8 @@ def test_detector_rejects_first_file_freq_id_mismatch():
         red.begin(_detector_ctx(), {"f_center_hz": CH20_HZ, "nfft": 16384})
 
 
-# #5: an out-of-band pilot must yield an explicitly invalid detector product and
-# must NOT invoke the (GPU) kernel.
+# #5: an out-of-band pilot yields an explicitly invalid detector product and
+# never invokes the GPU kernel
 def test_detector_out_of_band_emits_invalid_without_kernel(tmp_path):
     def _boom(**kw):
         raise AssertionError("detector_fn must not run for an out-of-band pilot")
@@ -592,7 +594,7 @@ def test_detector_out_of_band_emits_invalid_without_kernel(tmp_path):
         "weights": np.zeros((3, K), dtype=np.int8),
     })
     red = PilotProxyDetectorAnalyzer()
-    # freq_id 400 (643.75 MHz) -> nearest ATSC 43, whose pilot is 559 kHz off-center
+    # freq_id 400 (643.75 MHz) is nearest ATSC 43, whose pilot is 559 kHz off-center
     with pytest.warns(RuntimeWarning, match="does not contain"):
         red.begin(ctx, {"f_center_hz": 643.75e6, "nfft": 16384})
     chunk = np.zeros((16384, 4), dtype=np.uint8)
@@ -602,7 +604,7 @@ def test_detector_out_of_band_emits_invalid_without_kernel(tmp_path):
         "unit_key": "baseband_e_400.h5",
         "scope": "local",
     }
-    n = red.consume_file([chunk, chunk], meta)  # must not raise (kernel skipped)
+    n = red.consume_file([chunk, chunk], meta)  # kernel skipped, so no error
     assert n == 2
     out = tmp_path / "400.npz"
     red.save(str(out))

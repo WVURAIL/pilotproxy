@@ -28,9 +28,9 @@ from pilot_proxy.product_contract import (
     frame_powers_from_fine,
 )
 
-# Historic cohorts stay checkable: the gate accepts the schema tokens whose
-# products exist on disk and knows which per-frame fields each one carries.
-# The per-frame list is the product contract's, not a second hand-kept copy.
+# The gate accepts every schema token whose products exist on disk, so older
+# cohorts can still be checked, and it knows the per-frame fields of each.
+# The per-frame list is taken from the product contract.
 _V5_ONLY = ("railed_sample_count", "fill_sample_count", "railed_sample_total")
 KNOWN_SCHEMAS = {
     "pilotproxy_per_pilot_product_v3": tuple(
@@ -41,9 +41,9 @@ KNOWN_SCHEMAS = {
 }
 PER_UNIT = ("unit_order", "unit_time0_ctime", "unit_time0_fpga", "unit_event_id",
             "unit_delta_time", "archive_version")
-# Exact bit-equality across a kill/resume. Integer-exact per-frame fields are
-# filtered to the schema the products carry; a field the schema requires but a
-# side lacks is a failure, never a silent skip.
+# Fields that must be bit-equal across a kill and resume. The integer-exact
+# per-frame fields are filtered to the schema the products carry, and a field
+# the schema requires but one run lacks is a failure.
 COMPARE_FRAME_EXACT = ("frame_index", "p_target_u64", "p_ref_sum_u64",
                        "p_ref_lower_u64", "p_ref_upper_u64", "reject_mask",
                        "valid", "frame_unit_index", "frame_in_unit",
@@ -124,7 +124,7 @@ def check_per_pilot(path: Path, r: Report):
     r.check(not np.any(reject & ~valid),
             "reject_mask=1 only on valid frames (positive excess needs valid)")
     if token == PER_PILOT_PRODUCT_SCHEMA_TOKEN:
-        # The v6 frame-power invariant: P_r is the exact all-bin fine sum.
+        # each frame power P_r is the exact all-bin sum of its fine powers (v6)
         sums = frame_powers_from_fine(z)
         r.check(all(np.array_equal(_1d(z, k), v) for k, v in zip(
             ("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64"), sums)),
@@ -146,9 +146,9 @@ def check_per_pilot(path: Path, r: Report):
     elif n_valid == 0:
         r.check(peak == 0.0, "no valid frames -> zero spectrum")
 
-    # time axis: real data is timed; flag if not (no LST possible)
+    # real data is timed, and LST needs a finite unit_time0_ctime
     t0 = _1d(z, "unit_time0_ctime")
-    _1d(z, "unit_delta_time")  # Validate the required per-unit time-step field.
+    _1d(z, "unit_delta_time")  # the per-unit time step must be present
     n_timed = int(np.isfinite(t0).sum())
     if n_timed == 0:
         r.warning("no unit has a finite time0_ctime -- LST/time folding unavailable")
@@ -168,11 +168,11 @@ def check_per_pilot(path: Path, r: Report):
     else:
         r.bad(f"rational_overflow_count == {overflow} of {n} frames (high)")
 
-    # The summary's decision is the current one (kernel core 3.0.0): the
-    # valid flag and reject_mask of the frame powers summed from
-    # fine_power_u64. A v6 product stores exactly these (checked above); an
-    # older product's stored columns are the row-domain decision, so they are
-    # recomputed and the stored masked fraction is printed beside them.
+    # The summary reports the current decision of kernel core 3.0.0, which is
+    # the valid flag and reject_mask of the frame powers summed from
+    # fine_power_u64. A v6 product stores exactly these (checked above). The
+    # stored columns of an older product hold the row-domain decision, so they
+    # are recomputed and the stored masked fraction is printed beside them.
     powers = "stored"
     summary_valid, summary_reject = valid, reject
     if token != PER_PILOT_PRODUCT_SCHEMA_TOKEN:
@@ -206,10 +206,11 @@ def check_per_pilot(path: Path, r: Report):
 def _terminal_combine_skipped(run: Path):
     """Return the recorded refusal class when the scan soft-failed the combine.
 
-    The scan writes a ``terminal_combine`` entry into ``scan_scope.json``; a
-    recorded skip makes missing combined products the documented outcome of a
-    successful scan rather than a failure. Runs predating the record (or a
-    crash before the combine) carry no entry and stay failures.
+    The scan writes a ``terminal_combine`` entry into ``scan_scope.json``.
+    When the entry records a skip, missing combined products are the
+    documented outcome of a successful scan. A run made before this entry
+    existed, or a crash before the combine, leaves no entry, and the missing
+    products then count as a failure.
     """
     scope = run / "scan_scope.json"
     if not scope.is_file():
@@ -294,7 +295,7 @@ def cmd_compare(dir_a: str, dir_b: str) -> int:
         ua, ub = _1d(za, "unit_order").size, _1d(zb, "unit_order").size
         tot_a += na
         tot_b += nb
-        # the headline: no double-count, no loss
+        # no frame may be counted twice or lost
         r.check(na == nb, f"n_frames equal (clean={na}, resumed={nb})")
         r.check(ua == ub, f"n_units equal (clean={ua}, resumed={ub})")
         schema_frame = KNOWN_SCHEMAS[ta]
@@ -311,7 +312,7 @@ def cmd_compare(dir_a: str, dir_b: str) -> int:
             xa, xb = np.asarray(za[k]), np.asarray(zb[k])
             same = xa.shape == xb.shape and np.array_equal(xa, xb)
             (r.ok if same else r.bad)(f"{k} identical")
-        # spectra: same GPU backend + same frame order -> ~bit-identical
+        # with the same GPU backend and frame order, the spectra are nearly bit-identical
         ba = _1d(za, "integrated_spectrum_before_mask")
         bb = _1d(zb, "integrated_spectrum_before_mask")
         peak = float(ba.max()) if ba.size else 1.0

@@ -50,8 +50,8 @@ BANNED = {
     "ref_norm_" + "sum_sq": "reference_norm_sum_sq",
     "norm_corrected_" + "mu0": "null_power_ratio_from_weight_norms",
     "v1_" + "fstat": "coarse_power_ratio_from_powers",
-    # Retired with the row-domain frame powers (kernel core 3.0.0): the frame
-    # powers are the all-bin sums of the fine powers.
+    # Retired in kernel core 3.0.0, where the frame powers are the all-bin
+    # sums of the fine powers.
     "exact_coarse_" + "power_by_term": "fine_reduction.frame_powers_from_fine_u64",
     "check_coarse_power_" + "marginal_identity": (
         "the v6 frame-power invariant (product_contract.frame_powers_from_fine)"

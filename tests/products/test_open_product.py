@@ -2,9 +2,9 @@
 of record, read through ``open_product``.
 
 Kernel core 3.0.0 defines the frame powers as the all-bin sums of the fine
-powers. A v6 product stores them so, and the reader verifies it; a v5 product
-stored row-domain powers, and the reader replaces them by the sums of the fine
-powers every v5 product retains.
+powers. A v6 product stores them in this form, and the reader verifies it. A v5
+product stored row-domain powers, which the reader replaces by the sums of the
+fine powers that every v5 product retains.
 """
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def test_a_v5_product_is_read_through_its_fine_sums(tmp_path):
     )
 
     # The frame powers are the exact all-bin sums, term by term (Python ints),
-    # and they are not the stored v5 row-domain powers.
+    # and they differ from the stored v5 row-domain powers.
     for term, field in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
         expected = [sum(int(v) for v in fine[f, term]) for f in range(fine.shape[0])]
         assert [int(v) for v in view.columns[field][:, 0]] == expected
@@ -73,7 +73,7 @@ def test_a_v5_product_is_read_through_its_fine_sums(tmp_path):
         assert not np.array_equal(view.columns[field], values[field])
     assert tuple(view.columns) == FINE_DERIVED_FRAME_COLUMNS
 
-    # Every coordinate follows the fine sums: the excess, the survey flag, Q.
+    # The excess, the survey flag and Q all follow the fine sums.
     target = view.columns["p_target_u64"][:, 0].astype(np.float64)
     reference = view.columns["p_ref_sum_u64"][:, 0].astype(np.float64)
     nt = int(values["target_norm_sq"][0])

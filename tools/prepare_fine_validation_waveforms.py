@@ -53,7 +53,7 @@ def scalar(value):
 
 
 def qualify(path):
-    """Independent IQ-domain qualification; no detector or PFB implementation."""
+    """Qualify one settled payload in the IQ domain, independent of the detector and PFB code."""
     iq = np.memmap(path, dtype=np.complex64, mode='r')
     if iq.size != RETAINED:
         raise ValueError('Unexpected retained IQ length')
@@ -72,8 +72,9 @@ def qualify(path):
         finite = bool(np.isfinite(part).all())
         total_rms = math.sqrt(float(np.mean(np.abs(part)**2)))
         pilot = abs(np.vdot(carrier, part) / WINDOW)
-        # Integrated two-sided complex-IQ periodogram. The Hann normalization
-        # makes the sum an estimate of average waveform power, not ASD units.
+        # Two-sided periodogram of the complex IQ. With the Hann normalization,
+        # the sum over a band estimates the average waveform power in that band,
+        # in power units.
         spectrum = np.fft.fft(part * hann)
         band_power = np.abs(spectrum)**2 / (WINDOW * np.sum(hann**2))
         rows = {'window_index': i, 'start_sample': start, 'stop_sample_exclusive': start+WINDOW,

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Reduce complete frozen literal powers, calibrate nulls, freeze discovery grids.
+"""Reduce complete frozen literal powers, calibrate the nulls, and freeze the discovery grids.
 
-These four stages never inspect null-validation or evaluation powers. Sources
-are snapshotted before reduction, every declared raw shard is authenticated,
-and a missing/invalid curve refuses calibration rather than losing trials.
-All outputs are exclusive and preserve their input/source identities.
+The four stages (score-null, calibrate, score-discovery and freeze-grid) never
+read null-validation or evaluation powers. The sources are snapshotted before
+reduction, and every declared raw shard is authenticated. A missing or invalid
+curve stops the calibration, so no trial is lost. Every output is written to a
+new file and records the identities of its inputs and sources.
 
-Frame powers are the all-bin sums of the fine powers (kernel core 3.0.0):
+The frame powers are the all-bin sums of the fine powers (kernel core 3.0.0),
 ``fixed_fine.sum(axis=-1)`` for the fixed stage and ``float_fine.sum(-1)`` for
-each floating stage. The raw shards' ``float_coarse`` and ``fixed_coarse``
-members (row-domain sums in shards written before core 3.0.0, such as the
-2026-09-09 campaign) keep their layout authenticated, but their values are
+each floating stage. In shards written before core 3.0.0, such as those of the
+2026-09-09 campaign, the ``float_coarse`` and ``fixed_coarse`` members hold
+row-domain sums. Their layout is still authenticated, but their values are
 never read.
 """
 from __future__ import annotations
@@ -279,21 +280,21 @@ FIXED_FRAME_POWER_CAPACITY = 1 << 63
 
 
 def frame_powers(float_fine, fixed_fine):
-    """Frame powers as the all-bin sums of the fine powers (kernel core 3.0.0).
+    """Return the frame powers as the all-bin sums of the fine powers (kernel core 3.0.0).
 
     ``float_fine[..., stage, term, bin]`` gives ``[..., stage, term]`` float64
     sums, one per floating stage, and ``fixed_fine[..., term, bin]`` gives the
     exact ``[..., term]`` uint64 sums of the fixed stage. A fixed sum at or
-    above the frozen signed accumulation capacity ``2**63`` is refused, so a
-    wrapped uint64 total can never be returned.
+    above the frozen signed accumulation capacity ``2**63`` raises
+    ``ValueError``, so a wrapped uint64 total is never returned.
     """
     float_fine = np.asarray(float_fine)
     fixed_fine = np.asarray(fixed_fine)
     if fixed_fine.dtype != np.dtype(np.uint64):
         raise TypeError("fixed fine powers must have exact uint64 dtype")
     fixed = fixed_fine.sum(axis=-1, dtype=np.uint64)
-    # The float64 shadow is within a relative 1e-13 of the true sum; only the
-    # sums it places near the capacity are re-added as Python integers.
+    # The float64 sum differs from the true sum by at most a relative 1e-13, so
+    # only the sums it places near the capacity are added again as Python integers.
     near = np.argwhere(fixed_fine.sum(axis=-1, dtype=np.float64) >= float(1 << 62))
     for index in map(tuple, near):
         if sum(int(value) for value in fixed_fine[index]) >= FIXED_FRAME_POWER_CAPACITY:
@@ -302,10 +303,10 @@ def frame_powers(float_fine, fixed_fine):
 
 
 def reduce_powers(float_fine, fixed_fine, anchors, mu0):
-    """Frame-flat array reducer; six floating ablations plus exact Q16.
+    """Reduce frame-flat power arrays to six floating ablations and the exact Q16 requirements.
 
     The frame-level (coarse) ratios use :func:`frame_powers`, the all-bin
-    sums of the same fine powers the fine scores read.
+    sums of the same fine powers that are read by the fine scores.
     """
     n = len(fixed_fine)
     fine = np.empty((n, len(anchors), 6, 4))
@@ -335,11 +336,12 @@ def reduce_powers(float_fine, fixed_fine, anchors, mu0):
     float_frame, fixed_frame = frame_powers(float_fine, fixed_fine)
     geometry = construct_geometry(anchors[0])
     for stage in range(6):
-        # Input-only quantization with ideal unit-modulus weights retains mu0=1.
+        # input-only quantization with ideal unit-modulus weights keeps mu0=1
         normalization = 1.0 if stage in (0, 1, 2) else mu0
         power = float_frame[:, stage] if stage < 5 else fixed_frame
-        # Only the small coarse array is required; tiny placeholder fine avoids
-        # inventing another normalization implementation.
+        # Only the coarse ratio is needed here. A zero fine placeholder is passed
+        # so that float_scores supplies the normalization and no second
+        # implementation of it is written.
         result = float_scores(np.zeros((n, 3, 256)), geometry,
                               coarse_powers=power, mu0=normalization)
         coarse[:, stage], coarse_valid[:, stage] = result["coarse_ratio"], result["coarse_valid"]
@@ -558,7 +560,10 @@ def calibrate(out):
 
 
 def curve_grid(snr_db, curves):
-    """Exact declared grid union, preserving downward/plateau brackets."""
+    """Return the exact union of declared grid points around every crossing bracket.
+
+    Downward and plateau brackets are kept along with the upward ones.
+    """
     snr = np.asarray(snr_db, dtype=float)
     if snr.tolist() != list(range(-66, -20, 3)) or not curves:
         raise ValueError("Full declared discovery grid and nonempty curves are required")

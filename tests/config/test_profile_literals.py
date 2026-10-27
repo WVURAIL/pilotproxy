@@ -1,19 +1,19 @@
 # coding=utf-8
 """Every literal the project profile replaces, and the loader value that reproduces it.
 
-Each row names where the literal sat (``file:line`` at pilot-proxy bdfcdce or
-RFIsher 7edf11c), the literal exactly as it was written (so its float arithmetic
-is repeated here), and the profile value that stands in for it. The profile value
-must have the same type and compare exactly equal.
+Each row gives the location of the literal (``file:line`` at pilot-proxy
+bdfcdce or RFIsher 7edf11c), the literal exactly as it was written, so that its
+float arithmetic is repeated here, and the profile value used in its place.
+The profile value must have the same type and compare exactly equal.
 
-``replaced`` rows were removed from pilot-proxy ``src/`` and now read the
-profile; ``REPLACED_NAMES`` below checks that they are no longer literals.
-``pinned`` rows are copies that stay where they are for now (the detector's own
-constants, RFIsher, tools and frozen records); the refactor switches them to the
-profile in later milestones, and these rows fix the value they must keep.
-``deleted`` rows sat in pilot-proxy code that was since deleted (moved to the
-science side or retired); they cite the file at the last commit that holds it
-(``path@commit``) and keep the value it must have.
+``replaced`` rows were removed from pilot-proxy ``src/``, and the code reads the
+profile instead. ``REPLACED_NAMES`` below checks that they are no longer
+literals. ``pinned`` rows are copies that stay in place (the detector's own
+constants, RFIsher, tools and frozen records) until a later milestone of the
+refactor moves them to the profile, and each row fixes the value its copy must
+keep. ``deleted`` rows were in pilot-proxy code that has been deleted (moved to
+the science side or retired). They cite the file at the last commit that holds
+it (``path@commit``) and keep the value it must have.
 """
 from __future__ import annotations
 
@@ -47,11 +47,12 @@ def _freq_ids(role="screened"):
     return [P.target_freq_id(b) for b in P.frequency_plan.bands(role)]
 
 
-# The capture scripts' marker map (frame_residual.py L9 and the others): every band, the control band at 491.
+# The marker map of the capture scripts (frame_residual.py L9 and the others) covers every band, with the
+# control band at 491.
 
 # (location, status, literal as written, profile value)
 LITERALS = {
-    # ---- frequency plan and interference template -------------------------------
+    # frequency plan and interference template
     "atsc_channel_width": (
         "pilot-proxy src/pilot_proxy/atsc_channels.py:12 ATSC_CHANNEL_WIDTH_HZ",
         "replaced", 6.0e6, lambda: P.interference.band_width_hz),
@@ -115,7 +116,7 @@ LITERALS = {
     "generator_channel_width": (
         "pilot-proxy src/pilot_proxy/testbench/generate_atsc_signal.py:17 ATSC_CHANNEL_WIDTH_HZ",
         "pinned", 6.0e6, lambda: P.interference.band_width_hz),
-    # ---- freq_id maps -----------------------------------------------------------
+    # freq_id maps
     "audit_freq_table": (
         "pilot-proxy tools/audit_per_pilot.py:36 FREQ_TABLE",
         "pinned",
@@ -130,7 +131,7 @@ LITERALS = {
         "amendment 18 decision 13: 491 is the channel of the nominal pilot position 608.309 MHz",
         "pinned", 491,
         lambda: P.instrument.freq_id_of_hz(P.marker_hz(P.frequency_plan.band("37")))),
-    # ---- instrument -------------------------------------------------------------
+    # instrument
     "chime_band_top": (
         "pilot-proxy src/pilot_proxy/archive/chime_coarse.py:24 CHIME_BAND_TOP_HZ",
         "replaced", 800_000_000.0, lambda: P.instrument.f0_hz),
@@ -191,7 +192,7 @@ LITERALS = {
     "rfisher_frequency_max_mhz": (
         "RFIsher src/rfisher/constants.py:6 CHIME_FREQUENCY_MAX_MHZ",
         "pinned", 800.0, lambda: P.instrument.f0_mhz),
-    # ---- detector geometry ------------------------------------------------------
+    # detector geometry
     "detector_window": (
         "pilot-proxy src/pilot_proxy/detector_constants.py:4 DEFAULT_DETECTOR_WINDOW_SAMPLES "
         "(detector)", "pinned", 128, lambda: P.detector_config.detector_window),
@@ -231,7 +232,7 @@ LITERALS = {
     "rfisher_histogram_null_p": (
         "RFIsher scripts/compare_coarse_histograms_v5.py P = 262144",
         "pinned", 262144, lambda: P.detector_config.summed_terms(P.instrument)),
-    # ---- integration model ------------------------------------------------------
+    # integration model
     "rfisher_frame_seconds": (
         "RFIsher src/rfisher/constants.py:4 CHIME_FRAME_SECONDS",
         "pinned", 16384 * 2.56e-6, lambda: P.integration_model.frame_seconds),
@@ -241,7 +242,7 @@ LITERALS = {
     "ruling_frame_seconds": (
         "pilot-proxy tools/capture/frame_analysis/ruling_baseline.py@30e50c2:17 TF (record)",
         "deleted", 16384 * 2.56e-6, lambda: P.integration_model.frame_seconds),
-    # ---- eras -------------------------------------------------------------------
+    # eras
     "rfisher_sign_on_off_through": (
         "RFIsher src/rfisher/residual.py:135 SIGN_ON_OFF_THROUGH",
         "pinned", {35: "2021-10"}, lambda: P.eras.off_through()),
@@ -257,7 +258,7 @@ LITERALS = {
         "results/archive_author_eras_2026-09-23/archive/ledger/run.json era_overrides_sha256",
         "pinned", "81f5f20e075c8f6bde41928ecfdd8215b87488b2ee3ff512b5c9ab8343c81aae",
         lambda: P.eras.overrides_sha256()),
-    # ---- register ---------------------------------------------------------------
+    # register
     "min_frames_per_false_alarm": (
         "pilot-proxy src/pilot_proxy/chime/injection_recovery.py:48 MIN_FRAMES_PER_FALSE_ALARM",
         "replaced", 10.0, lambda: P.register.value("detection.minimum_frames_per_false_alarm")),
@@ -402,7 +403,7 @@ def test_hz_freq_id_helpers_agree_on_every_target():
         assert abs(centre - marker) <= P.instrument.channel_width_hz / 2
 
 
-# Evidence strings of the register that named files since deleted (M6): the file at the last commit that holds it.
+# Register evidence strings that name deleted files (M6), mapped to the file at the last commit that holds it.
 EVIDENCE_REWRITES = {
     "src/rfisher/residual.py": ["RFIsher src/rfisher/residual.py@7edf11c"],
     "src/rfisher/thresholds.py": ["RFIsher src/rfisher/thresholds.py@7edf11c"],
@@ -436,7 +437,8 @@ def test_register_copies_the_detector_entries_value_for_value():
     assert golden["snapshot_sha256"] == P.register.source["snapshot_sha256"]
     copied = [d for d in golden["decisions"] if not d["id"].startswith("transfer.")]
     assert len(copied) == 59
-    # the residual chain's correlation entries and the drift screen's went with their code (2026-10-13)
+    # the correlation entries of the residual chain and those of the drift screen were removed with their code
+    # (2026-10-13)
     removed = [d for d in copied if d["id"].startswith(("correlation.", "stability."))]
     assert len(removed) == 31 and not set(P.register.ids()) & {d["id"] for d in removed}
     copied = [d for d in copied if d not in removed]
@@ -467,10 +469,10 @@ def test_register_copies_the_detector_entries_value_for_value():
                         "transfer.pilot_capture_efficiency": marker.capture_efficiency}
 
 
-# A pinned pilot-proxy row that names a module-level constant is also held to the
-# code: the name must still be assigned that literal where the row says it is.
-# (Rows citing an inline literal, RFIsher or a record file are checked by the
-# golden files and the rows above.)
+# A pinned pilot-proxy row that names a module-level constant is also checked
+# against the code. The name must still be assigned that literal at the location
+# the row gives. Rows that cite an inline literal, RFIsher or a record file are
+# checked by the golden files and the rows above.
 _PINNED_NAME = re.compile(r"^pilot-proxy (\S+?)(?::\d+(?:,\d+)*)? ([A-Z][A-Z0-9_]*)\b")
 _PURE_BUILTINS = {"dict": dict, "enumerate": enumerate, "range": range, "set": set,
                   "tuple": tuple, "zip": zip}
@@ -501,8 +503,8 @@ def _module_assignment(path: Path, name: str):
     """The module-level value node assigned to ``name`` in ``path``, or None.
 
     A record script may use syntax newer than this interpreter (the capture
-    ruling's PEP 701 f-strings need Python 3.12). Its constants sit on one-line
-    top-level statements, so those lines are parsed on their own instead.
+    ruling's PEP 701 f-strings need Python 3.12). Its constants are assigned in
+    one-line top-level statements, so those lines are parsed on their own.
     """
     text = path.read_text(encoding="utf-8")
     try:

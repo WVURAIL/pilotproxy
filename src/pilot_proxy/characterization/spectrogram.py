@@ -1,21 +1,23 @@
 """Summarize the marker-region spectrum of each band by UTC month.
 
-Use the histogram export's ``histogram_eligible`` frames: health-selected
-frames with finite times and finite positive Q, from any era or no era.
-Their stored PSDs sum power over feeds and encode it in 0.01 dB steps relative
-to each frame's median positive fine-bin power across the coarse channel.
+The reduction uses the ``histogram_eligible`` frames of the histogram export,
+which are the health-selected frames with finite times and finite positive Q,
+from any era or from no era. Their stored PSDs sum the power over feeds and
+encode it in 0.01 dB steps relative to each frame's median positive fine-bin
+power across the coarse channel.
 
-Keep the 501 bins centered on the nominal marker and take the median over
-each month's frames. A month with no eligible frames remains empty. For
-CHIME's mirrored second Nyquist zone, signed fine bin m maps to
-``sky = coarse center - m * f_s/nfft``. Thus positive m lowers the sky
-frequency; store the rows in ascending sky frequency.
+The 501 bins centered on the nominal marker are kept, and the median is taken
+over each month's frames. A month with no eligible frames stays empty. CHIME
+channels lie in the mirrored second Nyquist zone, so signed fine bin m maps to
+``sky = coarse center - m * f_s/nfft``. That is, a positive m lowers the sky
+frequency. The rows are stored in ascending sky frequency.
 
-Copy the release's saved eras and boundary causes alongside the spectra as
-exact gzipped bytes. Before reducing the data, check each product against its
-ledger digest, each frame export against the histogram release manifest,
-and each ledger and era file against the characterization release manifest.
-Record both supplied manifests' SHA-256 values in the output manifest.
+The release's saved eras and boundary causes are copied alongside the spectra
+as exact gzipped bytes. Before the data are reduced, each product is checked
+against its ledger digest, each frame export against the histogram release
+manifest, and each ledger and era file against the characterization release
+manifest. The SHA-256 of the characterization release manifest is recorded in
+the output manifest.
 
     pilot-proxy characterize spectrogram --products DIR --frames DIR
         --frames-release-manifest FILE --release DIR --eras-release-manifest FILE --out DIR
@@ -128,8 +130,8 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
             codes = np.asarray(z["psd_frame_db_i16"])
         if step != 0.01 or invalid != -32768 or codes.shape != (eligible.size, NFFT):
             raise ValueError(f"PSD coding changed: channel {ch}")
-        # Mirrored (zone 2): sky = center - m * FINE_HZ, so the pilot sits at
-        # m = (center - pilot) / FINE_HZ; FFT order stores bin m at m mod NFFT.
+        # mirrored zone 2: sky = center - m * FINE_HZ, so the pilot is at
+        # m = (center - pilot) / FINE_HZ, and FFT order stores bin m at m mod NFFT
         exact = (center - pilot) / FINE_HZ
         nominal = int(round(exact))
         offsets = np.arange(-HALF, HALF + 1)

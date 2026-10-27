@@ -131,7 +131,8 @@ def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
     product["decision_contract_json"] = np.asarray(
         json.dumps(audit_per_pilot.v5_decision_contract())
     )
-    # v5 stored row-domain powers that are not the fine sums: reported, not failed.
+    # A v5 product stores row-domain powers that differ from the fine sums. The
+    # audit records this in its notes and passes the product.
     product["fine_power_u64"] = product["fine_power_u64"] * np.uint64(256)
     path = tmp_path / "844.npz"
     np.savez(path, **product)
@@ -139,7 +140,8 @@ def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
     assert audit.failures == []
     assert any("v5 coarse ratio from fine sums" in note for note in audit.notes)
 
-    # Any other change to the v5 decision contract fails, not only a method.
+    # A change to any field of the v5 decision contract fails the audit. Here
+    # the output field is changed.
     decision = audit_per_pilot.v5_decision_contract()
     decision["active_decision"]["output_field"] = "mask"
     product["decision_contract_json"] = np.asarray(json.dumps(decision))
@@ -149,7 +151,7 @@ def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
 
 
 def test_v5_decision_contract_is_the_stored_record() -> None:
-    # The exact decision_contract_json a v5 product of record stores.
+    # the exact decision_contract_json stored by a v5 product of record
     stored = (
         '{"active_decision":{"implementation":"host_exact_integer_comparison",'
         '"method":"coarse_normalized_positive_excess","output_field":"reject_mask"},'

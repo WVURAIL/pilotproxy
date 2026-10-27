@@ -1,9 +1,10 @@
 # Paper-to-code map
 
 The journal repositories hold frozen data and build scripts. Current code must
-reproduce the same defined quantities, but later source is not the binary used
-for an earlier timing result. Record source, library, inputs and environment
-for every new run. Do not overwrite the papers' frozen records.
+reproduce the same defined quantities, while an earlier timing result belongs
+to the binary that produced it. Record the source, library, inputs, and
+environment for every new run, and leave the frozen records of the papers
+unchanged.
 
 | Paper quantity or claim | Implementation | Verification |
 |---|---|---|
@@ -20,7 +21,8 @@ for every new run. Do not overwrite the papers' frozen records.
 
 Paths in the middle column are under `src/pilot_proxy/` unless otherwise shown.
 The core test filenames are under `tests/core/` except where their directory is
-specified. These tests distinguish arithmetic exactness from physical validity.
+specified. These tests check arithmetic exactness and make no claim of physical
+validity.
 
 ## Recheck the frozen threshold decisions
 
@@ -30,11 +32,12 @@ With the companion MNRAS manuscript checkout available:
 python tools/check_paper_thresholds.py --paper-root ../dtv-mnras
 ```
 
-This uses the paper's frozen sweeps and budgets; no raw telescope data are
-needed. It checks the frozen record with its recorded calendar factor and the
-ideal-year assignments separately. It also compares the shipped
-response table and measured amplitude ratio. It does not validate gamma's
-transfer to another population, temporal stationarity, or cross-day covariance.
+Since the check uses the frozen sweeps and budgets of the paper, no raw
+telescope data are needed. The frozen record is checked with its recorded
+calendar factor, and the ideal-year assignments are checked on their own. In
+addition, the shipped response table and the measured amplitude ratio are
+compared. It does not cover the transfer of gamma to another population, temporal
+stationarity, or cross-day covariance.
 
 ## Companion repositories
 
@@ -44,19 +47,19 @@ transfer to another population, temporal stationarity, or cross-day covariance.
   derivatives and unmodeled-residual projection.
 - [kotekan](https://github.com/kotekan/kotekan): live receiver integration. The
   manifest in `external/pilotproxy/VENDOR.json` pins its exact upstream core.
-  Do not edit vendored files or equate a new main-branch build with an archived
-  measurement. The stage comes from Kotekan PR 1677; live commissioning is
-  separate from local arithmetic validation.
+  Vendored files are never edited, and a new main-branch build is never
+  treated as an archived measurement. The stage comes from Kotekan PR 1677.
+  Live commissioning and local arithmetic validation are different steps.
 
 ## Compatibility and evidence
 
 `PilotProxy_*` is the native API. Fields such as `cfar_rank`, `deployed*`, the
-coherence-named fields and cache rule v1 have specific compatibility meanings in
-[TERMINOLOGY.md](TERMINOLOGY.md). Do not infer a statistical model from those
-tokens. The frame-power
-schema, Q16 units, one-based versus zero-based ranks and receiver coordinates
-are contracts, not cosmetic names to change by search-and-replace.
+coherence-named fields, and cache rule v1 have specific compatibility meanings,
+given in [TERMINOLOGY.md](TERMINOLOGY.md). These names carry no statistical
+model. The frame-power schema, Q16 units, one-based and zero-based ranks, and
+receiver coordinates are contracts, and they must never be changed by
+search-and-replace.
 
-`docs/evidence/`, runtime freezes, shipped data and dated era files support
-reproduction and remain in place. A tool's presence does not make its
-hypothesis or estimator part of the paper.
+`docs/evidence/`, the runtime freezes, the shipped data, and the dated era
+files support reproduction and stay in place. A tool in this repository adds its
+hypothesis or estimator to the paper only when the paper uses it.

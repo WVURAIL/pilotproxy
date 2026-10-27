@@ -1,10 +1,19 @@
-"""Independent check of the clean-noise loss of OS at fixed ranks against CA, by quadrature (no Monte Carlo).
+"""Quadrature check of the clean-noise loss of order-statistic (OS) references against cell averaging (CA).
 
-Model as stated in rank/RANK.md: i.i.d. fine bins T ~ F(4096, 8192); D = 5 bins with pilot gains (0, g1, 1, g1, 0),
-g1 the rectangular-window response half a natural bin off the tone (L = 128); Z = max_D T / ref; each detector's
-threshold at its own clean 1e-3 point; SNR per bin at Pd = 0.9; loss = SNR(OS rho) - SNR(CA) in dB.
-Reference laws: OS rho = exact order-statistic density of F(4096, 8192); CA = the mean of |B| bins, its density
-by FFT convolution of the single-bin density. Ideal independent-bin reference only. The simulated or quadrature threshold is not an operational eta_Pfa calibration.
+The loss of OS at fixed ranks is computed by quadrature, with no Monte Carlo
+trials, as an independent check. The model is the one stated in rank/RANK.md.
+The fine bins T are i.i.d. F(4096, 8192). The designated set D has 5 bins with
+pilot gains (0, g1, 1, g1, 0). Here, g1 is the rectangular-window response half
+a natural bin off the tone (L = 128). The statistic is Z = max_D T / ref, and
+each detector's threshold is set at its own clean 1e-3 point. The SNR per bin is
+found at Pd = 0.9, and the loss is SNR(OS rho) - SNR(CA) in dB.
+
+The OS reference at rank rho uses the exact order-statistic density of
+F(4096, 8192). The CA reference is the mean of |B| bins, and its density is
+found by FFT convolution of the single-bin density.
+
+This is an ideal independent-bin reference only. The simulated or quadrature
+threshold is not an operational eta_Pfa calibration.
 
 Run with --out DIR using this module.
 """
@@ -25,6 +34,7 @@ F = stats.f(D1, D2)
 
 
 def os_ref(n, rho, lo=0.84, hi=1.20, h=2e-5):
+    """Return the grid, normalized weights and grid mass of the rank-rho order statistic of n bins."""
     r = np.arange(lo, hi, h)
     lp = (special.gammaln(n + 1) - special.gammaln(rho) - special.gammaln(n - rho + 1)
           + (rho - 1) * F.logcdf(r) + (n - rho) * F.logsf(r) + F.logpdf(r))
@@ -33,6 +43,7 @@ def os_ref(n, rho, lo=0.84, hi=1.20, h=2e-5):
 
 
 def ca_ref(n, h=2e-5, N=1 << 19, bw=4e-6):
+    """Return the bin centers, normalized weights and single-bin grid mass of the mean of n bins."""
     # density of Y = X - 1 on a circular grid, n-fold convolution by FFT, then M = 1 + S / n binned to width bw
     k = np.arange(N); k[k >= N // 2] -= N
     y = k * h
@@ -52,11 +63,13 @@ def ca_ref(n, h=2e-5, N=1 << 19, bw=4e-6):
 
 
 def pfa(eta, r, w):
+    """Return P(max of the 5 null D bins > eta ref), averaged over the reference density."""
     s = F.sf(eta * r)
     return float(np.dot(w, -np.expm1(5.0 * np.log1p(-s))))
 
 
 def pd(sdb, eta, r, w):
+    """Return Pd at a per-bin pilot SNR of sdb (dB), averaged over the reference density."""
     s = 10 ** (sdb / 10)
     x = eta * r
     c0 = F.cdf(x)
@@ -66,6 +79,7 @@ def pd(sdb, eta, r, w):
 
 
 def solve(r, w):
+    """Return the threshold eta at Pfa = 1e-3 and the SNR (dB) at Pd = 0.9 for one reference."""
     eta = brentq(lambda e: pfa(e, r, w) - PFA, 1.0, 1.4, xtol=1e-12)
     snr = brentq(lambda v: pd(v, eta, r, w) - PD, -10.0, -7.0, xtol=1e-8)
     return eta, snr

@@ -1,24 +1,25 @@
 # coding=utf-8
 """Floored-residual comparison for the synthetic bench.
 
-This study is not the paper's signed-mean retained-power estimator. It keeps
-an alternative residual convention to reproduce the validation comparison.
+This study uses a floored residual convention, which differs from the
+signed-mean retained-power estimator of the paper. The convention is kept to
+reproduce the validation comparison.
 
-The command-line driver lives in ``tools/mask_residual_frontier.py``.  This
+The command-line driver is in ``tools/mask_residual_frontier.py``. This
 module holds the small, testable pieces: the archive's exact per-rank Q16
 decision boundary, its keep rule, its empirical candidate staircase, the
 shelf-or-floor per-frame residual convention, the residual-score histogram of
 chapter 6 eq:detection:histogram, and the prefix-sum walk that turns that
 histogram into the frontier of eq:detection:frontier.
 
-Two quantities are carried through every bin of the histogram side by side.
-``systematic`` is what this comparison assigns to a frame: ``10^(shelf/10)`` when
-the frame has a finite shelf estimate, the channel floor otherwise, and never
-below the floor.  ``injected`` is what the synthetic bench actually put into
-that frame, which the archive can never know.  Both are prefix-summed over the
-same bins, so the frontier reports the claim and the truth on identical kept
-sets and any gap between them belongs to the residual convention rather than
-to the bookkeeping.
+Two quantities are carried side by side through every bin of the histogram.
+``systematic`` is the residual this study assigns to a frame. It is
+``10^(shelf/10)`` when the frame has a finite shelf estimate and the channel
+floor otherwise, and it is never below the floor. ``injected`` is what the
+synthetic bench actually put into that frame, which the archive can never
+know. Both are prefix-summed over the same bins, so the frontier reports the
+claim and the truth on identical kept sets. Any gap between them is
+therefore due to the residual convention alone.
 
 The Q16 boundaries use the shared exact scorer. The residual floor and
 candidate selection below reproduce the validation study:
@@ -123,7 +124,7 @@ def measured_floor_db(
     percentile: float = FLOOR_PERCENTILE,
     minimum_frames: int = FLOOR_MIN_FRAMES,
 ) -> dict[str, Any]:
-    """The off-population floor: a percentile of its finite shelf estimates."""
+    """Return the off-population floor as a percentile of its finite shelf estimates."""
     values = np.asarray(shelf_db, dtype=np.float64)
     finite = values[np.isfinite(values)]
     if finite.size < int(minimum_frames):
@@ -150,8 +151,9 @@ def systematic_residuals(
 ) -> np.ndarray:
     """The shelf-or-floor linear convention, one value per frame.
 
-    A frame with a finite shelf estimate carries ``max(10^(shelf/10), floor)``;
-    a frame without one carries the floor.  No frame falls below the floor.
+    A frame with a finite shelf estimate is assigned
+    ``max(10^(shelf/10), floor)``, and a frame without one is assigned the
+    floor. No frame falls below the floor.
     """
     floor = float(floor_linear)
     if not math.isfinite(floor) or floor < 0.0:
@@ -232,10 +234,10 @@ def frontier_points(
 ) -> list[dict[str, Any]]:
     """Walk the histogram's prefix sums into unsmoothed frontier points.
 
-    ``r_sys`` is what the cumulative sums claim survives in the kept frames;
-    ``r_injected`` is the mean of what the bench actually injected into the
-    same kept frames.  Both come from the same prefix sums, so they describe
-    identical kept sets.
+    ``r_sys`` is the mean residual that the cumulative sums claim for the kept
+    frames. ``r_injected`` is the mean of what the bench actually injected
+    into the same kept frames. Both come from the same prefix sums, so they
+    describe identical kept sets.
     """
     frames = histogram.frame_count
     if frames <= 0:
@@ -269,7 +271,7 @@ def frontier_points(
 def minimum_mask_envelope(
     points: Sequence[Mapping[str, Any]], tolerance: float, *, key: str = "r_sys"
 ) -> dict[str, Any] | None:
-    """Eq:detection:frontier: the least mask whose residual is within tolerance."""
+    """Return the least mask whose residual is at most the tolerance (eq:detection:frontier)."""
     tau = float(tolerance)
     if not math.isfinite(tau) or tau <= 0.0:
         raise ValueError("the residual allowance must be positive and finite.")
@@ -302,10 +304,10 @@ def bootstrap_frontier(
 ) -> dict[int, dict[str, tuple[float, float]]]:
     """Resample frames with replacement at a fixed candidate grid.
 
-    The grid is held at the value the full sample produced, so every replicate
-    reports the same candidates and the interval describes trial noise rather
-    than a moving staircase.  Candidates that fall below the retained-frame
-    floor in a replicate contribute nothing to that candidate's interval.
+    The grid is held at the candidates of the full sample, so every replicate
+    reports the same candidates. The interval then describes trial noise
+    only, with no movement of the staircase. In a replicate, a candidate that
+    falls below the retained-frame floor adds nothing to its own interval.
     """
     grid = [int(value) for value in candidates]
     boundaries = [int(value) for value in required_q16]

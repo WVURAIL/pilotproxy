@@ -1,26 +1,29 @@
 # coding=utf-8
-"""Analyze an injection ladder: recovery linearity and the radiometer baseline.
+"""Analyze an injection ladder for recovery linearity and the radiometer baseline.
 
-Consumes the products of ``pilot-proxy chime-scan`` runs over
-``inject-pilot-tone`` output trees (one run per amplitude, each run directory
-also holding its ladder point's ``injection_manifest.json``) and produces the
-two referee-facing results:
+The inputs are the products of ``pilot-proxy chime-scan`` runs over
+``inject-pilot-tone`` output trees. There is one run per tone amplitude, and
+each run directory also holds the ``injection_manifest.json`` of its ladder
+point.
 
-* **Recovery linearity** --- mean corrected pilot excess
-  ``rho_hat = mean(normalized_pilot_excess[valid])`` per point, with standard
-  errors, and the weighted linear fit ``rho_hat = floor + gain * a^2`` against
-  injected tone power. Slope-one behavior in the signal-dominated regime is
-  the "recovered tracks injected" claim; the intercept is the channel's
-  ambient floor, anchored by the mandatory ``a = 0`` control point (which the
-  injection harness guarantees is byte-identical to the source data).
-* **Radiometer baseline** --- on identical frames, detection rates for the
-  power-ratio (``coarse_power_ratio``) and the classical total-power detector
-  (``baseband_power_linear``) at matched false-alarm rates, thresholds taken
-  as empirical quantiles of the ``a = 0`` control, with Wilson 95% intervals
-  from ``evaluate_snr.wilson_interval``. The horizontal gap between the two
-  detection curves is the measured sensitivity advantage.
+For the recovery linearity, the mean corrected pilot excess
+``rho_hat = mean(normalized_pilot_excess[valid])`` is computed for each point
+with its standard error, and the weighted linear fit
+``rho_hat = floor + gain * a^2`` is made against the injected tone power. A
+log-log slope of one in the signal-dominated regime shows that the recovered
+excess tracks the injected power. The intercept is the ambient floor of the
+channel, anchored by the required ``a = 0`` control point, which the injection
+harness makes byte-identical to the source data.
 
-Everything is post-hoc over stored products; no detector re-runs.
+For the radiometer baseline, the detection rates of the power ratio
+(``coarse_power_ratio``) and of the classical total-power detector
+(``baseband_power_linear``) are evaluated on the same frames at matched
+false-alarm rates. The thresholds are empirical quantiles of the ``a = 0``
+control, and the Wilson 95% intervals come from
+``evaluate_snr.wilson_interval``. The horizontal gap between the two detection
+curves is the measured sensitivity advantage.
+
+Only stored products are read, and the detector is not run again.
 """
 from __future__ import annotations
 
@@ -52,8 +55,8 @@ RECOVERY_SUMMARY_FILENAME = "injection_recovery_summary.json"
 RECOVERY_FIGURE = "injection_recovery_linearity.png"
 BASELINE_FIGURE = "detector_vs_radiometer_pd.png"
 DEFAULT_FALSE_ALARM_RATES = (1e-2,)
-# An empirical quantile at P_fa needs enough H0 frames to be meaningful: at
-# least this many expected false alarms (detector register entry
+# An empirical quantile at P_fa is used only when the H0 frames give at least
+# this many expected false alarms (detector register entry
 # detection.minimum_frames_per_false_alarm).
 MIN_FRAMES_PER_FALSE_ALARM = injection.MIN_FRAMES_PER_FALSE_ALARM
 STATISTICS = {"power_ratio": "power_ratio", "radiometer": "power"}

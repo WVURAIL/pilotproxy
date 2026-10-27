@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independently recount retained throughput timings; do not rerun timings."""
+"""Recount the retained SDR streaming throughput records without rerunning the timings."""
 
 import argparse
 import hashlib
@@ -34,12 +34,12 @@ def main():
             digest(root / "source_snapshots" / name) == expected,
             "source snapshot " + name,
         )
-    # Reproduce only the deterministic input, not any timing measurement.
+    # only the deterministic input is regenerated, and no timing is measured
     n = plan["input_samples_per_repeat"]
     rng = np.random.Generator(np.random.PCG64(plan["seed"]))
     component = rng.uniform(-1, 1, (n, 2))
-    # Byte identity requires the frozen complex-phase expression and operation
-    # order; a float-phase cos/sin expansion is not bitwise interchangeable.
+    # byte identity needs the frozen complex-exponential expression and operation
+    # order, since a cos/sin expansion of the phase gives different bits
     signal = 0.25 * np.exp(2j * np.pi * 100000 * np.arange(n) / 2000000)
     iq = np.asarray(component[:, 0] + 1j * component[:, 1] + signal, dtype="<c8")
     input_hash = json.loads((root / "input-record.json").read_text())[

@@ -1,21 +1,22 @@
 # coding=utf-8
-"""Stream CHIME archive data and combine per-pilot products.
+"""Stream CHIME archive data and stack the per-pilot products.
 
-This is the implementation behind ``pilot-proxy chime-scan``. A multi-channel
-pull is storage-safe and resumable, then stacks the per-pilot
-products with the event-keyed combine step into PilotProxy's canonical
-products; if no event is common to every completed channel, the scan still
-succeeds with per-pilot products and defers stacking to ``chime-combine``
-(``--report`` / ``--drop``). This is the
-recommended archive-scale entry point; ``pilot-proxy chime-run`` (the
-``run_chime_analysis`` batch path) remains for pre-staged local directories.
+This module implements ``pilot-proxy chime-scan``, the recommended
+archive-scale entry point. Each channel is pulled through the storage-safe,
+resumable engine, and the per-pilot products are then stacked into the
+canonical PilotProxy products by the event-keyed combine step. If no event is
+common to every completed channel, the scan still succeeds with its per-pilot
+products, and stacking is left to ``chime-combine`` (``--report`` and
+``--drop``). ``pilot-proxy chime-run`` (the ``run_chime_analysis`` batch path)
+is used for pre-staged local directories.
 
-* ``--source local``          : files already on disk (a 10 s chunk, /arc, ...).
-* ``--source cadc-datatrail``  : storage-safe streaming from the CADC archive.
+* ``--source local``: files already on disk (a 10 s chunk, /arc, ...).
+* ``--source cadc-datatrail``: storage-safe streaming from the CADC archive.
 
-The detector analyzer defaults to the real CUDA kernel (GPU). For tests, the
-detector / kernel / weights can be injected via ``analyzer_options`` (the same
-hooks ``run_chime_analysis`` exposes), which is how the GPU-free parity tests run.
+The detector analyzer defaults to the CUDA kernel on a GPU. For tests, the
+detector, kernel, and weights can be injected through ``analyzer_options``, the
+same hooks that ``run_chime_analysis`` exposes. The GPU-free parity tests run
+this way.
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ from pilot_proxy.provenance import file_sha256
 
 _DETECTOR_ANALYZER = "pilot-proxy-detector"
 _READER_FOR_ANALYZER = {
-    _DETECTOR_ANALYZER: "chime-baseband-packed",  # native int4 -> lossless kernel pack
+    _DETECTOR_ANALYZER: "chime-baseband-packed",  # native int4, lossless kernel pack
 }
 _SCAN_SCOPE_SCHEMA_VERSION = "pilotproxy_chime_scan_scope_v1"
 _LOCAL_INPUT_MANIFEST_SCHEMA_VERSION = "pilotproxy_local_input_manifest_v1"
@@ -192,11 +193,11 @@ def _saved_unit_keys(path: Path) -> set[str]:
 
 
 def _framed_unit_keys(path: Path) -> set[str]:
-    """Saved unit keys that own at least one persisted detector frame.
+    """Return the saved unit keys that own at least one persisted detector frame.
 
-    A frame proves that a unit contributed data, not that the whole unit was
-    consumed: ``max_chunks_per_file`` deliberately stops the reader early.
-    Callers must classify these keys as completed or capped using the product's
+    A frame shows only that a unit contributed data, since
+    ``max_chunks_per_file`` can stop the reader before the end of the unit.
+    Callers must classify these keys as completed or capped from the product's
     scan parameters.
     """
     if not path.exists():
@@ -283,7 +284,7 @@ def _failed_current_unit_count(
     quarantined_keys: set[str],
     max_files: int | None,
 ) -> int:
-    """Identify only the in-order unit named by a pipeline unit failure."""
+    """Return 1 when a pipeline unit failure names the first pending unit, else 0."""
     considered = units if not max_files else units[: int(max_files)]
     pending = [
         unit
@@ -336,9 +337,9 @@ def _refresh_scope_totals(scope: dict[str, Any]) -> None:
 def _named_inventory_path(name: str, source_root: str | Path | None = None) -> Path:
     """Resolve a named archive inventory to its ``inventory.jsonl`` path.
 
-    ``source_root`` (the directory passed to ``chime-survey --root``)
-    always wins when given: ``<root>/data/<name>/inventory.jsonl``. Otherwise
-    the archive resolver is the single source of truth for named inventories.
+    When ``source_root`` (the directory passed to ``chime-survey --root``) is
+    given, the path is ``<root>/data/<name>/inventory.jsonl``. Otherwise the
+    path comes from the archive inventory resolver.
     """
     if not str(name).strip():
         raise ValueError("inventory name may not be empty")
@@ -366,12 +367,13 @@ def _read_inventory_meta(inventory_path: Path) -> dict | None:
 
 
 def _freq_ids_in_inventory(inventory_path: Path) -> list[int]:
-    """Sorted distinct freq_ids across the inventory's rows.
+    """Return the sorted distinct freq_ids of the inventory's rows.
 
-    Rows without a freq_id (companion shapes: gains, N2) are skipped, since they are
-    exactly the rows the source's freq_id filter never serves to a per-pilot
-    run. Malformed lines are skipped too, matching the source's tolerant
-    ``enumerate``."""
+    Rows without a freq_id (companion shapes such as gains and N2) are skipped,
+    since the source's freq_id filter never serves them to a per-pilot run.
+    Malformed lines are also skipped here, and the source's ``enumerate``
+    rejects them later.
+    """
     if not inventory_path.exists():
         raise SystemExit(
             f"chime-scan: inventory not found: {inventory_path}\n"
@@ -399,8 +401,11 @@ def _freq_ids_in_inventory(inventory_path: Path) -> list[int]:
 
 
 def _parse_freq_id_list(spec: Any) -> list[int] | None:
-    """Tolerant parse of a sidecar ``freq_ids`` field ('506,521', '506-521',
-    [506, 521], ...). None when absent or not confidently parseable ('all')."""
+    """Leniently parse a sidecar ``freq_ids`` field.
+
+    The field may be '506,521', '506-521', [506, 521], and so on. Returns None
+    when the field is absent or cannot be parsed with confidence, as for 'all'.
+    """
     if spec is None:
         return None
     if isinstance(spec, (list, tuple)):
@@ -435,10 +440,13 @@ def _selection_is_empty(select: Any) -> bool:
 def _default_selection_from_inventory(
     inventory_path: Path, *, label: str, meta: dict | None, verbose: bool
 ) -> list[int]:
-    """No --select: every freq_id the inventory contains, echoed before any
-    staging so the scope of the run is visible up front. When the sidecar's
-    requested ``freq_ids`` disagree with the rows (patchy replication, partial
-    survey), say so."""
+    """Return every freq_id in the inventory, for a run with no --select.
+
+    The list is printed before any staging, so the scope of the run is visible
+    at the start. A note is also printed when the sidecar's requested
+    ``freq_ids`` disagree with the rows, as after patchy replication or a
+    partial survey.
+    """
     found = _freq_ids_in_inventory(inventory_path)
     if not found:
         raise SystemExit(
@@ -495,38 +503,40 @@ def run_chime_scan(
     analyzer_options: Mapping[str, Any] | None = None,
     verbose: bool = True,
 ) -> dict[str, Path]:
-    """Fan out the chosen analyzer over CHIME data and combine into canonical products.
+    """Run the chosen analyzer over CHIME data and stack the canonical products.
 
-    ``--source`` is inferred from the flags that name it: ``--inventory`` /
-    ``--inventory-name`` select ``cadc-datatrail``; everything else keeps the
-    local default (``--source-root`` alone serves both layouts and never
-    infers). An explicit ``--source`` that conflicts with those flags is an
-    error. ``--source local`` reads files under ``--input-dir``.
-    ``--source cadc-datatrail`` streams from an inventory, provided as one of:
+    ``--source`` is inferred from the flags that name it. ``--inventory`` and
+    ``--inventory-name`` select ``cadc-datatrail``, and every other case uses
+    the local default. ``--source-root`` alone serves both layouts and is never
+    used to infer the source. An explicit ``--source`` that conflicts with
+    those flags is an error. ``--source local`` reads files under
+    ``--input-dir``. ``--source cadc-datatrail`` streams from an inventory,
+    given as one of:
 
-    * ``--inventory <inventory.jsonl>`` for an explicit inventory path;
-    * ``--inventory-name <name>`` for a named inventory, resolved
-      through the archive inventory root (default
-      ``~/datatrawl-inventories/<name>/``); with ``--source-root <r>`` it
-      resolves as ``<r>/data/<name>/inventory.jsonl`` instead.
+    * ``--inventory <inventory.jsonl>`` for an explicit inventory path.
+    * ``--inventory-name <name>`` for a named inventory, resolved through the
+      archive inventory root (default ``~/datatrawl-inventories/<name>/``).
+      With ``--source-root <r>``, it resolves as
+      ``<r>/data/<name>/inventory.jsonl``.
 
-    ``--select`` scopes the run to specific freq_ids; for the archive source it
-    defaults to every freq_id the inventory contains (echoed before any
-    staging, with a note when the survey sidecar's requested set disagrees
-    with the rows). Local scans have no inventory and still require it.
+    ``--select`` limits the run to specific freq_ids. For the archive source, it
+    defaults to every freq_id in the inventory. The list is printed before any
+    staging, with a note when the survey sidecar's requested set disagrees with
+    the rows. Local scans have no inventory and still require ``--select``.
 
-    The detector analyzer's CUDA kernel is GPU-only, so ``--analyzer pilot-proxy-detector``
-    requires a GPU node. A missing ``cupy`` is caught up front (rather than
-    surfacing as every file failing to analyze). There is no CPU detector path for
-    production (the CPU reference exists only as a test fixture), so there is no
-    GPU/CPU toggle here.
+    The detector analyzer's CUDA kernel is GPU-only, so ``--analyzer
+    pilot-proxy-detector`` requires a GPU node. A missing ``cupy`` is caught
+    before any file is staged, so it does not appear as a failure on every
+    file. The CPU reference exists only as a test fixture, so there is no CPU
+    detector path for production and no GPU/CPU toggle.
 
-    By default every requested pilot must enumerate at least one unit and every
-    enumerated unit must complete. ``allow_partial=True`` is the explicit escape
-    hatch for capped smoke runs or intentionally incomplete inventories; either
-    way, ``scan_scope.json`` durably records the per-pilot outcome, and its
-    ``terminal_combine`` entry records whether the optional terminal combine
-    ran or was soft-failed (with the refusing error class and message).
+    By default, every requested pilot must enumerate at least one unit, and
+    every enumerated unit must complete. ``allow_partial=True`` accepts capped
+    smoke runs and inventories known to be incomplete. In both cases,
+    ``scan_scope.json`` durably records the per-pilot outcome, and its
+    ``terminal_combine`` entry records the status of the optional terminal
+    combine: combined, skipped (with the refusing error class and message), or
+    not run.
 
     ``stop_after_checkpoint=True`` stops after the next durable checkpoint. It
     is an execution control and is not part of the product resume identity.
@@ -567,12 +577,12 @@ def run_chime_scan(
         )
     reader_name = reader or _READER_FOR_ANALYZER[analyzer]
 
-    # -- source: infer from the flags that name it ---------------------------
-    # --inventory/--inventory-name only mean anything for the archive source, so
-    # their presence names it; everything else keeps the historic local default
-    # (--source-root serves both sources -- the local input dir, or the survey
-    # root for --inventory-name -- and never infers).
-    # Conflicting pairings are errors rather than silent ignores.
+    # Source inference
+    # --inventory and --inventory-name apply only to the archive source, so
+    # their presence selects it. Every other case uses the local default.
+    # --source-root serves both sources, as the local input directory or as the
+    # survey root for --inventory-name, and is never used to infer the source.
+    # A conflicting pair of flags is an error.
     has_inventory_flags = inventory is not None or inventory_name is not None
     if source is None:
         source = "cadc-datatrail" if has_inventory_flags else "local"
@@ -603,7 +613,7 @@ def run_chime_scan(
         options["source_root"] = str(input_dir if input_dir is not None else source_root)
         options["source_glob"] = source_glob
         if source_freq_id_regex:
-            # An explicit --set of this key wins over the flag.
+            # an explicit --set of this key takes precedence over the flag
             options.setdefault("source_freq_id_regex", source_freq_id_regex)
         if source_event_regex:
             options.setdefault("source_event_regex", source_event_regex)
@@ -712,10 +722,10 @@ def run_chime_scan(
     _require_preflight(src, ctx, label="source", method=source_preflight)
     _require_preflight(rdr, ctx, label="reader")
 
-    # Fail fast on missing runtime artifacts before any file is staged, instead
-    # of quarantining every unit or dying with a raw error mid-scan. For
-    # pilot-proxy-detector, that means cupy, the CUDA kernel library, and the
-    # weight bank.
+    # Missing runtime artifacts are reported before any file is staged, so the
+    # scan does not quarantine every unit or stop with a raw error partway
+    # through. For pilot-proxy-detector, the artifacts are cupy, the CUDA kernel
+    # library, and the weight bank.
     analyzer_probe = analyzer_cls()
     _ok, _problems = analyzer_probe.preflight(ctx)
     if not _ok:
@@ -808,8 +818,8 @@ def run_chime_scan(
         "max_staged_files": max_staged_files,
         "checkpoint_every": checkpoint_every,
         "staging_dir": str(staging),
-        # None when the default locator served the run; set when the fetch was
-        # routed straight at a replica.
+        # None when the default locator served the run. Set when the fetch was
+        # routed straight to a replica.
         "storage_service": storage_service_override(),
     }
     execution_attempts = _prior_execution_attempts(previous_scope)
@@ -873,8 +883,8 @@ def run_chime_scan(
         scope_entry["extra_unit_keys"] = extra_keys
         scope_entry["zero_frame_unit_keys"] = zero_frame_keys
         prepared_runs.append((sub_sel, units, out_path))
-        # Enumeration is durable before staging or analyzing any file, so an
-        # interruption still leaves an auditable requested scope.
+        # The enumeration is written before any file is staged or analyzed, so
+        # an interruption still leaves an auditable requested scope.
         _refresh_scope_totals(scope)
         _atomic_write_json(scope_path, scope)
         if extra_keys or zero_frame_keys:
@@ -1015,15 +1025,15 @@ def run_chime_scan(
         )
         _refresh_scope_totals(scope)
         _atomic_write_json(scope_path, scope)
-        # The engine only writes the product if at least one unit was accumulated;
-        # if every unit failed/quarantined there is no product (or it has zero
-        # frames). Treat that as an error rather than silently feeding an absent/
-        # empty product to combine, since it usually signals a systemic problem
-        # (missing GPU, a bad inventory) that would hit every channel rather than
-        # bad input for this one. Use n_done (total accumulated, this run plus any
-        # resumed) instead of n_new, so a relaunch that finds a channel already
-        # complete (n_new == 0) is recognized as produced rather than mistaken
-        # for a failure.
+        # The engine writes the product only when at least one unit was
+        # accumulated. When every unit failed or was quarantined, there is no
+        # product, or it has zero frames. Such a channel is never passed to
+        # combine. It usually signals a systemic problem, such as a missing GPU
+        # or a bad inventory, that would affect every channel, and the
+        # incomplete-scope check below reports it unless --allow-partial is
+        # given. ``produced`` is computed from the framed unit keys of the saved
+        # product, which cover this run and any resumed run, so a relaunch that
+        # finds a channel already complete (n_new == 0) counts it as produced.
         produced = Path(out).exists() and bool(framed_keys)
         if not produced:
             continue
@@ -1087,12 +1097,13 @@ def run_chime_scan(
     try:
         outputs = combine_detector_products(product_paths, output_dir)
     except ValueError as exc:
-        # Combine's validation pass (CombineIntegrityError and its plain
-        # ValueError siblings) refuses the stack, not the scan: every per-pilot
-        # product is already durable, so soft-fail the optional terminal
-        # combine instead of losing the run to it. The two typed refusals get
-        # tailored guidance; anything else gets the generic escape. Non-
-        # ValueError failures are not integrity refusals and still propagate.
+        # A ValueError from the combine validation pass (CombineIntegrityError
+        # and its plain ValueError siblings) refuses the stack, and the scan
+        # itself still succeeds. Every per-pilot product is already durable, so
+        # the optional terminal combine is skipped and the run is kept. The two
+        # typed refusals get their own guidance, and any other refusal gets the
+        # generic message. Failures that are not a ValueError are not integrity
+        # refusals and still propagate.
         print(f"[chime-scan] terminal combine skipped: {exc}", flush=True)
         if isinstance(exc, CombineEmptyIntersectionError):
             print(
@@ -1126,8 +1137,8 @@ def run_chime_scan(
                 "and stack once the refusal is understood.",
                 flush=True,
             )
-        # stdout scrolls away on a multi-week run; the skip must survive in
-        # the run directory alongside the per-pilot outcome it annotates.
+        # stdout scrolls away on a multi-week run, so the skip is recorded in
+        # the run directory next to the per-pilot outcome it describes.
         scope["terminal_combine"] = {
             "status": "skipped",
             "error": type(exc).__name__,

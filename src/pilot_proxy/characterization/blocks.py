@@ -1,20 +1,20 @@
 """Split calibration and evaluation data by acquisition, then bootstrap acquisitions.
 
-Consecutive 42 ms frames from one acquisition are strongly correlated. The
-archive also has daily and seasonal structure. We therefore keep each
-acquisition intact when splitting the data or resampling it for uncertainty.
-The product's ``frame_unit_index`` identifies these groups.
+Consecutive 42 ms frames from one acquisition are strongly correlated, and the
+archive also has daily and seasonal structure. Each acquisition is therefore
+kept intact when the data are split or resampled for uncertainty. The groups
+are given by the product's ``frame_unit_index``.
 
-Within a current era, acquisitions are ordered in time. The split is placed
-at the acquisition that balances the frame counts, so calibration precedes
-evaluation as it would in use. Bootstrap replicates draw whole acquisitions
-with replacement and record their random seed.
+In a current era, acquisitions are ordered in time. The split is placed at the
+acquisition that balances the frame counts, so calibration precedes evaluation
+as it would in use. Bootstrap replicates are drawn as whole acquisitions with
+replacement, and the random seed is recorded with each estimate.
 
-Month support follows the dissertation's section 8.1 aggregation rule. A UTC
-month needs at least 30 valid frames from 5 acquisitions on 3 days; the
-registered acquisition-count sensitivities are 3, 5, and 10. Each block must
-meet the era's month requirements on its own. Otherwise the selector reports
-insufficient support.
+Month support follows the aggregation rule of section 8.1 of the dissertation.
+A UTC month needs at least 30 valid frames from 5 acquisitions on 3 days. The
+registered sensitivity values of the acquisition count are 3, 5, and 10. Each
+block must meet the era's month requirements on its own. Otherwise, the split
+is marked ``insufficient_support``.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ MIN_BLOCKS_PER_HALF = 8
 
 
 def month_index(unix_seconds) -> np.ndarray:
-    """UTC calendar month as ``year * 12 + (month - 1)``; -1 where the time is NaN."""
+    """Return the UTC calendar month as ``year * 12 + (month - 1)``, or -1 where the time is NaN."""
     t = np.asarray(unix_seconds, dtype=float)
     out = np.full(t.shape, -1, dtype=np.int64)
     for i in np.flatnonzero(np.isfinite(t)):
@@ -51,7 +51,7 @@ def month_label(index: int) -> str:
 
 
 def day_index(unix_seconds) -> np.ndarray:
-    """UTC day number; -1 where NaN."""
+    """Return the UTC day number, or -1 where the time is NaN."""
     t = np.asarray(unix_seconds, dtype=float)
     out = np.full(t.shape, -1, dtype=np.int64)
     ok = np.isfinite(t)
@@ -61,7 +61,7 @@ def day_index(unix_seconds) -> np.ndarray:
 
 @dataclass(frozen=True)
 class MonthSupport:
-    """Per populated month: frames, acquisitions, days."""
+    """Frame, acquisition, and day counts of one populated month."""
 
     month: int
     frames: int
@@ -75,10 +75,10 @@ class MonthSupport:
 
 def month_support(frame_time, unit_index, selected, *, min_frames: int = MONTH_MIN_FRAMES,
                   min_units: int = MONTH_MIN_UNITS, min_days: int = MONTH_MIN_DAYS) -> list[MonthSupport]:
-    """Populated months among the selected frames, in calendar order.
+    """Return the populated months of the selected frames in calendar order.
 
-    Frames whose time is unrecorded (NaN) cannot be placed in a month and are
-    left out; callers report the reduced denominator.
+    A frame with no recorded time (NaN) cannot be placed in a month and is not
+    counted. The caller reports the reduced denominator.
     """
     t = np.asarray(frame_time, dtype=float)
     u = np.asarray(unit_index)
@@ -126,11 +126,12 @@ def split_blocks(unit_index, unit_time, selected, *, frame_time=None, minimum_mo
     """Split selected frames into calibration and evaluation blocks.
 
     Acquisitions are ordered by their first-sample time and assigned whole to
-    the calibration block until the cumulative frame count reaches half of
-    the selected frames; the remainder is the evaluation block. ``frame_time``
-    (default: the unit time of each frame) is used only to count populated
-    months per block; a block with fewer than ``minimum_months`` populated
-    months makes the split ``insufficient_support``.
+    the calibration block until the cumulative frame count reaches half of the
+    selected frames. The remaining acquisitions form the evaluation block.
+    ``frame_time`` (default: the unit time of each frame) is used only to count
+    the populated months of each block. A block with fewer than
+    ``minimum_months`` populated months marks the split
+    ``insufficient_support``.
     """
     u = np.asarray(unit_index)
     sel = np.asarray(selected, dtype=bool)
@@ -147,8 +148,8 @@ def split_blocks(unit_index, unit_time, selected, *, frame_time=None, minimum_mo
     order = np.argsort(first_time, kind="stable")
     cumulative = np.cumsum(frames_per_unit[order])
     half = cumulative[-1] / 2.0
-    # the acquisition that carries the cumulative count across half joins the
-    # calibration block; the evaluation block always keeps at least one unit
+    # The acquisition that carries the cumulative count across half joins the
+    # calibration block. The evaluation block always keeps at least one acquisition.
     cut = int(np.searchsorted(cumulative, half, side="left"))
     cut = min(cut, units.size - 2) if units.size > 1 else -1
     cal_units = set(units[order[: cut + 1]].tolist())
@@ -171,7 +172,7 @@ def split_blocks(unit_index, unit_time, selected, *, frame_time=None, minimum_mo
 
 @dataclass(frozen=True)
 class Bootstrap:
-    """A block-bootstrap estimate: the point value on the full block and its quantiles."""
+    """Block-bootstrap estimate of a statistic, with its point value on the full block and its quantiles."""
 
     estimate: float
     quantiles: tuple[float, ...]
@@ -199,12 +200,12 @@ def block_bootstrap(unit_index, selected, statistic: Callable[[np.ndarray], floa
                     quantiles: Sequence[float] = DEFAULT_QUANTILES, min_blocks: int = MIN_BLOCKS_PER_HALF) -> Bootstrap:
     """Resample whole acquisitions with replacement and re-evaluate a statistic.
 
-    ``statistic`` receives an integer weight per frame (how many times the
-    frame's acquisition was drawn; zero for frames outside the selection) and
-    returns a float; the point estimate uses unit weights on the selection.
-    Weighted statistics keep every replicate a single vectorized pass, so a
-    1000-replicate bootstrap over 40k frames costs one pass per replicate,
-    not a copy of the product.
+    ``statistic`` is given an integer weight per frame and returns a float. The
+    weight is the number of times the frame's acquisition was drawn, and it is
+    zero for a frame that is not selected. The point estimate uses unit weights
+    on the selection. Each replicate is then a single vectorized pass over the
+    frames, so a 1000-replicate bootstrap over 40000 frames needs no copy of
+    the product.
     """
     u = np.asarray(unit_index)
     sel = np.asarray(selected, dtype=bool)
@@ -229,7 +230,7 @@ def block_bootstrap(unit_index, selected, statistic: Callable[[np.ndarray], floa
 
 
 def weighted_fraction(weights: np.ndarray, flag: np.ndarray) -> float:
-    """Fraction of (weighted) frames with ``flag`` set; NaN when no weight."""
+    """Return the weighted fraction of frames with ``flag`` set, or NaN when the total weight is zero."""
     w = np.asarray(weights, dtype=float)
     total = w.sum()
     return float((w * np.asarray(flag, dtype=float)).sum() / total) if total > 0 else float("nan")

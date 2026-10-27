@@ -25,7 +25,7 @@ def _command_available(command: str) -> bool:
 
 
 def _latex_package_available(package: str) -> bool:
-    """Return whether ``kpsewhich`` resolves a LaTeX package."""
+    """Return True when ``kpsewhich`` resolves a LaTeX package."""
 
     if not _command_available("kpsewhich"):
         return False
@@ -49,16 +49,15 @@ def setup_matplotlib(
 ):
     """Configure Matplotlib for LaTeX-style PilotProxy plots.
 
-    External TeX rendering is normally opt-in through the
-    ``PILOT_PROXY_USE_TEX`` environment variable and is used only when the TeX
-    helper commands are available. Otherwise, Matplotlib's Computer Modern
-    mathtext renderer gives the same visual language without a TeX runtime
-    dependency.
+    Without ``dissertation_style``, external TeX rendering is opt-in through
+    the ``PILOT_PROXY_USE_TEX`` environment variable and is used only when
+    the TeX helper commands are available. Otherwise, the Computer Modern mathtext renderer of
+    Matplotlib gives the same look with no TeX runtime dependency.
 
-    ``dissertation_style=True`` is stricter. It reproduces the dissertation's
-    fail-closed Latin Modern/T1 typography contract and never silently falls
-    back to DejaVu. This mode requires ``latex``, ``dvipng``, ``kpsewhich``,
-    and the ``lmodern`` package.
+    ``dissertation_style=True`` is stricter. It applies the fail-closed
+    Latin Modern/T1 typography of the dissertation and requires ``latex``,
+    ``dvipng``, ``kpsewhich``, and the ``lmodern`` package. A missing
+    requirement raises RuntimeError, so the text never falls back to DejaVu.
     """
     import matplotlib
 
@@ -115,10 +114,11 @@ def setup_matplotlib(
 
             return plt
 
-        # Match the journal build (mnras/rasti classes load newtxtext/newtxmath)
-        # when the newtx fonts are installed; otherwise fall back to Computer
-        # Modern, which matches the article-class draft build. An unconditional
-        # newtx preamble crashes savefig on hosts without newtxtext.sty.
+        # The mnras and rasti classes load newtxtext and newtxmath, so the
+        # journal build is matched when the newtx fonts are installed. Other
+        # hosts use Computer Modern, which matches the article-class draft
+        # build. An unconditional newtx preamble crashes savefig on hosts
+        # without newtxtext.sty.
         try:
             has_newtx = (
                 subprocess.run(
@@ -132,8 +132,8 @@ def setup_matplotlib(
             has_newtx = False
         preamble = r"\usepackage{amsmath}"
         if has_newtx:
-            # newtxmath supplies the AMS symbol set; loading amssymb on top
-            # of it clashes (\Bbbk etc. already defined).
+            # newtxmath supplies the AMS symbol set. Loading amssymb with it
+            # clashes on symbols that newtxmath already defines, such as \Bbbk.
             preamble += r"\usepackage{newtxtext,newtxmath}"
         else:
             preamble += r"\usepackage{amssymb}"

@@ -147,9 +147,9 @@ Project affiliation & West Virginia University.\\ \hline
 
 \section{Introduction}
 
-PilotProxy measures ATSC 1.0 pilot tones with a fixed-point CUDA local-reference power-ratio detector. We use the narrow pilot as a proxy for a DTV data shelf that may lie below the broadband noise floor. The standalone testbench generates its own waveform and receiver geometry. The CHIME workflow instead receives instrument metadata and packed baseband data through a separate adapter.
+PilotProxy measures ATSC 1.0 pilot tones with a fixed-point CUDA local-reference power-ratio detector. We use the narrow pilot as a proxy for a DTV data shelf that may lie below the broadband noise floor. The standalone testbench generates its own waveform and receiver geometry, while the CHIME workflow receives instrument metadata and packed baseband data through its own adapter.
 
-This separation is intentional. The kernel measures target and reference powers without knowing about physical channels, decibels, or telescope layout. Host software supplies those meanings and records them with the output.
+The kernel is kept independent of the instrument by design. It measures target and reference powers with no knowledge of physical channels, decibels, or telescope layout, and host software supplies those meanings and records them with the output.
 
 \subsection{Detector Objective}
 
@@ -157,7 +157,7 @@ This separation is intentional. The kernel measures target and reference powers 
 Given a local ATSC pilot excess, estimate the equivalent ATSC 1.0 data-shelf SNR relative to the stated non-DTV reference floor.
 \end{quote}
 
-We first build and test the detector. We then generate an ATSC waveform, audit the waveform, add noise at a requested shelf SNR, quantize the samples, and run the detector. The final sections describe receiver integration, output fields, limitations, and common failures.
+In this guide, we first build and test the detector. We then generate an ATSC waveform, audit it, add noise at a requested shelf SNR, quantize the samples, and run the detector. Finally, we discuss receiver integration, output fields, limitations, and common failures.
 
 \subsection{Package Contents}
 
@@ -178,7 +178,7 @@ The detector compares one target power with two local reference powers. For one 
 \begin{equation}
   F=\frac{2P_t}{P_{r1}+P_{r2}},\qquad Q=F/\mu_0,\qquad e=Q-1.
 \end{equation}
-The normalization \(\mu_0\) is the target/reference ratio of exact packed-weight squared norms. The raw diagnostic \(F-1\) is not the physical excess. We use \(\mathrm{PNR}_{\mathrm{bin},dB}=10\log_{10}e\) for \(e>0\), and convert it to an equivalent DTV data-shelf SNR with
+The normalization \(\mu_0\) is the ratio of the exact squared norms of the packed target and reference weights. The raw diagnostic \(F-1\) is not the physical excess, which is \(e\). We use \(\mathrm{PNR}_{\mathrm{bin},dB}=10\log_{10}e\) for \(e>0\), and convert it to an equivalent DTV data-shelf SNR with
 \begin{equation}
   \mathrm{SNR}_{\mathrm{shelf},dB} = \mathrm{PNR}_{\mathrm{bin},dB}
   -10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})
@@ -221,42 +221,41 @@ which gives the bandwidth spreading term
   \node[align=left] at (6.1,2.12) {DTV data shelf\\below the non-DTV floor};
   \node[align=left] at (6.2,0.65) {non-DTV noise floor};
 \end{tikzpicture}
-\caption{Signal definitions used by the detector. The kernel compares a target pilot bin with two local reference bins. Host software converts the resulting one-bin excess to an equivalent 6 MHz data-shelf SNR under the recorded calibration constants.}
+\caption{Signal definitions used by the detector. The red line is the ATSC pilot in the target bin \(P_t\), the gold dashed lines mark the lower and upper reference bins, the gray band is the DTV data shelf, and the blue line is the non-DTV noise floor. The kernel compares the target bin with the two reference bins, and host software converts the resulting one-bin excess to an equivalent 6 MHz data-shelf SNR under the recorded calibration constants.}
 \label{fig:spectrum_definitions}
 \end{figure}
 
 
 \section{Installation Model}
 
-Use an editable checkout for the end-to-end workflows in this guide. Install the extras required by the work you intend to run:
+The end-to-end workflows in this guide use an editable checkout, with the extras required by each workflow:
 \begin{lstlisting}[style=shell]
 python -m pip install -e ".[test]"              # CPU-side tests
 python -m pip install -e ".[cuda,test,plot]"    # CUDA and plots
 pilot-proxy --help
 \end{lstlisting}
-Built wheels and source distributions include the reference weight bank and the \code{configs/} tree. Default-resource CPU commands such as \code{list-channels} can therefore run outside the repository. The current examples, repository-relative generated paths, helper scripts, and subprocess-backed two-interpreter workflows should be run from a checkout or supplied explicit paths. The CUDA shared library is not included in the Python distribution; build it from a clone before running GPU-backed commands.
+Built wheels and source distributions contain the reference weight bank and the \code{configs/} tree, so default-resource CPU commands such as \code{list-channels} can run from any directory. The examples, the repository-relative generated paths, the helper scripts, and the two-interpreter workflows that use subprocesses are run from a checkout or given explicit paths. The CUDA shared library is not part of the Python distribution and is built from a clone before any GPU-backed command runs.
 
 \subsection{Python Environments}
 
 When GNU Radio is installed as a system package, two Python interpreters may be necessary:
 \begin{itemize}
   \item GNU Radio Python: used for ATSC generation and GNU Radio AWGN, typically \code{/usr/bin/python3}.
-  \item CUDA Python: used for CuPy, the CUDA shared library, and detector evaluation --- the repository virtual environment installed with the \code{cuda}, \code{test}, and, when needed, \code{plot} extras.
+  \item CUDA Python: the repository virtual environment, installed with the \code{cuda} and \code{test} extras and, when needed, the \code{plot} extra, and used for CuPy, the CUDA shared library, and detector evaluation.
 \end{itemize}
 
-Keep the CUDA environment active for the examples below. The \code{generate-atsc} command and GNU Radio noise source invoke the interpreter supplied through \code{--gnuradio-python}, typically \code{/usr/bin/python3}. PilotProxy must also be importable by that interpreter. The supported guide setup is an editable source checkout, whose wrapper supplies the checkout's \code{src/} path to the child process. If using a wheel instead, install PilotProxy for the GNU Radio interpreter or provide an explicit compatible \code{PYTHONPATH}; installing it only in the CUDA environment is not sufficient. On WSL, the CUDA driver path is commonly \code{/usr/lib/wsl/lib}; verify it on the target host.
+The CUDA environment stays active for the examples below. The \code{generate-atsc} command and the GNU Radio noise source invoke the interpreter supplied through \code{--gnuradio-python}, typically \code{/usr/bin/python3}, and PilotProxy must also be importable by that interpreter. This guide supports an editable source checkout, whose wrapper supplies the \code{src/} path of the checkout to the child process. With a wheel, PilotProxy must be installed for the GNU Radio interpreter or reached through an explicit compatible \code{PYTHONPATH}, since an installation in the CUDA environment alone is not visible to that interpreter. On WSL, the CUDA driver path is commonly \code{/usr/lib/wsl/lib}, and it is verified on the target host.
 
 On WSL, adding the Python environment's \code{lib/} directory to
 \code{LD_LIBRARY_PATH} can make \code{/usr/bin/bash} load that environment's
 \code{libtinfo.so.6} and print a \code{no version information available}
-warning. The examples require only the CUDA driver path. Pass
-\code{--no-python-user-site} to \code{generate-atsc} when user-site packages shadow the NumPy build used by GNU Radio; the evaluator's GNU Radio noise subprocess already disables the user site.
+warning. The examples require only the CUDA driver path. When user-site packages shadow the NumPy build used by GNU Radio, \code{--no-python-user-site} is passed to \code{generate-atsc}. The GNU Radio noise subprocess of the evaluator already disables the user site.
 
 \section{Build and Test}
 
 \subsection{Build the CUDA Kernel}
 
-Build for the target GPU architecture:
+The kernel is built for the target GPU architecture with:
 \begin{lstlisting}[style=shell]
 make build-kernel   # SM auto-detected; pass SM=<arch> to override
 \end{lstlisting}
@@ -264,22 +263,22 @@ This builds \code{cuda/libpilotproxy.so} and stages a copy to:
 \begin{lstlisting}[style=shell]
 ~/.cache/pilot_proxy/libpilotproxy.so
 \end{lstlisting}
-On WSL, the cached copy avoids loading the shared library directly from \code{/mnt/c}.  If you rebuild only under \code{cuda/}, remove the staged copy with:
+On WSL, the cached copy avoids loading the shared library directly from \code{/mnt/c}. After a rebuild under \code{cuda/} alone, the staged copy is removed with:
 \begin{lstlisting}[style=shell]
 make clean-cache
 \end{lstlisting}
 
 \subsection{Run Tests}
 
-Run Python tests:
+The Python tests are run with:
 \begin{lstlisting}[style=shell]
 python -m pytest tests -q
 \end{lstlisting}
-Run CUDA/kernel tests on a CUDA-capable host:
+The CUDA and kernel tests are run on a CUDA-capable host with:
 \begin{lstlisting}[style=shell]
 make -C cuda test DP4A=1   # SM auto-detected
 \end{lstlisting}
-The repository separates Python, CPU, CUDA, and GNU Radio checks. Record the commit, host, and commands for each release test. A Python-only result does not establish CUDA or GNU Radio behavior, so run those checks on a suitable target before tagging a release.
+The Python, CPU, CUDA, and GNU Radio checks are run as distinct suites, and the commit, host, and commands are recorded for each release test. A Python-only result says nothing about CUDA or GNU Radio behavior, so those checks are run on a suitable target before a release is tagged.
 
 \section{Quickstart}
 
@@ -287,7 +286,7 @@ The provided script exercises the main standalone path:
 \begin{lstlisting}[style=shell]
 bash examples/quickstart.sh   # GPU architecture auto-detected
 \end{lstlisting}
-The output includes a waveform audit, detector-input generation, an SNR evaluation, and detection JSON. The current summary headings are shown below. Numeric rows are intentionally omitted here; rerun the script on the target commit and treat that recorded output as the result.
+The output has a waveform audit, the detector-input generation, an SNR evaluation, and the detection JSON. The summary headings are shown below. Numeric rows are not reproduced here, since the result is the output recorded when the script is rerun on the target commit.
 \begin{lstlisting}[style=shell]
 frequency_offset_hz, requested_data_shelf_snr_db,
 measured_truth_data_shelf_snr_db, cpu_float_estimated_data_shelf_snr_db,
@@ -302,7 +301,7 @@ estimated_data_shelf_snr_db_mean
 
 \subsection{Generate a Reference ATSC Signal}
 
-Generate the reference ATSC waveform. GNU Radio runs under the interpreter given by \code{--gnuradio-python}:
+The reference ATSC waveform is generated under the GNU Radio interpreter given by \code{--gnuradio-python}:
 \begin{lstlisting}[style=shell]
 pilot-proxy generate-atsc \
   --gnuradio-python /usr/bin/python3 \
@@ -312,14 +311,14 @@ pilot-proxy generate-atsc \
 
 \subsection{Audit the Reference Waveform}
 
-Audit the generated waveform before detector evaluation:
+The generated waveform is audited before detector evaluation:
 \begin{lstlisting}[style=shell]
 pilot-proxy audit-atsc \
   --input-iq generated/atsc/atsc_8vsb_complex64.cfile
 \end{lstlisting}
 The audit records the pilot frequency, pilot-to-data power, occupied bandwidth, shelf flatness, and edge rolloff. The field \field{measured_pilot_to_data_power_db} is the signed quantity \(10\log_{10}(P_{\mathrm{pilot}}/P_{\mathrm{data}})\). The field \field{measured_pilot_below_data_db} records its positive magnitude when the pilot is below the data shelf.
 
-\notebox{The audit reports pilot frequency in the generated complex-baseband coordinate.  For physical channel 14, the baseband pilot corresponds to an RF pilot at 470.309441 MHz after reference-band placement.}
+\notebox{The audit reports pilot frequency in the generated complex-baseband coordinate. For physical channel 14, the baseband pilot corresponds to an RF pilot at 470.309441 MHz after reference-band placement.}
 
 \section{Reference Channelizer and Detector Resolution}
 
@@ -338,15 +337,15 @@ Detector window & \ppDetectorWindowSamples\ samples \\ \hline
 Detector-bin width & \ppDetectorBinHz\ Hz \\ \hline
 Fine-bin width (padded) & \ppFineBinHz\ Hz (\ppFineNumBins\ bins per detector bin span) \\ \hline
 \end{longtable}
-This geometry gives a \ppDetectorBinHz\ Hz detector-bin width; the default pilot-to-shelf conversion is valid for this stated geometry, and another receiver must supply its measured or modeled effective noise bandwidth. Throughout this guide, ``detector bin'' names the \ppDetectorBinHz\ Hz resolution set by the \(K=\ppDetectorWindowSamples\) window, and ``fine bin'' names the \ppFineBinHz\ Hz resolution of the padded window-axis FFT described in Section~\ref{sec:fineproducts}.
+This geometry gives a detector-bin width of \ppDetectorBinHz\ Hz. The default pilot-to-shelf conversion is valid for this geometry only, and another receiver must supply its measured or modeled effective noise bandwidth. In this guide, the \ppDetectorBinHz\ Hz resolution set by the \(K=\ppDetectorWindowSamples\) window is known as the \emph{detector bin}, and the \ppFineBinHz\ Hz resolution of the padded window-axis FFT described in Section~\ref{sec:fineproducts} is known as the \emph{fine bin}.
 
 \section{Channel Selection}
 
-List physical channels supported by the shipped weight bank:
+The physical channels supported by the shipped weight bank are listed with:
 \begin{lstlisting}[style=shell]
 pilot-proxy list-channels
 \end{lstlisting}
-The included weights cover physical channels 14 through 36. The frequency helpers accept other UHF channels, but the detector still requires a matching row in the weight manifest. The standalone ascending-frequency reference coordinate places channels 14, 21, and 36 at coarse indices 179, 287, and 517. The shipped post-Nyquist-zone-normalization CHIME manifest, which \code{list-channels} reports, stores the same targets at 843, 735, and 505. Do not compare an index without naming its coordinate system.
+The shipped weights cover physical channels 14 through 36. The frequency helpers accept other UHF channels, but the detector still requires a matching row in the weight manifest. In the standalone reference coordinate, which ascends in frequency, channels 14, 21, and 36 are at coarse indices 179, 287, and 517. The shipped CHIME manifest, in the post-Nyquist-zone-normalization coordinate reported by \code{list-channels}, stores the same targets at 843, 735, and 505. An index is therefore compared with another only when both name their coordinate system.
 
 The default channel is physical channel 14:
 \begin{equation}
@@ -356,24 +355,25 @@ In the shipped DC-centered bank, physical channel 14 tests a coarse-channel boun
 
 \section{Quantize and Create Detector Input}
 
-Create a packed detector matrix:
+A packed detector matrix is created with:
 \begin{lstlisting}[style=shell]
 pilot-proxy quantize \
   --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
   --physical-channel 14 \
   --frame-size-samples 16384
 \end{lstlisting}
-This example uses a 16,384-sample frame because that is the checked-in CHIME
-reference profile. In integration, the frame size is matched to the
-correlator's frame rather than chosen freely and must be a positive multiple of
-the selected detector window. The detector core supports \(K=64\) and
-\(K=128\); the CHIME profile selects \(K=128\), while the CHORD profiles select
-\(K=64\). The CHIME F-engine upgrade target this repository designs for is
-\(2^{14}=16384\), not a statement about the currently deployed CHIME
-correlator. The software does not infer one universal frame size from HDF5
-metadata: set \code{chime-run --frame-size-samples} from verified product
-information, and set the Pilot Proxy CHIME instrument \code{nfft} used by
-\code{chime-scan}. Record the resolved value with each real-data product.
+This example uses a 16384-sample frame, the frame of the checked-in CHIME
+reference profile. In an integration, the frame size is matched to the frame of
+the correlator, and it must be a positive multiple of the selected detector
+window. The detector core supports \(K=64\) and \(K=128\). The CHIME profile
+selects \(K=128\), while the CHORD profiles select \(K=64\). This repository is
+designed for the CHIME F-engine upgrade target of \(2^{14}=16384\) samples, and
+this value makes no statement about the CHIME correlator deployed today. Since
+the software infers no universal frame size from HDF5 metadata,
+\code{chime-run --frame-size-samples} is set from verified product information,
+and the Pilot Proxy CHIME instrument \code{nfft} used by \code{chime-scan} is
+set from the same information. The resolved value is recorded with each
+real-data product.
 
 The output matrix is row-major and has shape \code{(rows, K)} or
 \code{(batch, rows, K)} with dtype \code{int8}, where \code{K} is the selected
@@ -382,7 +382,7 @@ passing pointers to the kernel.
 
 \section{Evaluate Shelf-SNR Response}
 
-Run the synthetic evaluator with the CUDA backend. This example shows the WSL driver path:
+The synthetic evaluator is run with the CUDA backend, here with the WSL driver path:
 \begin{lstlisting}[style=shell]
 LD_LIBRARY_PATH=/usr/lib/wsl/lib \
 pilot-proxy evaluate-snr \
@@ -405,10 +405,10 @@ Outputs are written under \code{generated/dtv_snr_eval/}:
 If neither explicit \code{--requested-data-shelf-snr-db} values nor an
 \code{--snr-start-db}/\code{--snr-stop-db}/\code{--snr-step-db} range is
 provided, the evaluator sweeps from \(-60\dB\) to \(0\dB\) in 3 dB steps.
-Each \code{--noise-trials} entry adds one independently generated noise frame
-at every requested SNR and frequency offset. Use several trials per point when
-the objective is a response curve. The GNU Radio noise path exercises more of
-the reference signal chain, while the Python noise path reduces runtime for a
+Each trial counted by \code{--noise-trials} adds one independently generated
+noise frame at every requested SNR and frequency offset, so a response curve
+needs several trials per point. The GNU Radio noise path exercises more of the
+reference signal chain, while the Python noise path reduces the runtime of a
 large sweep:
 \begin{lstlisting}[style=shell]
 LD_LIBRARY_PATH=/usr/lib/wsl/lib \
@@ -421,15 +421,15 @@ pilot-proxy evaluate-snr \
   --noise-trials 10 \
   --noise-source python
 \end{lstlisting}
-This configuration produces 210 detector frames: 10 frames at each of 21 SNR
-values. Ten trials are useful for checking the workflow but do not by themselves
-support a publication uncertainty claim. Choose the final trial count from the
-precision required for the plotted interval and record that choice. Add
-\code{--standard-frequency-offset-sweep} when the \(-1\mathrm{kHz}\),
-\(0\mathrm{Hz}\), and \(+1\mathrm{kHz}\) curves are needed; this triples the
-number of evaluated offset conditions.
+This configuration produces 210 detector frames, with 10 frames at each of 21
+SNR values. Ten trials are enough to check the workflow, but they do not support
+an uncertainty claim in a publication. The final trial count is chosen from the
+precision required for the plotted interval, and that choice is recorded. When
+the \(-1\mathrm{kHz}\), \(0\mathrm{Hz}\), and \(+1\mathrm{kHz}\) curves are
+needed, \code{--standard-frequency-offset-sweep} triples the number of evaluated
+offset conditions.
 
-Large sweeps do not require a GPU. With \code{--detector-backend cpu-reference}, the primary fields come from the integer CPU reference and each row records the backend. Before interpreting a CPU-only sweep as representative of the CUDA implementation, compare a small same-seed sample across both backends, for example:
+Large sweeps require no GPU. With \code{--detector-backend cpu-reference}, the primary fields come from the integer CPU reference, and each row records the backend. Before a CPU-only sweep is taken as representative of the CUDA implementation, a small sample with the same seed is compared on both backends, for example with:
 \begin{lstlisting}[style=shell]
 pilot-proxy evaluate-snr \
   --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
@@ -442,25 +442,25 @@ pilot-proxy evaluate-snr \
   --detector-backend cpu-reference
 \end{lstlisting}
 
-For a CUDA-backed sweep, render the grouped result without plot smoothing:
+For a CUDA-backed sweep, the grouped result is rendered without plot smoothing:
 \begin{lstlisting}[style=shell]
 pilot-proxy plot-results
 \end{lstlisting}
-The CSV, JSON, and PNG use the same grouped summary values. The current plot helper hard-labels its selected fixed-point series ``GPU fixed-point.'' Do not use that label for a \code{cpu-reference} result: plot the CSV directly or relabel the series ``CPU fixed-point,'' and retain the recorded \field{detector_backend} with the figure.
+The CSV, JSON, and PNG use the same grouped summary values. The plot helper labels its selected fixed-point series ``GPU fixed-point'' in every case. For a \code{cpu-reference} result that label is wrong, so the CSV is plotted directly or the series is relabeled ``CPU fixed-point,'' and the recorded \field{detector_backend} is kept with the figure.
 
 \begin{figure}[H]
 \centering
 \IfFileExists{../generated/dtv_snr_eval/dtv_snr_sweep.png}{%
 \includegraphics[width=0.92\linewidth]{../generated/dtv_snr_eval/dtv_snr_sweep.png}
-\caption{Example shelf-SNR response for the stated synthetic configuration: \(-60\dB\) to \(0\dB\) in 3 dB steps, 10 Python-noise trials per point, one input stream, and no smoothing. The diagonal is an input-equals-output reference. The curves compare the unquantized floating-point model with the selected packed-int4 fixed-point backend. Ten trials per point demonstrate the workflow but do not define the uncertainty of a publication result.}
+\caption{Example shelf-SNR response for the synthetic configuration of this section, from \(-60\dB\) to \(0\dB\) in 3 dB steps, with 10 Python-noise trials per point, one input stream, and no smoothing. The diagonal marks equal input and output SNR. The two curves are the unquantized floating-point model and the selected packed-int4 fixed-point backend. Ten trials per point demonstrate the workflow and do not set the uncertainty of a publication result.}
 }{%
-\fbox{\parbox{0.86\linewidth}{\centering The optional generated SNR sweep figure was not found. Run the validation sweep and plot workflow to create \code{generated/dtv_snr_eval/dtv_snr_sweep.png}.}}
-\caption{Example shelf-SNR response for the stated synthetic configuration: \(-60\dB\) to \(0\dB\) in 3 dB steps, 10 Python-noise trials per point, one input stream, and no smoothing. The diagonal is an input-equals-output reference. The curves compare the unquantized floating-point model with the selected packed-int4 fixed-point backend. Ten trials per point demonstrate the workflow but do not define the uncertainty of a publication result.}
+\fbox{\parbox{0.86\linewidth}{\centering The optional generated SNR sweep figure was not found. The validation sweep and plot workflow create \code{generated/dtv_snr_eval/dtv_snr_sweep.png}.}}
+\caption{Example shelf-SNR response for the synthetic configuration of this section, from \(-60\dB\) to \(0\dB\) in 3 dB steps, with 10 Python-noise trials per point, one input stream, and no smoothing. The diagonal marks equal input and output SNR. The two curves are the unquantized floating-point model and the selected packed-int4 fixed-point backend. Ten trials per point demonstrate the workflow and do not set the uncertainty of a publication result.}
 }
 \label{fig:snr_sweep_10trial}
 \end{figure}
 
-Important report fields include:
+The main report fields are:
 \begin{itemize}
   \item \field{requested_data_shelf_snr_db}
   \item \field{measured_truth_data_shelf_snr_db}
@@ -482,22 +482,22 @@ Important report fields include:
 
 \newpage\section{Detection on a Packed Matrix}
 
-Run detection on a prebuilt packed detector matrix:
+Detection on a prebuilt packed detector matrix is run with:
 \begin{lstlisting}[style=shell]
 LD_LIBRARY_PATH=/usr/lib/wsl/lib \
 pilot-proxy detect \
   --input-detector-matrix generated/detector_input/detector_matrix_i4.npy
 \end{lstlisting}
 The command reads the pilot identity from the \code{metadata.json} sidecar that
-\code{quantize} writes next to the matrix; an explicit
-\code{--physical-channel} or \code{--dtv-pilot-mhz} must agree with it, and
-without either a sidecar or a flag, \code{detect} stops because it cannot select a weight row safely.
-If \code{detector_matrix_i4.npy} is absent but the batched
+\code{quantize} writes next to the matrix, and an explicit
+\code{--physical-channel} or \code{--dtv-pilot-mhz} must agree with it. With
+neither a sidecar nor a flag, \code{detect} stops, because it cannot select a
+weight row safely. If \code{detector_matrix_i4.npy} is absent but the batched
 \code{detector_blocks_i4.npy} file exists, \code{detect} resolves the default
-input to the batched file automatically.  If neither file exists, run
-\code{quantize} first.
+input to the batched file. If neither file exists, \code{quantize} must be run
+first.
 
-The detector JSON includes:
+The detector JSON contains:
 \begin{itemize}
   \item \field{selected_weight_layout}
   \item \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v2}
@@ -505,7 +505,7 @@ The detector JSON includes:
   \item \field{mask_rule}, \field{target_norm_sq}, \field{reference_norm_sum_sq}, and \field{null_power_ratio}
   \item per-block \field{mask} and \field{normalized_positive_excess_mask}, exact powers, \field{coarse_power_ratio}, raw \field{raw_pilot_excess}, norm-corrected \field{normalized_pilot_excess}, and estimated shelf SNR.
 \end{itemize}
-The current \code{detect} command does not apply a user-supplied shelf-SNR threshold. Its threshold fields inside \field{result_schema} are \code{null}, and it masks a valid block at the norm-corrected condition \(F>\mu_0\). The basic raw convention \(F>1\) is useful for defining \(\rho=F-1\), but it is not the CHIME mask rule.
+The \code{detect} command applies no user-supplied shelf-SNR threshold. Its threshold fields in \field{result_schema} are \code{null}, and it masks a valid block at the norm-corrected condition \(F>\mu_0\). The basic raw convention \(F>1\) is used to define \(\rho=F-1\), while the CHIME mask rule is \(F>\mu_0\).
 
 \section{Receiver Integration Contract}
 
@@ -513,23 +513,24 @@ The kernel does not encode telescope metadata. Receiver integrations provide the
 \begin{itemize}
   \item \code{configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json} describes the locked CUDA kernel contract.
   \item \code{receiver_profile.json} describes RF band, channelizer geometry, Nyquist zone, frame size, input streams, quantization defaults, bin ENBW, and pilot-capture efficiency.
-  \item \code{stream_map.json} maps stream indices to feed, polarization, beam, or other receiver-specific identifiers.
+  \item \code{stream_map.json} maps stream indices to feed, polarization, beam, or other receiver-specific labels.
   \item \code{check-profile}, \code{check-layout}, \code{make-weights}, and \code{chime-run} consume the applicable profile or stream-map records. The standalone \code{detect} command selects shipped weights from its sidecar or channel flag, while \code{evaluate-snr} uses the fixed testbench geometry.
 \end{itemize}
 
 \begin{figure}[H]
 \centering
 \input{figures/system_context.tikz}
-\caption{Kotekan's implemented mask path. The detector reads the voltage ring
-and writes a rejection bit, frame powers, and optional rank support for each
-aligned block. The opt-in \code{DtvRfiMask} stage intersects those decisions
-with the existing RFImask; both visibility and sample-count consumers use
-the combined mask. CHIME's diagnostic include remains detect-only.
-See \code{docs/OPERATOR_HANDOFF.md} for receiver qualification.}
+\caption{Mask path implemented in Kotekan. The detector reads the voltage ring
+and writes a rejection bit, the frame powers, and the optional rank support for
+each aligned block. The opt-in \code{DtvRfiMask} stage intersects those
+decisions with the existing RFImask, and both the visibility and sample-count
+consumers use the resulting mask. The diagnostic include for CHIME remains
+detect-only. Receiver qualification is described in
+\code{docs/OPERATOR_HANDOFF.md}.}
 \label{fig:system_context}
 \end{figure}
 
-Useful metadata checks:
+The metadata is checked with:
 \begin{lstlisting}[style=shell]
 pilot-proxy check-profile \
   --receiver-profile configs/receiver_profiles/reference_800mhz_pfb.json
@@ -539,7 +540,7 @@ pilot-proxy check-layout \
   --stream-map configs/stream_maps/chime_feed_pol_example.json
 \end{lstlisting}
 
-Generate receiver-profile-backed weights with:
+Weights backed by a receiver profile are generated with:
 \begin{lstlisting}[style=shell]
 pilot-proxy make-weights \
   --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
@@ -549,18 +550,18 @@ pilot-proxy make-weights \
   --output generated/weights/chime_dtv_weights_k128.bin
 \end{lstlisting}
 
-The CHIME profile has status \code{baseband_frame_verified_2026_07_29}.
-Its 16,384-sample frame represents the planned F-engine upgrade interface used for
-the repository's tests and analysis, not the current deployed correlator. The
-example stream map contains 2,048 feed-polarization entries so the layout check
-exercises the intended row-count contract. Verify both files against the actual
-data product before using them in a telescope run. Neither file is required by
-the standalone ATSC testbench.
+The CHIME profile has the status \code{baseband_frame_verified_2026_07_29}. Its
+16384-sample frame represents the planned F-engine upgrade interface used for
+the tests and analysis of this repository, and it describes no correlator
+deployed today. The example stream map has 2048 feed-polarization entries, so
+the layout check exercises the intended row-count contract. Both files are
+verified against the actual data product before they are used in a telescope
+run. The standalone ATSC testbench requires neither file.
 
 \section{Thresholds}
 \label{sec:thresholds}
 
-For the synthetic threshold path, the user provides \code{threshold_data_shelf_snr_db}. Host code converts it to a rational half-threshold and compares the integer frame powers with the integer threshold terms; the kernel takes no threshold.
+For the synthetic threshold path, the user provides \code{threshold_data_shelf_snr_db}. Host code converts it to a rational half-threshold and compares the integer frame powers with the integer threshold terms, so the kernel takes no threshold.
 
 
 \begin{figure}[H]
@@ -577,7 +578,7 @@ For the synthetic threshold path, the user provides \code{threshold_data_shelf_s
 \draw[->,thick] (c) -- (d);
 \draw[->,thick] (d) -- (e);
 \end{tikzpicture}
-\caption{Synthetic threshold conversion. The user supplies a shelf-SNR threshold, and the host compares the integer frame powers with a fixed-point rational half-threshold.}
+\caption{Synthetic threshold conversion. The user supplies a shelf-SNR threshold, and the host compares the integer frame powers with a fixed-point rational half-threshold. Here, \(S_{\mathrm{shelf,thr}}\) is the shelf-SNR threshold, \(\eta_p\) is the pilot capture efficiency, \(B_{\mathrm{DTV}}\) and \(B_{\mathrm{bin}}\) are the DTV bandwidth and the bin ENBW, \(\rho_{\mathrm{thr}}\) and \(F_{\mathrm{thr}}\) are the raw excess and the power ratio at threshold, and \(N_{\mathrm{half}}/D_{\mathrm{half}}\) is the rational form of the half-threshold.}
 \label{fig:threshold_conversion}
 \end{figure}
 
@@ -598,20 +599,21 @@ slightly unequal, so each weight row has a fixed null point
 \mu_0=\frac{2\,\lVert w_t\rVert^2}
 {\lVert w_{r1}\rVert^2+\lVert w_{r2}\rVert^2}.
 \end{equation}
-The basic raw convention calls \(F>1\) positive excess. The implementation instead masks a valid frame when \(F>\mu_0\), using integer cross
-multiplication. We compute \(\mu_0\) from the packed weights; it is not a mean
+The basic raw convention calls \(F>1\) positive excess. The implementation masks
+a valid frame when \(F>\mu_0\), with the inequality evaluated by integer cross
+multiplication. We compute \(\mu_0\) from the packed weights, and no mean is
 estimated from CANFAR data. This rule corrects the weight-normalization point,
-but it does not supply an empirical false-positive rate or an operational RFI
+but it supplies neither an empirical false-positive rate nor an operational RFI
 severity threshold.
 
-The rule is a recording convention rather than a tuned operating point: the
+The rule is a recording convention and was not tuned as an operating point. The
 rational pair that implements it is per-channel bundle data, and
-\field{coarse_power_ratio} is persisted per frame, so a deployment (or a later
-re-analysis) may move the threshold without any kernel change. The adopted
-Kotekan deployment instead moves the decision itself to the fine
-designated-set CFAR computed in the kernel; the Data Sheet's threshold
-section and \code{docs/DESIGN_DECISIONS.md} record the evaluated
-alternatives and the first survey calibration.
+\field{coarse_power_ratio} is stored for every frame, so a deployment or a later
+re-analysis may move the threshold with no kernel change. The adopted Kotekan
+deployment moves the decision itself to the fine designated-set CFAR computed
+in the kernel. The evaluated alternatives and the first survey calibration are
+recorded in the threshold section of the Data Sheet and in
+\code{docs/DESIGN_DECISIONS.md}.
 
 \section{Standard and Calibrated Conversion}
 
@@ -624,7 +626,7 @@ The standard synthetic conversion uses
 \end{lstlisting}
 The positive field \field{pilot_below_data_db} records how far the pilot power lies below the average data-shelf power. For example, an audit value of \field{measured_pilot_to_data_power_db=-11.9} corresponds to \field{measured_pilot_below_data_db=11.9}.
 
-Use calibrated mode only when a receiver measurement or model supports the overrides:
+Calibrated mode is used only when a receiver measurement or model supports the overrides:
 \begin{lstlisting}[style=shell]
 --pilot-below-data-db VALUE
 --bin-enbw-hz VALUE
@@ -635,61 +637,61 @@ The output report records the values used, so an analysis can reproduce the conv
 \section{Fine Products and Interpretation}
 \label{sec:fineproducts}
 
-The time-coherent front end replaces the reduction after the dot product:
-the windows are integrated coherently (up to \ppCoherentGainDb~dB of
-deflection sensitivity over the all-incoherent reduction) and only the feed
-sum remains incoherent. From the exact \code{int32} row sums, the kernel
-forms a per-frame fine spectrum:
-each weight term's rows reshape to \([N_{\mathrm{streams}},W]\) windows, the
-frozen fixed-point FFT (\code{fxfft256_v1}) along the window axis with
-\(\times\ppFinePadFactor\) zero padding gives
-\ppFineNumBins\ fine bins of \ppFineBinHz\ Hz, and an incoherent sum over
-streams yields the exact \code{uint64} fine powers \(S_n[b]\) and the
-fine-bin statistic \(F_2[b]=2S_t[b]/(S_{r1}[b]+S_{r2}[b])\). The coarse
-statistic is formed from the same spectrum: the frame
-powers are defined as the all-bin sums \(P_n=\sum_b S_n[b]\), so \(F\) is
-exactly the all-bin marginal of the fine spectrum and there is no separate
-coarse power path. Every product stores both, and the readers check
-\(P_n=\sum_b S_n[b]\) exactly.
-The Data Sheet
-and \code{docs/PRODUCT_SCHEMA.md} give the definitions and stored fields;
-\code{docs/METHOD_SPEC.md} states the CFAR calibration.
+In the time-coherent front end, the windows are integrated coherently after the
+dot product, and only the feed sum stays incoherent. The coherent integration gains up to
+\ppCoherentGainDb~dB of deflection sensitivity over a reduction that is
+incoherent in every step. A per-frame fine spectrum is formed by the kernel
+from the exact \code{int32} row sums. First, the rows of each weight term are
+reshaped to \([N_{\mathrm{streams}},W]\) windows. The frozen fixed-point FFT
+(\code{fxfft256_v1}) is then applied along the window axis with
+\(\times\ppFinePadFactor\) zero padding, which gives \ppFineNumBins\ fine bins of
+\ppFineBinHz\ Hz. Finally, an incoherent sum over the streams yields the exact
+\code{uint64} fine powers \(S_n[b]\) and the fine-bin statistic
+\(F_2[b]=2S_t[b]/(S_{r1}[b]+S_{r2}[b])\). The coarse statistic is formed from
+the same spectrum. The frame powers are defined as the all-bin sums
+\(P_n=\sum_b S_n[b]\), so \(F\) is exactly the all-bin marginal of the fine
+spectrum, and no other coarse power path exists. That is, the coarse and fine
+statistics come from one set of fine powers. Every product stores both, and the
+readers check \(P_n=\sum_b S_n[b]\) exactly. The definitions and stored fields
+are given in the Data Sheet and in \code{docs/PRODUCT_SCHEMA.md}, and the CFAR
+calibration is stated in \code{docs/METHOD_SPEC.md}.
 
 In CHIME archive products (\code{pilot-proxy chime-scan}), fine products are
-mandatory, because the frame powers are their sums: \code{--set
+mandatory, because the frame powers are their sums. The option \code{--set
 fine_products} accepts only \code{on} (the default), and a library without the
 row-sum and fine-power entries fails at launch. The only product without fine
-terms is a pilot outside the measured band
+terms is that of a pilot out of the measured band
 (\field{fine_status=not_applicable_pilot_out_of_band}).
 
 \begin{figure}[H]
 \centering
 \input{figures/detector_datapath.tikz}
-\caption{Detector datapath in the filterbank view: a selected-bin DFT
-filterbank (stage 1, detector bins) followed by the padded window-axis
-FFT (stage 2, fine bins) --- a standard two-stage zoom channelization that
-computes only the channels the detector needs.}
+\caption{Detector datapath drawn as a filterbank. Stage 1 is a selected-bin DFT
+filterbank that produces the detector bins, and stage 2 is the padded
+window-axis FFT that produces the fine bins. The two stages form a standard
+two-stage zoom channelization that computes only the channels the detector
+needs.}
 \label{fig:detector_datapath}
 \end{figure}
 
-Reading the products: designated bin 0 is the nominal ATSC pilot. A real
-transmitter rarely sits exactly there --- full-power stations hold a
-\(\pm1\) kHz tolerance and translator-class stations carry no specified
-tolerance --- so a genuine pilot typically appears as a persistent detected
-line at a fixed nonzero offset within the fine span (half a detector bin on
-either side of nominal), while the designated bin itself may rarely fire. The any-bin
-decision rule exists for exactly this case. Two consequences follow. First,
-identify a transmitter by the stability of its offset across frames and
-epochs, not by designated-bin hits. Second, on DTV-occupied channels the
-offset pilot lives in non-designated bins, so
-\field{fine_null_bulk_exceedance_fraction} can read high there. This field is
-the in-sample fraction of fitted null-bulk bins above the fitted threshold; it
-is not an independently measured false-alarm rate. Interpret it together with
-the stored fine spectrum and the detected-line stability across frames.
+In the products, designated bin 0 is the nominal ATSC pilot. A real transmitter
+is rarely exactly there. Full-power stations hold a \(\pm1\) kHz tolerance, and
+translator-class stations have no specified tolerance. A genuine pilot
+therefore typically appears as a persistent detected line at a fixed nonzero
+offset in the fine span (half a detector bin on either side of nominal), and
+the designated bin itself may rarely fire. The any-bin decision rule exists for
+this case. Two consequences follow. First, a transmitter is recognized by the
+stability of its offset over frames and epochs, and designated-bin hits are a
+poor guide. Second, on DTV-occupied channels the offset pilot lies in
+non-designated bins, so \field{fine_null_bulk_exceedance_fraction} can be high
+there. This field is the in-sample fraction of fitted null-bulk bins above the
+fitted threshold, and it is not an independently measured false-alarm rate. It
+is read together with the stored fine spectrum and the stability of the
+detected line over frames.
 
 \section{C API Overview}
 
-The public C API is declared in \code{cuda/pilotproxy_detector.h}. In this example, \code{d_in}, \code{d_fine_power_out}, and \code{d_power_out} are device pointers; \code{host_weights} is a host pointer. A typical measurement call is
+The public C API is declared in \code{cuda/pilotproxy_detector.h}. In this example, \code{d_in}, \code{d_fine_power_out}, and \code{d_power_out} are device pointers, and \code{host_weights} is a host pointer. A typical measurement call is
 \begin{lstlisting}[style=cstyle,language=C]
 int K, N, bits, ref_offset;
 PilotProxy_GetSpecs(&K, &N, &bits, &ref_offset);
@@ -718,11 +720,11 @@ and host code then computes
 \begin{equation}
   F=\frac{2P_t}{P_{r1}+P_{r2}}
 \end{equation}
-and the norm-corrected mask in exact integer arithmetic; the library forms no
-ratio and no coarse mask. A zero denominator cannot
-define \(F\): the host marks the frame invalid and forces its mask to zero, so
-Python callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before
-interpreting any conversion. The deployed mask bit comes from
+and the norm-corrected mask in exact integer arithmetic, so the library forms no
+ratio and no coarse mask. \(F\) is undefined for a zero denominator. In that
+case, the host marks the frame invalid and forces its mask to zero, so Python
+callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before they
+interpret any conversion. The deployed mask bit comes from
 \apicode{PilotProxy_Compute_FusedFineMask_U64} or
 \apicode{PilotProxy_Compute_FusedFineMaskWithSupport_U64}.
 
@@ -734,92 +736,96 @@ if (PilotProxy_Supports_RowSums()) {
     PilotProxy_Compute_RowSums_I32(h, host_weights, d_matched_filter_row_projections_out);
 }
 \end{lstlisting}
-The values are exact integers, the input of
-\apicode{PilotProxy_Compute_FinePowers_U64}; the staged path sums that stage's
-fine powers over bins on the host and obtains the same frame powers as the
-fused entry, bit for bit. Rows keep the packer's stream-major order, so a term
-slice reshapes to \code{[num_streams, windows_per_stream]} with no gather.
+The values are exact integers and are the input of
+\apicode{PilotProxy_Compute_FinePowers_U64}. In the staged path, the fine powers
+of that stage are summed over bins on the host, and the frame powers obtained
+are bit for bit the same as those of the fused entry. Rows keep the
+stream-major order of the packer, so a term slice reshapes to
+\code{[num_streams, windows_per_stream]} with no gather.
 
-In deployment terms, only the per-frame \code{mask} (1 = reject) crosses
-the proposed interface; the fine-power, frame-power and row-sum readbacks
-feed the archive science products and diagnostics.
+In deployment, only the per-frame \code{mask} (1 = reject) crosses the proposed
+interface, and the fine-power, frame-power, and row-sum readbacks feed the
+archive science products and diagnostics.
 
 \section{JSON Output Policy}
 
-JSON reports do not emit NaN or infinity; values that are not finite are serialized as \code{null}. CSV files may retain NaN text when analysis software can represent it.
+JSON reports emit no NaN or infinity, and values that are not finite are serialized as \code{null}. CSV files may keep NaN text when the analysis software can represent it.
 
-Detector and synthetic SNR-evaluator JSON reports include \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v2}. This object records the statistic definition, layout, calibration constants, threshold conversion, fixed-point contract, and mask convention needed to interpret those reports. Audit, quantization, summary, injection, and CHIME products use their own documented top-level schemas; in particular, CHIME per-pilot archive products use \field{schema_version}=\texttt{\ppPerPilotSchema} as defined in \code{docs/PRODUCT_SCHEMA.md}.
+Detector and synthetic SNR-evaluator JSON reports carry \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v2}. This object records the statistic definition, layout, calibration constants, threshold conversion, fixed-point contract, and mask convention needed to interpret those reports. Audit, quantization, summary, injection, and CHIME products use their own documented top-level schemas. CHIME per-pilot archive products, for example, use \field{schema_version}=\texttt{\ppPerPilotSchema} as defined in \code{docs/PRODUCT_SCHEMA.md}.
 
-The combined-row statistic is:
+The statistic over summed blocks is:
 \begin{equation}
 F = \frac{2\sum_r P_{t,r}}{\sum_r P_{r1,r}+\sum_r P_{r2,r}},
 \end{equation}
 where \(r\) indexes the summed blocks and each \(P_{n,r}\) is a frame power,
 the all-bin sum of that block's fine powers. We sum powers first and form one
-ratio; averaging per-block power ratios would define a different estimator.
+ratio, since an average of per-block power ratios would define a different
+estimator.
 
-When a product averages masked data, it excludes rejected blocks rather than zero-filling them:
+When a product averages masked data, rejected blocks are excluded from both the
+sum and the count, and no zero is filled in their place:
 \begin{equation}
 \bar{P}_{\mathrm{after}} =
 \frac{\sum_b P_b(1-M_b)}{\sum_b (1-M_b)}.
 \end{equation}
-Here \(M_b=1\) excludes block \(b\).
+Here, \(M_b=1\) excludes block \(b\).
 
 \section{Result Summaries}
 
-Use the summary helper to reduce a result file to compact CSV and JSON statistics:
+The summary helper reduces a result file to compact CSV and JSON statistics:
 \begin{lstlisting}[style=shell]
 pilot-proxy summarize-results \
   --input generated/dtv_snr_eval/dtv_snr_eval.json \
   --output-dir generated/summary
 \end{lstlisting}
-This writes \code{summary.csv} and \code{summary.json}. For an SNR sweep, the
-command skips histograms because the input mixes distinct requested-SNR
-populations. A histogram is easier to interpret for repeated trials at one
-fixed SNR. Use \code{--histograms always} only when that mixed distribution is
-intentionally part of the diagnostic.
+This command writes \code{summary.csv} and \code{summary.json}. For an SNR
+sweep, histograms are skipped, because the input mixes populations at different
+requested SNRs. A histogram is easier to interpret for repeated trials at one
+fixed SNR, and \code{--histograms always} is used only when the mixed
+distribution is meant to be part of the diagnostic.
 
 \section{Known Limitations}
 
 \begin{itemize}
-  \item The synthetic testbench models GNU Radio ATSC 1.0 signals. It does not model other broadcast standards or establish telescope performance.
+  \item The synthetic testbench models GNU Radio ATSC 1.0 signals only. Other broadcast standards and telescope performance are not covered.
   \item The CHIME real-data workflow (\code{chime-run}, \code{chime-scan}, and the HDF5 reader) is documented in \code{docs/CANFAR_RUNBOOK.md} and \code{docs/CHIME_RUN_WORKFLOW.md}.
-  \item The checked-in CHIME profile and stream map must still agree with the data product being processed. The 16,384-sample frame is the planned F-engine upgrade profile used by this repository, not a claim about the current deployed frame. \code{chime-run} uses its explicit override, and \code{chime-scan} uses the Pilot Proxy CHIME instrument \code{nfft}; neither path should be described as automatically discovering a universal HDF5 frame size.
-  \item Synthetic threshold tests accept a shelf-SNR threshold. The CHIME path instead uses $F>\mu_0$, with \(\mu_0\) fixed by the weight norms. Neither rule is an empirically calibrated telescope false-positive threshold.
-  \item Receiver profiles define an adapter contract; they do not establish that a telescope pipeline has been deployed or validated.
-  \item Installed packages carry the weight bank and \code{configs/} resources, so default-resource commands can run outside the repository. Repository-relative examples, helper scripts, second-interpreter subprocesses, and the CUDA build require a checkout or explicit paths. The CUDA kernel itself is not packaged and builds from the cloned source tree (\code{make build-kernel}).
-  \item Fine products are mandatory: the frame powers are their all-bin sums, so a library without the row-sum and fine-power entries fails at launch, and \code{fine_products} accepts only \code{on}.
+  \item The checked-in CHIME profile and stream map must still agree with the data product being processed. The 16384-sample frame is the planned F-engine upgrade profile used by this repository and makes no claim about the frame deployed today. \code{chime-run} uses its explicit override, and \code{chime-scan} uses the Pilot Proxy CHIME instrument \code{nfft}. Neither path discovers a universal HDF5 frame size.
+  \item Synthetic threshold tests accept a shelf-SNR threshold, while the CHIME path uses $F>\mu_0$, with \(\mu_0\) fixed by the weight norms. Neither rule is a telescope false-positive threshold calibrated on data.
+  \item Receiver profiles define an adapter contract. A profile does not show that a telescope pipeline has been deployed or validated.
+  \item Installed packages carry the weight bank and \code{configs/} resources, so default-resource commands can run from any directory. Repository-relative examples, helper scripts, second-interpreter subprocesses, and the CUDA build require a checkout or explicit paths. The CUDA kernel itself is not packaged and builds from the cloned source tree (\code{make build-kernel}).
+  \item Fine products are mandatory, because the frame powers are their all-bin sums. A library without the row-sum and fine-power entries fails at launch, and \code{fine_products} accepts only \code{on}.
 \end{itemize}
 
 \section{Troubleshooting}
 
 \subsection{GNU Radio imports fail}
-Use the system GNU Radio Python, typically \code{/usr/bin/python3}. Confirm that it can import PilotProxy from the editable checkout or an explicit \code{PYTHONPATH}; a wheel installed only in the CUDA environment is not visible to it. Set \code{PYTHONNOUSERSITE=1} when user-site packages shadow the GNU Radio NumPy build.
+The system GNU Radio Python, typically \code{/usr/bin/python3}, must be able to import PilotProxy from the editable checkout or through an explicit \code{PYTHONPATH}. A wheel installed only in the CUDA environment is not visible to it. \code{PYTHONNOUSERSITE=1} is set when user-site packages shadow the GNU Radio NumPy build.
 
 \subsection{CUDA shared library not found}
-Run \code{make build-kernel SM=<target>} and ensure \code{LD_LIBRARY_PATH} includes the CUDA driver path. On WSL, this is commonly \code{/usr/lib/wsl/lib}; verify the target host and prefer the staged cache copy under \code{~/.cache/pilot_proxy/}.
+The library is rebuilt with \code{make build-kernel SM=<target>}, and \code{LD_LIBRARY_PATH} must hold the CUDA driver path. On WSL, this path is commonly \code{/usr/lib/wsl/lib}, and it is verified on the target host. The staged cache copy under \code{~/.cache/pilot_proxy/} is preferred.
 
 \subsection{Wrong detector matrix shape}
 The packed detector matrix must have dtype \code{int8} and last dimension equal
-to the selected compiled detector window (64 or 128). Use
-\code{pilot-proxy quantize} to build the expected format.
+to the selected compiled detector window (64 or 128). \code{pilot-proxy quantize}
+builds the expected format.
 
 \subsection{No weights for channel}
-The shipped bank covers physical channels 14-36.  Use \code{pilot-proxy list-channels} to list available targets.
+The shipped bank covers physical channels 14 through 36, and \code{pilot-proxy list-channels} lists the available targets.
 
 \subsection{PNR is null}
-If \(F\leq1\), the raw pilot-excess ratio is non-positive and \(10\log_{10}(F-1)\) is undefined. The JSON value is therefore \code{null}; this can occur for noise-only and weak-signal trials.
+If \(F\leq1\), the raw pilot-excess ratio is non-positive and \(10\log_{10}(F-1)\) is undefined. The JSON value is therefore \code{null}, which can occur for noise-only and weak-signal trials.
 
 \subsection{A scan fails at launch for want of fine powers}
-The loaded \code{libpilotproxy.so} lacks the row-sum or fine-power entry, or is
-from another core major. Rebuild and restage it with \code{make build-kernel},
-confirm \code{PilotProxy_Supports_RowSums()} and \code{PilotProxy_Supports_FinePowers()}
-return 1 (the kernel-load check in \code{scripts/setup_env.sh} prints the loaded
-version), and relaunch. There is no degraded mode: the frame powers are the
-sums of the fine powers.
+The loaded \code{libpilotproxy.so} lacks the row-sum or fine-power entry, or it
+is from another core major. The library is rebuilt and restaged with
+\code{make build-kernel}, \code{PilotProxy_Supports_RowSums()} and
+\code{PilotProxy_Supports_FinePowers()} are confirmed to return 1 (the
+kernel-load check in \code{scripts/setup_env.sh} prints the loaded version), and
+the scan is relaunched. No degraded mode exists, because the frame powers are
+the sums of the fine powers.
 
-\subsection{High nd flag rate on an occupied channel}
-\field{fine_null_bulk_exceedance_fraction} counts detections in non-designated bins. A real transmitter at a nonzero pilot offset occupies those bins persistently, so a high rate on a DTV-occupied channel is expected signal (see Section~\ref{sec:fineproducts}). Evaluate CFAR calibration on channels without detected lines instead.
+\subsection{High null-bulk exceedance fraction on an occupied channel}
+\field{fine_null_bulk_exceedance_fraction} counts detections in non-designated bins. A real transmitter at a nonzero pilot offset occupies those bins persistently, so a high fraction on a DTV-occupied channel is the expected signal (see Section~\ref{sec:fineproducts}). The CFAR calibration is evaluated on channels without detected lines.
 
 \begin{thebibliography}{9}
 \bibitem{atsc_a53_part2_2011} Advanced Television Systems Committee, \emph{ATSC Digital Television Standard, Part 2: RF/Transmission System Characteristics}, A/53 Part 2:2011, 15 December 2011. \url{https://www.atsc.org/wp-content/uploads/2021/04/A53-Part-2-2011.pdf}

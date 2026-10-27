@@ -23,7 +23,7 @@ _SPEC.loader.exec_module(v5_fixture)
 def product_path(tmp_path):
     path = v5_fixture._write_product(tmp_path / "506.npz", 36)
     # the frame-health gate reads the per-frame baseband power, which the
-    # threshold fixture does not carry; add an in-range value per frame
+    # threshold fixture does not carry, so an in-range value is added per frame
     with np.load(path, allow_pickle=False) as product:
         frames = int(np.asarray(product["valid"]).shape[0])
     v5_fixture._replace(path, baseband_power_linear=np.full((frames, 1), 4.0))
@@ -68,19 +68,19 @@ def test_geometry_axes_round_trip(product_path):
         for b in (0.0, 17.5, 8191.0, 16000.25):
             back = g.psd_bin_of_rf_offset(g.psd_rf_offset_hz([b]))
             assert back[0] == pytest.approx(b % NFFT, abs=1e-6)
-        # the channel-centre line sits at (center - pilot) from the nominal pilot
+        # the channel-center line is at (center - pilot) from the nominal pilot
         assert g.psd_rf_offset_hz([0])[0] == pytest.approx(g.centre_line_rf_offset_hz)
 
 
 def test_grid_residual_and_rf_conversion_follow_the_receiver_sense():
-    # channel 36: pilot 602.309441 MHz, center 602.343750 MHz, sense -1 -> +739.7 Hz, bin 62
+    # channel 36: pilot 602.309441 MHz, center 602.343750 MHz and sense -1 give +739.7 Hz, bin 62
     residual = grid_residual_hz(602_309_441.0, 602_343_750.0, -1)
     assert residual == pytest.approx(739.7, abs=0.1)
     assert fine_bin_of_hz(residual) == 62
-    # an anchor one fine bin above the residual is one bin LOWER in RF under sense -1
+    # an anchor one fine bin above the residual is one bin lower in RF under sense -1
     rf = fine_offset_to_rf_hz(residual + FINE_BIN_HZ, residual, -1)
     assert rf == pytest.approx(-FINE_BIN_HZ)
-    # unwrapping: a fine offset half a coarse bin away wraps to the other edge, not beyond it
+    # unwrapping: an offset past half a coarse bin wraps into the coarse bin about zero
     rf_wrap = fine_offset_to_rf_hz(residual - COARSE_BIN_HZ + 5.0, residual, -1)
     assert rf_wrap == pytest.approx(-5.0)
     np.testing.assert_allclose(fine_hz_of_bin([0, 1, 255, 128]), [0.0, FINE_BIN_HZ, -FINE_BIN_HZ, -128 * FINE_BIN_HZ])
@@ -104,7 +104,7 @@ def test_fine_terms_rows_match_the_full_member(product_path):
         np.testing.assert_array_equal(p.fine_terms(rows), p.fine_terms_all()[rows])
 
 
-# ------------------------------------------------------------------ blocks
+# blocks
 def _synthetic_units(n_units=40, frames_per_unit=5, start=1.6e9, spacing=86400.0 * 3):
     unit_index = np.repeat(np.arange(n_units), frames_per_unit)
     unit_time0 = start + np.arange(n_units) * spacing
@@ -116,7 +116,7 @@ def test_month_support_applies_the_section_8_1_minimums():
     unit_index, unit_time = _synthetic_units(n_units=12, frames_per_unit=6, spacing=86400.0 * 2)  # ~24 days
     months = blocks.month_support(unit_time, unit_index, np.ones(unit_index.size, bool))
     assert months and all(m.frames >= 30 and m.units >= 5 and m.days >= 3 for m in months)
-    # too few acquisitions in a month -> not populated
+    # a month with too few acquisitions is not populated
     few = blocks.month_support(unit_time, unit_index, np.ones(unit_index.size, bool), min_units=100)
     assert few == []
     label = blocks.month_label(2026 * 12 + 8)
@@ -158,7 +158,7 @@ def test_block_bootstrap_resamples_acquisitions_with_a_recorded_seed():
     assert a.estimate == pytest.approx(flag.mean())
     assert a.values == b.values and a.blocks == 30
     assert a.low <= a.estimate <= a.high
-    # frames are never resampled individually: every replicate's weights are constant within an acquisition
+    # frames are never resampled one at a time, so the weights of every replicate are constant over an acquisition
     with pytest.raises(ValueError, match="at least"):
         blocks.block_bootstrap(unit_index, unit_index < 3, stat)      # three acquisitions only
 

@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# CANFAR probe bootstrap v2 -- pilot-proxy v5 archive run, frozen tag.
-# Run inside ONE CANFAR session terminal. The session MUST use
-# images.canfar.net/skaha/astroml-cuda:latest -- the non-CUDA astroml
-# image has a GPU and driver but no toolkit, and cupy cannot JIT there.
+# CANFAR probe bootstrap for the pilot-proxy v5 archive run at the frozen tag.
+# Run in one CANFAR session terminal. The session must use
+# images.canfar.net/skaha/astroml-cuda:latest. The non-CUDA astroml image
+# has a GPU and driver but no toolkit, and cupy cannot JIT there.
 #   bash /arc/home/$CANFAR_USER/pp_switch/canfar_probe_bootstrap.sh
-# v2: phase 3 now restores the runtime OFFLINE from the freeze bundle's own
-# wheelhouse (cut at the frozen rev), per the lock's "install only from the
-# bundled wheelhouse" doctrine.  v1 tried PyPI and was correctly refused by
-# hash checking (different manylinux wheel variants for the same versions).
-# Read-only against the archive except ~25 timed test downloads to /tmp.
+# Phase 3 restores the runtime offline from the wheelhouse of the freeze
+# bundle (cut at the frozen rev), as its lock requires ("Install only from
+# the bundled wheelhouse."). PyPI serves different manylinux wheel variants
+# for the same versions, so an install from PyPI fails the hash check.
+# Nothing is written to the archive. The probe makes about 25 timed test
+# downloads to /tmp.
 set -uo pipefail
-# Site configuration: the CANFAR account name; export it before running (see README.md).
-#   CANFAR_USER  the CANFAR account; the kit and the runs live under /arc/home/$CANFAR_USER/
+# Site configuration, exported before running (see README.md):
+#   CANFAR_USER  CANFAR account name. The kit and the runs are under /arc/home/$CANFAR_USER/.
 : "${CANFAR_USER:?}"
 say(){ printf '\n===== %s =====\n' "$*"; }
 
@@ -36,9 +37,10 @@ nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader || true
 python3 --version
 
 say "0b. CUDA toolkit (image check)"
-# The session image must be astroml-CUDA. astroml:latest carries the driver but
-# no toolkit: nvidia-smi works, the kernel .so loads, fetching works, and the
-# scan then dies on its first file inside cupy's JIT. Fail here instead.
+# The session image must be astroml-cuda. astroml:latest has the driver but no
+# toolkit, so nvidia-smi works, the kernel .so loads and fetching works, and
+# the scan then dies on its first file in cupy's JIT. This check stops the
+# bootstrap before that point.
 if ! command -v nvcc >/dev/null 2>&1; then
   echo "NO nvcc: this session has no CUDA toolkit."
   echo "  Its image is probably images.canfar.net/skaha/astroml:latest."
@@ -64,9 +66,9 @@ fi
 cd "$PP"
 git fetch --quiet origin --tags
 # $PP is on /arc and shared by every session. Moving HEAD while another
-# session is scanning from it would change the code under a live run and
-# fail every later gate (REV mismatch). So: no-op when already at REV;
-# otherwise refuse unless explicitly allowed.
+# session scans from it would change the code under a live run and fail
+# every later gate (REV mismatch). The checkout is left alone when it is
+# already at REV, and it is moved only with PP_ALLOW_CHECKOUT=YES.
 if [ "$(git rev-parse HEAD)" != "$REV" ]; then
   if [ "${PP_ALLOW_CHECKOUT:-}" = "YES" ]; then
     git checkout --quiet "$REV"
@@ -81,7 +83,7 @@ test "$(git rev-parse HEAD)" = "$REV" || { echo "REV MISMATCH"; exit 1; }
 test -z "$(git status --porcelain)" || { echo "TREE NOT CLEAN"; exit 1; }
 echo "at $TAG = $REV (clean)"
 
-rm -rf "$HOME/pp-venv"  # pp-venv-old-cleanup: v1 partial install
+rm -rf "$HOME/pp-venv"  # partial venv left by the earlier PyPI install attempt
 say "3. runtime restore (offline, from the freeze bundle wheelhouse)"
 if [ ! -e "$BUNDLE/.restored_ok" ]; then
   echo "verifying bundle tar..."

@@ -26,16 +26,17 @@ from pilot_proxy.json_utils import json_dumps_strict
 from pilot_proxy.schema_identity import schema_token
 
 DETECTOR_CONTRACT_SCHEMA_NAME = "pilotproxy_detector_contract"
-# Revision 2 (kernel core 3.0.0): the frame powers are the all-bin sums of the
-# exact fxfft256 fine power spectra, and the fine_reduction block names that
-# definition (coarse_power_definition) instead of the retired row-domain
-# marginal identity. Revision 1 is the contract of every output written before
-# core 3.0.0 (inside the per-pilot v5 products of record, and in the
-# run_config.json/stats.json of CHIME run outputs such as the 2026 capture
-# reductions). Those outputs are records: readers that re-express them (the
-# v5 per-pilot reader) or only validate them (validate-products) accept
-# revision 1; analyses of CHIME run outputs, which carry no fine powers to
-# re-express, refuse it.
+# In revision 2 (kernel core 3.0.0), the frame powers are the all-bin sums of
+# the exact fxfft256 fine power spectra, and this definition is named in the
+# coarse_power_definition of the fine_reduction block. Revision 1 carried the
+# retired row-domain marginal identity in that place. Revision 1 is the
+# contract of every output written before core 3.0.0, which covers the
+# per-pilot v5 products of record and the run_config.json and stats.json of
+# CHIME run outputs such as the 2026 capture reductions. These outputs are
+# records. Revision 1 is accepted by readers that re-express them (the v5
+# per-pilot reader) or only validate them (validate-products). CHIME run
+# outputs carry no fine powers to re-express, so revision 1 is rejected by
+# analyses of those outputs.
 DETECTOR_CONTRACT_SCHEMA_REVISION = 2
 DETECTOR_CONTRACT_SCHEMA_TOKEN = schema_token(
     DETECTOR_CONTRACT_SCHEMA_NAME,
@@ -54,13 +55,15 @@ CHIME_STATS_SCHEMA_TOKEN = schema_token(
 )
 NORMALIZED_POSITIVE_EXCESS_MASK_SOURCE = "normalized_positive_excess_decision"
 COARSE_POWER_RATIO_VALID_RULE = "p_ref_sum != 0"
-# The corrected rule compares against the H0 zero-point of F implied by the
-# int4-quantized weight norms, instead of assuming that zero-point is exactly 1.
-# For white noise E[P_term] = sigma^2 * ||w_term||^2, so
-# The ratio of expected powers is null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq, and quantization leaves the
-# three norms unequal (null_power_ratio spans ~0.985..1.011 across the shipped ATSC 14-36
-# bank). "F > 1" therefore pins the H0 mask fraction toward 0 or 1 per channel;
-# "F > null_power_ratio" restores a channel-independent zero-point exactly, in integers.
+# The mask rule compares F with its H0 zero-point, which is set by the
+# int4-quantized weight norms. For white noise E[P_term] = sigma^2 * ||w_term||^2,
+# so the ratio of expected powers is
+# null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq. Quantization
+# leaves the three norms unequal, and null_power_ratio spans about 0.985 to
+# 1.011 over the shipped ATSC 14-36 bank. A fixed test "F > 1" would pin the
+# H0 mask fraction toward 0 or 1 on each channel. The test
+# "F > null_power_ratio" gives every channel the same zero-point, exactly and
+# in integers.
 NORMALIZED_POSITIVE_EXCESS_MASK_RULE = (
     "valid && (p_target * reference_norm_sum_sq > target_norm_sq * p_ref_sum)"
 )
@@ -76,9 +79,10 @@ ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION = (
     "S = fxfft256_v1 fine powers"
 )
 COARSE_POWER_DEFINITION = LOCKED_COARSE_POWER_DEFINITION
-# The revision-1 strings, as the v5 products of record carry them: P_r was the
-# row-domain sum of |z|^2 and was tied to the fine spectra by a per-frame
-# marginal identity. Kept only so readers can recognize those products.
+# Revision-1 strings as the v5 products of record carry them. In revision 1,
+# P_r is the row-domain sum of |z|^2 and is tied to the fine spectra by a
+# per-frame marginal identity. These strings are used only to recognize those
+# products.
 DETECTOR_POWER_RATIO_DEFINITION_V1 = (
     "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
 )
@@ -87,7 +91,7 @@ ALL_ROWS_DETECTOR_POWER_RATIO_DEFINITION_V1 = (
 )
 COMBINE_MODE_ALL_ROWS_SUMMED_BEFORE_RATIO = "all_rows_summed_before_ratio"
 # Detector-coordinate weights expect input already put upright for its Nyquist
-# zone (windows of a mirrored, even-zone channel time-reversed).
+# zone, which for a mirrored, even-zone channel means time-reversed windows.
 WEIGHT_COORDINATE_POST_NYQUIST_ZONE = "post_nyquist_zone_normalization"
 WEIGHT_COORDINATE_RAW_INPUT = "raw_input_frequency_coordinate"
 INPUT_COORDINATE_POST_NYQUIST_ZONE_NORMALIZED = "post_nyquist_zone_normalized"
@@ -104,8 +108,8 @@ VALID_INPUT_COORDINATE_SYSTEMS = frozenset(
         INPUT_COORDINATE_RAW_INPUT,
     }
 )
-# Names written by earlier releases (and still passed by older callers); they
-# are read as the current names and never written.
+# Earlier releases wrote these names, and older callers still pass them. They
+# are read as the current names and are never written.
 OLD_WEIGHT_COORDINATE_NAMES = {
     "post_spectral_sense_normalization": WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
 }
@@ -372,15 +376,15 @@ def validate_detector_contract(contract: Mapping[str, Any]) -> None:
         _validate_fine_reduction(contract["fine_reduction"])
 
 
-# fine_reduction.v1_marginal_identity, the one revision-1 field revision 2
-# replaced (by coarse_power_definition), as that release wrote it.
+# Value of fine_reduction.v1_marginal_identity as the revision-1 release wrote
+# it. Revision 2 replaces this one revision-1 field with coarse_power_definition.
 DETECTOR_CONTRACT_V1_MARGINAL_IDENTITY = "exact_int64_enforced_per_frame"
 
 
 def validate_record_or_current_detector_contract(
     contract: Mapping[str, Any],
 ) -> int:
-    """Validate a current contract or a revision-1 record; return its revision.
+    """Validate a current contract or a revision-1 record and return its revision.
 
     A revision-2 document is checked by :func:`validate_detector_contract`. A
     revision-1 document (an output written before kernel core 3.0.0, whose
@@ -461,8 +465,8 @@ def weight_term_norms_sq(
 
     ``packed_weights`` is the locked ``(3, K)`` packed complex weight array
     (real in the high nibble, imaginary in the low nibble for 4-bit
-    components). Components are integers, so the squared norms are exact
-    integers; they are returned as Python ints.
+    components). The components are integers, so the squared norms are exact
+    and are returned as Python ints.
     """
     bits = int(bits_per_component)
     if bits not in (4, 8):
@@ -485,8 +489,9 @@ def weight_term_norms_sq(
 def null_power_ratio_from_weight_norms(target_norm_sq: int, reference_norm_sum_sq: int) -> float:
     """Return the flat-noise ratio implied by the quantized weight norms.
 
-    The value is 2*target_norm_sq/reference_norm_sum_sq, a ratio of
-    expected powers. It is not the expectation E[F] of their ratio.
+    The value is 2*target_norm_sq/reference_norm_sum_sq, the ratio of the
+    expected powers. The expectation E[F] of the power ratio itself is a
+    different quantity.
     """
     target_norm = _exact_uint64(
         target_norm_sq,
@@ -508,12 +513,13 @@ def normalized_positive_excess(
     target_norm_sq: int,
     reference_norm_sum_sq: int,
 ) -> int:
-    """Exact integer norm-corrected positive-excess mask decision.
+    """Return the exact integer norm-corrected positive-excess mask decision.
 
-    Implements ``valid && (p_target * reference_norm_sum_sq > target_norm_sq *
-    p_ref_sum)`` in unbounded Python integers, the exact form of
-    ``F > null_power_ratio``. With ``target_norm_sq : reference_norm_sum_sq = 1 : 2`` this
-    reduces to the legacy ``2*p_target > p_ref_sum`` rule.
+    The rule ``valid && (p_target * reference_norm_sum_sq > target_norm_sq *
+    p_ref_sum)`` is evaluated in unbounded Python integers, and it is the
+    exact form of ``F > null_power_ratio``. With
+    ``target_norm_sq : reference_norm_sum_sq = 1 : 2``, it reduces to the
+    legacy ``2*p_target > p_ref_sum`` rule.
     """
     num = _exact_uint64(p_target, field="p_target")
     den = _exact_uint64(p_ref_sum, field="p_ref_sum")

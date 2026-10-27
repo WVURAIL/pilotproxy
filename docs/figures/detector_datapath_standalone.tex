@@ -1,6 +1,6 @@
-% Standalone wrapper for rendering the shared detector-datapath diagram to
-% an image (svg for markdown use). The Data Sheet and User Guide \input the
-% .tikz fragment directly; this wrapper exists only for the rendered copy.
+% Standalone wrapper that renders the shared detector-datapath diagram to an svg
+% image for Markdown. The Data Sheet and User Guide \input the .tikz fragment
+% directly, and this wrapper is used only for the rendered copy.
 %   pdflatex detector_datapath_standalone.tex
 %   pdftocairo -svg detector_datapath_standalone.pdf detector_datapath.svg
 \documentclass[tikz,border=6pt]{standalone}

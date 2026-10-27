@@ -118,7 +118,7 @@ def engineering_cohort(tmp_path, *, coarse_members=None):
     plan["counts"]["evaluation"] = 2
     plan["loss_rule"] = {"bootstrap_replicates": 12}
     helper.write(out / "plan.json", plan)
-    # These are unsealed test fixtures, not scientific artifacts.
+    # These test fixtures are unsealed, so each shard is rebound to the edited plan.
     for path in (out / "raw").rglob("*.npz"):
         with np.load(path, allow_pickle=False) as data:
             arrays = {k: data[k] for k in data.files if k != "meta_json"}

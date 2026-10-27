@@ -1,4 +1,4 @@
-"""Archive candidate binding and refusal tests; all products here are synthetic."""
+"""Tests of archive candidate binding and refusal. All products here are synthetic."""
 from pathlib import Path
 import hashlib
 import json

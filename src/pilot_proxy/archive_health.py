@@ -1,21 +1,21 @@
 # coding=utf-8
-"""Identify unusable archive frames and repair spectra when the samples are known.
+"""Detect unusable archive frames and repair the spectra when their samples are known.
 
-The CHIME per-pilot archive retains enough frame-level data to remove
-known pathological rows from scalar and fine-statistic analyses. It
-usually does not retain each frame's Fourier spectrum, so removing a
-frame from an integrated spectrum requires more information.
+The CHIME per-pilot archive stores enough frame-level data to remove known
+pathological rows from scalar and fine-statistic analyses. It usually does
+not store each frame's Fourier spectrum, so removing a frame from an
+integrated spectrum requires more information.
 
-One case can be reconstructed exactly: baseband_power_linear == 128
-means every decoded complex int4 sample was (-8, -8). That constant
-frame has only a DC component under the rectangular FFT. We can therefore
-subtract its known contribution from both archived integrated spectra.
-If another excluded valid frame has undetermined samples, report that
-exact spectral correction is unavailable.
+One case can be reconstructed exactly. A baseband_power_linear of 128 means
+every decoded complex int4 sample was (-8, -8). Under the rectangular FFT this
+constant frame has only a DC component, so its known contribution is
+subtracted from both archived integrated spectra. When another excluded valid
+frame has undetermined samples, the exact spectral correction is reported as
+unavailable.
 
-Keep the two byte conventions distinct. CHIME stores (-8, -8) as native
-offset-binary 0x00; lossless detector repacking writes two's-complement
-0x88 for the same sample.
+The two byte conventions are kept distinct. CHIME stores (-8, -8) as native
+offset-binary 0x00, and lossless detector repacking writes the same sample as
+two's-complement 0x88.
 """
 
 from __future__ import annotations
@@ -180,7 +180,7 @@ _RESIDUAL_FRAME_FIELDS = (
     "reject_mask",
     "coarse_power_ratio",
     # RFIsher's residual reader needs the per-frame shelf estimate beside
-    # the statistic; without it every health view is refused as neither a
+    # the statistic. Without it, every health view is refused as neither a
     # current product nor a supported archived one.
     "estimated_data_shelf_snr_db",
     "frame_unit_index",
@@ -274,7 +274,7 @@ class CorrectedSpectrumResult:
     accumulation_reject_disagreements: int = 0
 
 
-# current spelling -> the spelling the 2020--2026 archive used.
+# current spelling to the spelling of the 2020-2026 archive
 _ARCHIVED_SPELLING = {v: k for k, v in ARCHIVED_TO_CURRENT.items()}
 
 
@@ -301,14 +301,15 @@ def _scalar(product: Mapping[str, Any], name: str) -> Any:
 
 
 # The detector columns (frame powers, ratio floats, reject_mask, valid) of a
-# product that retains its exact fine powers are read through
-# product_contract.coarse_columns_from_fine: since kernel core 3.0.0 the frame
-# powers are the all-bin sums of fine_power_u64. In a v6 product these equal
-# the stored columns; in a v5 product of record they replace the stored
+# product that stores its exact fine powers are read through
+# product_contract.coarse_columns_from_fine. Since kernel core 3.0.0, the frame
+# powers are the all-bin sums of fine_power_u64. In a v6 product these sums
+# equal the stored columns. In a v5 product of record they replace the stored
 # row-domain powers, so every gate, summary and ledger row here describes the
 # products by the current definition. Archived products without fine powers
-# keep their stored columns. One computation per open product is cached
-# (weakly, so a closed product releases it).
+# are read from their stored columns. The columns are computed once per open
+# product and cached through a weak reference, so a closed product releases
+# them.
 _FINE_DERIVED_COLUMNS = frozenset(FINE_DERIVED_FRAME_COLUMNS)
 _FINE_COLUMN_CACHE: dict[int, tuple[Any, dict[str, np.ndarray]]] = {}
 
@@ -331,7 +332,7 @@ def _fine_derived_columns(product: Mapping[str, Any]) -> dict[str, np.ndarray] |
         ) from exc
     try:
         ref = weakref.ref(product, lambda _ref, k=key: _FINE_COLUMN_CACHE.pop(k, None))
-    except TypeError:  # a plain dict: recompute on every call
+    except TypeError:  # a plain dict cannot be weakly referenced, so it is not cached
         return columns
     _FINE_COLUMN_CACHE[key] = (ref, columns)
     return columns
@@ -356,7 +357,7 @@ def _frame_vector(
 def _stored_frame_vector(
     product: Mapping[str, Any], name: str, n_frames: int
 ) -> np.ndarray:
-    """The column as the product stores it, never re-derived from fine powers."""
+    """Return the column as stored, without re-deriving it from the fine powers."""
     arr = _array(product, name)
     if arr.shape == (n_frames, 1):
         return arr[:, 0]
@@ -476,9 +477,9 @@ def evaluate_frame_health(product: Mapping[str, Any]) -> FrameHealthResult:
 
 
 def _residual_view_key(name: str) -> str:
-    """Published column name for an internal field name.
+    """Return the published column name of an internal field.
 
-    The view still publishes its archived spellings and schema value so older
+    The view publishes the archived spellings and schema value so older
     consumers can read it.
     """
     return _ARCHIVED_SPELLING.get(name, name)
@@ -488,13 +489,14 @@ def write_residual_health_view(source: Path, destination: Path) -> Path:
     """Write the health-filtered columns required by the residual-analysis APIs.
 
     Those APIs load a path themselves. Giving them the original product
-    would restore rows excluded by the v1 health check, so create a
-    derived view containing only their coarse-policy and residual fields.
-    Slice every frame column by the inclusion mask and record the source
-    hash and health-check identity.
+    would restore rows excluded by the v1 health check, so a derived view is
+    written with only their coarse-policy and residual fields. Every frame
+    column is sliced by the inclusion mask, and the source hash and
+    health-check identity are recorded.
 
-    This view is not a replacement archive product. It omits the run's
-    superseded fine-decision fields.
+    The view is written only as an input for these APIs and does not replace
+    the archive product. The run's superseded fine-decision fields are not
+    copied into it.
     """
 
     source_path = Path(source)
@@ -519,7 +521,7 @@ def write_residual_health_view(source: Path, destination: Path) -> Path:
             arrays[_residual_view_key(name)] = np.asarray(value[health.include])
         for name in _RESIDUAL_METADATA_FIELDS:
             arrays[_residual_view_key(name)] = np.asarray(_array(product, name))
-        # Derived, not copied: the product stores the integer pair only.
+        # the product stores only the integer pair, so the ratio is derived here
         arrays[_residual_view_key("null_power_ratio")] = np.asarray(
             [null_power_ratio_of(product)], dtype=np.float64
         )
@@ -572,7 +574,7 @@ def temporary_residual_health_views(
 
 
 def _product_nyquist_zone(product: Mapping[str, Any]) -> int:
-    """Products store the zone's direction as ``sense``: -1 mirrored, +1 upright."""
+    """Return the Nyquist zone from the stored ``sense`` (-1 mirrored, +1 upright)."""
     value = int(_scalar(product, "sense"))
     if value == -1:
         return MIRRORED_NYQUIST_ZONE
@@ -600,9 +602,9 @@ def _sample_rate_hz(product: Mapping[str, Any]) -> float:
 def corrected_fine_geometry(product: Mapping[str, Any]) -> dict[str, Any]:
     """Return the geometry-predicted acquisition neighborhood.
 
-    This geometry is an acquisition prior, not an empirical line
-    localization.  :func:`recompute_corrected_fine_diagnostics` separately
-    measures narrow epoch anchors and records any refusal to do so.
+    This geometry is an acquisition prior. The narrow epoch anchors are
+    measured from the data by :func:`recompute_corrected_fine_diagnostics`,
+    which also records any refusal to measure them.
     """
 
     nfft = int(_scalar(product, "nfft"))
@@ -925,12 +927,12 @@ def recompute_corrected_fine_diagnostics(
     """Recompute float CFAR with distinct predicted and measured line roles.
 
     This reproduces :func:`pilot_proxy.fine_reduction.calibrate_cfar` in
-    vectorized chunks.  The broad geometry-predicted neighborhood is an
-    acquisition diagnostic.  A narrow +/-2-bin window is used only in UTC
+    vectorized chunks. The broad geometry-predicted neighborhood is an
+    acquisition diagnostic. A narrow +/-2-bin window is used only in UTC
     quarters where a health-filtered persistent line passes the declared
-    evidence thresholds; other quarters explicitly fall back to the broad
-    predicted neighborhood.  This remains retrospective and does not replace
-    the active coarse rejection bit stored in ``reject_mask``.
+    evidence thresholds. Other quarters fall back to the broad predicted
+    neighborhood. The recomputation is retrospective, and the active coarse
+    rejection bit stored in ``reject_mask`` is left unchanged.
     """
 
     gate = evaluate_frame_health(product) if health is None else health
@@ -1071,9 +1073,10 @@ def _ceiling_dc_power_per_frame(product: Mapping[str, Any]) -> float:
     if nfft <= 0 or streams <= 0:
         raise ArchiveHealthError("nfft and num_input_streams must be positive")
     dc = np.asarray([complex(-8 * nfft, -8 * nfft)], dtype=np.complex64)
-    # Array arithmetic is intentional: both NumPy and CuPy produce float32 for
-    # abs(complex64_array)**2.  For nfft=16384 this is 34359736320 per stream,
-    # not the infinite-precision 34359738368, because abs rounds before square.
+    # Array arithmetic is used because NumPy and CuPy both produce float32 for
+    # abs(complex64_array)**2. For nfft=16384 this gives 34359736320 per
+    # stream. The infinite-precision value is 34359738368, and the difference
+    # comes from abs rounding before the square.
     power_per_stream = float(np.asarray(np.abs(dc) ** 2, dtype=np.float64)[0])
     return float(power_per_stream * streams)
 
@@ -1090,12 +1093,14 @@ def health_correct_integrated_spectra(
 
     The stored spectra were accumulated by the writer with the product's own
     stored ``valid`` and ``reject_mask``, so the frame accounting here uses
-    those stored columns, not the columns re-derived from ``fine_power_u64``.
+    those stored columns. The ``reject_mask`` re-derived from
+    ``fine_power_u64`` is used only for ``accumulation_reject_disagreements``.
     In a v6 product the two are identical (the frame-power invariant). In a
-    v5 product of record the stored ``reject_mask`` is the row-domain
+    v5 product of record, the stored ``reject_mask`` is the row-domain
     decision, and the after-mask spectrum is the spectrum of the frames that
-    decision kept; ``accumulation_reject_disagreements`` counts the healthy
-    valid frames on which it differs from the current (fine-sum) decision.
+    decision kept. The count ``accumulation_reject_disagreements`` is the
+    number of healthy valid frames where the stored decision differs from the
+    current (fine-sum) decision.
     """
 
     gate = evaluate_frame_health(product) if health is None else health
@@ -1334,9 +1339,9 @@ def unix_utc_to_lmst_hours(
     """Approximate local mean sidereal time with UTC used as the UT1 proxy.
 
     The dependency-free polynomial is an IAU-1982-style GMST expression.  It
-    is used only to assign the survey exposure to one-hour LMST bins.  The
-    products do not retain DUT1, so this function deliberately reports mean,
-    not apparent, sidereal time and does not claim precision timing.
+    is used only to assign the survey exposure to one-hour LMST bins. The
+    products do not store DUT1, so the function reports mean sidereal time
+    and is not intended for precision timing.
     """
 
     seconds = np.asarray(unix_utc_seconds, dtype=np.float64)
@@ -1755,8 +1760,8 @@ def audit_product(
             "product_bytes": int(product_path.stat().st_size),
             "product_sha256": digest,
             "stored_schema_version": str(_scalar(product, "schema_version")),
-            # Where the frame powers, valid, reject_mask and the coarse
-            # columns below come from (kernel core 3.0.0 definition).
+            # source of the frame powers, valid, reject_mask and coarse
+            # columns below (kernel core 3.0.0 definition)
             "frame_power_source": (
                 "all_bin_sums_of_fine_power_u64"
                 if "fine_power_u64" in product
@@ -1955,7 +1960,7 @@ def audit_product(
                 "exact": spectra.exact,
                 "unavailable_reason": spectra.unavailable_reason,
                 # The spectra are accumulated with the stored valid and
-                # reject_mask; on a v5 product that reject_mask is the
+                # reject_mask. On a v5 product that reject_mask is the
                 # row-domain decision of record.
                 "accumulation_masks": "stored_valid_and_reject_mask",
                 "accumulation_reject_disagreements": (
@@ -2714,7 +2719,7 @@ def _generation_timestamp() -> tuple[str, str]:
 
 
 def _audit_implementation_identity() -> dict[str, Any]:
-    """Identify the exact generator source, including Git state when present."""
+    """Return the exact generator source identity, with the Git state when present."""
 
     identity: dict[str, Any] = {
         "package_source_sha256": package_source_sha256(),
@@ -3219,8 +3224,9 @@ def _plot_product_diagnostics(
         channel_dir = figure_root / f"channel_{channel:02d}_fid_{fid:04d}"
         channel_dir.mkdir(parents=True, exist_ok=True)
 
-        # Precompute the three dissertation diagnostics once, then render both
-        # stand-alone publication assets and a one-page per-channel atlas.
+        # The three dissertation diagnostics (histograms, spectra and heatmap)
+        # are prepared once and drawn both as individual publication assets
+        # and as a one-page atlas for each channel.
         panels = [
             (coarse[include] / mu0, r"Coarse $F/\mu_0$", 1.0),
             (
@@ -3426,8 +3432,9 @@ def _plot_product_diagnostics(
             }
         )
 
-        # Exactly health-corrected relative time-averaged spectra. This is a
-        # relative spectrum, not an absolutely calibrated PSD.
+        # Time-averaged spectra with the exact health correction, in dB
+        # relative to the before-spectrum median. No absolute PSD calibration
+        # is applied.
         fig, axis = plt.subplots(figsize=(10.2, 4.5))
         draw_spectrum(axis)
         axis.set_title(
@@ -3462,8 +3469,9 @@ def _plot_product_diagnostics(
             }
         )
 
-        # UTC calendar-month mean fine-F heatmap. This is explicitly a
-        # detector-statistic diagnostic, not a raw-voltage spectrogram.
+        # UTC calendar-month mean fine-F heatmap. It is a diagnostic of the
+        # detector statistic, drawn from the fine power ratios with no raw
+        # voltages.
         fig, axis = plt.subplots(figsize=(11.0, 5.0))
         draw_heatmap(fig, axis)
         axis.set_title(
@@ -3491,7 +3499,7 @@ def _plot_product_diagnostics(
         )
 
         # One deterministic dissertation-ready atlas per channel. The heatmap
-        # remains a raster image embedded in the otherwise vector PDF.
+        # is embedded as a raster image in the otherwise vector PDF.
         atlas = plt.figure(figsize=(12.0, 15.5))
         outer = atlas.add_gridspec(
             3,

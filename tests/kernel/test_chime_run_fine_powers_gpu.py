@@ -1,4 +1,4 @@
-"""chime-run on the GPU stores the fine powers of its frame powers, bit for bit."""
+"""chime-run on the GPU must match the CPU chain bit for bit, and each stored frame power must be the sum of its stored fine powers."""
 
 import dataclasses
 import json

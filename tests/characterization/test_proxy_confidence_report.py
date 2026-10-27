@@ -39,13 +39,13 @@ def score_fixture(tmp_path):
     scores.mkdir()
     product = tmp_path / "original-product.npz"
     frames = sample_frames()
-    # the loaded frames carry the knee of the current rule; the cache records rule v1's
+    # the loaded frames carry the knee of the current rule, and the cache records the knee of rule v1
     frames.knee_word = int(knee.propose([int(w) for w in frames.required], [str(int(e)) for e in frames.event],
                                         valid=[bool(v) for v in frames.supported])["knee_word_q16"])
     rows = np.array([3, 0, 2, 1])
-    # The excess is formed from the frame powers, the fine powers' all-bin
-    # sums (kernel core 3.0.0): with norms 1 : 2 (mu_0 = 1), P_1 = P_2 = 2**40
-    # and P_0 = (e + 1) 2**40, exact for these dyadic excesses.
+    # The excess is formed from the frame powers, which are the all-bin sums of
+    # the fine powers (kernel core 3.0.0). With norms 1 : 2 (mu_0 = 1), P_1 = P_2 = 2**40
+    # and P_0 = (e + 1) 2**40, which are exact for these dyadic excesses.
     fine = np.zeros((4, 3, 4), dtype=np.uint64)
     fine[rows, 0, 0] = np.rint((np.asarray(frames.excess) + 1.0) * 2.0**40).astype(np.uint64)
     fine[:, 1, 1] = 1 << 40
@@ -80,8 +80,8 @@ def test_live_freeze_then_offline_replay_preserves_exact_analysis_arrays(tmp_pat
     assert provenance["sha256"] == REPORT.digest(first / "inputs/ch99.npz")
     for key in ("required", "weight", "supported", "event", "excess", "time"):
         np.testing.assert_array_equal(getattr(frames, key), getattr(expected, key))
-    # The frozen replay must work with neither an original product nor a score
-    # reader. Removing this test-owned temporary product makes that observable.
+    # The frozen replay must run without the original product and without a score
+    # reader. The temporary product of this test is removed so that any read of it fails.
     product.unlink()
     monkeypatch.setattr(REPORT.rule, "load_frames", lambda *args: pytest.fail("offline replay read live scores"))
     replay, replay_provenance = REPORT.freeze_channel(
@@ -97,8 +97,8 @@ def test_frozen_checksum_is_verified_before_loading_or_repacking(tmp_path):
     first = tmp_path / "first"
     REPORT.freeze_channel(99, scores, first)
     frozen = first / "inputs/ch99.npz"
-    # Appended bytes may leave a ZIP readable, so a mere successful NPZ load
-    # would not be an adequate identity check.
+    # A ZIP can stay readable after bytes are appended, so a successful NPZ load
+    # alone does not confirm the identity of the file.
     frozen.write_bytes(frozen.read_bytes() + b"changed")
     with pytest.raises(ValueError, match="checksum mismatch"):
         REPORT.freeze_channel(99, None, tmp_path / "replay", first / "inputs")
@@ -145,8 +145,8 @@ def test_nonfinite_event_time_is_refused():
     for value in (np.nan, np.inf):
         time = f.time.copy()
         time[:2] = value
-        # NumPy may warn while reducing a deliberate NaN; the contractual
-        # result being tested is the explicit refusal, not that warning.
+        # NumPy may warn while reducing the injected NaN, so the warning is
+        # suppressed and only the refusal is tested.
         with np.errstate(invalid="ignore"), pytest.raises(ValueError, match="finite event times"):
             REPORT.event_time_clusters(replace(f, time=time), 1)
 

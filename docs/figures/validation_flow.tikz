@@ -1,10 +1,11 @@
-% Shared architecture diagram: the standalone validation flow.
-% Single source of truth -- \input by PilotProxy_DS001 (Data Sheet) and
-% PilotProxy_UG001 (User Guide), and rendered to validation_flow.svg for
-% README.md. Requires: tikz libraries arrows.meta + positioning, and the
-% colors PilotProxyBlue (WVU blue) and LightGray (WVU not-quite-white) defined by the host
-% document (or by validation_flow_standalone.tex when rendering the svg).
-% Re-render the svg after editing:
+% Standalone validation flow.
+% This file is the one source of the diagram. It is \input by PilotProxy_DS001
+% (Data Sheet) and PilotProxy_UG001 (User Guide) and rendered to
+% validation_flow.svg for docs/USAGE.md. It needs the tikz libraries
+% arrows.meta and positioning, and the colors PilotProxyBlue (WVU blue) and
+% LightGray (WVU not-quite-white) defined by the host document, or by
+% validation_flow_standalone.tex when the svg is rendered. The svg must be
+% rendered again after each edit:
 %   cd docs/figures && pdflatex validation_flow_standalone.tex \
 %     && pdftocairo -svg validation_flow_standalone.pdf validation_flow.svg
 \begin{tikzpicture}[node distance=0.36cm,>=Latex]

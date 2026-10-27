@@ -290,12 +290,13 @@ def audit_atsc_iq(
     )
     measured_pilot_below_data_db = -float(pilot_to_data_power_db)
 
-    # Direct integration (additive v1 fields, 2026-07): no shelf model.
-    # Total in-allocation power decomposes as pilot line + everything else;
-    # the shelf continues underneath the pilot window, so the direct data
-    # power adds the baseline back (equivalently: band total minus the
-    # baseline-corrected pilot power). This is the estimator-independent
-    # integrated pilot-to-data ratio the shelf extrapolation approximates.
+    # The pilot-to-data ratio is also found by direct integration, with no
+    # shelf model. These fields are additive to the v1 audit schema. The total
+    # in-allocation power is the pilot line plus everything else. The shelf
+    # continues under the pilot window, so the baseline is added back to the
+    # direct data power. That is, the data power is the band total minus the
+    # baseline-corrected pilot power. This integrated ratio does not depend on
+    # the shelf estimator, and the shelf extrapolation above approximates it.
     band_power_integrated = float(np.sum(psd[band_mask]) * df)
     data_power_direct = max(0.0, band_power_integrated - measured_pilot_power)
     measured_pilot_below_data_direct_db = -float(
@@ -303,8 +304,9 @@ def audit_atsc_iq(
         if data_power_direct > 0.0
         else float("nan")
     )
-    # Mean-shelf variant of the extrapolated estimator, bounding the
-    # median-vs-mean convention sensitivity alongside the direct integral.
+    # The extrapolated estimator is repeated with the mean shelf instead of the
+    # median. With the direct integral, it bounds the sensitivity of the ratio
+    # to the choice of median or mean.
     measured_pilot_below_data_mean_shelf_db = -float(
         _positive_to_db(
             measured_pilot_power / (shelf_psd_mean * float(channel_width_hz))

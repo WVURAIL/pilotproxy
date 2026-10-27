@@ -196,7 +196,7 @@ def _validate_input_manifest(
     *,
     errors: list[dict[str, str]],
 ) -> _InputManifestIdentity | None:
-    """Validate one of the two current, intentionally distinct manifests."""
+    """Validate a chime-run or chime-scan input manifest, which use different schemas."""
     token = payload.get("schema_version")
     if token == CHIME_INPUT_MANIFEST_SCHEMA_TOKEN:
         if not _validate_exact_fields(
@@ -572,10 +572,10 @@ def _is_normalized_positive_excess_run(
     )
 
 
-# A run written before kernel core 3.0.0 carries detector contract revision 1:
-# its frame powers are row-domain sums of |z|^2 and its outputs hold no fine
-# powers, so they cannot be re-expressed. Such a run is validated as the
-# record it is and reported with this note; analyses refuse it.
+# A run written before kernel core 3.0.0 carries detector contract revision 1.
+# Its frame powers are row-domain sums of |z|^2, and its outputs hold no fine
+# powers to recompute them from. Such a run is validated as a record and
+# reported with this note, and analyses of it are refused.
 CONTRACT_V1_RECORD_NOTE = (
     "detector contract revision 1 (kernel core < 3.0.0): the frame powers are "
     "row-domain sums of |z|^2, not the fine-power sums of core 3.0.0; the "
@@ -590,7 +590,7 @@ def _validate_detector_contract(
     stats: dict[str, Any],
     errors: list[dict[str, str]],
 ) -> int | None:
-    """Validate both contract copies; return their revision when both pass."""
+    """Validate the contract copies in run_config and stats, and return their revision when both pass."""
     run_contract = run_config.get("detector_contract")
     stats_contract = stats.get("detector_contract")
     if not isinstance(run_contract, dict):
@@ -679,13 +679,13 @@ def _validate_detector_frame_powers(
     fine_powers_required: bool,
     errors: list[dict[str, str]],
 ) -> None:
-    """Detector contract revision 2: the reference split and the fine powers.
+    """Check the reference split and fine powers of a contract revision 2 output.
 
-    A revision-2 output carries ``p_ref_lower_u64`` and ``p_ref_upper_u64``;
-    a ``chime-run`` output also carries ``fine_power_u64``, whose all-bin
-    sums must be the stored frame powers exactly. (A ``chime-scan`` combine
-    leaves the fine powers in its per-pilot products; when present they are
-    checked the same way.)
+    A revision-2 output carries ``p_ref_lower_u64`` and ``p_ref_upper_u64``. A
+    ``chime-run`` output also carries ``fine_power_u64``, whose all-bin sums
+    must equal the stored frame powers exactly. A ``chime-scan`` combine leaves
+    the fine powers in its per-pilot products, so they are not required here,
+    and when present they are checked the same way.
     """
     required = ["p_ref_lower_u64", "p_ref_upper_u64"]
     if fine_powers_required:
@@ -1293,10 +1293,11 @@ def validate_products(
     generation_after = _read_generation_snapshot(
         run, phase="after", errors=errors, validate_files=False
     )
-    # This must be the final filesystem observation. A publisher creates the
-    # durable journal before changing canonical bytes, so a false result here
-    # is the validator's stable linearization point; checking it before the
-    # generation marker leaves a window in which publication can begin unseen.
+    # The journal check must be the last filesystem read. A publisher creates
+    # the durable journal before it changes canonical bytes, so a false result
+    # here is the stable linearization point of the validator. A check made
+    # before the generation marker is read would leave a window where a
+    # publication can begin unseen.
     journal_after = _entry_exists(publish_journal)
     if journal_before or journal_after:
         _add_error(

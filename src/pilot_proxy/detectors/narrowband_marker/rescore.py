@@ -1,11 +1,13 @@
-"""Rescore one channel's score cache on a fine geometry: anchor, marker half-width h and
-marker guard band g (detector v2 calibration options).
+"""Rescore one channel's score cache with a given anchor, marker half-width h, and
+marker guard band g, the fine geometry options of the detector v2 calibration.
 
-The frames, events and weights of the cache are kept; the words, rank support, knee and
-candidates are recomputed from the cache's original product. The rank is the median of the
-resulting bulk (``scores.candidate_rho_values``). At the cache's own geometry the words,
-support and, under knee rule v1 (the knee every cache records), the knee and candidates
-reproduce the cache. Nothing of record is changed; the output is a new directory.
+The frames, events, and weights of the cache are kept, and the words, rank support,
+knee, and candidates are recomputed from the cache's original product. The rank is
+the median of the resulting bulk (``scores.candidate_rho_values``). At the cache's
+own geometry, the recomputed words and support reproduce the cache. Every cache
+records the knee of knee rule v1, and under that rule the recomputed knee and
+candidates also reproduce the cache. The output is written to a new directory, and
+nothing of record is changed.
 
     python -m pilot_proxy.detectors.narrowband_marker.rescore CACHE.json OUT_DIR
         [--anchor-bin A] [--designated-half-width H] [--marker-guard-bins G] [--knee-rule ID]
@@ -57,10 +59,10 @@ def rescore(cache_json, output, *, anchor_bin=None, designated_half_width=2, mar
     """Write ``ch<N>.json`` and ``ch<N>.npz`` for one cache rescored on a fine geometry.
 
     ``anchor_bin`` None keeps the cache's anchor. The source product is the cache's
-    original product (its frame powers are read, never changed). The recorded knee
-    is rule v1's, as in every cache (the threshold rule checks it and decides with
-    its current rule). Returns the summary of the old and new geometry, knee and
-    supported frames.
+    original product, whose frame powers are read and never changed. By default the
+    recorded knee is that of rule v1, as in every cache. The threshold rule checks this
+    knee and then decides with its own current rule. Returns the summary of the old and
+    new geometry, knee, and supported frames.
     """
     cache_json = Path(cache_json)
     output = Path(output)

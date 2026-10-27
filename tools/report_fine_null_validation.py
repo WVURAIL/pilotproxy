@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Report independent literal H0 outcomes without changing calibration.
 
-Scientific gate failures are retained in the report and do not raise an
+Scientific gate failures are kept in the report and do not raise an
 exception. Missing, altered or incorrectly labeled inputs do raise, since
 they cannot support a report with the frozen denominator.
 """
@@ -56,9 +56,10 @@ def threshold_value(value, *, exact):
 def count_outcomes(samples, valid, threshold, *, always=None):
     """Count strict decisions without dropping invalid or sentinel observations.
 
-    Explicit uint64 threshold conversion prevents mixed-scalar float coercion
-    near 2**64. Logical 2**64 is represented only by zero plus always=True;
-    it exceeds every deployable threshold. Invalid zero is a distinct state.
+    The threshold is converted to uint64 explicitly, so the uint64 samples
+    are never tested against it as floats near 2**64. The logical value
+    2**64 is represented only by a zero sample with always=True, and it
+    exceeds every deployable threshold. An invalid zero is a distinct state.
     """
     samples, valid = np.asarray(samples), np.asarray(valid)
     if samples.ndim != 1 or valid.shape != samples.shape or valid.dtype != np.dtype(bool):
@@ -80,8 +81,9 @@ def count_outcomes(samples, valid, threshold, *, always=None):
         threshold = threshold_value(threshold, exact=False)
         if samples.dtype.kind != 'f' or np.any(samples < 0):
             raise ValueError('Floating responses must have floating dtype and be nonnegative')
-        # NaN cannot be silently interpreted as a non-exceedance. It remains
-        # in the denominator and is explicitly invalid; +inf is an exceedance.
+        # NaN > threshold is False, so a NaN response would otherwise count as
+        # a non-exceedance. It is kept in the denominator and counted as
+        # invalid. A +inf response is an exceedance.
         undefined = valid & np.isnan(samples)
         valid = valid & ~np.isnan(samples)
         mask = valid & (samples > threshold)
@@ -178,8 +180,9 @@ def check_threshold_records(records, pfas, plan, *, exact):
 def independent_inventory(out, plan, ids, calibration):
     selected = phase_ids(plan, ids, 'null_validation')
     frozen = aware(calibration['frozen_utc'])
-    # The campaign identity table uses its general fixture-choice recipe even
-    # for H0. These labels are unused: the raw null phase injects amplitude 0.
+    # The campaign identity table labels the H0 trials with the same
+    # fixture-choice recipe as the other phases. The labels are checked here
+    # and otherwise unused, since the raw null phase injects amplitude 0.
     expected_labels = [2 + (hashlib.sha256(
         f"{plan['schema']}:fixture-choice:null_validation:{int(trial)}".encode()
     ).digest()[0] & 1) for trial in selected['trial']]
@@ -247,8 +250,8 @@ def run(out):
     pieces = {c: [] for c in plan['channels']}
     for path, metadata in inventory:
         raw = read_raw(path, metadata, len(plan['channels']))
-        # The frame powers are the fine sums; reduce_powers refuses a sum at
-        # or above the same capacity.
+        # The frame powers are sums of these fine powers, and reduce_powers
+        # refuses a frame sum at or above the same 2**63 capacity.
         if np.any(raw['fixed_fine'] >= np.uint64(1 << 63)):
             raise ValueError('Raw fixed power exceeds the frozen signed accumulation capacity')
         for column, channel in enumerate(plan['channels']):

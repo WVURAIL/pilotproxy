@@ -3,16 +3,20 @@
 """
 Pure-NumPy reference implementation for the local-reference power ratio kernel.
 
-The kernel's chain (core 3.0.0) is: packed samples and weights -> exact int32
-matched-filter row projections ``z[n, m]`` -> the frozen fxfft256 fine power
-spectra ``S[n, f]`` (summed over streams) -> frame powers
-``P[n] = sum_f S[n, f]`` -> ``R_coarse = 2 P[0] / (P[1] + P[2])``. The packed
-references below compute exactly that chain in integers, so a CPU-only sweep
-keeps the kernel's semantics. The float reference
-(:func:`coarse_power_ratio_cpu_reference`) works on unquantized complex rows,
-where the fixed-point transform does not apply; it is the float prototype of
-the same ratio, ``sum_m |z[n, m]|^2`` per term, which an exact transform of
-length ``L_F`` scales by ``L_F`` in every term, so the ratio is the same.
+In kernel core 3.0.0, the packed samples and weights are first reduced to
+exact int32 matched-filter row projections ``z[n, m]``. These projections are
+passed through the frozen fxfft256 to give the fine power spectra
+``S[n, f]``, summed over streams. Each frame power is then
+``P[n] = sum_f S[n, f]``, and the ratio is
+``R_coarse = 2 P[0] / (P[1] + P[2])``. Since the packed references below
+compute this chain exactly in integers, a CPU-only sweep has the kernel's
+semantics.
+
+The float reference (:func:`coarse_power_ratio_cpu_reference`) works on
+unquantized complex rows, where the fixed-point transform does not apply. It
+is the float prototype of the same ratio, and ``sum_m |z[n, m]|^2`` is used
+for each term. Under an exact transform of length ``L_F``, every term is
+scaled by ``L_F``, so the ratio is the same.
 """
 
 from __future__ import annotations
@@ -92,15 +96,15 @@ def coarse_power_ratio_cpu_reference(
     samples: np.ndarray,
     weights: np.ndarray,
 ) -> tuple[float, np.ndarray]:
-    """Float prototype of the local-reference power ratio.
+    """Return the float prototype of the local-reference power ratio.
 
     Returns ``(R, sums)`` with ``sums[n] = sum_m |x_m . conj(w_n)|^2`` in
-    float64 over any number of rows. These row-domain sums are not the
-    kernel's frame powers (the all-bin sums of the fixed-point fine spectra,
-    :func:`frame_powers_cpu_reference_packed`); an exact transform would scale
-    every term by the same ``L_F``, so ``R`` is the float prototype of the
-    kernel's ratio, which differs from it only by the fixed-point transform's
-    rounding.
+    float64 over any number of rows. These are row-domain sums, and the
+    kernel's frame powers are the all-bin sums of the fixed-point fine
+    spectra (:func:`frame_powers_cpu_reference_packed`). Under an exact
+    transform, every term is scaled by the same ``L_F``, so ``R`` differs
+    from the kernel's ratio only by the rounding of the fixed-point
+    transform.
     """
     if samples.ndim != 2:
         raise ValueError(f"samples must be 2D (M, K). Got shape {samples.shape}.")
@@ -129,14 +133,15 @@ def frame_powers_cpu_reference_packed(
     packed_weights: np.ndarray,
     bits: int,
 ) -> np.ndarray:
-    """The kernel's exact frame powers from packed samples and weights.
+    """Return the kernel's exact frame powers from packed samples and weights.
 
-    ``P[n] = sum_f S[n, f]``: exact row projections
-    (:func:`matched_filter_row_projections_cpu_reference_packed`) through the
-    frozen fxfft256 (:func:`pilot_proxy.fine_reduction.frame_powers_from_fine_u64`),
-    summed over bins. Returns ``uint64[3]``. Like the kernel entry, it derives
-    the stream count as ``rows // 128`` and refuses a row count that is not a
-    whole number of 128-window streams.
+    The frame power ``P[n] = sum_f S[n, f]`` is formed by passing the exact
+    row projections (:func:`matched_filter_row_projections_cpu_reference_packed`)
+    through the frozen fxfft256
+    (:func:`pilot_proxy.fine_reduction.frame_powers_from_fine_u64`) and
+    summing over bins. Returns ``uint64[3]``. As in the kernel entry point,
+    the stream count is ``rows // 128``, and a row count that is not a whole
+    number of 128-window streams raises ValueError.
     """
     from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 
@@ -163,7 +168,7 @@ def coarse_power_ratio_cpu_reference_packed(
     packed_weights: np.ndarray,
     bits: int,
 ) -> tuple[float, np.ndarray]:
-    """The kernel's local-reference power ratio from packed integers.
+    """Return the kernel's local-reference power ratio from packed integers.
 
     Returns ``(R, powers)`` where ``powers`` are the exact ``uint64[3]`` frame
     powers of :func:`frame_powers_cpu_reference_packed` (the all-bin sums of
@@ -187,13 +192,14 @@ def matched_filter_row_projections_cpu_reference_packed(
 ) -> np.ndarray:
     """Return the kernel's exact integer matched-filter row projections.
 
-    The result has shape ``[terms, rows, 2]`` and dtype ``int32``.  Its
+    The result has shape ``[terms, rows, 2]`` and dtype ``int32``. Its
     arithmetic and layout are the CPU specification for
-    ``PilotProxy_Compute_RowSums_I32``: packed signed components are sign-extended,
-    each row is dotted with the conjugated weight vector, and the real and
-    imaginary integer sums are retained separately.  This public reference is
-    used by the synthetic sensitivity ablations as the boundary between
-    input/weight quantization and the frozen fixed-point fine transform.
+    ``PilotProxy_Compute_RowSums_I32``. The packed signed components are
+    sign-extended, each row is dotted with the conjugated weight vector, and
+    the real and imaginary integer sums are kept as two components. This
+    public reference is used by the synthetic sensitivity ablations as the
+    boundary between input/weight quantization and the frozen fixed-point
+    fine transform.
     """
     samples = np.asarray(packed_samples)
     weights = np.asarray(packed_weights)
@@ -217,8 +223,9 @@ def matched_filter_row_projections_cpu_reference_packed(
     wr = np.asarray(w.real, dtype=np.int64)
     wi = np.asarray(w.imag, dtype=np.int64)
 
-    # z[n, m] = sum_k x[m, k] * conj(w[n, k]).  Integer inputs keep the
-    # einsums exact in int64; the detector's int4/K<=128 bound fits int32.
+    # z[n, m] = sum_k x[m, k] * conj(w[n, k]). The einsums are exact in int64
+    # for integer inputs, and the int4, K <= 128 bound of the detector fits
+    # int32.
     real = np.einsum("mk,nk->nm", xr, wr, optimize=True)
     real += np.einsum("mk,nk->nm", xi, wi, optimize=True)
     imag = np.einsum("mk,nk->nm", xi, wr, optimize=True)

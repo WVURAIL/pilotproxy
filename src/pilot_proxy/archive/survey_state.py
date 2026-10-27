@@ -1,15 +1,17 @@
 """Durable state for a resumable CADC survey.
 
-The network/archive source decides *what* an event means and verifies its files.
-This module owns the orthogonal persistence contract:
+The archive source decides what an event means and verifies its files. This
+module stores the survey state on disk with three mechanisms:
 
-* a configuration fingerprint prevents incompatible runs sharing a directory;
-* atomic JSON replacement protects small checkpoints and the event cache; and
-* SQLite commits an event's inventory rows and done marker in one transaction.
+* a configuration fingerprint, which keeps incompatible runs from sharing a
+  directory,
+* atomic JSON replacement of the small checkpoints and the event cache, and
+* a SQLite transaction that commits an event's inventory rows and done marker
+  together.
 
-``inventory.jsonl`` and the historical text ledgers are deterministic views of
-the database. They can therefore be regenerated after a process stops between a
-database commit and a view refresh, without duplicating rows.
+``inventory.jsonl`` and the text ledgers are deterministic views of the
+database. They can be regenerated without duplicate rows after a process stops
+between a database commit and a view refresh.
 """
 from __future__ import annotations
 
@@ -55,17 +57,17 @@ _TABLE_COLUMNS = {
 
 
 class SurveyOutputLock:
-    """Portable, process-scoped ownership of one survey output directory.
+    """Portable, process-scoped lock on one survey output directory.
 
-    The lock file is intentionally durable while the operating-system lock is
-    not: an interrupted process cannot strand the directory permanently, and
-    every cooperating process still sees a single owner from manifest
-    validation through the final state render.
+    The lock file stays on disk, and the operating-system lock on it is released
+    when the process ends. An interrupted process therefore cannot leave the
+    directory locked, and every cooperating process sees a single owner from
+    manifest validation through the final state render.
     """
 
     def __init__(self, out: Path) -> None:
-        # Canonicalize parent-directory aliases so two paths through symlinks
-        # cannot acquire different lock files for the same survey state.
+        # Parent-directory aliases are resolved, so two paths through symlinks
+        # cannot take different lock files for the same survey state.
         self.out = Path(out).expanduser().resolve()
         self.path = self.out / ".survey.lock"
         self._handle = None
@@ -96,8 +98,9 @@ class SurveyOutputLock:
                 "different --name/output directory.") from exc
 
         self._handle = handle
-        # This is diagnostic only; exclusion is provided by the OS lock. The
-        # contents may survive a crash without making the lock stale.
+        # The pid is written for diagnosis only, and exclusion comes from the
+        # OS lock. The contents may survive a crash without making the lock
+        # stale.
         try:
             handle.seek(0)
             handle.truncate()
@@ -128,7 +131,7 @@ class SurveyOutputLock:
 
 
 def with_survey_output_lock(function):
-    """Hold exclusive output ownership for the complete survey call."""
+    """Hold the survey output lock for the whole survey call."""
     @wraps(function)
     def wrapped(self, ctx, out_dir, *args, **kwargs):
         with SurveyOutputLock(Path(out_dir)):
@@ -161,11 +164,13 @@ def atomic_write_json(path: Path, value) -> None:
 
 
 class SurveyRun:
-    """Record each execution separately from its stable resume configuration.
+    """Record one survey execution in ``survey_runs/<run_id>.json``.
 
-    The marker survives SIGKILL. It is cleared only after all database views
-    have been refreshed; an ordinary exception alone cannot certify freshness.
-    Callers must hold SurveyOutputLock and validate the manifest first.
+    Each execution has its own record, kept apart from the stable resume
+    configuration. The stale-views marker survives SIGKILL. It is cleared only
+    after all database views have been refreshed, since an ordinary exception
+    does not show that the views are current. Callers must hold
+    SurveyOutputLock and validate the manifest first.
     """
     def __init__(self, out):
         self.out = Path(out)
@@ -230,9 +235,9 @@ def _manifest_value(value):
         return sorted(items, key=lambda item: json.dumps(item, sort_keys=True))
     if isinstance(value, Path):
         return str(value)
-    # The type identity is deterministic and ensures a changed object type
-    # changes the manifest. A reader with meaningful object-valued settings can
-    # expose exact data through survey_fingerprint(ctx).
+    # The type identity is deterministic, so a changed object type changes the
+    # manifest. A reader with meaningful object-valued settings can record
+    # their exact data through survey_fingerprint(ctx).
     return {"type": f"{type(value).__module__}.{type(value).__qualname__}"}
 
 
@@ -351,7 +356,10 @@ def load_attempts(path: Path) -> dict[str, int]:
 
 
 class SurveyStore:
-    """Transactional source of truth; JSONL/text files are recoverable views."""
+    """Transactional SQLite record of the survey.
+
+    The JSONL and text files are views of this record and can be rebuilt from it.
+    """
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -421,7 +429,10 @@ class SurveyStore:
 
     def commit(self, key: str, scope: str, event: str, status: str, records,
                *, incomplete=None, no_files=None) -> None:
-        """Commit rows and the done marker together; safe to repeat after a crash."""
+        """Commit an event's rows and done marker in one transaction.
+
+        The commit is safe to repeat after a crash.
+        """
         incomplete_json = (json.dumps(list(incomplete), sort_keys=True)
                            if incomplete else None)
         no_files_json = (json.dumps(no_files, sort_keys=True)

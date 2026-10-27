@@ -1,5 +1,5 @@
-# Interference template: what the emitter looks like, for the detector adapter.
-# ATSC 1.0 8-VSB (A/53): a 6 MHz channel whose pilot sits 309.441 kHz above the
+# Interference template: the emitter model read by the detector adapter.
+# ATSC 1.0 8-VSB (A/53) is a 6 MHz channel with its pilot 309.441 kHz above the
 # lower channel edge and 11.3 dB below the aggregate data power.
 # Floats carry a decimal point so YAML reads them as numbers.
 kind: narrowband_marker            # selects the detector adapter and residual estimator

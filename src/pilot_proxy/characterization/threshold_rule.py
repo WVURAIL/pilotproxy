@@ -1,27 +1,31 @@
-"""Assign conditional channel thresholds from the detector and RFIsher table.
+"""Assign conditional channel thresholds from the detector and the RFIsher table.
 
-For each exact Q16 keep word, sweep the current era's equal-event distribution.
-``kappa`` counts retained probability, including unsupported frames in the
-original denominator. ``x`` is the signed mean pilot excess times the shelf
-conversion, floored only after averaging. ``se`` is its event-clustered
-standard error. The upper end is ``x + 2 se``.
+For each exact Q16 keep word, the current era's equal-event distribution is
+swept. ``kappa`` is the retained probability, with unsupported frames kept in
+the original denominator. ``x`` is the signed mean pilot excess times the shelf
+conversion, floored at zero only after averaging, and ``se`` is its
+event-clustered standard error. The upper end is ``x + 2 se``.
 
-The forecast strength is ``a = (gamma x_hi)**2 N G``. ``gamma`` is the measured
-calibrated redundant-stack amplitude divided by the archive shelf proxy. It
-is not an intrinsic coherent fraction. ``G`` is an assumed effective temporal
-gain, chosen from two stationary correlation families, not a measured
-cross-day coherence. These assumptions make every assigned word conditional.
+The forecast strength is ``a = (gamma x_hi)**2 N G``. Here, ``gamma`` is the
+measured, calibrated redundant-stack amplitude divided by the archive shelf
+proxy. It covers the spatial phase cancellation of calibrated redundant
+stacking and the transfer from the archive to the short captures. ``G`` is an
+effective temporal gain chosen from two stationary correlation families.
+Since the cross-day coherence has not been measured, ``G`` is assumed, and
+these assumptions make every assigned word conditional.
 
-Test the knee first, then the loosest passing word below it. Both the full-era
-and last-year curves must satisfy the channel's nominal-strength budget
-(default 1; a smaller value incorporates finite-amplitude or transfer checks).
-The ideal calendar cost is ``1 / kappa`` with a 20-year limit. Pass
-``calendar_factor=LEGACY_CALENDAR_FACTOR`` to reproduce the duty scenario of
-the frozen records. The recent window keeps the full-era knee and event weights.
+The knee is tested first, then the loosest passing word below it. Both the
+full-era and last-year curves must meet the channel's nominal-strength budget.
+The budget defaults to 1, and a smaller value allows for finite-amplitude or
+transfer checks. The ideal calendar cost is ``1 / kappa`` with a 20-year
+limit. ``calendar_factor=LEGACY_CALENDAR_FACTOR`` reproduces the duty scenario
+of the frozen records. The last-year window keeps the full-era knee and event
+weights.
 
-Serialized ``deployed*`` keys mean assigned candidates, not telescope operation.
-The ``coherent_fraction`` and ``coherent_gain`` data filenames and JSON keys
-keep their spelling for reproducibility; see docs/TERMINOLOGY.md.
+The serialized ``deployed*`` keys name assigned candidates and do not describe
+telescope operation. The ``coherent_fraction`` and ``coherent_gain`` data
+filenames and JSON keys keep their spelling for reproducibility (see
+docs/TERMINOLOGY.md).
 """
 from __future__ import annotations
 
@@ -41,14 +45,15 @@ from . import knee as knee_rule
 Q16 = 65536
 _TEMPLATE = default_project().interference
 FINE_BIN_HZ = 390625 / 128                 # 3051.76 Hz, the bin the marker excess is read in
-# Marker excess to band power: the marker sits marker_to_band_db below the band's total power.
+# Marker excess to band power. The marker is marker_to_band_db below the band's total power.
 SHELF = 10 ** (_TEMPLATE.marker.marker_to_band_db / 10) * FINE_BIN_HZ / _TEMPLATE.band_width_hz
 FRAME_SAMPLES = 16384                      # samples per frame
 FRAME_SECONDS = FRAME_SAMPLES / 390625     # 41.94 ms
-# Stack-to-proxy amplitude ratio measured in the matched captures. The historical
-# data filename is coherent_fraction.json; this does not measure intrinsic coherence.
-# Both measurements are CHIME-derived; the code-only cut withholds them (CHIME_DERIVED.md), and
-# then the module still imports but the rule refuses to price a band.
+# The stack-to-proxy amplitude ratio was measured in the matched captures. Its data file
+# keeps the name coherent_fraction.json and does not measure intrinsic coherence.
+# Both measurements are CHIME-derived and are withheld from the code-only cut
+# (CHIME_DERIVED.md). The module still imports without them, but the rule then
+# refuses to price a band.
 
 
 def _measurement(name: str) -> dict | None:
@@ -68,15 +73,15 @@ STACK_AMPLITUDE_RATIO_BY_BAND = {int(k): float(v) for k, v in (_STACK_RATIO_RECO
 STACK_AMPLITUDE_RATIO = float(_STACK_RATIO_RECORD["value"]) if _STACK_RATIO_RECORD else float("nan")
 STACK_AMPLITUDE_RATIO_SCALE = _STACK_RATIO_RECORD["scale"] if _STACK_RATIO_RECORD else None
 # G is a model-family budget for the unmeasured temporal transfer. The finite-dump
-# cross-moment in gamma is accounted for by G_int / mean_rho; this is not a
-# universal lower bound or a measurement of the long-time cross-day product.
+# cross-moment in gamma is accounted for by G_int / mean_rho. This budget is not a
+# universal lower bound, and it does not measure the long-time cross-day product.
 _GAIN = _measurement("coherent_gain.json")
 GAIN_FRAMES = int(_GAIN["frames"]) if _GAIN else None
 GUARD_STANDARD_ERRORS = 2.0
 MAX_CALENDAR_YEARS = 20.0                  # assumed facility lifetime
-ON_SKY_DUTY = 0.152                        # historical operating-duty scenario, not the paper's primary comparison
+ON_SKY_DUTY = 0.152                        # duty scenario of the frozen records, used only in LEGACY_CALENDAR_FACTOR
 LEGACY_CALENDAR_FACTOR = 8760 / (ON_SKY_DUTY * 8766)
-CALENDAR_YEARS_PER_RETAINED_YEAR = 1.0       # Overview's ideal year; masking alone costs 1 / kappa
+CALENDAR_YEARS_PER_RETAINED_YEAR = 1.0       # ideal year of the Overview, where masking alone costs 1 / kappa
 LAST_YEAR_DAYS = 365.25                    # the last-year guard's window: one full seasonal cycle
 TABLE_SCHEMA = "rfisher-channel-table-v2"
 
@@ -115,15 +120,17 @@ class ChannelFrames:
 
 
 def load_frames(channel: int, scores_dir) -> ChannelFrames:
-    """Read ``ch<N>.json`` and ``ch<N>.npz`` of the score cache and the marker
-    excess from the archive product they name, and check the keep rule
-    reproduces the accepted mask at the current word.
+    """Read one channel's score cache and the marker excess of its archive product.
 
-    The excess is ``product_contract.pilot_excess_from_fine_powers``: formed
+    ``ch<N>.json`` and ``ch<N>.npz`` are read from the score cache, the marker
+    excess is read from the archive product they name, and the keep rule must
+    reproduce the accepted mask at the current word.
+
+    The excess is computed by ``product_contract.pilot_excess_from_fine_powers``
     from the frame powers ``P_r = sum_f fine_power_u64[:, r, f]`` (kernel core
-    3.0.0) for v5 and v6 products alike, never from a v5 product's stored
-    row-domain ``normalized_pilot_excess``. The product file is unchanged, so
-    the cache's identity binding (path and size) still holds."""
+    3.0.0), for v5 and v6 products alike. The stored row-domain
+    ``normalized_pilot_excess`` of a v5 product is not read. The product file is
+    unchanged, so the cache's identity binding (path and size) still holds."""
     scores_dir = Path(scores_dir)
     meta = json.loads((scores_dir / f"ch{channel}.json").read_text())
     product = meta["original_product_identity"]
@@ -141,7 +148,7 @@ def load_frames(channel: int, scores_dir) -> ChannelFrames:
         frames.excess = pilot_excess_from_fine_powers(p, rows)
     if not np.array_equal(keep(frames, frames.current_word), frames.current_keep):
         raise ValueError(f"channel {channel}: the keep rule does not reproduce the accepted mask")
-    # The cache records the knee of rule v1; the decision uses the knee of the current rule (v2, the stronger
+    # The cache records the knee of rule v1. The decision uses the knee of the current rule (v2, the stronger
     # bend), read from the same frames after rule v1 is checked to reproduce the recorded word.
     events = [str(int(e)) for e in frames.event]
     words = [int(w) for w in frames.required]
@@ -155,7 +162,7 @@ def load_frames(channel: int, scores_dir) -> ChannelFrames:
 
 def last_year(frames: ChannelFrames) -> ChannelFrames:
     """The frames of the era's last ``LAST_YEAR_DAYS`` (one full seasonal cycle). Frames keep their era
-    weights, so kappa is relative to the subset; the knee is the full era's (none is computed here)."""
+    weights, so kappa is relative to the subset. The knee is the full era's, and none is computed here."""
     if frames.time is None:
         raise ValueError(f"channel {frames.channel}: the cache lacks frame_time")
     sel = frames.time >= frames.time.max() - LAST_YEAR_DAYS * 86400
@@ -218,9 +225,12 @@ def sweep(frames: ChannelFrames, shelf: float = SHELF) -> dict:
 
 
 def gain_of(tau, model: str):
-    """G(tau): the residual's power in a long average over a white residual's, the sum of rho(d)
-    over every lag d (tau in frame intervals). coth(1 / 2 tau) for the exponential rho = exp(-d / tau),
-    about 2 tau; the exact lag sum of the triangular rho = max(1 - d / tau, 0), about tau."""
+    """Return G(tau), the sum of rho(d) over every lag d, with tau in frame intervals.
+
+    G is the residual's power in a long average divided by that of a white
+    residual. For the exponential rho = exp(-d / tau), G = coth(1 / 2 tau),
+    which is about 2 tau. For the triangular rho = max(1 - d / tau, 0), G is
+    the exact lag sum, which is about tau."""
     tau = np.asarray(tau, dtype=float)
     if model == "exp":
         return 1 / np.tanh(1 / (2 * tau))
@@ -230,9 +240,12 @@ def gain_of(tau, model: str):
 
 @lru_cache
 def minimum_family_gain(frames: int) -> float:
-    """The least G(tau) / rho_bar_n(tau) over the coherence time tau for an n-frame dump, the lower
-    of an exponential and a triangular frame-to-frame correlation, with G(tau) the lag sum
-    (``gain_of``). 6.75 for 4 frames, 15.23 for 11, 40.00 for 33; the triangular sets each."""
+    """Return the least G(tau) / rho_bar_n(tau) over the coherence time tau for an n-frame dump.
+
+    The lower value of an exponential and a triangular frame-to-frame
+    correlation is taken, with G(tau) the lag sum of ``gain_of``. The result is
+    6.75 for 4 frames, 15.23 for 11, and 40.00 for 33, and the triangular
+    correlation sets each of these values."""
     d = np.arange(1, frames)[:, None]
     tau = np.geomspace(0.05, 1e4, 20001)                      # in frame intervals
     best = np.inf
@@ -244,13 +257,13 @@ def minimum_family_gain(frames: int) -> float:
 
 
 def temporal_gain(channel: int) -> float:
-    """Assumed G_int / mean_rho budget; the same model-family value for each band."""
+    """Return the assumed G_int / mean_rho budget, the same model-family value for each band."""
     _require(_GAIN, "coherent_gain.json")
     return minimum_family_gain(GAIN_FRAMES)
 
 
 def strength(x, gain: float, stack_amplitude_ratio: float = STACK_AMPLITUDE_RATIO):
-    """Residual strength a = (gamma x)^2 N G; ``stack_amplitude_ratio`` is gamma."""
+    """Return the residual strength a = (gamma x)^2 N G, with gamma given by ``stack_amplitude_ratio``."""
     if stack_amplitude_ratio is STACK_AMPLITUDE_RATIO:
         _require(_STACK_RATIO_RECORD, "coherent_fraction.json")
     return (stack_amplitude_ratio * np.asarray(x)) ** 2 * FRAME_SAMPLES * gain
@@ -273,8 +286,8 @@ def _point(s: dict, word: int, R: float, gain: float,
     """Read the supplied sweep at ``word``.
 
     ``coherence_limit_s`` is the effective-gain-time diagnostic
-    ``FRAME_SECONDS * gain / r_hi`` for this sweep alone. It is not a physical
-    phase lifetime or a limit jointly evaluated across multiple sweeps.
+    ``FRAME_SECONDS * gain / r_hi`` for this sweep alone. It does not give a
+    physical phase lifetime or a joint limit over several sweeps.
     """
     i = _at(s, word)
     if i is None:
@@ -294,7 +307,7 @@ def decide(s: dict, knee_word: int, R: float, *, gain: float, max_years: float =
            calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
     """Assign a candidate at the knee or the loosest passing word below it.
 
-    ``gain`` is the assumed effective temporal gain G; ``budget`` caps the
+    ``gain`` is the assumed effective temporal gain G, and ``budget`` caps the
     nominal-proxy bias ratio. ``calendar_factor / kappa`` is the time cost.
     """
     if not np.isfinite(calendar_factor) or calendar_factor <= 0:
@@ -328,15 +341,15 @@ GUARD_FAILED = "fails the tolerance on its last year"
 def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: float,
                    max_years: float = MAX_CALENDAR_YEARS, exclude: str | None = None, budget: float = 1.0,
                    calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
-    """``decide`` on the full era with the last-year guard (sweep ``last``).
+    """Run ``decide`` on the full era with the last-year guard (sweep ``last``).
 
-    Adds ``full_era_word``, ``last_year_r_hi`` and ``guard_acted``.
+    The result adds ``full_era_word``, ``last_year_r_hi``, and ``guard_acted``.
     ``last_year_r_hi`` is evaluated at the original ``full_era_word``, before
-    any tightening. Any deployed point, including its legacy
-    ``coherence_limit_s`` diagnostic, is read on ``full`` at the final word.
-    The joint effective-gain-time limit instead uses
+    any tightening. A deployed point, with its legacy ``coherence_limit_s``
+    diagnostic, is read on ``full`` at the final word. The joint
+    effective-gain-time limit is
     ``FRAME_SECONDS * gain / max(r_hi_full, r_hi_last)``, with both ratios
-    evaluated at that final word; it is not stored in ``coherence_limit_s``.
+    evaluated at that final word, and it is not stored in ``coherence_limit_s``.
     """
     d = decide(full, knee_word, R, gain=gain, max_years=max_years, exclude=exclude, budget=budget,
                calendar_factor=calendar_factor)

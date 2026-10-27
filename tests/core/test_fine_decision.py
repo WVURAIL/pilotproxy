@@ -1,12 +1,12 @@
 # coding=utf-8
-"""Gates for the frozen fine decision reference (fine decision v1).
+"""Tests of the frozen fine decision reference (fine decision v1).
 
-The reference is exact integer arithmetic; the oracle here is
-``fractions.Fraction`` (also exact), applied naively: sort the bulk F2
-values, take the requested rank, compare each designated bin against
-multiplier * rank value. Agreement is required exactly --- including
-tie, wrap, and degenerate-denominator cases --- because the CUDA
-epilogue is gated bit-for-bit against this module.
+The reference uses exact integer arithmetic. The oracle here is a direct
+computation with ``fractions.Fraction``, which is also exact. The bulk F2
+values are sorted, the value at the requested rank is taken, and each
+designated bin is compared with the multiplier times that value. The two must
+agree exactly, also in the tie, wrap and zero-denominator cases, since the
+CUDA epilogue is checked bit for bit against this module.
 """
 from __future__ import annotations
 
@@ -246,8 +246,8 @@ def test_required_multiplier_matches_decision_input_validation():
 
 
 def test_tied_rank_values_are_representative_independent():
-    # Bins 0 and 2 carry the same rational with different representations
-    # (2/4 == 1/2); either representative must give the same decision.
+    # Bins 0 and 2 hold the same rational in different representations
+    # (2/4 == 1/2), and either representative must give the same decision.
     S = np.zeros((3, FINE_BINS), dtype=np.uint64)
     mask = np.zeros(FINE_BINS, dtype=bool)
     for b, (t, lo, up) in {0: (1, 2, 2), 2: (2, 4, 4), 4: (5, 1, 1)}.items():
@@ -270,7 +270,7 @@ def test_tied_rank_values_are_representative_independent():
         anchor_bin=100,
         designated_half_width=0,
         bulk_mask=mask,
-        cfar_rank=2,  # rank value now 5/2; threshold 5 > 3/2
+        cfar_rank=2,  # rank value 5/2, so the threshold 5 > 3/2
         multiplier_q16=2 * MULTIPLIER_ONE,
     )
     assert d.valid and d.mask == 0
@@ -294,7 +294,8 @@ def test_degenerate_rules():
         multiplier_q16=MULTIPLIER_ONE,
     )
     assert d.n_bulk == 1 and d.rank_bin == 2 and d.mask == 1
-    # Rank beyond the usable bulk: invalid frame, mask forced 0.
+    # A rank past the end of the usable bulk gives an invalid frame, and the
+    # mask is forced to 0.
     d = fine_mask_decision(
         S,
         anchor_bin=100,
@@ -322,9 +323,9 @@ def test_degenerate_rules():
 
 
 def test_large_power_magnitudes_stay_exact():
-    # Near the Parseval-corner scale (~2^55): cross products reach
-    # ~2^110 and the threshold triple ~2^127 --- the regime the kernel
-    # must cover with its fixed-width helpers.
+    # Powers near the Parseval-corner scale (~2^55) give cross products near
+    # 2^110 and a threshold triple product near 2^127. The kernel must cover
+    # this range with its fixed-width helpers.
     rng = np.random.default_rng(RNG_SEED + 2)
     mask = independent_bin_mask(FINE_BINS, designated_bins=[0])
     for _ in range(50):
@@ -345,9 +346,9 @@ def test_large_power_magnitudes_stay_exact():
 
 
 def test_injected_line_fires_and_null_does_not():
-    # Synthetic spectrum: flat references, flat target except an
-    # injected excess at the anchor. The designated set fires; with the
-    # line removed the same calibration keeps the mask at 0.
+    # The synthetic spectrum has flat references and a flat target, except for
+    # an excess injected at the anchor. The designated set fires on the line,
+    # and without the line the same calibration keeps the mask at 0.
     S = np.zeros((3, FINE_BINS), dtype=np.uint64)
     S[1, :] = 1000
     S[2, :] = 1000

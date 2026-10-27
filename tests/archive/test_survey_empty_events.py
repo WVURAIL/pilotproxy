@@ -2,31 +2,35 @@
 """
 Regression test for the silent "resolved-but-empty" survey failure.
 
-The bug: survey() resolved a Datatrail Common Path for an event but every
-requested freq_id came back absent (cadcinfo NotFound) or under the size floor.
-That yields zero records AND zero hard errors, which _commit_decision read as
-"clean" -- so the event was marked permanently done and ZERO rows were written,
-while the run still reported `survey wrote <path>`. The tell in the field was a
-run that processed N events and printed not one per-event line (those only fire
-when records or errored is non-empty) and left inventory.jsonl at 0 lines while
+In this failure, survey() resolved a Datatrail Common Path for an event while
+every requested freq_id came back absent (cadcinfo NotFound) or under the size
+floor. That yields zero records and zero hard errors, which _commit_decision
+read as "clean". The event was marked permanently done and no rows were
+written, and the run still reported `survey wrote <path>`. In the field, such
+a run processed N events, printed no per-event line (those fire only when
+records or errored is non-empty), and left inventory.jsonl at 0 lines while
 surveyed_events.txt filled.
 
-These tests pin the fix WITHOUT any CADC/Datatrail access by injecting fakes for
-the three seams survey() leans on -- enumerate, `datatrail ps`, and cadcinfo:
+These tests check the fix with no CADC or Datatrail access. Fakes are injected
+for the three seams of survey(): enumerate, `datatrail ps`, and cadcinfo. The
+tests check that:
 
-  * _commit_decision now distinguishes 0-record-0-error (empty) from clean;
-  * an empty event with a RECENT (or undatable) observation is NOT marked done
-    on the first pass -- it is retried across resumes, so a rerun picks it up;
-  * after _MAX_ATTEMPTS it is accepted-as-empty: marked done AND recorded in
-    no_files_events.jsonl (visible, never silent, never re-probed forever);
+  * _commit_decision distinguishes an event with 0 records and 0 errors
+    (empty) from a clean one
+  * an empty event with a recent or undatable observation is not marked done
+    on the first pass and is retried across resumes, so a rerun picks it up
+  * after _MAX_ATTEMPTS the event is accepted as empty, marked done and
+    recorded in no_files_events.jsonl, so it is visible and never probed
+    again
   * an empty event whose observation is at least _EMPTY_TERMINAL_AGE_DAYS old
-    is accepted-as-empty on FIRST sighting (absence is definitive per probe;
-    the only transient it could mask is replication lag, which cannot affect
-    an old observation), with a full ledger entry giving the reason;
-  * a run whose inventory ends at 0 rows prints a loud [warn]; and
-  * the happy path (freq_ids present -> rows written, event done) still works.
+    is accepted as empty on first sighting, with a full ledger entry giving
+    the reason. Absence is definitive for each probe, and the only transient
+    it could mask is replication lag, which cannot affect an old observation.
+  * a run whose inventory ends at 0 rows prints a loud [warn]
+  * the normal path, with freq_ids present, still writes rows and marks the
+    event done
 
-Run:  PYTHONPATH=src python tests/test_survey_empty_events.py
+Run:  PYTHONPATH=src python tests/archive/test_survey_empty_events.py
 """
 from __future__ import annotations
 
@@ -46,15 +50,15 @@ from pilot_proxy.archive.interfaces import RunContext, SurveyUnavailableError
 
 SCOPE = "chime.event.baseband.raw"
 ABSENT_EVENT = "100000001"          # cp resolves, every freq_id NotFound
-PRESENT_EVENT = "900000009"         # cp resolves, every freq_id present + big
+PRESENT_EVENT = "900000009"         # cp resolves, every freq_id present and above the floor
 FREQ_IDS = [614, 706]
 ABOVE_FLOOR = MINIMUM_ARCHIVE_BYTES + 1
 
-# Common-Path date directories exercising the age gate's three regimes.
-# RECENT sits well inside _EMPTY_TERMINAL_AGE_DAYS, so absence could still be
-# replication lag -> retry lifecycle (the original pinned behavior). OLD is far
-# past the threshold -> first-sight acceptance. UNDATED defeats _DATE_RE ->
-# obs_date "unknown" -> the gate must fail open into the retry path.
+# Common Path date directories for the three regimes of the age gate. RECENT
+# is well below _EMPTY_TERMINAL_AGE_DAYS, so absence could still be
+# replication lag, and the event takes the retry lifecycle. OLD is far past the
+# threshold and is accepted on first sight. UNDATED does not match _DATE_RE, so
+# obs_date is "unknown" and the gate must fail open into the retry path.
 RECENT_OBS_DIR = (datetime.date.today()
                   - datetime.timedelta(days=3)).strftime("raw/%Y/%m/%d")
 OLD_OBS_DIR = "raw/2020/01/01"
@@ -63,16 +67,16 @@ UNDATED_OBS_DIR = "misc"
 
 @contextlib.contextmanager
 def fake_archive(membership, present_events, obs_dir=RECENT_OBS_DIR):
-    """Patch the three live seams survey() uses, restore them on exit."""
+    """Patch the three live seams of survey() and restore them on exit."""
     orig_enum = cadc_datatrail._enumerate_events
     orig_ps = cadc_datatrail.DATATRAIL.common_path
     orig_size = cadc_datatrail.CadcDatatrailSource._cadc_size
     present = set(present_events)
 
     def fake_size(self, uri, *a, **k):
-        # PRESENT events -> an above-floor size; everything else -> NotFound,
-        # which the real _cadc_size reports as (None, None): the silent-absent
-        # case that drove the bug.
+        # A present event returns a size above the floor. Any other event is
+        # NotFound, which the real _cadc_size reports as (None, None). This
+        # silent absence caused the failure.
         if any(ev in str(uri) for ev in present):
             return ABOVE_FLOOR, None
         return None, None
@@ -91,7 +95,7 @@ def fake_archive(membership, present_events, obs_dir=RECENT_OBS_DIR):
 
 
 def _survey(out_dir):
-    """Run one survey pass over out_dir; return (returned_path, stdout)."""
+    """Run one survey pass over out_dir and return its stdout."""
     ctx = RunContext(instrument=None, selection=None,
                      options={"freq_ids": list(FREQ_IDS)})
     src = cadc_datatrail.CadcDatatrailSource()
@@ -118,7 +122,7 @@ def _state(out_dir):
 
 
 def _no_files_keys(st):
-    """scope|event keys of the accept-as-empty ledger entries."""
+    """Return the scope|event keys of the accept-as-empty ledger entries."""
     return [f"{r['scope']}|{r['event']}" for r in st["no_files"]]
 
 
@@ -136,9 +140,9 @@ def test_completeness_pending_uses_event_identity_not_only_counts(
         complete.survey(ctx, str(out))
     assert complete.survey_completeness_issues(str(out))["pending"] == 0
 
-    # The enumeration changes but has the same cardinality. The new event is a
-    # recent accepted-for-retry empty event, while the old completed key remains
-    # in SQLite. A len(events)-len(surveyed) calculation would incorrectly say 0.
+    # The enumeration changes and keeps the same cardinality. The new event is a
+    # recent empty event held for retry, and the old completed key remains in
+    # SQLite. A count of len(events) - len(surveyed) would give 0 pending.
     with fake_archive(
             {(SCOPE, ABSENT_EVENT): ["dataset"]}, set(),
             obs_dir=RECENT_OBS_DIR):
@@ -150,9 +154,7 @@ def test_completeness_pending_uses_event_identity_not_only_counts(
     capsys.readouterr()
 
 
-# --------------------------------------------------------------------------
 # 1) pure decision function
-# --------------------------------------------------------------------------
 def run_commit_decision_unit() -> int:
     cd = cadc_datatrail._commit_decision
     M = cadc_datatrail._MAX_ATTEMPTS
@@ -163,9 +165,9 @@ def run_commit_decision_unit() -> int:
         ("partial accept",    cd(2, M - 1, 2), (True, True, True)),
         ("empty retry",       cd(0, 0, 0),     (False, False, False)),
         ("empty accept",      cd(0, M - 1, 0), (False, True, False)),
-        # the age gate: empty_max_attempts=1 (old obs) accepts on first
-        # sighting; None leaves the young/undatable retry lifecycle untouched;
-        # and the errored/partial path must ignore the empty-only cap.
+        # age gate: empty_max_attempts=1 (old obs) accepts on first sighting,
+        # None keeps the retry lifecycle for a young or undatable obs, and the
+        # errored or partial path ignores the cap for empty events
         ("empty aged-out first sight",
          cd(0, 0, 0, empty_max_attempts=1),
          (False, True, False)),
@@ -181,7 +183,7 @@ def run_commit_decision_unit() -> int:
         if got != want:
             print(f"  FAIL: _commit_decision {label}: got {got}, want {want}")
             ok = False
-    # the crux: empty must NOT mark done while attempts remain, and clean must.
+    # an empty event is not marked done while attempts remain, and a clean one is
     if cd(0, 0, 0)[1] is not False:
         print("  FAIL: empty-with-attempts-left was marked done"); ok = False
     if cd(0, 0, 4)[1] is not True:
@@ -191,9 +193,7 @@ def run_commit_decision_unit() -> int:
     return 0 if ok else 1
 
 
-# --------------------------------------------------------------------------
-# 2) survey() end-to-end: empty event coexists with a real one
-# --------------------------------------------------------------------------
+# 2) survey() end-to-end: an empty event alongside a real one
 def run_mixed_survey() -> int:
     print("MIXED SURVEY (one present event, one all-absent RECENT event)")
     work = tempfile.mkdtemp(prefix="dtw_mixed_")
@@ -204,20 +204,20 @@ def run_mixed_survey() -> int:
             (SCOPE, PRESENT_EVENT): ["dataset_a"],
         }
         out_dir = os.path.join(work, "data", "chime-test")
-        # RECENT obs (the fake_archive default): the age gate must NOT fire,
-        # preserving the original retried-across-resumes contract.
+        # with a RECENT obs, the fake_archive default, the age gate does not
+        # fire and the event is retried across resumes
         with fake_archive(membership, present_events=[PRESENT_EVENT]):
             log = _survey(out_dir)
         st = _state(out_dir)
         present_key, absent_key = f"{SCOPE}|{PRESENT_EVENT}", f"{SCOPE}|{ABSENT_EVENT}"
 
-        # present event -> 2 rows (one per freq_id), all for the present event
+        # the present event gives 2 rows, one per freq_id
         if len(st["rows"]) != len(FREQ_IDS):
             print(f"  FAIL: expected {len(FREQ_IDS)} rows, got {len(st['rows'])}")
             ok = False
         if any(r["event"] != PRESENT_EVENT for r in st["rows"]):
             print("  FAIL: a row was written for the absent event"); ok = False
-        # present event marked done; absent event NOT (it must be retried)
+        # the present event is marked done and the absent event is kept for retry
         if present_key not in st["surveyed"]:
             print("  FAIL: present event was not marked done"); ok = False
         if absent_key in st["surveyed"]:
@@ -226,7 +226,7 @@ def run_mixed_survey() -> int:
         # not yet accepted as empty (first pass only)
         if st["no_files"]:
             print(f"  FAIL: no_files written too early: {st['no_files']}"); ok = False
-        # the absent event is now visible in the log, not invisible
+        # the absent event is visible in the log
         if ABSENT_EVENT not in log or "retry" not in log.lower():
             print("  FAIL: absent event produced no visible per-event line"); ok = False
         print(f"  present -> {len(st['rows'])} rows + done; absent -> retried, "
@@ -237,9 +237,7 @@ def run_mixed_survey() -> int:
     return 0 if ok else 1
 
 
-# --------------------------------------------------------------------------
-# 3) survey() end-to-end: a wholly-empty survey warns, then accepts after retries
-# --------------------------------------------------------------------------
+# 3) survey() end-to-end: a wholly empty survey warns, then accepts after retries
 def run_empty_survey() -> int:
     print("EMPTY SURVEY (only an all-absent event; reproduces the report)")
     work = tempfile.mkdtemp(prefix="dtw_empty_")
@@ -254,7 +252,7 @@ def run_empty_survey() -> int:
             log1 = _survey(out_dir)
             st1 = _state(out_dir)
 
-            # run 1: 0 rows, loud warning, event NOT marked done
+            # run 1: 0 rows, a loud warning, and the event is not marked done
             if st1["rows"]:
                 print(f"  FAIL: empty survey wrote {len(st1['rows'])} rows"); ok = False
             if "inventory.jsonl is EMPTY" not in log1:
@@ -262,7 +260,8 @@ def run_empty_survey() -> int:
             if absent_key in st1["surveyed"]:
                 print("  FAIL: empty event marked done on first pass"); ok = False
 
-            # runs up to _MAX_ATTEMPTS: it gets accepted-as-empty (done + logged)
+            # runs up to _MAX_ATTEMPTS: the event is accepted as empty, marked
+            # done and logged
             log_last = log1
             for _ in range(M - 1):
                 log_last = _survey(out_dir)
@@ -295,9 +294,7 @@ def run_empty_survey() -> int:
     return 0 if ok else 1
 
 
-# --------------------------------------------------------------------------
-# 4) survey() end-to-end: an OLD absent event is accepted on first sighting
-# --------------------------------------------------------------------------
+# 4) survey() end-to-end: an old absent event is accepted on first sighting
 def run_aged_empty_survey() -> int:
     print("AGED EMPTY SURVEY (old obs; accept-as-empty on FIRST sighting)")
     work = tempfile.mkdtemp(prefix="dtw_aged_")
@@ -310,7 +307,7 @@ def run_aged_empty_survey() -> int:
                           obs_dir=OLD_OBS_DIR):
             log1 = _survey(out_dir)
             st1 = _state(out_dir)
-            log2 = _survey(out_dir)        # must skip, not re-probe
+            log2 = _survey(out_dir)        # skips the event with no second probe
 
         if absent_key not in st1["surveyed"]:
             print("  FAIL: aged empty event not marked done on first sighting")
@@ -348,9 +345,7 @@ def run_aged_empty_survey() -> int:
     return 0 if ok else 1
 
 
-# --------------------------------------------------------------------------
-# 5) survey() end-to-end: an UNDATABLE absent event must keep the retry path
-# --------------------------------------------------------------------------
+# 5) survey() end-to-end: an undatable absent event keeps the retry path
 def run_undated_empty_survey() -> int:
     print("UNDATED EMPTY SURVEY (no obs date in the path; gate fails open)")
     work = tempfile.mkdtemp(prefix="dtw_undated_")
@@ -382,7 +377,7 @@ def run_undated_empty_survey() -> int:
     return 0 if ok else 1
 
 
-# -- pytest entry points ---------------------------------------------------
+# pytest entry points
 def test_commit_decision_unit():
     assert run_commit_decision_unit() == 0
 

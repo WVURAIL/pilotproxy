@@ -1,16 +1,17 @@
 # Retained proxy confidence-band diagnostic
 
-`pilot_proxy.characterization.confidence_band.simultaneous_upper_band` computes
-a one-sided studentized event-pairs-bootstrap upper band jointly over supplied
-Q16 threshold words and named frame windows. It is a separate analysis: it does
-not replace `threshold_rule`'s existing `x + 2 se` guard or change any operating
-decision.
+The purpose of
+`pilot_proxy.characterization.confidence_band.simultaneous_upper_band` is to
+compute a one-sided upper band on the signed proxy mean jointly over the
+supplied Q16 threshold words and named frame windows. The band comes from a
+studentized event-pairs bootstrap. As a diagnostic, it leaves the existing `x + 2 se` guard of
+`threshold_rule` and every operating decision unchanged.
 
 ## What is bounded
 
-The target is the conditional **signed proxy mean**, with the original frame
-weights retained. For a threshold and window, define the contribution of
-resampling cluster `b` as
+The bounded quantity is the conditional signed proxy mean, with the original
+frame weights kept. For a threshold and a window, the contribution of resampling
+cluster `b` is defined as
 
 ```
 A_b = sum(original_frame_weight * signed_excess * keep)
@@ -18,26 +19,27 @@ B_b = sum(original_frame_weight * keep)
 mu_hat = shelf * sum(A_b) / sum(B_b)
 ```
 
-The population estimand is the corresponding ratio of expected cluster
-contributions. Default clusters are observing events. When the input weights
-give every observing event equal total mass, the target retains that weighting;
-it does not give every retained event equal mass. Events with no kept frames
-contribute zero to both sums and remain members of the resampling population.
-The score and excess may depend on the same frame. This is part of the
-conditional proxy estimand, not a requirement that the two be independent.
+The population estimand is the corresponding ratio of the expected cluster
+contributions. By default, the clusters are the observing events. When the input
+weights give every observing event equal total mass, the target keeps that
+weighting, so the retained events do not each receive equal mass. Events with no
+kept frames contribute zero to both sums and stay in the resampling population.
+The score and the excess may both depend on the same frame. This dependence is
+part of the conditional proxy estimand, and the two need not be independent.
 
-A statistical band for this mean is not a calibration of true injected
-retained power or the physical sky shelf. Those interpretations additionally
-depend on the pilot-to-shelf transfer, saturation, leakage, propagation and
-instrument state. Neither bootstrap resampling nor a larger critical value
-supplies an unknown physical calibration allowance.
+A statistical band for this mean does not calibrate the true injected retained
+power or the physical sky shelf. Those quantities also depend on the
+pilot-to-shelf transfer, saturation, leakage, propagation, and the instrument
+state. An unknown physical calibration allowance is supplied by neither
+bootstrap resampling nor a larger critical value.
 
 ## Joint resampling and upper-tail direction
 
-Each replicate draws as many clusters as the original sample, with replacement
-and equal selection probability. The same multiplicities `m_b` are used in
-every window, including overlapping full-era and last-year windows. Original
-frame weights are never re-equalized within a window or temporal block.
+Each replicate draws as many clusters as the original sample has, with
+replacement and equal selection probability. In every window, the same
+multiplicities `m_b` are used, even where the full-era and last-year windows
+overlap. The original frame weights are never re-equalized in a window or
+temporal block.
 
 For a replicate, the mean and standard error are
 
@@ -47,10 +49,11 @@ se_star = shelf * sqrt(sum(m_b (A_b - (mu_star / shelf) B_b)^2))
                  / sum(m_b B_b)
 ```
 
-The multiplicity in the squared residual sum is `m_b`, not `m_b^2`: repeated
-copies are repeated sampling units. The original standard error uses every
-`m_b = 1`, matching the existing event-cluster convention without an additional
-`G/(G-1)` finite-sample variance factor.
+The squared residual sum is weighted by `m_b`, since each repeated copy is its
+own sampling unit. A weight of `m_b^2` would treat the copies as a single unit.
+For the original standard error, `m_b = 1` for every cluster, which matches the
+existing event-cluster convention, with no added `G/(G-1)` finite-sample
+variance factor.
 
 For each replicate, the upper-band pivot is
 
@@ -58,62 +61,67 @@ For each replicate, the upper-band pivot is
 max over eligible words and windows: (mu_hat - mu_star) / se_star
 ```
 
-Its requested quantile uses NumPy's `higher` order-statistic convention. The
-signed band is `mu_hat + critical * se_hat`. Only the final reported `upper`
-field applies `max(0, signed_upper)`; the mean, error, pivot and `signed_upper`
-retain their signs. This direction matters for asymmetric bootstrap laws.
+For the requested quantile of the pivot, NumPy's `higher` order-statistic
+convention is used. The signed band is `mu_hat + critical * se_hat`. Only the
+final reported `upper` field applies `max(0, signed_upper)`, and the mean,
+error, pivot, and `signed_upper` keep their signs. The sign of the pivot,
+`mu_hat - mu_star`, selects the upper tail, and the band depends on this
+direction when the bootstrap law is asymmetric.
 
 ## Support and failures
 
-Eligibility is fixed once using the original data. The defaults require:
+Eligibility is fixed once from the original data. By default, a point is
+eligible when it has:
 
-- At least 30 kept resampling clusters.
-- Effective retained support `(sum B_b)^2 / sum(B_b^2)` of at least 20.
-- Positive retained mass and a finite, positive standard error.
+- at least 30 kept resampling clusters;
+- an effective retained support `(sum B_b)^2 / sum(B_b^2)` of at least 20; and
+- positive retained mass and a finite, positive standard error.
 
-These are declared engineering support floors, not coverage theorems. They
-count clusters, not frames. With `cluster_labels`, the API's `kept_events` and
-`min_kept_events` refer to resampling clusters; `kept_clusters` is an explicit
-output alias. Unsupported points receive infinite upper limits.
+These are declared engineering floors on the support, and no coverage theorem
+rests on them. They count clusters, never frames. With `cluster_labels`, the API
+fields `kept_events` and `min_kept_events` refer to resampling clusters, and
+`kept_clusters` is given as an explicit output alias. Unsupported points receive
+infinite upper limits.
 
-The eligible family is not reselected in bootstrap replicates. If any member
-has zero retained mass, undefined or zero error, an overflowing pivot, or
-cancellation-dominated variance in a replicate, that replicate's joint maximum
-is positive infinity. Failed replicates are retained in the quantile. If its
-critical value is infinite, the entire eligible family is unavailable. Failure
-counts and the number of completed replicates are returned explicitly.
+In the bootstrap replicates, the eligible family is not reselected. If any
+member has zero retained mass, an undefined or zero error, an overflowing pivot,
+or a variance dominated by cancellation in a replicate, the joint maximum of
+that replicate is positive infinity. Failed replicates are kept in the quantile.
+If the critical value is infinite, the entire eligible family is unavailable.
+Both the failure counts and the number of completed replicates are returned with
+the result.
 
 ## Grid selection and dependence
 
-The supplied words remain fixed during resampling. For a predeclared grid, the
+During resampling, the supplied words stay fixed. For a predeclared grid, the
 family is exactly the eligible words and windows supplied in that call. A
-threshold chosen from that grid is part of the same joint analysis; this does
-not justify extrapolation to omitted words or additional channels.
+threshold chosen from that grid is covered by the same joint analysis, but words
+and channels that were not supplied are not covered.
 
-When the caller instead supplies all distinct observed score words, the result
-is an **empirical-staircase simultaneous-bootstrap diagnostic**. The grid was
-not predeclared. Any coverage validation must reproduce that grid-building and
-selection procedure on each independent dataset; fixed-grid validation alone
-does not qualify it. Era definitions, anchors, profiles, weighting rules and
-window construction also remain frozen during resampling. If their selection
-is part of a desired repeated-sample claim, that selection needs its own
-matching validation.
+When the caller supplies all distinct observed score words, the grid was not
+predeclared, and the result is known as an empirical-staircase
+simultaneous-bootstrap diagnostic. A coverage validation of this diagnostic must
+repeat the grid construction and selection on each independent dataset, since a
+fixed-grid validation does not qualify it. Era definitions, anchors, profiles,
+weighting rules, and window construction also stay frozen during resampling. If
+a repeated-sample claim is to cover their selection, that selection needs its
+own matching validation.
 
-Event-pairs resampling assumes independent, sufficiently exchangeable events.
-It does not automatically cover common receiver changes, seasonal drift or
-cross-event correlation. Optional integer `cluster_labels` may group complete
-original events into calendar-day or longer temporal blocks, without changing
-their original frame weights. An original event cannot be split across two
-clusters. Changing the grouping is a dependence-sensitivity analysis; it does
-not by itself establish independence of the larger blocks.
+Event-pairs resampling assumes independent and sufficiently exchangeable events.
+Common receiver changes, seasonal drift, and correlation between events are not
+covered by this assumption. With the optional integer `cluster_labels`, complete
+original events are grouped into calendar-day or longer temporal blocks, and the
+original frame weights are kept. An original event cannot be split over two
+clusters. A change of grouping is a sensitivity analysis for dependence, and it
+does not by itself show that the larger blocks are independent.
 
-Before describing a result as a nominal-confidence bound, check repeated-sample
-coverage against an appropriate known-target model, including the actual
-support, grid and threshold-selection procedure. Independent datasets are the
-coverage trials. Dependent points along a single threshold staircase are not
-coverage trials. Existing frozen injection products can also test agreement
-with known injected retained power, within their recorded conditions, without
-turning that test into a universal physical bound.
+A result is described as a bound at nominal confidence only after its
+repeated-sample coverage is checked against a suitable model with a known
+target, using the actual support, grid, and threshold-selection procedure. Each
+coverage trial is an independent dataset, and dependent points along one
+threshold staircase do not count as trials. Existing frozen injection products
+can also test agreement with a known injected retained power under their
+recorded conditions, and such a test holds only for those conditions.
 
 ## API and implementation
 
@@ -131,40 +139,43 @@ result = simultaneous_upper_band(
 )
 ```
 
-Each window returns the signed mean, standard error, eligibility/status,
-signed and nonnegative upper limits, kept frame/cluster counts, effective
-support and original retained weight. Global output includes the critical
-value, every joint pivot, settings, assumptions and failure diagnostics. The
-arrays and nonfinite values are intentional; reporting tools must preserve
-their meanings when serializing rather than silently converting a refusal to
-a successful bound.
+Each window returns the signed mean, the standard error, the eligibility and
+status, the signed and nonnegative upper limits, the kept frame and cluster
+counts, the effective support, and the original retained weight. Across all
+windows, the output holds the critical value, every joint pivot, the settings,
+the assumptions, and the failure diagnostics. Both the arrays and the nonfinite
+values carry meaning, and a reporting tool must preserve that meaning when it
+serializes them, so that a refusal is never reported as a successful bound.
 
-The implementation aggregates sparse event/entry-word contributions and forms
-increments of each event's squared prefixes. Multiplicity-weighted cumulative
-sums then recompute each replicate's moments. It allocates no dense
-event-by-threshold matrix or replicate-by-event-by-threshold tensor. A common
-weight normalization and per-window location centering improve arithmetic
-without changing the estimator. `batch_size` controls only the storage of
+In the implementation, the sparse contributions for each event and entry word
+are aggregated, and the increments of each event's squared prefixes are formed.
+From cumulative sums weighted by the multiplicities, the moments of each
+replicate are then recomputed. No dense event-by-threshold matrix or
+replicate-by-event-by-threshold tensor is allocated. A common weight
+normalization and a location centering in each window improve the arithmetic and
+leave the estimator unchanged. `batch_size` sets only the storage of the
 multinomial count draws and does not change the seeded answer.
 
-Tests compare all means, errors and bootstrap pivots with an independent
-event-copy oracle; they cover asymmetric upper-tail direction, overlapping
-windows, unequal cluster mass, zero-kept events, failed replicates, support
-refusals, clipping, numerical cancellation, malformed input and reproducibility.
+Tests compare all means, errors, and bootstrap pivots with an independent oracle
+that copies events. They cover the upper-tail direction for asymmetric laws,
+overlapping windows, unequal cluster mass, events with no kept frames, failed
+replicates, support refusals, clipping, numerical cancellation, malformed input,
+and reproducibility.
 
 ## Reproducible command-line runs
 
-The two drivers insert this checkout's `src` directory before importing the
-implementation. Run them from the canonical `pilotproxy` checkout, with NumPy
-and SciPy available. Replace the `/path/to/` placeholders with your interpreter,
-inputs and a new output directory. Keep the complete
-output directories, input receipts and source revision together.
+The two drivers insert the `src` directory of this checkout before they import
+the implementation, so they are run from the canonical `pilotproxy` checkout
+with NumPy and SciPy available. In the commands below, `/path/to/` marks the
+interpreter, the inputs, and a new output directory. Complete output
+directories, input receipts, and the source revision are kept together.
 
-Record the runtime before a run. A seed and source hash alone do not identify
-the numerical environment. The validator records NumPy in its summary, but
-neither driver automatically records the full Python/SciPy/platform receipt.
-Use a new receipt for every runtime used, including an interrupted run resumed
-on another platform; retain all receipts rather than overwriting the original.
+Before a run, the runtime is recorded, because a seed and a source hash do not
+determine the numerical environment. The validator records the NumPy version in
+its summary, but neither driver records the full receipt of Python, SciPy, and
+platform. Each runtime gets its own receipt, and so does an interrupted run
+resumed on another platform. All receipts are kept, and the original is never
+overwritten. A receipt is written with:
 
 ```bash
 cd /path/to/pilotproxy
@@ -198,7 +209,7 @@ PY
 
 ### Archive report and frozen-input replay
 
-Create the archive diagnostic from the existing score products:
+The archive diagnostic is made from the existing score products:
 
 ```bash
 "$proxy_python" tools/report_proxy_confidence_band.py \
@@ -208,22 +219,23 @@ Create the archive diagnostic from the existing score products:
   --replicates 1999 --seed 2026101601 --modes event day week
 ```
 
-The default channel list is 14 through 37; `--channels 14 35 37`, for example,
-requests a smaller diagnostic in a separate output directory. The two joint
-windows are the full frozen era and frames within `LAST_YEAR_DAYS` of its last
-frame. Confidence 0.95 and support floors 30/20 are fixed in this driver.
-Day and week modes use one-day and seven-day UTC bins anchored at the Unix
-epoch. Each whole event belongs to the bin of its earliest frame. Mode order
-also enters the bootstrap seed, so retain the recorded order when reproducing
-a run. The modes are separate sensitivity analyses, not a joint confidence
-family across groupings or channels.
+By default, the channel list is 14 through 37, and a smaller diagnostic, such as
+`--channels 14 35 37`, is written to its own output directory. The two joint
+windows are the full frozen era and the frames no more than `LAST_YEAR_DAYS`
+days before its last frame. In this driver, the confidence of 0.95 and the
+support floors of 30 and 20 are fixed. The day and week modes use one-day and
+seven-day UTC bins anchored at the Unix epoch, and each whole event belongs to
+the bin of its earliest frame. Since the mode order also enters the bootstrap
+seed, a reproduction keeps the recorded order. Each mode is its own sensitivity
+analysis, and the modes do not form a joint confidence family over groupings or
+channels.
 
-Each `scores/chN.npz` requires its `chN.json` metadata and the original product
-referenced by that metadata for the live loader. The report records score-file
-and metadata hashes and freezes the exact analysis arrays in
-`inputs/chN.npz`, with a companion JSON checksum/provenance receipt. The live
-loader checks original archive size; it does **not** verify the original
-archive SHA256. That limitation is explicit in the receipt.
+For the live loader, each `scores/chN.npz` requires its `chN.json` metadata and
+the original product named in that metadata. The report records the hashes of
+the score file and the metadata and freezes the exact analysis arrays in
+`inputs/chN.npz`, beside a JSON receipt of checksums and provenance. The live
+loader checks the size of the original archive but not its SHA256, and the
+receipt states this limit.
 
 An offline replay uses those frozen arrays and checks their stored SHA256
 before loading them:
@@ -236,35 +248,38 @@ before loading them:
   --replicates 1999 --seed 2026101601 --modes event day week
 ```
 
-`--scores` and `--frozen-inputs` are mutually exclusive. Offline replay needs
-the frozen NPZ/JSON pairs, this implementation and its policy data; it does
-not need the original score or archive files. The optional
-`--published-decisions` file checks reproduction of the accepted DTV words
-(channel 37 is the radio astronomy control). Preserve it to reproduce that
-check. A moved input path can change receipt identity without changing the
-arrays or numerical answer.
+`--scores` and `--frozen-inputs` are mutually exclusive. An offline replay needs
+the frozen NPZ and JSON pairs, this implementation, and its policy data, and it
+runs without the original score or archive files. The optional
+`--published-decisions` file checks that the accepted DTV words are reproduced
+(channel 37 is the radio astronomy control), so the file is kept for that
+check. Moving an input path can change the receipt identity while the arrays and
+the numerical answer stay the same.
 
-Outputs include `protocol.json`, `inputs/`, a JSON report and compressed NPZ
-arrays for every channel/mode, and `summary.json`. The NPZ files preserve the
-full grid, eligibility, upper limits and bootstrap pivots. JSON nonfinite
-numbers become `null`; inspect status/failure fields and the NPZ arrays to
-distinguish unavailable limits from finite results. Reports hash the core,
-driver, existing rule, policy inputs, frozen arrays and result arrays, and
-record resolved policy constants. Reusing an output directory verifies the
-protocol and each existing result's identities/checksum; mismatches refuse
-reuse. Use a new directory after changing code, protocol or inputs.
+The outputs contain `protocol.json`, `inputs/`, a JSON report and compressed NPZ
+arrays for every channel and mode, and `summary.json`. In the NPZ files, the
+full grid, the eligibility, the upper limits, and the bootstrap pivots are
+preserved. Nonfinite numbers become `null` in JSON, so an unavailable limit is
+told apart from a finite result by the status and failure fields and by the NPZ
+arrays. Each report hashes the core, the driver, the existing rule, the policy
+inputs, the frozen arrays, and the result arrays, and it records the resolved
+policy constants. When an output directory is reused, the protocol and the
+identities and checksum of each existing result are verified, and any mismatch
+refuses the reuse. A change of code, protocol, or inputs needs a new directory.
 
 The original guard is recomputed and remains the operative result. The
-`proxy_band_substitution_diagnostic` is only a sensitivity calculation through
-the unchanged rule API. Its `se` input encodes half the nonnegative difference
-between the band and the clipped proxy mean, so the API's `2 se` term supplies
-the band margin. This encoded value is **not a standard error**; if the band
-falls below that mean, the substitution conservatively uses the mean. The
-report does not write accepted detector words or modify the guard.
+`proxy_band_substitution_diagnostic` is a sensitivity calculation through the
+unchanged rule API. Its `se` input holds half the nonnegative difference between
+the band and the clipped proxy mean, so the `2 se` term of the API supplies the
+band margin. This encoded value is therefore not a standard error. If the band
+falls below the mean, the substitution uses the mean, which is the conservative
+choice. The report writes no accepted detector words and leaves the guard
+unchanged.
 
 ### Independent-dataset validation
 
-Run the declared seven-scenario protocol, including existing campaign products:
+The declared protocol of seven scenarios, with the existing campaign products,
+is run with:
 
 ```bash
 "$proxy_python" tools/validate_proxy_confidence_band.py \
@@ -273,146 +288,154 @@ Run the declared seven-scenario protocol, including existing campaign products:
   --campaign /path/to/fine_detector_validation_2026-09-09/campaign
 ```
 
-Here `--replicates` counts independent datasets per scenario; it is distinct
-from `--bootstrap-replicates` within each dataset. The fixed protocol uses
-320 events per analytic dataset and 160 rows per empirical dataset, full and
-final-half windows, confidence 0.95 and support floors 30/20. It reconstructs
-the observed threshold staircase, support eligibility and diagnostic knee/
-threshold selection in every dataset. The selection budget is fixed from the
-declared population target before dataset draws; this tests a specified
-selection procedure, not the entire archive policy or profile-fitting process.
+Here, `--replicates` counts the independent datasets per scenario, and
+`--bootstrap-replicates` counts the bootstrap replicates in each dataset. Under
+the fixed protocol, each analytic dataset has 320 events and each empirical
+dataset has 160 rows, with full and final-half windows, a confidence of 0.95,
+and support floors of 30 and 20. In every dataset, the observed threshold
+staircase, the support eligibility, and the diagnostic selection of knee and
+threshold are reconstructed. The selection budget is fixed from the declared
+population target before the datasets are drawn. Thus, the protocol tests one
+specified selection procedure, and the full archive policy and the profile
+fitting are not tested.
 
 The five analytic scenarios are `null_gaussian`, `independent_gaussian`,
-`coupled_unequal`, `correlated_wrong_unit` and `correlated_blocks`. They cover
-known conditional proxy targets, unequal event sizes and score/proxy coupling.
-The last two share a Gaussian disturbance across four events and compare
-incorrect event-level resampling with the corresponding block grouping. The
-wrong-unit case deliberately violates the independent-cluster assumption.
+`coupled_unequal`, `correlated_wrong_unit`, and `correlated_blocks`. They cover
+known conditional proxy targets, unequal event sizes, and coupling between score
+and proxy. In the last two, four events share a Gaussian disturbance, and
+incorrect resampling by event is compared with the corresponding block grouping.
+The wrong-unit case violates the independent-cluster assumption on purpose.
 
-The empirical frontier population comes from the checked-in
+The empirical frontier population is taken from the checked-in
 `docs/evidence/mask_residual_frontier_2026-09-07/study_config.json` and
 `frames/off.npz` / `frames/on_m55p0.npz`. With `--campaign`, the driver also
-reads the campaign plan, its referenced cache plan and 16-trial evaluation
-shards for channel/case pairs (14, 0), (14, 4) and (35, 0), at 2,048 streams.
-It verifies cache/shard checksums and shard identities, reduces 512 trial IDs
-per case, and uses the available levels nearest requested coordinates
--55, -50 and -44 dB. The empirical campaign population uses channel 14,
-case 0, at the middle selected level. These populations retain paired score
-and proxy rows; independently resampling them creates known-target statistical
-datasets, not new physical waveform observations.
+reads the campaign plan, the cache plan it names, and the 16-trial evaluation
+shards for the channel and case pairs (14, 0), (14, 4), and (35, 0), at 2048
+streams. After the checksums of the cache and shards and the shard identities
+are verified, 512 trial IDs are reduced per case, and the available levels
+nearest the requested coordinates of -55, -50, and -44 dB are used. For the
+empirical campaign population, channel 14, case 0, is used at the middle
+selected level. These populations keep the score and proxy rows paired.
+Resampling them independently produces statistical datasets with a known target,
+and no new physical waveform observations are made.
 
-`campaign_diagnostic.json` compares proxy means with the **requested model
-data-shelf coordinate**. That coordinate is not measured total digital input
-INR, and the difference is not an isolated estimate of selection bias. Reused
-trial IDs pair cells and levels and do not add independent trials. Omitting
-`--campaign` runs six scenarios and changes the family size and protocol.
-This driver has no `--frozen-inputs` option: direct replay needs the referenced
-fixtures, campaign/cache products when requested, and a Git checkout for the
-revision receipt. An external portable replay must preserve the exact joint
-populations and separately record any I/O substitutions and their hashes.
+`campaign_diagnostic.json` compares the proxy means with the requested model
+coordinate of the data shelf. This coordinate is a model input and differs from
+the measured total digital input INR, and the difference between the proxy mean
+and this coordinate is not an isolated estimate of selection bias. Reused trial IDs pair cells and levels and
+add no independent trials. Without `--campaign`, six scenarios are run, and the
+family size and protocol change. This driver has no `--frozen-inputs` option. A
+direct replay needs the referenced fixtures, the campaign and cache products
+when they are requested, and a Git checkout for the revision receipt. A portable
+replay elsewhere must preserve the exact joint populations and record each I/O
+substitution and its hash.
 
-The driver writes `protocol.json` before outcomes, atomic per-scenario
-checkpoints every ten datasets, per-scenario results, optional campaign
-diagnostics and `summary.json`. Checkpoints resume only when their protocol
-hash matches. Preserve input checksums and verify them before resuming; a
-matching protocol alone does not establish unchanged empirical inputs. The
-summary records source/fixture hashes, the checkout commit and NumPy version.
+The driver writes `protocol.json` before any outcome, then atomic checkpoints
+for each scenario every ten datasets, the results of each scenario, the
+optional campaign diagnostics, and `summary.json`. A checkpoint resumes only
+when its protocol hash matches. A matching protocol does not show that the
+empirical inputs are unchanged, so the input checksums are kept and verified
+before a resume. The summary records the source and fixture hashes, the
+checkout commit, and the NumPy version.
 
-For each scenario, `qualified95` requires both zero unavailable datasets and
-a one-sided Clopper-Pearson upper limit on the joint miss probability of at
-most 0.05. The tail probability is `0.05 / number_of_scenarios`, adjusting the
-qualification statements across the declared scenario family. Raw observed
-coverage alone does not pass this gate. Knee/selected-point misses and
-unavailable counts are reported separately; refusals must not be presented as
-successful finite bounds. Any qualification is conditional on that declared
-population. It does not certify physical shelf power, arbitrary archive
-dependence, profile selection, or a simultaneous statement across channels.
-These instructions specify the analysis and its gate; they make no claim that
-the completed validation passes it. The existing guard remains unchanged.
+For each scenario, `qualified95` requires zero unavailable datasets and a
+one-sided Clopper-Pearson upper limit of at most 0.05 on the joint miss
+probability. The tail probability is `0.05 / number_of_scenarios`, which adjusts
+the qualification statements for the declared family of scenarios. Raw observed
+coverage alone does not pass this gate. Misses at the knee and at the selected
+points, and the unavailable counts, are reported on their own, and a refusal
+must never be presented as a successful finite bound. A qualification holds only
+for the declared population. Physical shelf power, arbitrary archive dependence,
+profile selection, and a simultaneous statement over channels are not certified
+by it. This section specifies the analysis and its gate, and the outcome of the
+completed validation is given in the next section.
 
 
 ## Separately calibrated model margin
 
-`tools/calibrate_proxy_confidence_band.py` adds a conservative, explicitly
-model-conditional option. It leaves the event/block estimator, original event
-weights, joint windows, support rules and bootstrap algorithm unchanged. It
-also leaves the production `x + 2 se` guard unchanged. The original seven-model
-validation is retained: 18, 23, 20, 94, 18, 25 and 21 joint misses among 400
-datasets, respectively, in the scenario order above with the two empirical
-models last. All were finite, but none passed the stricter family-adjusted
-qualification gate. The assumption-matched observed miss rates of 4.5–6.25%
-do not, by themselves, demonstrate a numerical defect. The wrong-unit control
-had a substantially larger 23.5% miss rate.
+`tools/calibrate_proxy_confidence_band.py` adds a conservative option that holds
+only under its stated models. The event and block estimator, the original event
+weights, the joint windows, the support rules, the bootstrap algorithm, and the
+production `x + 2 se` guard are all unchanged. In the original validation of
+seven models, which is kept, the joint misses in 400 datasets were 18, 23, 20,
+94, 18, 25, and 21, in the scenario order above with the two empirical models
+last. All bands were finite, but none of the models passed the stricter
+family-adjusted qualification gate. For the models that match the assumptions,
+the observed miss rates lie between 4.5% and 6.25%, and these rates do not by
+themselves show a numerical defect. With 94 misses, the wrong-unit control had a
+far larger miss rate of 23.5%.
 
-The new procedure uses **independent calibration and validation datasets**.
-For each calibration dataset, let `c` be its original bootstrap critical value
-and let `mu` be the known population conditional proxy mean. Its scalar score is
+Independent datasets are used for calibration and for validation. For each
+calibration dataset, `c` denotes its original bootstrap critical value, and `mu`
+denotes the known conditional proxy mean of the population. Its scalar score is
 
 ```
 R = max(0, max over eligible words/windows ((mu - mu_hat) / se_hat))
     / max(c, 1)
 ```
 
-The score includes the complete observed-staircase procedure, overlapping
-windows, support selection and finite-bootstrap randomness. A multiplier `M`
-then gives the upper band
+The score covers the complete observed-staircase procedure, the overlapping
+windows, the support selection, and the randomness of the finite bootstrap. A
+multiplier `M` then gives the upper band
 
 ```
 mu_hat + M * max(c, 1) * se_hat
 ```
 
-The positive critical floor makes widening monotone even when a bootstrap
-critical value is negative. `widen_upper_band` preserves raw means, standard
-errors and bootstrap pivots, clips only the final nonnegative branch, rejects
-multipliers below one and refuses a nonfinite widened critical value. An
-unavailable original band remains unavailable.
+With the floor of one on the critical value, the widening stays monotone even
+when a bootstrap critical value is negative. `widen_upper_band` preserves the
+raw means, standard errors, and bootstrap pivots, clips only the final
+nonnegative branch, rejects multipliers below one, and refuses a nonfinite
+widened critical value. An original band that is unavailable stays unavailable.
 
-For each of the six assumption-matched models, 400 independent calibration
-scores determine a one-sided nonparametric tolerance limit. The declared
-content is 0.975. The smallest order rank `k` satisfying
+For each of the six models that match the assumptions, 400 independent
+calibration scores determine a one-sided nonparametric tolerance limit with a
+declared content of 0.975. The smallest order rank `k` that satisfies
 
 ```
 P[Binomial(400, 0.975) >= k] <= 0.05 / 6
 ```
 
-is **398** (one-based): its exact tail is 0.002547621772282387; rank 397 gives
-0.009683002762933034 and does not meet the rule. The model's multiplier is the
-398th ascending score, floored at one. The common multiplier is the maximum
-across the six models. No failed or unavailable calibration dataset is dropped:
-any such dataset refuses finite calibration.
+is 398 (one-based), with an exact tail of 0.002547621772282387. Rank 397 gives
+0.009683002762933034 and does not meet the rule. For each model, the multiplier
+is its 398th ascending score, floored at one, and the common multiplier is the
+maximum over the six models. No failed or unavailable calibration dataset is
+dropped, and any such dataset refuses a finite calibration.
 
-For independent, identically distributed complete-dataset scores from each
-specified model, this order-statistic construction gives at least 95%
-simultaneous calibration confidence that the resulting multiplier covers at
-least 97.5% of future datasets from **each of those six models**. Bonferroni
-controls the six statements; independence across the six calibrations is not
-needed. Ties make the order-statistic guarantee conservative. This is a
-statement about the score distribution under the declared simulation laws,
-including their sample sizes and procedure. It is not a distribution-free
-claim about arbitrary archive data or physical DTV power. The distinction
-between tolerance content and confidence is described in the
-[NIST tolerance-limit reference](https://itl.nist.gov/div898/software/dataplot/refman1/auxillar/tolelimi.htm);
-the order-statistic approach originates in
-[Wilks (1941)](https://doi.org/10.1214/aoms/1177731788).
+When the complete-dataset scores of each specified model are independent and
+identically distributed, this order-statistic construction gives at least 95%
+simultaneous confidence that the resulting multiplier covers at least 97.5% of
+future datasets from each of the six models. The Bonferroni correction controls
+the six statements, so the six calibrations need not be independent of each
+other. Ties make the order-statistic guarantee conservative. Such a guarantee
+concerns the score distribution under the declared simulation laws, with their
+sample sizes and procedure. It makes no distribution-free claim about arbitrary
+archive data or physical DTV power. Tolerance content and confidence are
+distinguished in the [NIST tolerance-limit
+reference](https://itl.nist.gov/div898/software/dataplot/refman1/auxillar/tolelimi.htm),
+and the order-statistic method is due to [Wilks
+(1941)](https://doi.org/10.1214/aoms/1177731788).
 
-The calibration namespace is fixed at seed 20261016031. After the multiplier is
-frozen, 400 fresh datasets per scenario use seed 20261016032, with distinct
-hashed dataset/bootstrap purposes. The validation gate is unchanged: no
-unavailable datasets and the one-sided exact binomial upper miss limit at
-`alpha = .05/7` must be at most .05 for **all six matched models**. The seventh
-scenario, incorrect event resampling under four-event dependence, is excluded
-from calibration and reported as a negative control. Its lower miss limit
-above .05 establishes assumption failure when observed; it does not trigger
-retuning if the conservative margin happens to mask that failure. No seeds,
-model populations or multiplier are replaced after held-out outcomes.
+For calibration, the seed namespace is fixed at 20261016031. After the
+multiplier is frozen, 400 fresh datasets per scenario are drawn with seed
+20261016032, with distinct hashed purposes for the dataset and bootstrap draws.
+Under the unchanged validation gate, all six matched models must have no
+unavailable datasets and a one-sided exact binomial upper miss limit of at most
+.05 at `alpha = .05/7`. The seventh scenario, incorrect resampling by event
+under four-event dependence, is kept out of the calibration and reported as a
+negative control. When its lower miss limit is above .05, the assumption failure
+is confirmed. If the conservative margin happens to hide that failure, no
+retuning follows. No seed, model population, or multiplier is replaced after the
+held-out outcomes are known.
 
 ### Calibration and held-out replay
 
-The compact frozen population package contains `empirical_populations.npz` and
-`population_receipt.json`; the driver verifies the NPZ SHA256 before writing
-output. Its score/proxy rows are the exact finite populations extracted by the
-original validator, with their source receipts retained separately. This avoids
-re-reading large waveform products and does not create new physical trials.
+The compact frozen population package holds `empirical_populations.npz` and
+`population_receipt.json`, and the driver verifies the SHA256 of the NPZ before
+writing any output. Its score and proxy rows are the exact finite populations
+extracted by the original validator, and their source receipts are kept on
+their own. With this package, the large waveform products are not re-read,
+and no new physical trials are created.
 
 ```bash
 cd /path/to/pilotproxy
@@ -432,28 +455,31 @@ proxy_populations=/path/to/proxy-confidence-validation-compact
   --base-revision 0adde4b775fd8428b790b64e3494205072da51c3
 ```
 
-Defaults fix 400 datasets per phase/model and 399 bootstrap replicates. The
-protocol, source hashes, population identity, both seed namespaces, support
-rules and success criterion are written before any outcomes. Runtime receipts
-record Python, NumPy, SciPy and platform; every record identifies its runtime,
-replicate index and dataset/bootstrap seeds. The per-record runtime identity hashes
-the compact, sorted JSON representation of the runtime object; the evidence
-manifest separately hashes the receipt file bytes. Checkpoints every ten datasets
-resume only with the same protocol and ordered seed identities. Validation
-rechecks calibration-file hashes and recomputes all six order statistics from
-complete saved records, rather than trusting a printed multiplier.
+By default, 400 datasets are drawn per phase and model, with 399 bootstrap
+replicates. Before any outcome, the protocol, source hashes, population
+identity, both seed namespaces, support rules, and success criterion are
+written. The runtime receipts record Python, NumPy, SciPy, and the platform, and
+every record names its runtime, replicate index, and dataset and bootstrap
+seeds. For each record, the runtime identity is the hash of the compact, sorted
+JSON form of the runtime object, and the evidence manifest also hashes the bytes
+of the receipt file. Checkpoints are written every ten datasets and resume only
+with the same protocol and the same ordered seed identities. In the validation
+phase, the hashes of the calibration file are rechecked and all six order
+statistics are recomputed from the complete saved records, so a printed
+multiplier is never trusted.
 
-Outputs are `protocol.json`, runtime receipts, six `calibrate-*.json`
+The outputs are `protocol.json`, the runtime receipts, six `calibrate-*.json`
 checkpoints, `calibration.json`, seven `validate-*.json` checkpoints,
-`summary.json` and `heldout_scenarios.csv`. Preserve all records, optionally in
-a lossless compressed archive, plus their hashes. Record the eventual source
-commit separately; the base revision identifies the pre-change checkout, while
-the frozen source hashes identify the actual implementation used. A different
-source, protocol, or input needs a new output directory. Exact numerical replay
-also depends on the recorded numerical runtime. Use a new output directory for
-a different platform: the inherited JSON writer uses native newline bytes, so
-cross-platform protocol rewriting can change its byte hash and refuse resume.
-The completed experiment uses one recorded native Windows runtime throughout.
+`summary.json`, and `heldout_scenarios.csv`. All records and their hashes are
+preserved, optionally in a lossless compressed archive. Since the base revision
+names the checkout before the change, and the frozen source hashes name the
+implementation that actually ran, the final source commit is recorded on its
+own. A different source, protocol, or input needs a new output directory. Exact
+numerical replay also depends on the recorded numerical runtime. A different
+platform needs a new output directory as well, because the inherited JSON writer
+uses native newline bytes, and a protocol rewritten on another platform can
+change its byte hash and refuse the resume. For the completed experiment, one
+recorded native Windows runtime was used throughout.
 
 The archive reporter accepts the verified artifact explicitly:
 
@@ -465,21 +491,21 @@ The archive reporter accepts the verified artifact explicitly:
   --model-calibration "$proxy_band_run/calibration.json"
 ```
 
-It refuses a different source or bootstrap replicate count and recomputes the
-calibration artifact from its saved records before processing archive data.
-Applying this multiplier to an archive remains an unqualified **sensitivity
-diagnostic**: matching the model's independence, population and selection
-assumptions has not been established for that archive. It changes neither
-accepted words nor the production sampling guard and supplies no physical
-transfer-calibration allowance.
+Before it processes archive data, the reporter recomputes the calibration
+artifact from its saved records, and it refuses a different source or bootstrap
+replicate count. Applied to an archive, the multiplier gives an unqualified
+sensitivity diagnostic, because the archive has not been shown to meet the
+model's independence, population, and selection assumptions. Neither the
+accepted words nor the production sampling guard is changed, and no physical
+transfer-calibration allowance is supplied.
 
 
 ### Held-out result
 
-The frozen multiplier is **1.5651996017565912**, selected by the correctly
-blocked dependence model's calibration tolerance limit. All 2,400 calibration
-datasets and 2,800 held-out datasets produced finite available bands. All six
-assumption-matched models passed the unchanged qualification gate:
+The frozen multiplier is 1.5651996017565912, set by the calibration tolerance
+limit of the dependence model with correct blocks. All 2400 calibration datasets
+and 2800 held-out datasets produced finite available bands. All six models that
+match the assumptions passed the unchanged qualification gate:
 
 | Held-out model | Misses / 400 | Family-adjusted upper miss limit |
 | --- | ---: | ---: |
@@ -490,23 +516,25 @@ assumption-matched models passed the unchanged qualification gate:
 | Frozen empirical frontier | 0 | 1.228% |
 | Frozen empirical campaign | 2 | 2.189% |
 
-The wrong-unit negative control had 19/400 misses (4.75%), with lower and
-upper limits 2.524% and 8.012%. It **failed qualification**, but the widened
-margin did not establish that its miss probability exceeds 5%. Thus this run
-supports the six declared model results while its negative control is not a
-successful detector of nominal undercoverage after widening. No procedure,
-seed or multiplier was changed in response. Before widening, the control had
-94/400 misses.
+For the wrong-unit negative control, 19 of 400 datasets missed (4.75%), with
+lower and upper limits of 2.524% and 8.012%. It failed qualification, but with
+the widened margin its lower limit is below 5%, so the run does not show that
+its miss probability exceeds 5%. Thus, this run supports the six declared model
+results, but after widening the negative control no longer detects the nominal
+undercoverage. Before widening, the control had 94 misses in 400. No procedure,
+seed, or multiplier was changed in response.
 
-These are joint eligible-staircase/window results. Diagnostic selected points
-exist in only a subset of datasets; their separate counts remain in the
-summary and must not be described as 400 successful operating selections.
-The complete artifact is kept with the private evidence: `summary.json`, `heldout_scenarios.csv`, `complete_records.zip`, the
-raw records, runtime/test receipts and `MANIFEST.json`. The protocol SHA256 is
-`2b83b2901c4d1ebc1869f07b987dede01ab85a6d0eb2893af6dc7cd06b7f0e24`;
-the calibrated artifact SHA256 is
-`3fe6f4625dd0d45f01cc1c62922eedba376d1fcb3ba7a722429d0c053759a319`.
-The recorded runtime was Python 3.12.14, NumPy 2.5.4 and SciPy 1.18.1 on Windows.
-A no-work resume verified all protocol, calibration, validation and summary
-bytes unchanged. An offline channel-37 archive replay checked the opt-in
-reporting path; it remains an archive diagnostic, not a model qualification.
+These results are joint over the eligible staircase and the windows. Diagnostic
+selected points exist in only some of the datasets, and their own counts are
+kept in the summary. They must not be described as 400 successful operating
+selections. The complete artifact is kept with the private evidence:
+`summary.json`, `heldout_scenarios.csv`, `complete_records.zip`, the raw
+records, the runtime and test receipts, and `MANIFEST.json`. The protocol SHA256
+is `2b83b2901c4d1ebc1869f07b987dede01ab85a6d0eb2893af6dc7cd06b7f0e24`, and the
+SHA256 of the calibrated artifact is
+`3fe6f4625dd0d45f01cc1c62922eedba376d1fcb3ba7a722429d0c053759a319`. On Windows,
+the recorded runtime was Python 3.12.14, NumPy 2.5.4, and SciPy 1.18.1. A resume
+with no remaining work verified that all protocol, calibration, validation, and
+summary bytes were unchanged. An offline archive replay of channel 37 checked
+the opt-in reporting path. It is an archive diagnostic only and qualifies no
+model.

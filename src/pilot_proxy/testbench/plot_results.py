@@ -654,7 +654,7 @@ def _required_iq_samples(
 
 
 def _recorded_nyquist_zone(geometry: Mapping[str, Any], metadata_path: Path) -> int:
-    """The result's Nyquist zone; results before 1.1.0 recorded its old word."""
+    """Return the result's Nyquist zone, read from the old spectral_sense word for results before 1.1.0."""
     zone = frequency_axis_nyquist_zone(
         geometry, context=f"{metadata_path}: detector_geometry"
     )
@@ -1267,7 +1267,10 @@ def _bootstrap_pooled_excess_interval(
     samples: int = DEFAULT_BOOTSTRAP_SAMPLES,
     seed: int = DEFAULT_BOOTSTRAP_SEED,
 ) -> tuple[float, float]:
-    """Bootstrap signed pooled excess in linear coordinates."""
+    """Return the 95% bootstrap interval of the signed pooled excess in linear coordinates.
+
+    The trials are resampled in pass clusters when every trial has a pass_index.
+    """
     records = _trial_ratio_weight_records(rows, prefix)
     if len(records) < 2 or int(samples) < 1:
         return math.nan, math.nan

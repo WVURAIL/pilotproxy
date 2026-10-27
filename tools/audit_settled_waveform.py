@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Recount archived transfer powers and recompute clean waveform diagnostics.
 
-This audit records current source/input identities. It does not reconstruct the
-unrecorded historical source revision or claim independent RF calibration.
+The audit records the hashes of the current sources and inputs. The source
+revision of the archived run was not recorded and is not reconstructed, and no
+independent RF calibration is claimed.
 """
 from __future__ import annotations
 import argparse

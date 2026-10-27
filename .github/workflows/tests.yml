@@ -24,8 +24,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      # CPU-only job: the README smoke-test commands on each supported Python.
-      # The full test suite runs once, in cpu-release.
+      # The README smoke-test commands run on each supported Python without a
+      # GPU. The full test suite runs once, in cpu-release.
       - run: python -m pip install -U pip setuptools wheel
       - run: python -m pip install -e .
       - run: pilot-proxy --help
@@ -47,7 +47,7 @@ jobs:
       - run: make release-check
 
   archive-integration:
-    # Pull requests only; a skipped job still reports the required check.
+    # pull requests only (a skipped job still reports the required check)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:

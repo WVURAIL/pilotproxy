@@ -11,7 +11,7 @@ public interface introduced in datatrail-cli 0.11.0
 terminal formatting or internal ``dtcli.src.functions`` APIs. ``ls`` returns
 a ``scopes``, ``larger_datasets``, ``datasets``, or ``error`` dictionary.
 ``ps`` returns ``{"dataset", "scope", "files", "policies"}`` or an
-``{"error": ...}`` envelope; an error exits with status 1.
+``{"error": ...}`` envelope. An error exits with status 1.
 
 An unavailable service and an empty dataset have different meanings. Adapter
 methods preserve that distinction so a failed request can be retried without
@@ -34,17 +34,18 @@ import time
 from collections.abc import Mapping
 from typing import List, Optional, Sequence, Tuple
 
-# event IDs are embedded in datatrail's child-dataset names; the only parsing
-# we still do is pulling those IDs out of the (structured) name list.
+# event IDs (six or more digits) are taken from datatrail's child-dataset names
 _EVENT_RE = re.compile(r"\b\d{6,}\b")
 
-# the public contract this adapter drives -- `datatrail ls/ps --json` -- landed
-# in datatrail-cli 0.11.0. Checked by api_available() so doctor reports an old
-# install before a run rather than survey misreading it as an outage mid-walk.
+# `datatrail ls/ps --json` was added in datatrail-cli 0.11.0. api_available()
+# checks the version so that doctor reports an old install before a run.
+# Without the check, a survey would read the old install as an outage partway
+# through the walk.
 _MIN_CLI = (0, 11)
 
-# hard per-call child timeout: the subprocess boundary makes a wedged HTTP
-# request boundable. Timeout kills the child and reads as an outage (retried).
+# Hard timeout for each datatrail child (s). Running datatrail in a subprocess
+# allows for a hung HTTP request to be killed. A timeout is treated as an outage
+# and retried.
 _TIMEOUT_S = float(os.environ.get(
     "PILOT_PROXY_DATATRAIL_TIMEOUT",
     os.environ.get("DATATRAWL_DATATRAIL_TIMEOUT", "300"),
@@ -63,13 +64,13 @@ def _cli_version() -> "Optional[Tuple[int, ...]]":
 
 
 def _extract_json(stdout: str) -> "Optional[dict]":
-    """The JSON object in a --json invocation's stdout, or None.
+    """Return the JSON object in the stdout of a --json call, or None.
 
-    The payload is not always at offset 0 -- dtcli prints its update-available
-    banner to stdout ahead of the command output -- so parse from the first
-    '{'. Every --json payload is a single object; stdout without one (empty,
-    or the Rich scopes table the invalid-scope path renders) yields None,
-    which callers treat as "the CLI did not answer".
+    dtcli prints its update-available banner to stdout ahead of the command
+    output, so the object is parsed from the first '{'. Every --json payload is
+    a single object. Stdout without one, such as empty output or the Rich
+    scopes table printed for an invalid scope, returns None, and callers treat
+    None as no answer from the CLI.
     """
     i = stdout.find("{")
     if i < 0:
@@ -83,12 +84,14 @@ def _extract_json(stdout: str) -> "Optional[dict]":
 
 def _run_json(args: "Sequence[str]", *, deadline=None
               ) -> "tuple[Optional[dict], str]":
-    """Run `datatrail <args> --json`; (payload, diag).
+    """Run `datatrail <args> --json` and return (payload, diag).
 
-    payload=None means the CLI did not answer with JSON -- spawn failure,
-    timeout (child killed), or non-JSON stdout -- and diag says why, one line.
-    Service-level errors ARE JSON ({"error": ...} with exit 1) and come back
-    as a payload for the caller to classify. Never raises.
+    payload=None means the CLI did not answer with JSON because of a spawn
+    failure, a timeout (the child is killed), or non-JSON stdout, and diag
+    gives the reason in one line. Service-level errors are JSON
+    ({"error": ...} with exit 1) and are returned as a payload for the caller
+    to classify. The only exception raised is SystemExit, when the installed
+    CLI does not accept --json.
     """
     cmd = [sys.executable, "-m", "dtcli.cli", *args, "--json"]
     env = dict(os.environ, NO_COLOR="1", TERM="dumb", PAGER="cat")
@@ -118,32 +121,34 @@ def _run_json(args: "Sequence[str]", *, deadline=None
 
 
 class DatatrailContractError(RuntimeError):
-    """Datatrail answered, but the payload deterministically violates the
-    contract this adapter understands: schema drift in a newer CLI, a
-    malformed replica list, a minoc replica outside the expected CADC
-    collection(s), or replica paths with no usable common split. Retrying
-    cannot change a deterministic answer, so this is never folded into the
-    transient not-answered verdict -- callers record the refusal and move on
-    (survey commits the event as `refused` and ledgers the reason)."""
+    """Datatrail answered, but the payload breaks the contract of this adapter.
+
+    It is raised for schema drift in a newer CLI, a malformed replica list, a
+    minoc replica that is not under the expected CADC collections, or replica
+    paths with no usable common split. A retry returns the same answer, so this
+    error is never treated as a transient failure to answer. Callers record the
+    refusal and continue, and the survey commits the event as `refused` with
+    the reason in its ledger."""
 
 
-# The CADC collection(s) minoc replicas are expected to live under. Widening
-# this tuple is a deliberate act: the refusal message names the offending URI
-# so the decision is made on evidence, not on silence.
+# CADC collections that minoc replicas are expected under. Any other replica
+# is refused, and the refusal message names its URI, so any change to this
+# tuple is made from a recorded case.
 _MINOC_COLLECTIONS = ("cadc:CHIMEFRB/",)
 
-# Datatrail stopped emitting the collection prefix on some minoc replicas after
-# 2026-08-03: a 2025 event returns all 736 replicas as bare "data/..." paths,
-# and a 2020 event can return both forms from the same directory. The bare
-# paths name the same artifacts -- cadcinfo resolves them once the prefix is
-# restored -- so restore it for paths that match the archive layout rather than
-# widening _MINOC_COLLECTIONS, which would accept an arbitrary URI.
+# After 2026-08-03, Datatrail stopped writing the collection prefix on some
+# minoc replicas. A 2025 event returns all 736 replicas as bare "data/..."
+# paths, and a 2020 event can return both forms from the same directory. The
+# bare paths name the same files, and cadcinfo resolves them once the prefix is
+# restored. The prefix is therefore restored for paths that match the archive
+# layout. Adding a bare root to _MINOC_COLLECTIONS would accept an arbitrary
+# URI.
 _MINOC_DEFAULT_COLLECTION = "cadc:CHIMEFRB/"
 _BARE_REPLICA_ROOTS = ("data/",)
 
 
 class ArchivePath(str):
-    """A resolved path that retains whether its collection was inferred."""
+    """A resolved path that records if its collection prefix was restored."""
     def __new__(cls, value, *, collection_restored=False):
         result = super().__new__(cls, value)
         result.collection_restored = bool(collection_restored)
@@ -153,8 +158,8 @@ class ArchivePath(str):
 def _restore_collection(uri: str) -> str:
     """Restore the collection prefix on a bare archive-relative replica path.
 
-    A URI that already names a known collection is returned unchanged, and one
-    that matches neither is returned unchanged so the caller still refuses it.
+    A URI that names a known collection, or that matches no bare root, is
+    returned unchanged. The caller then refuses a URI of the second kind.
     """
     if uri.startswith(_MINOC_COLLECTIONS):
         return uri
@@ -164,19 +169,19 @@ def _restore_collection(uri: str) -> str:
 
 
 class Datatrail:
-    """Typed adapter over datatrail's machine-readable CLI (`--json`).
+    """Typed adapter for the machine-readable datatrail CLI (`--json`).
 
-    Stateless: every method spawns one `datatrail` child per invocation, so one
-    shared instance is safe to reuse and to call from the survey verify pool.
-    The listing methods degrade to [] on any datatrail-reported error (logged
-    to stderr); callers must treat [] as "couldn't determine", never as
-    "definitively empty".
+    The adapter holds no state. Every method call spawns one `datatrail` child,
+    so one shared instance can be reused and called from the survey verify
+    pool. The listing methods return [] on any error that datatrail reports,
+    and the error is logged to stderr. Callers treat [] as unknown and never as
+    an empty listing.
     """
 
-    # -- availability (for doctor / preflight) -----------------------------
+    # availability, for doctor and preflight
     @staticmethod
     def installed() -> bool:
-        """True if datatrail-cli (`dtcli`) imports -- i.e. datatrail is present."""
+        """True if datatrail-cli (`dtcli`) can be imported."""
         try:
             import dtcli  # noqa: F401
             return True
@@ -185,12 +190,12 @@ class Datatrail:
 
     @staticmethod
     def api_available() -> "tuple[bool, str]":
-        """(ok, detail): does the installed datatrail speak the JSON contract?
+        """Return (ok, detail) for the JSON contract of the installed datatrail-cli.
 
-        A pre-0.11 datatrail-cli (no --json) would misread as a service
-        outage an hour into a survey; this doctor-time check reports the real
-        cause up front instead.
-        `detail` says what to install when not ok.
+        A datatrail-cli older than 0.11 has no --json and would read as a
+        service outage an hour into a survey. This check runs in doctor and
+        reports the cause before the survey starts. When ok is False, `detail`
+        says what to install.
         """
         v = _cli_version()
         if v is None:
@@ -202,24 +207,26 @@ class Datatrail:
                            f"datatrail-cli>=0.11")
         return True, ""
 
-    # -- discovery (listing), via `datatrail ls --json` ---------------------
+    # discovery listings, from `datatrail ls --json`
     @staticmethod
     def _list_result_checked(scope=None, dataset=None) -> "tuple[dict, bool]":
-        """`datatrail ls [scope [dataset]] --json` -> (dict, ok).
+        """Run `datatrail ls [scope [dataset]] --json` and return (dict, ok).
 
-        ok=False means the SERVICE could not answer (no JSON came back, or
-        datatrail's own {"error": ...}); the dict is then {}. ok=True with an
-        empty dict is a genuine "nothing registered here". The distinction
-        exists because a discovery walk must never let an outage read as
-        emptiness -- the unchecked helpers below collapse both to [] for
-        callers whose contract already says "treat [] as couldn't-determine".
+        ok=False means the service could not answer, either because no JSON
+        came back or because datatrail returned its own {"error": ...}. The
+        dict is then {}. ok=True with an empty listing means nothing is
+        registered there. A discovery walk must never record an outage as an
+        empty listing, so the two cases are kept apart here. The unchecked
+        helpers below return [] for both, for callers that already treat [] as
+        unknown.
 
-        Shape guard: a non-error answer must carry the key this arity is
-        defined to return (`scopes` / `larger_datasets` / `datasets` -- dtcli
-        constructs the first and third, the server the second, and 0.11 emits
-        the key even when its list is empty). A parsed dict WITHOUT it is a
-        contract change in a newer datatrail-cli, and with an open-ended
-        version pin it must read as not-answered, never as an empty scope."""
+        A non-error answer must carry the key defined for the number of
+        arguments: `scopes`, `larger_datasets`, or `datasets`. dtcli builds the
+        first and third, the server builds the second, and 0.11 writes the key
+        even when its list is empty. A parsed dict without the key is a
+        contract change in a newer datatrail-cli. Since the version pin is
+        open-ended, such a dict is treated as no answer and never as an empty
+        scope."""
         args = ["ls"] + [a for a in (scope, dataset) if a]
         key = "datasets" if dataset else ("larger_datasets" if scope
                                           else "scopes")
@@ -239,12 +246,12 @@ class Datatrail:
                 f"this adapter understands?\n")
             return {}, False
         if not isinstance(payload[key], list):
-            # Observed live: with the scopes endpoint unreachable behind a
-            # proxy, dtcli 0.11.0 leaked the error text through as
-            # {"scopes": "<proxy error prose>"} with exit 0 (decode_response
-            # passes non-JSON bodies along as str). list("<str>") would
-            # shred that into per-character "scopes" -- classify as
-            # not-answered instead.
+            # With the scopes endpoint unreachable behind a proxy, dtcli
+            # 0.11.0 was seen to return the proxy error text as
+            # {"scopes": "<proxy error prose>"} with exit 0, since
+            # decode_response passes non-JSON bodies through as str.
+            # list("<str>") would split that text into one "scope" per
+            # character, so the answer is treated as no answer.
             sys.stderr.write(
                 f"[datatrail ls scope={scope} dataset={dataset}] non-list "
                 f"{key!r} value ({type(payload[key]).__name__}) -- treating "
@@ -264,33 +271,35 @@ class Datatrail:
         return self.list_scopes_checked()[0]
 
     def list_scopes_checked(self) -> "tuple[List[str], bool]":
-        """(scopes, ok): ok=False = datatrail did not answer, not "no scopes"."""
+        """Return (scopes, ok), where ok=False means datatrail did not answer."""
         res, ok = self._list_result_checked()
         return list(res.get("scopes", [])), ok
 
     def list_datasets_checked(self, scope: str) -> "tuple[List[str], bool]":
-        """(datasets, ok): ok=False = the scope could not be LISTED (outage),
-        which is not the same map row as a scope with nothing under it."""
+        """Return (datasets, ok), where ok=False means the scope could not be listed.
+
+        The scope map records an outage of this kind apart from a scope with no
+        datasets."""
         res, ok = self._list_result_checked(scope)
         return list(res.get("larger_datasets", [])), ok
 
     def children(self, scope: str, dataset: str) -> List[str]:
-        """The child dataset names one level under (scope, dataset), verbatim.
+        """Return the child dataset names one level under (scope, dataset), unchanged.
 
-        This is the raw name list `events_in_dataset_checked` extracts event IDs from.
-        Recon's --expand writes it out unfiltered, because non-event products
-        (timestamped acquisitions, calibration containers) have no event ID to
-        extract -- their names ARE the handle you resolve with `datatrail ps`.
-        Degrades to [] like the other listing methods: treat that as "couldn't
-        determine", never "definitively empty".
+        `events_in_dataset_checked` takes event IDs from this list. Recon's
+        --expand writes the list unfiltered, since non-event products such as
+        timestamped acquisitions and calibration containers have no event ID.
+        Their names are the handles passed to `datatrail ps`. Like the other
+        listing methods, this returns [] on an error, and [] means unknown.
         """
         return self.children_checked(scope, dataset)[0]
 
     def children_checked(self, scope: str,
                          dataset: str) -> "tuple[List[str], bool]":
-        """(children, ok): the checked form of children() -- recon's --expand
-        uses it so an unlistable container is reported as such, not written to
-        the map as if it were childless."""
+        """Return (children, ok), the checked form of children().
+
+        Recon's --expand uses it so that a container that cannot be listed is
+        reported and is never written to the map as an empty container."""
         res, ok = self._list_result_checked(scope, dataset)
         return [str(n) for n in res.get("datasets", [])], ok
 
@@ -300,34 +309,37 @@ class Datatrail:
         children, ok = self.children_checked(scope, dataset)
         return ([ev for name in children for ev in _EVENT_RE.findall(name)], ok)
 
-    # -- file listing (`datatrail ps --json`, normalized) --------------------
+    # file listing, from `datatrail ps --json`
     def files(self, scope: str, dataset: str, *, retries: int = 3,
               base: float = 4.0, deadline=None) -> tuple:
-        """(common_path, [names], ok) for one dataset's minoc files.
+        """Return (common_path, names, ok) for the minoc files of one dataset.
 
-        This is `datatrail ps <scope> <dataset> --json`, normalized to the minoc
-        replica list. Exposed here so an analyzer resolving a per-day
-        companion (a gains day-dataset, say) never scrapes the Rich table or
-        imports dtcli internals itself -- this adapter owns that boundary.
+        The listing comes from `datatrail ps <scope> <dataset> --json`, reduced
+        to the minoc replica list. An analyzer that needs a per-day companion,
+        such as a gains day-dataset, calls this method so that it never parses
+        the Rich table or imports dtcli internals.
 
-        Contract mirrors common_path():
-          (None, [], False)  = the CLI/service did not answer (retried) --
-                               the {"error": ...} envelope (exit 1) or no
-                               payload at all: transient, worth retrying;
-          DatatrailContractError raised = the service ANSWERED but the payload
-                               deterministically violates this adapter's
-                               contract (schema drift, malformed or
-                               out-of-collection replicas). Never retried,
-                               never conflated with an outage;
-          (None, [], True)   = queried OK, no minoc files for this dataset
-                               ("files" null, or without minoc replicas);
-          (path, names, True) = resolved. `path` is prefixed cadc:CHIMEFRB/
-                                like common_path(); `names` are relative to
-                                it, in server order, so a fetch URI is
-                                f"{path}/{name}".
+        The return values follow common_path():
 
-        Normalization matches dtcli's own find_dataset_common_path: strip the cadc:CHIMEFRB/
-        prefix, collapse '//', commonprefix trimmed to the last '/'.
+          (None, [], False)    the CLI or service did not answer, with the
+                               {"error": ...} envelope (exit 1) or with no
+                               payload. This is transient and is retried.
+          DatatrailContractError
+                               the service answered, but the payload breaks
+                               the contract of this adapter (schema drift, or
+                               malformed or out-of-collection replicas). It is
+                               never retried and never treated as an outage.
+          (None, [], True)     the query succeeded, and the dataset has no
+                               minoc files ("files" is null or has no minoc
+                               replicas).
+          (path, names, True)  resolved. `path` has the cadc:CHIMEFRB/ prefix,
+                               as in common_path(), and `names` are relative
+                               to it in server order, so a fetch URI is
+                               f"{path}/{name}".
+
+        The paths are normalized as in dtcli's find_dataset_common_path. The
+        cadc:CHIMEFRB/ prefix is stripped, '//' is collapsed, and the common
+        prefix is trimmed to the last '/'.
         """
         delay = base
         for k in range(retries + 1):
@@ -349,22 +361,23 @@ class Datatrail:
                     continue
                 return None, [], False        # did not answer, retried out
             if "files" not in payload:
-                # 0.11's success payload always carries the key ("files" may
-                # be null, but it is present). A non-error dict without it is
-                # a changed contract in a newer datatrail-cli -- deterministic,
-                # so no retry -- and must never read as "dataset has no files".
+                # The 0.11 success payload always has the "files" key, which
+                # may be null. A non-error dict without it is a contract change
+                # in a newer datatrail-cli. A retry returns the same answer, so
+                # none is made, and the dict never means a dataset with no
+                # files.
                 raise DatatrailContractError(
                     f"[datatrail ps {scope} {dataset}] unexpected --json "
                     "shape (no 'files' key) -- datatrail-cli newer than this "
                     "adapter understands?")
             files_resp = payload["files"]
-            # "files": null is the CLI's rendering of functions.ps returning
-            # (None, policy) -- the find half had no answer for this name
-            # while policies resolved. For a dataset the map says exists,
-            # that reads as "no files", same as the no-minoc case below.
-            # Any OTHER non-dict value (a string, say -- 0.11 wraps string
-            # halves in the error envelope, so this shape is unowned) is
-            # degradation or drift, never a no-data verdict.
+            # "files": null is how the CLI renders functions.ps returning
+            # (None, policy), where the find half had no answer for this name
+            # and the policies resolved. For a dataset that the map lists, this
+            # means no files, as in the no-minoc case below. Any other non-dict
+            # value, such as a string, is a fault or schema drift and never
+            # means no data. 0.11 wraps string halves in the error envelope, so
+            # no known path returns this shape.
             if files_resp is not None and not isinstance(files_resp, dict):
                 raise DatatrailContractError(
                     f"[datatrail ps {scope} {dataset}] non-dict 'files' "
@@ -429,19 +442,20 @@ class Datatrail:
                 collection_restored=normalized != canonical), names, True
         return None, [], False
 
-    # -- common-path resolution --------------------------------------------
+    # common-path resolution
     def common_path(self, scope: str, event: str, *, retries: int = 3,
                     base: float = 4.0, deadline=None) -> tuple:
-        """Resolve an event's CADC common path.
+        """Return (path, ok), the CADC common path of one event.
 
-        Same `ps --json` call as files(), restricted to a single directory.
-        Survey readers append basenames to this path, so nested relative
-        names cannot be represented here and must not look like absent data.
+        This is the `ps --json` call of files(), restricted to a single
+        directory. Survey readers append basenames to this path, so nested
+        relative names cannot be represented. A nested name raises
+        DatatrailContractError so that it is never read as absent data.
 
-        Contract: (None, False) = couldn't query (transient /
-        service down, retried); (None, True) = queried OK but no minoc files
-        (no-data); (path, True) = resolved, prefixed with the cadc:CHIMEFRB
-        collection.
+        (None, False) means the query failed (transient or service down, after
+        retries). (None, True) means the query succeeded and found no minoc
+        files. (path, True) is resolved, with the cadc:CHIMEFRB collection
+        prefix.
         """
         cp, names, ok = self.files(
             scope, event, retries=retries, base=base, deadline=deadline)
@@ -452,5 +466,5 @@ class Datatrail:
         return cp, ok
 
 
-# A shared default instance -- survey orchestration and preflight use this.
+# shared default instance for survey orchestration and preflight
 DATATRAIL = Datatrail()

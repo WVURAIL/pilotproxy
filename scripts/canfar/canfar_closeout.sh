@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Closeout for the completed 2026-09 CHIME archive run: assemble the
-# canonical per-pilot products into one run directory.
+# Closeout for the 2026-09 CHIME archive run. The canonical per-pilot
+# products are assembled into one run directory.
 #
 #   bash /arc/home/$CANFAR_USER/pp_switch/canfar_closeout.sh assemble
 #
-# Assembly is needed because this run's 23 canonical products are split
-# across two shard directories (they do not overlap):
+# The 23 canonical products of this run are split across two shard
+# directories that do not overlap:
 #   shard1 (11): 506 521 537 552 568 583 675 752 767 813 829
 #   shard2 (12): 598 614 629 644 660 690 706 721 736 783 798 844
-# shard3's directory duplicates six of these and is NOT copied; it is kept
-# where it is as reproduction evidence.
+# The shard3 directory duplicates six of these channels. It is not copied
+# and stays in place as reproduction evidence.
 set -uo pipefail
-# Site configuration: the CANFAR account name; export it before running (see README.md).
-#   CANFAR_USER  the CANFAR account; the kit and the runs live under /arc/home/$CANFAR_USER/
+# Site configuration, exported before running (see README.md):
+#   CANFAR_USER  CANFAR account name. The kit and the runs are under /arc/home/$CANFAR_USER/.
 : "${CANFAR_USER:?}"
 say(){ printf '\n===== %s =====\n' "$*"; }
 die(){ echo "CLOSEOUT-BLOCK: $*" >&2; exit 1; }

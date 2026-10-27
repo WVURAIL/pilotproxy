@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Produce exactly two density figures: ideal law, actual GNU Radio, measured SDR.
+"""Draw the noise and tone density figures with the ideal law, GNU Radio and the measured SDR.
 
-Uses the frozen v1 single-row projection and capture-validation functions. All
-power calibration is loaded from reserved captures; no comparison data refit.
+The frozen v1 single-row projection and capture-validation functions are used.
+All power calibration is loaded from reserved captures, and the comparison data
+are not refit.
 """
 from __future__ import annotations
 import argparse

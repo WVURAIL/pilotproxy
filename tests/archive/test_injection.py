@@ -23,7 +23,7 @@ from pilot_proxy.chime.injection import (  # noqa: E402
 N_TIME = 4096
 N_FEEDS = 3
 CENTER_MHZ = 470.312500  # coarse channel containing the DTV 14 pilot
-# Land the tone on an exact FFT bin so the delta-spectrum check is leakage-free.
+# the tone is placed on an exact FFT bin, so the delta spectrum has no leakage
 TONE_BIN = 37
 F_BB = TONE_BIN * fmt.FS / N_TIME
 
@@ -35,8 +35,9 @@ def _make_base_file(path, *, include_minus_eight: bool = True) -> None:
     )
     with h5py.File(str(path), "r+") as handle:
         if include_minus_eight:
-            # Byte 0x00 decodes to (-8, -8): the component a symmetric +/-7
-            # quantizer cannot round-trip. Identity must still hold.
+            # Byte 0x00 decodes to (-8, -8), a component that a symmetric +/-7
+            # quantizer cannot round-trip. The zero-amplitude output must still
+            # be byte-identical.
             data = handle["baseband"][...]
             data[0, 0] = 0x00
             handle["baseband"][...] = data
@@ -72,20 +73,20 @@ def test_injection_delta_is_the_requested_tone(tmp_path) -> None:
 
     assert entry["clip_count"] == 0
     assert entry["byte_identical_to_source"] is False
-    # make_synth_file draws complex noise with per-component std
-    # noise_std/sqrt(2); integer rounding adds ~1/12 variance.
+    # make_synth_file draws complex noise with a per-component std of
+    # noise_std/sqrt(2), and integer rounding adds a variance of about 1/12
     expected_rms = float(np.sqrt(0.5 + 1.0 / 12.0))
     assert entry["rms_lsb_per_component"] == pytest.approx(expected_rms, rel=0.1)
     with h5py.File(str(source), "r") as src, h5py.File(str(output), "r") as dst:
         delta = fmt.unpack_4bit(dst["baseband"][...]) - fmt.unpack_4bit(
             src["baseband"][...]
         )
-        # Siblings preserved verbatim; only baseband changed.
+        # siblings are kept verbatim and only the baseband dataset changes
         assert np.array_equal(src["sibling"][...], dst["sibling"][...])
         assert dst.attrs["note"] == "preserve me"
     spectrum = np.fft.fft(delta, axis=0) / N_TIME
     recovered = np.abs(spectrum[TONE_BIN, :])
-    # Rounding noise per bin is ~sqrt(1/6/N_TIME) ~ 0.006 LSB against a = 2.
+    # rounding noise per bin is about sqrt(1/6/N_TIME), or 0.006 LSB, against a = 2
     assert recovered == pytest.approx(amplitude, rel=0.05)
     off_bin = np.abs(spectrum[TONE_BIN + 5, :])
     assert np.all(off_bin < 0.1 * amplitude)

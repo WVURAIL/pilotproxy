@@ -1,11 +1,14 @@
-"""Fine score profiles and populations for a frozen fine_decision_v1 detector.
+"""Describe the geometry and trial population used to measure fine scores.
 
-A score profile declares the receiver, weights, producer and fine geometry a
-population of minimum keeping Q16 words was measured with; a population lists
-those words per trial. These validators check declared identities and evidence
-contracts, not their physical truth. The capture replay writes and checks
-them; the operating threshold itself comes from the threshold rule
-(:mod:`pilot_proxy.characterization.threshold_rule`).
+A score profile identifies the receiver, weights, producer, and fine
+geometry for a frozen fine_decision_v1 detector. Its population lists
+the minimum keeping Q16 word for each trial. Capture replay writes and
+checks these records.
+
+Validation establishes consistency of the declared identities and
+evidence; it does not measure their physical truth. The operating
+threshold is selected separately by
+:mod:`pilot_proxy.characterization.threshold_rule`.
 """
 
 from __future__ import annotations

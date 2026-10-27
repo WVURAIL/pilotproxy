@@ -1,22 +1,17 @@
-"""Per-telescope channelization and hardware, stored as data.
+"""Describe telescope geometry and archive access in a YAML file.
 
-A telescope is a YAML file under ``pilot_proxy/instruments/``. It describes the band geometry
-(freq_id 0 frequency, processed bandwidth, channel count, ordering, Nyquist zone)
-and the Datatrail baseband `scopes` its data lives under. Any frequency<->freq_id
-mapping falls out of this geometry, so adding a telescope that shares an existing
-channelization is a YAML entry (often just `extends:` plus a feed count and scope),
-not a code change.
+An instrument file under ``pilot_proxy/instruments/`` gives the frequency of
+channel 0, processed bandwidth, channel count and ordering, and Nyquist zone.
+These values determine the mapping between frequency and freq_id. A telescope
+with shared geometry can extend another file and specify just its differences,
+such as feed count and Datatrail baseband scopes.
 
-Nyquist zone is a telescope property. Odd zones use the normal baseband direction;
-even zones are inverted. Current CHIME-family instruments in this repository use
-the second Nyquist zone.
+The Nyquist zone sets the direction within each channel: odd zones are upright
+and even zones are mirrored. The CHIME-family instruments here use zone 2.
+A survey determines which frequency channels have data at a given site.
 
-Which freq_ids are actually occupied is geography, not configuration, and is
-discovered by a survey, not declared here.
-
-This module is intentionally analysis-agnostic: what a given analysis looks for
-(a particular carrier, an RFI model, a feed list) is a property of the analyzer,
-not the telescope. The instrument is pure geometry plus data access metadata.
+Analysis choices, such as the carrier to detect, RFI model, or selected feeds,
+belong to the analyzer. The instrument file supplies geometry and data access.
 """
 from __future__ import annotations
 
@@ -110,10 +105,9 @@ class Instrument:
         return self.n_feeds
 
     def freq_id_of_hz(self, f_hz: float) -> int:
-        """Nearest freq_id for a sky frequency in Hz, computed in Hz.
+        """Return the nearest channel index for a sky frequency in Hz.
 
-        This is the arithmetic of the former ``chime_freq_id_from_hz``:
-        ``round((f0 - f) / width)`` for a descending channelization.
+        For descending channels the mapping is ``round((f0 - f) / width)``.
         """
         width = self.channel_width_hz
         if self.descending:

@@ -1,9 +1,9 @@
 # coding=utf-8
-"""Small durable-file primitives shared by product writers.
+"""Write durable files without exposing a partially written replacement.
 
-Temporary files are created with ``open(2)`` mode ``0666`` so the caller's
-normal umask is honoured.  When replacing an existing file, its permission
-bits are copied to the temporary file before publication.
+Create temporary files with open(2) mode 0666 so the caller's umask applies.
+When replacing an existing file, copy its permission bits to the temporary
+file before publishing it.
 """
 
 from __future__ import annotations

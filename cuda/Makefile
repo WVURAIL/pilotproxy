@@ -99,10 +99,9 @@ $(error CUDA compiler not found: NVCC=$(NVCC). Run 'command -v nvcc' and either 
 endif
 endif
 
-# The arch and CONFIG_DEFS live only in recipe flags, invisible to make's
-# timestamp check, so changing them used to reuse stale objects silently.
-# Encode them and the build mode in stamp filenames: switching any knob
-# invalidates the relevant output; release and debug builds remain independent.
+# Make's timestamp check does not see changed compiler flags. Include the
+# architecture, CONFIG_DEFS, and build mode in stamp filenames so changing
+# any of them rebuilds the affected output. Debug and release stay separate.
 CONFIG_KEY := sm$(SM)_dp4a$(DP4A)_k$(DETECTOR_WINDOW_SAMPLES)_bt$(BLOCK_THREADS)_gmb$(GRID_MAX_BLOCKS)_cwl$(CONSTANT_WEIGHT_LANES)_swl$(SHARED_WEIGHT_LANES)
 RELEASE_CONFIG_STAMP := .config_release_$(CONFIG_KEY).stamp
 DEBUG_CONFIG_STAMP := .config_debug_$(CONFIG_KEY).stamp
@@ -153,12 +152,9 @@ $(CUDA_TEST): $(TARGET) $(CUDA_TEST_SOURCES) $(CUDA_TEST_HEADERS) $(RELEASE_CONF
 test_cuda: $(CUDA_TEST)
 	./$(CUDA_TEST)
 
-# Runs the CUDA regression at a deliberately tiny launch capacity to exercise
-# the grid-stride paths. That build overwrites libpilotproxy.so with a library
-# whose capacity is 4 blocks, which then fails any later test needing more
-# streams (the Python GPU suite uses 2048) with "num_streams exceeds the launch
-# capacity" -- a confusing failure far from its cause. Restore the default
-# build afterwards so the target cannot leave a degraded artifact behind.
+# A four-block launch capacity exercises the grid-stride paths. Restore
+# the default library afterward so later tests can use the full capacity,
+# including the Python GPU suite's 2048 streams.
 test_cuda_grid_stride:
 	$(MAKE) test_cuda GRID_MAX_BLOCKS=4
 	@echo "Restoring default build (GRID_MAX_BLOCKS=$(GRID_MAX_BLOCKS))"

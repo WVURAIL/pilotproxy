@@ -17,7 +17,7 @@ Acceptance is bit-equality --- no tolerances:
    composed row-projection buffer; fine == the fxfft reference chain;
 2. batch case: same equalities per batch entry with a batched handle;
 3. production form: tap pointer NULL, fine + frame-power outputs unchanged
-   (the tap is genuinely optional; row projections never touch global
+   (the tap is optional; row projections never touch global
    memory);
 4. an impulse frame: the frozen transform of a unit impulse is exactly one
    in every bin, so the fused kernel must report ``S_target[f] = 1`` and

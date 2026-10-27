@@ -1,40 +1,28 @@
-"""One per-pilot product: the validated contract view and lazy access to its fields.
+"""Read a per-pilot product through its validated scientific coordinates.
 
-Two layers, read in this order:
+``open_product`` validates schema v6 or a v5 product of record, then exposes
+a ``ProductView``. The view contains the exact-integer coarse statistic
+``Q = F / mu_0``, the survey flag, estimated shelf level in dB, and acquisition
+coordinates. Missing schemas or incompatible contents raise
+``ProductContractError``.
 
-- :func:`open_product` validates a per-pilot product mapping (schema v6, or a
-  v5 product of record) against the product and detector contracts and
-  exposes its residual decision coordinates as a :class:`ProductView`: the
-  exact-integer coarse statistic ``Q = F / mu_0``, the survey flag, the
-  in-band residual estimate (the estimated shelf level, dB) and the
-  acquisition-unit coordinates. A product that does not satisfy the contract
-  raises :class:`ProductContractError`, and so does a product that declares
-  neither schema.
+All coarse coordinates use the frame powers defined in kernel core 3.0.0:
+``P_r = sum_f fine_power_u64[:, r, f]``. A v6 product stores these powers and
+is checked against its fine sums. A v5 product stored row-domain powers;
+its view recomputes the coarse coordinates from the retained fine powers and
+records that choice in ``ProductView.frame_power_definition``. The v5 file
+itself stays unchanged.
 
-Frame powers (kernel core 3.0.0): ``P_r = sum_f fine_power_u64[:, r, f]``.
-Every coarse coordinate here is formed from those sums
-(:func:`pilot_proxy.product_contract.coarse_columns_from_fine`). A v6 product
-stores exactly those columns and the reader verifies that it does. A v5
-product of record stored the row-domain sums of ``|z|^2`` instead; its view
-replaces them by the fine sums, which every v5 product retains for every
-frame, and records that in ``ProductView.frame_power_definition``. The v5
-files are never edited.
-- :class:`Product` keeps one ``.npz`` product open lazily (a product is up to
-  1.5 GB and ``numpy.load`` decodes a member only when indexed). It exposes the
-  small per-frame and per-unit fields as cached arrays, the view above, the
-  frame selection the health gate leaves, and the band geometry (the nominal
-  marker position on the fine axis and on the per-frame spectrum axis). The two
-  large members, ``fine_power_u64`` and ``psd_frame_db_i16``, are read only in
-  row chunks through ``fine_terms`` and ``psd_rows``.
+``Product`` adds lazy access to the NPZ file, which can be as large as 1.5 GB.
+Small frame and acquisition fields are cached. ``fine_terms`` and ``psd_rows``
+provide chunked access to the large fine-power and spectral arrays. The object
+also supplies the health-selected frames and the band's geometry.
 
-Coordinates: every frequency reported outward is the RF offset from the
-nominal marker, positive towards higher RF; the fine axis measures the carrier
-modulo ``f_s / K`` about the coarse grid, so the nominal marker's fine bin (the
-grid residual) is a band constant computed here and used to convert fine
-offsets to RF.
-
-The instrument and detector constants (sample rate, frame length, detector
-window, fine bins) are read from the project profile.
+Reported frequency offsets are measured from the nominal marker and increase
+with RF frequency. Internally, the fine axis wraps modulo ``f_s / K`` about
+the coarse grid. The nominal marker's residual from that grid sets its fine
+bin and lets us convert internal offsets to RF. Sample rate, frame length,
+detector window, and bin count come from the project profile.
 """
 from __future__ import annotations
 
@@ -545,7 +533,7 @@ def fine_bin_of_hz(offset_hz: float, fine_bins: int = FINE_BINS, fine_bin_hz: fl
 
 
 def fine_hz_of_bin(bin_index, fine_bins: int = FINE_BINS, fine_bin_hz: float = FINE_BIN_HZ):
-    """Fine-axis offset in Hz of a padded bin, centred convention ((b + L/2) mod L) - L/2."""
+    """Fine-axis offset in Hz of a padded bin, centered convention ((b + L/2) mod L) - L/2."""
     b = np.asarray(bin_index)
     return (((b + fine_bins // 2) % fine_bins) - fine_bins // 2) * fine_bin_hz
 
@@ -574,14 +562,14 @@ class Geometry:
     centre_hz: float
     sense: int
     grid_residual_hz: float          # fine-axis offset of the nominal pilot (fine-array direction)
-    nominal_fine_bin: int            # its padded fine bin (what fine_designated_bins is centred on)
+    nominal_fine_bin: int            # its padded fine bin (what fine_designated_bins is centered on)
     nominal_psd_bin: float           # its (real-valued) receiver-frame bin on the per-frame spectrum axis
     centre_line_rf_offset_hz: float  # the instrumental channel-centre line, RF offset from nominal
-    stored_window_centre: int        # centre of the product's fine_designated_bins (the scan's prediction)
+    stored_window_centre: int        # center of the product's fine_designated_bins (the scan's prediction)
 
     @property
     def matches_stored_window(self) -> bool:
-        """Whether the scan's designated window was centred on the same nominal bin."""
+        """Whether the scan's designated window was centered on the same nominal bin."""
         return self.stored_window_centre == self.nominal_fine_bin
 
     def psd_rf_offset_hz(self, bins) -> np.ndarray:
@@ -752,7 +740,7 @@ class Product:
             freq_id=int(self.view.freq_id),
             pilot_hz=pilot, centre_hz=centre, sense=sense,
             grid_residual_hz=residual, nominal_fine_bin=nominal_bin,
-            # receiver-frame frequency of the pilot is sense * (pilot - centre)
+            # receiver-frame frequency of the pilot is sense * (pilot - center)
             nominal_psd_bin=float((float(np.sign(sense) or 1) * (pilot - centre) / PSD_BIN_HZ) % NFFT),
             centre_line_rf_offset_hz=centre - pilot,
             stored_window_centre=stored_centre,

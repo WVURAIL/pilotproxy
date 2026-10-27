@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""Emit the fxfft master twiddle table as C source.
+"""Generate the shared fixed-point FFT twiddles as literal C values.
 
-The device and reference implementations must use the same twiddles as the
-Python reference, and must do so without runtime trigonometry -- a libm call
-on the device would reintroduce exactly the cross-platform float
-non-determinism the frozen specification exists to eliminate. So the table is
-generated here, once, from ``pilot_proxy.fxfft.MASTER_TWIDDLE_Q15``, and
-emitted as source literals with the master's hash stamped into the file.
+The device and reference transforms need identical coefficients. Reading a
+single table avoids platform-dependent runtime trigonometry. This generator
+writes ``pilot_proxy.fxfft.MASTER_TWIDDLE_Q15`` and its hash into C source.
 
-Because ``W_n[k] = W_M[k * M / n]`` exactly (see fxfft.py), one master serves
-every supported transform length: a length-n transform indexes the master with
-stride ``M / n``, which folds into the existing shift form -- stage ``s`` of a
-length-n radix-2 DIT reads ``master[t << (log2(M) - s)]``. That is the same
-expression the frozen 256-point code already uses with ``log2(256)``; only the
-constant changes. No new rounding decisions are introduced at any size.
+A length-n transform takes every M/n-th entry of the length-M master because
+``W_n[k] = W_M[k * M / n]`` exactly; see ``fxfft.py``. At radix-2 stage ``s``,
+the index is ``master[t << (log2(M) - s)]``. For n = 256 this selects the
+frozen transform's entries, and other supported lengths introduce no new
+twiddle rounding decisions.
 
 Usage:
     python3 tools/emit_fxfft_tables.py [--check] [-o cuda/fxfft_master_twiddle.h]
 
-``--check`` regenerates in memory and diffs against the file on disk, exiting
-non-zero if they differ. Wire it into CI so the committed header cannot drift
-from the Python master.
+``--check`` regenerates the text in memory and compares it with the committed
+header. A difference returns a nonzero exit status without rewriting the file.
 """
 
 from __future__ import annotations

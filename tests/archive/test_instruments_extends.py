@@ -2,7 +2,7 @@
 """
 Tests for instrument config resolution: `extends:` inheritance and `scopes`.
 
-These cover the data-as-config behaviour that the CHIME outriggers rely on -- a
+These cover the data-as-config behavior that the CHIME outriggers rely on -- a
 station that shares CHIME's channelization is a few lines (`extends: chime` plus
 the feed count and its scope) instead of a near-duplicate YAML -- and the scope
 list that drives the survey default. They run fully offline.

@@ -393,11 +393,9 @@ def main():
                     help="write a report separately from immutable input shards")
     ap.add_argument("--stage", choices=["h0", "sweep", "report", "verify"],
                     required=True)
-    # None means "not given": the sweep stages and the verification gate want
-    # very different defaults -- 1000 trials at 2048 streams against 3 at 64 --
-    # and a gate that silently inherits the sweep's is ten thousand times more
-    # expensive than the bit-exactness check it is meant to be. Resolved per
-    # stage below, so an explicit --trials still reaches whichever stage runs.
+    # Resolve omitted counts by stage. The sweep needs 1000 trials at 2048
+    # streams, while the arithmetic check needs only 3 at 64. An explicit
+    # --trials value takes precedence in either stage.
     ap.add_argument("--trials", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--snr-db", type=float, default=None)
@@ -409,7 +407,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     if args.stage == "verify":
         # Forward only what was actually given, so the README's
-        # "--stage verify --trials 4" is honoured while a bare --stage verify
+        # "--stage verify --trials 4" is honored while a bare --stage verify
         # keeps verify()'s own cheap defaults.
         given = {k: v for k, v in (("seed", args.seed), ("trials", args.trials),
                                    ("streams", args.streams)) if v is not None}

@@ -83,7 +83,7 @@ def _default_shape():
 def _default_cert() -> str:
     """The CADC proxy cert used for the direct fetch path.
 
-    CADC_CERT overrides (honoured even if absent -- the user's stated intent, and
+    CADC_CERT overrides (honored even if absent -- the user's stated intent, and
     the clean way to point a headless/batch job at a different cert); otherwise the
     standard ~/.ssl/cadcproxy.pem that `cadc-get-cert` writes. preflight() checks
     the resolved path actually exists, so a missing or unrenewed cert is flagged at

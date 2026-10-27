@@ -34,15 +34,14 @@
 /**
  * Detector-window samples (K) in one matched-filter vector.
  *
- * K is a per-receiver build parameter. It scales with the coarse-channel
- * width to hold the fine-bin width near 3.05 kHz: CHIME channels are
- * 390.625 kHz wide and use K = 128; CHORD channels are 195.3125 kHz wide
- * and use K = 64. The window count per detector block
- * (PILOTPROXY_FINE_WINDOWS_PER_STREAM) is frozen at 128 for every receiver;
- * only the window length varies. Supported values are 64 and 128, and
- * the build must define it; there is no default. The
- * guard-bit chain and the static assertions below enforce the fixed-point
- * closure for each.
+ * Choose K to keep the matched-filter cell width near 3.05 kHz. CHIME's
+ * 390.625 kHz coarse channels use K = 128; CHORD's 195.3125 kHz channels
+ * use K = 64. Each stream still contributes 128 windows to the fine
+ * transform (PILOTPROXY_FINE_WINDOWS_PER_STREAM).
+ *
+ * The build must specify K as 64 or 128; there is no default. The guard-bit
+ * calculation and static assertions below check the integer bounds for
+ * that choice.
  */
 #ifndef PILOTPROXY_DETECTOR_WINDOW_SAMPLES
 #error "Define PILOTPROXY_DETECTOR_WINDOW_SAMPLES (64 or 128) when building the core."
@@ -178,9 +177,8 @@ typedef int8_t InputType;
  * products: 4 + 4 + 1 = 9 bits. Accumulating K taps adds log2(K) guard bits,
  * so completed real/imaginary dot-product components require 9 + log2(K)
  * bits. At K = 128 that is 16 bits, which is why the row sums fit an int16
- * range even though they are stored as int32; at K = 64 it is 15 bits with
- * the same storage. Shared-memory footprint scales with the window count,
- * and this margin is the lever that halves it.
+ * range even though they are stored as int32. At K = 64 the bound is
+ * 15 bits. Both configurations retain int32 storage for the row sums.
  *
  * PILOTPROXY_DOT_ACCUM_GUARD_BITS must equal log2(PILOTPROXY_DETECTOR_WINDOW_SAMPLES).
  * It is derived here for each supported window length and asserted below.
@@ -266,7 +264,7 @@ constexpr double kMaxBinMagnitude =
  * component per butterfly, 2-norm sqrt(128) per stage, propagated through
  * the remaining stages' sqrt(2) growth). The additive term is why the
  * RATIO P_r / (L_F * sum |z|^2) is not pinned near 1 at small amplitude
- * (unit-amplitude rows depart from Parseval by tens of per cent); the
+ * (unit-amplitude rows depart from Parseval by tens of percent); the
  * bound on P_r itself is monotone in ||X||, so it is set by the maximum
  * input norm, where the additive term is small: at ||X|| = 2^22 per stream
  * (K = 128) the factor on the power is (1 + d + c / 2^22)^2 <= 1.00061, and

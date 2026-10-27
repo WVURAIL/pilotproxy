@@ -1,17 +1,16 @@
 """Resolve the CuPy build used by archive analyzers.
 
-Policy: prefer the CuPy the CANFAR session image already ships. A pinned cupy in
-this package would shadow or mismatch the image's CUDA module, so the GPU extra is
-empty and this module does the right thing at run time instead:
+CuPy must match the CUDA environment in which the analysis runs. CANFAR images
+usually supply that build already, so the package leaves its GPU extra empty
+and resolves CuPy at runtime:
 
-  * `import_cupy()`        -> the image's cupy, or None if it isn't importable.
-  * `get_array_module(g)`  -> numpy, or the image's cupy when g is true.
-  * `detect_cuda_major()`  -> the image's CUDA major version, best-effort.
-  * `ensure_cupy(install)` -> the image's cupy, optionally pip-installing the
-                              matching `cupy-cuda<major>x` wheel when it is absent.
+* ``import_cupy()`` returns the environment's CuPy, or None when absent.
+* ``get_array_module(g)`` selects NumPy or, when g is true, CuPy.
+* ``detect_cuda_major()`` attempts to identify the environment's CUDA version.
+* ``ensure_cupy(install)`` can install the matching ``cupy-cuda<major>x`` wheel
+  if CuPy is absent and installation was explicitly requested.
 
-Auto-install lives only in `ensure_cupy(install=True)`. A scan never installs
-packages on its own.
+Only ``ensure_cupy(install=True)`` installs packages. A scan does not.
 """
 from __future__ import annotations
 

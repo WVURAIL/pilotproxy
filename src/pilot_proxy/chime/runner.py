@@ -724,7 +724,7 @@ def _append_detection_rows(
 
 
 def _coarse_center_hz(dataset, receiver_profile) -> float:
-    """Coarse-channel center frequency for a dataset (kept after offset-module removal)."""
+    """Coarse-channel center frequency for a dataset."""
     if dataset.coarse_channel_center_hz is not None:
         return float(dataset.coarse_channel_center_hz)
     selection = receiver_frequency_to_channel(

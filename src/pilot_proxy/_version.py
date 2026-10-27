@@ -1,3 +1,3 @@
-"""Single source of truth for the PilotProxy package version."""
+"""Define the package version used throughout PilotProxy."""
 
 __version__ = "1.1.0"

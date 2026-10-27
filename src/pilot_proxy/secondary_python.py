@@ -62,12 +62,12 @@ def _create_package_entry(shim_root: Path, package_root: Path) -> Path:
 def package_only_pythonpath(
     command: str | os.PathLike[str] | None,
 ) -> Iterator[Path | None]:
-    """Yield a temporary import root containing only ``pilot_proxy``.
+    """Provide a temporary import root containing only pilot_proxy.
 
-    The bridge is needed only for a genuinely different interpreter. It does
-    not add the primary interpreter's site-packages directory, so NumPy, GNU
-    Radio, and other dependencies continue to resolve from the secondary
-    interpreter. The temporary path remains alive for the context duration.
+    Use this bridge when launching a different Python interpreter. Keep
+    the primary interpreter's site-packages out of its search path so
+    NumPy, GNU Radio, and other dependencies come from the secondary
+    environment. Keep the temporary directory for the context's duration.
     """
     if not is_secondary_interpreter(command):
         yield None

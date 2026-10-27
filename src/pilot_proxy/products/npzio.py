@@ -1,4 +1,4 @@
-"""Safe, eagerly materialised NumPy archive loading.
+"""Safe, eagerly materialized NumPy archive loading.
 
 Survey products are external inputs.  NumPy's pickle-backed object arrays can
 execute arbitrary code while loading, so the package never enables them.

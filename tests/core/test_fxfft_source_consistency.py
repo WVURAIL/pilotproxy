@@ -1,16 +1,13 @@
 # coding=utf-8
-"""Source-level consistency between the CUDA transform and the C reference.
+"""Check that the CUDA transform and C reference index the same twiddle table.
 
-The device transform in ``cuda/pilotproxy_detector.cu`` and the C reference in
-``cuda/fxfft_ref.c`` must index the shared master twiddle table the same way.
-The C reference is proven bit-identical to the Python reference at every
-supported size (``test_fxfft_ref_family.py``), so if the CUDA source computes
-its twiddle index and stage bound with the same expressions against the same
-table, the index arithmetic is covered by that proof.
+``cuda/fxfft_ref.c`` is compared bit for bit with the Python reference at
+every supported size in ``test_fxfft_ref_family.py``. The checks here require
+``cuda/pilotproxy_detector.cu`` to use the same index and stage-bound
+expressions against that shared table.
 
-This is a cheap standing guard rather than a substitute for the golden-vector run: it
-catches one side being edited without the other, which is the failure mode a
-GPU-only gate would only reveal on a machine with a device attached.
+These source checks catch an edit made on only one side, even on a host
+without CUDA. Golden-vector runs on a GPU still test the device arithmetic.
 """
 
 from __future__ import annotations

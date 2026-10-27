@@ -68,12 +68,12 @@ def test_geometry_axes_round_trip(product_path):
         for b in (0.0, 17.5, 8191.0, 16000.25):
             back = g.psd_bin_of_rf_offset(g.psd_rf_offset_hz([b]))
             assert back[0] == pytest.approx(b % NFFT, abs=1e-6)
-        # the channel-centre line sits at (centre - pilot) from the nominal pilot
+        # the channel-centre line sits at (center - pilot) from the nominal pilot
         assert g.psd_rf_offset_hz([0])[0] == pytest.approx(g.centre_line_rf_offset_hz)
 
 
 def test_grid_residual_and_rf_conversion_follow_the_receiver_sense():
-    # channel 36: pilot 602.309441 MHz, centre 602.343750 MHz, sense -1 -> +739.7 Hz, bin 62
+    # channel 36: pilot 602.309441 MHz, center 602.343750 MHz, sense -1 -> +739.7 Hz, bin 62
     residual = grid_residual_hz(602_309_441.0, 602_343_750.0, -1)
     assert residual == pytest.approx(739.7, abs=0.1)
     assert fine_bin_of_hz(residual) == 62

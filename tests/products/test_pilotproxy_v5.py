@@ -510,13 +510,12 @@ def test_archive_gate_requires_complete_nonlocal_receiver_identity(tmp_path):
 
 
 def test_archive_gate_reports_units_without_a_recorded_sample_interval(tmp_path):
-    """An untimed acquisition is a v5 state, not a corruption.
+    """Accept an unrecorded sample interval while reporting its missing timing.
 
-    The producing contract writes NaN into ``unit_delta_time`` for a unit whose
-    acquisition metadata never carried a sample interval, and 470 of the 167,728
-    units in the September 2026 rebuild are in that state. The gate has to
-    accept them --- refusing would refuse the archive the run of record used ---
-    while carrying their count, because those frames have no frame time.
+    The v5 contract represents an absent interval as NaN in ``unit_delta_time``.
+    The September 2026 rebuild contains 470 such units among 167,728. The gate
+    must accept this supported state and count it, since those frames cannot
+    contribute to calculations that require a frame time.
     """
     paths = _cohort(tmp_path)
     with np.load(paths[-1], allow_pickle=False) as product:

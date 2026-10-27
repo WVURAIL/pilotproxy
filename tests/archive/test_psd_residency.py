@@ -4,7 +4,7 @@
 The analyzer computes each frame's PSD in float64 but retains only an int16 dB
 encoding (``psd_frame_db_i16``). That choice is what bounds resident memory on a
 long channel: measured on 2026-08-23, 35,095 frames -- the count needed to reach
-the 4.6 GB figure recorded against the float64 behaviour -- costs 1102 MB as
+the 4.6 GB figure recorded against the float64 behavior -- costs 1102 MB as
 int16 against 3291 MB as float64. A regression to a wider dtype would not fail
 any correctness test, so it is asserted here directly.
 """

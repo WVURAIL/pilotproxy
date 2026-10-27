@@ -483,7 +483,11 @@ def weight_term_norms_sq(
 
 
 def null_power_ratio_from_weight_norms(target_norm_sq: int, reference_norm_sum_sq: int) -> float:
-    """Return null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq, the flat-floor ratio of expected powers, not E[F]."""
+    """Return the flat-noise ratio implied by the quantized weight norms.
+
+    The value is 2*target_norm_sq/reference_norm_sum_sq, a ratio of
+    expected powers. It is not the expectation E[F] of their ratio.
+    """
     target_norm = _exact_uint64(
         target_norm_sq,
         field="target_norm_sq",

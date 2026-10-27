@@ -13,7 +13,7 @@ they re-derive the bundle *from scratch* against a **fresh** survey:
   not a stable identifier across surveys;
 * the inventory<->product join is a string join on
   ``common_path + "/" + name``, which couples the freeze directly to the
-  ``cadc:CHIMEFRB/`` collection-prefix normalisation in
+  ``cadc:CHIMEFRB/`` collection-prefix normalization in
   ``pilot_proxy.archive.datatrail_client``;
 * the closure assertions in both directions, and the disjointness of the
   zero-frame and quarantine sets that makes ``reasons`` single-valued.
@@ -269,7 +269,7 @@ def test_collection_prefix_drift_breaks_evidence_closure(tmp_path):
 
     ``datatrail_client._restore_collection`` exists precisely to keep the
     ``cadc:CHIMEFRB/`` prefix on replicas Datatrail now returns bare.  If that
-    normalisation regresses, the freeze cannot join a fresh inventory to the
+    normalization regresses, the freeze cannot join a fresh inventory to the
     Aug-3 products at all -- this is what that failure looks like.
     """
     bare_rows = _default_rows(collection="cadc:")

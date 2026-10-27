@@ -5,7 +5,7 @@
 Chapter 6 (``sec:detection:synthetic``, ``fig:detection:frontier``) asks for
 the frontier of ``eq:detection:frontier`` drawn against a contamination whose
 value is *known*: one unsmoothed curve per rank ``rho`` in the (surviving
-injected contamination, masked fraction) plane with ``eta`` labelling points
+injected contamination, masked fraction) plane with ``eta`` labeling points
 along each curve, at several duty cycles, with trial-bootstrap intervals; a
 second panel setting what the histogram cumulative sums of
 ``eq:detection:histogram`` claim survives beside what was actually injected
@@ -17,7 +17,7 @@ analysis reports is a prefix sum over a residual-score histogram whose
 per-frame entries are estimates.  On the archive the truth is unknown, so the
 estimator has never been checked against one.  Here the bench decides frame by
 frame whether a shelf was injected and at what level, so the same prefix sums
-can be totalled over the same kept frames for the claim and for the truth.
+can be totaled over the same kept frames for the claim and for the truth.
 
 Nothing in the masking path is re-derived for the bench.  The per-rank Q16
 boundary, the keep rule, the empirical candidate staircase, the retained-frame
@@ -975,7 +975,7 @@ def _duty_population(
     *,
     frames: int,
 ) -> dict[str, Any]:
-    """Compose one duty cycle from the labelled off and on populations.
+    """Compose one duty cycle from the labeled off and on populations.
 
     Frames are taken in order from each bank, so the same duty cycle always
     draws the same frames and a larger duty cycle contains the smaller one's

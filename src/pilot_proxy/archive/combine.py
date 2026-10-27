@@ -1,19 +1,18 @@
 # coding=utf-8
-"""Combine per-pilot archive products into Pilot Proxy's canonical products.
+"""Combine per-pilot archive products into PilotProxy's canonical products.
 
-The detector analyzer fans out one ``<channel>.npz`` per coarse channel.
-This step stacks those per-pilot products along the pilot axis, aligning
-frames by (event, frame-in-file) identity, so pilots that processed different
-event sets stack over exactly their common identities with drops reported --
-and feeds the SAME writer functions ``run_chime_analysis`` uses, so the combined
-``chime_detector_outputs`` / ``chime_spectrogram_cache`` / ``chime_reductions_10s``
-/ ``mask_summary`` are byte-identical to a single-process run, which is what
-keeps the existing plots and ``validate-products`` working unchanged on archive
-output.
+Each detector analyzer writes one product per coarse channel. To combine them,
+we first align frames by their event and position within the file. Pilots that
+processed different event sets contribute only their common frame identities;
+the alignment report records the dropped frames.
 
-A "per-pilot product" is exactly what ``PilotProxyDetectorAnalyzer.save`` writes:
-the per-pilot product schema for one pilot, with
-the per-frame 2-D arrays shaped ``(frames, 1)``.
+The aligned arrays then pass through the same writer functions as
+``run_chime_analysis``. This produces ``chime_detector_outputs``,
+``chime_spectrogram_cache``, ``chime_reductions_10s``, and ``mask_summary`` in
+the canonical formats used by plotting and ``validate-products``.
+
+A per-pilot input is the product written by ``PilotProxyDetectorAnalyzer.save``.
+Its two-dimensional frame arrays have shape ``(frames, 1)``.
 """
 from __future__ import annotations
 
@@ -288,11 +287,9 @@ class CombineDuplicateIdentityError(CombineIntegrityError):
     ``source_event_key`` only strips a trailing freq_id token, so those two
     units keep distinct event keys and merely stack as separate events.
 
-    The cause is therefore unresolved in the general case, which is exactly why
-    it is worth surfacing rather than crashing on. Treat it as a data-integrity
-    question, not a routine skip: the per-pilot products are unaffected, but the
-    event-keyed stack cannot be trusted until the duplicate is explained.
-    ``unit_scope`` on the per-pilot product is the first thing to check.
+    The duplicate must be explained before these products can be combined.
+    The per-pilot products remain intact. Start by inspecting ``unit_scope``
+    to determine which source units contributed the repeated identity.
     """
 
 
@@ -1586,7 +1583,7 @@ def _unlink_owned_journal(
 def _recover_interrupted_publish(
     run_dir: Path, ownership: _PublishOwnership
 ) -> bool:
-    """Roll back a journalled partial publication before starting new work."""
+    """Roll back a journaled partial publication before starting new work."""
     ownership.assert_owned()
     destination = Path(run_dir).absolute()
     _resolved_directory_root(destination, what="run directory")

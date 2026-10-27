@@ -852,11 +852,9 @@ def _run_with_output_lock_held(
                         break
                     continue
                 try:
-                    # Source-supplied unit metadata (the inventory row:
-                    # scope, event, obs_date, ...) is opaque to the engine
-                    # but load-bearing for analyzers; no file attribute
-                    # carries it. The probe reads the actual staged bytes,
-                    # so it wins on any key collision.
+                    # Analyzers need source metadata such as scope, event, and obs_date;
+                    # these fields may not exist in the file. The probe describes the
+                    # staged bytes themselves, so its values take precedence on overlap.
                     meta = {**dict(unit.meta), **dict(reader.probe(dest))}
                 except UnreadableUnitError as exc:
                     incomplete = _staged_copy_incomplete(dest, unit)
@@ -865,8 +863,6 @@ def _run_with_output_lock_held(
                         # archive says the object is: a staging failure, not
                         # a property of the archived bytes. Leave the unit
                         # unrecorded so the next resume fetches it again.
-                        # (2026-09-01: a staging directory removed under a
-                        # live scan quarantined 14 readable units this way.)
                         fail += 1
                         print(f"  FAIL read {unit.name}: {incomplete}; "
                               "will refetch on resume", file=sys.stderr)

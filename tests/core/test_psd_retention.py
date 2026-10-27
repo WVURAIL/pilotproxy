@@ -1,14 +1,10 @@
 # coding=utf-8
-"""The per-frame PSD must survive its int16 dB encoding.
+"""Check that per-frame spectra survive their int16 dB encoding.
 
-The analyzer already ran a 16384-point FFT over every feed each frame and
-power-summed it; v1 and v2 folded that into two accumulators and dropped the
-per-frame array. archive_health's SPECTRAL_LIMITATION names the consequence:
-the gate "cannot apply an arbitrary new frame mask, FFT window, or threshold to
-the archived spectra".
-
-Retaining it is only useful if the encoding is faithful, so the round trip is
-pinned here rather than left to review.
+The analyzer sums a 16384-point FFT power spectrum over feeds for each frame.
+Keeping each frame's spectrum allows later masks to select different frames;
+an accumulated spectrum alone cannot do that. The tests here check the
+encoding round trip so this retained information has a known precision.
 """
 from __future__ import annotations
 

@@ -8,7 +8,7 @@ the fake CLI boundary.
 
 _restore_collection_v2 is the proposed replacement. It is exercised through
 the SAME derivation by monkeypatching dt._restore_collection, so every
-assertion is about real adapter behaviour, not about the helper in isolation.
+assertion is about real adapter behavior, not about the helper in isolation.
 """
 from __future__ import annotations
 

@@ -2,11 +2,11 @@
  * @file pilotproxy_detector.cu
  * @brief GPU-accelerated power-ratio detection of narrowband signals.
  *
- * Implements a power-ratio detector built from per-row matched filters
- * (coherent within each K-sample row; row spectra are combined incoherently
- * across input streams), optimized for detecting DTV pilot tones in wideband
- * spectral data. Every stage from the packed samples to the power sums is
- * fixed-point integer arithmetic.
+ * A DTV pilot concentrates power near a known frequency. We measure it
+ * with a matched filter and compare its power with two nearby references.
+ * Each K-sample row is summed coherently, then successive rows form a fine
+ * spectrum. Powers from different input streams add incoherently.
+ * Every stage from packed samples to power sums uses fixed-point integers.
  *
  * @section algorithm Algorithm Overview
  *
@@ -23,7 +23,7 @@
  *
  *   F = 2 * P[target] / (P[ref1] + P[ref2])
  *
- * The frame powers are DEFINED as the all-bin sums of the fine spectrum
+ * The frame powers are defined as the all-bin sums of the fine spectrum
  * (kernel core 3.0.0); the transform length cancels in F. The deployed
  * decision (the fine designated-set CFAR epilogue) reads S_r[f] only.
  *
@@ -958,14 +958,10 @@ kernel_fused_fine(
     /* Phase 1: row sums for this stream's windows (each thread owns whole
      * windows; no cross-thread reduction).
      *
-     * The window axis is walked with a thread-stride loop, matching the tap
-     * loop of the staged kernels and the RowSumsTap loop below. The previous
-     * form derived a per-thread window count by integer division, which
-     * silently truncated when the window count was not a multiple of the
-     * block size and computed nothing at all when it was smaller. Striding
-     * removes both requirements and leaves the emitted bits unchanged: s_z is
-     * indexed by window, so which thread produces a window does not affect
-     * shared-memory contents. */
+     * Stride over windows so every window is processed, even when their
+     * count is smaller than the block or not a multiple of its size. Each
+     * window owns a distinct s_z entry, so assigning it to a different
+     * thread does not change the shared-memory result. */
     const size_t batch_stride =
         static_cast<size_t>(detector_rows_per_block) * PILOTPROXY_DETECTOR_WINDOW_SAMPLES;
     const InputType* Xb = X + batch_stride * static_cast<size_t>(b);

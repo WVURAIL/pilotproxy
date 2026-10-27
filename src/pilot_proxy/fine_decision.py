@@ -1,66 +1,69 @@
 # coding=utf-8
-"""Frozen fine designated-set decision reference (fine decision v1).
+"""Compare fine-bin power ratios using exact integer arithmetic.
 
-This module is the bit-exact Python reference for the fine-mask
-decision computed by the fused kernel epilogue (kernel core 4.0.0,
-``PilotProxy_Compute_FusedFineMask_U64``). The CUDA implementation must
-reproduce ``fine_mask_decision`` exactly --- same mask bit for the same
-exact fine powers and the same calibration constants --- so every value
-here is arithmetic over exact integers (Python's arbitrary-precision
-ints mirror the kernel's 128/192-bit fixed-width products).
+This is the Python reference for fine decision v1 in the fused kernel
+epilogue (kernel core 4.0.0, PilotProxy_Compute_FusedFineMask_U64). For
+the same fine powers and calibration constants, the CUDA implementation
+must return the same mask bit. Python's arbitrary-precision integers
+provide a reference for the kernel's 128/192-bit products.
 
-Decision statement
-------------------
+First define the measured ratios
+-------------------------------
 
-Inputs: exact uint64 fine power sums ``S[term, bin]`` (the fused
-kernel's ``FinePowers`` output; frozen fxfft256 v1 magnitudes summed
-over feeds) and per-channel calibration data from the runtime bundle:
+The input S[term, bin] contains exact uint64 fine powers: frozen fxfft256
+v1 magnitudes summed over feeds. At each bin b, write the ratio without
+dividing:
 
-* ``anchor_bin``            measured pilot line bin (0..255);
-* ``designated_half_width`` designated set = anchor +/- w, modulo 256
-                            (the survey's window convention);
-* ``bulk_mask``             256-bit mask of null-bulk bins: independent
-                            (every ``pad_factor``-th) bins, guard- and
-                            census-excluded --- built by
-                            ``fine_reduction.independent_bin_mask`` at
-                            bundle export time;
-* ``cfar_rank``             0-indexed rank into the ascending bulk F2
-                            values (the order-statistic CFAR estimate);
-* ``multiplier_q16``        threshold multiplier in Q16 fixed point.
+    F2[b] = num[b] / den[b]
+    num[b] = 2 * S[target, b]
+    den[b] = S[ref_lower, b] + S[ref_upper, b]
 
-Per-bin statistic (a rational, never divided): ``F2[b] = num[b]/den[b]``
-with ``num[b] = 2 * S[target, b]`` and
-``den[b] = S[ref_lower, b] + S[ref_upper, b]``.
+The runtime bundle supplies the comparison geometry and threshold:
 
-Rule: let ``bulk = {b : bulk_mask[b] and den[b] > 0}``. The frame is
-*invalid* (mask = 0) when ``cfar_rank >= |bulk|``. Otherwise let
-``F2_r`` be the value of rank ``cfar_rank`` in the ascending exact
-ordering of ``{F2[b] : b in bulk}`` (rank selection by counting, so the
-selected *value* is unique even under ties). The mask bit is 1 iff some
-designated bin ``b`` with ``den[b] > 0`` satisfies::
+* anchor_bin: measured pilot-line bin, from 0 through 255.
+* designated_half_width: examine anchor +/- w, wrapping modulo 256.
+* bulk_mask: a 256-bit mask of independent background bins, taking every
+  pad_factor-th bin and excluding guard and census bins. Bundle export
+  builds it with fine_reduction.independent_bin_mask.
+* cfar_rank: zero-based rank in the ascending background ratios.
+* multiplier_q16: threshold multiplier on a Q16 grid.
 
-    num[b] * 2**16 * den_r  >  multiplier_q16 * num_r * den[b]
+Then choose the background reference
+------------------------------------
 
-i.e. ``F2[b] > (multiplier_q16 / 2**16) * F2_r``. Degenerate
-denominators can never fire (the coarse rule's "zero-reference forced
-0", applied per bin), and a frame with a degenerate bulk is forced 0.
+Keep background bins with bulk_mask[b] and den[b] > 0. If cfar_rank is
+not smaller than their count, the frame is invalid and its mask is zero.
+Otherwise, select F2_r at that rank by exact comparisons. Counting ranks
+makes the selected value unique even when multiple bins tie.
 
-``fine_required_multiplier_q16`` inverts this strict comparison. It
-returns the smallest integer Q16 multiplier that keeps the frame, so exact
-change points can be collected without a floating-point threshold grid.
+Reject the frame (mask = 1) if any designated bin with den[b] > 0 satisfies::
 
-Why rank-based (order-statistic) CFAR: the survey's recorded per-frame
-calibration (``fine_reduction.calibrate_cfar``) uses float medians and
-interpolated quantiles, which cannot be made bit-exact across
-numpy/nvcc/compiler versions --- the same reason the deployed FFT is
-fixed point. A rank threshold with a Q16 multiplier makes the decision
-exact, and order statistics reject a contaminated bulk tail by construction.
-Rank and multiplier are bundle *data*; this module and the kernel freeze only
-the arithmetic, not the rule that selects them. The rank is the bulk median;
-the multiplier (the Q16 word) comes from ``characterization.threshold_rule``:
-the channel's knee, or the loosest word below it that meets the science
-tolerance within the time limit. ``runtime_calibration`` separately proposes
-commissioning thresholds from declared calibration populations.
+    num[b] * 2**16 * den_r > multiplier_q16 * num_r * den[b]
+
+This is the strict comparison F2[b] > (multiplier_q16 / 2**16) * F2_r,
+written as integer products. A bin with zero reference power cannot fire.
+A frame with insufficient background support also returns mask zero;
+its invalid status must therefore be checked separately from the mask.
+
+fine_required_multiplier_q16 reverses the comparison to find the smallest
+integer multiplier that keeps a frame. This gives exact change points
+without scanning a floating-point threshold grid.
+
+Why use a rank and an integer multiplier?
+----------------------------------------
+
+The survey's float calibration (fine_reduction.calibrate_cfar) uses
+medians and interpolated quantiles. Those operations do not define a
+bit-exact result across NumPy, NVCC, and compiler implementations. A rank
+reference and Q16 multiplier make the comparison exact while reducing
+sensitivity to contamination in the upper background tail.
+
+This module and the kernel fix the arithmetic. The bundle supplies the
+rank and multiplier. The current rank is the bulk median;
+characterization.threshold_rule selects the channel's knee or the
+loosest word below it that meets the science and time limits.
+runtime_calibration separately proposes commissioning thresholds from
+declared calibration populations.
 """
 from __future__ import annotations
 

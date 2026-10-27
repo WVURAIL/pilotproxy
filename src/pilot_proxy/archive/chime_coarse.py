@@ -1,19 +1,17 @@
 # coding=utf-8
-"""CHIME coarse-channel helpers shared by the archive analyzers.
+"""Map CHIME coarse-channel frequencies to archive channel indices.
 
-A CHIME baseband file is one *coarse* channel of the F-engine: the 400 MHz band
-(0..800 MHz top) split into 1024 channels of ``fs = 400e6 / 1024 = 390625`` Hz.
-A file's ``freq_id`` (0..1023) is therefore recoverable from its center
-frequency, the one quantity every reader's ``probe`` already exposes::
+The F-engine divides the 400--800 MHz band into 1024 channels, each
+``fs = 400e6 / 1024 = 390625`` Hz wide. A baseband file holds one of these
+channels. Its center frequency gives the archive ``freq_id`` (0..1023)::
 
     f_center = f0 - freq_id * coarse_width        (f0 = 800 MHz, top of band)
     freq_id  = round((f0 - f_center) / coarse_width)
 
-The analyzers *select* on ``freq_id`` (it is what the CADC file inventory and the
-on-disk filenames key on) but *label* each product with the ATSC physical
-channel the pilot falls in. Recording ``freq_id`` alongside the product lets the
-(deferred) 6 MHz mask-expansion step find the sibling coarse channels of a
-detected pilot without re-opening the raw files.
+Selection uses freq_id because that is how the inventory and filenames name
+channels. Products also carry the ATSC physical-channel label for the pilot.
+Keeping freq_id alongside it lets a later 6 MHz mask-expansion step find the
+other coarse channels in that television band without reopening the raw data.
 """
 from __future__ import annotations
 
@@ -47,17 +45,15 @@ def chime_freq_id_from_hz(
 
 
 def source_event_key(unit_key: object, freq_id: int) -> str:
-    """Normalise a source unit key to an event identity, dropping the freq_id.
+    """Identify an event by removing its file's trailing frequency-channel token.
 
-    A CHIME baseband file is named ``baseband_<event>_<freq_id>.h5`` (local path
-    or CADC URI). The combine step needs to confirm that different pilots saw the
-    *same events in the same order*, but each pilot's files carry a *different*
-    freq_id token, so the raw keys never match. Removing this product's own
-    freq_id token (the one immediately before the extension) collapses
-    ``baseband_<event>_829.h5`` and ``baseband_<event>_844.h5`` within the same
-    source namespace to the same key.  The directory/URI prefix is deliberately
-    retained: two independent campaigns can reuse a filename without becoming
-    the same acquisition. Keys that do not carry the suffix are returned intact.
+    Combining pilots requires a common event key. The files
+    ``baseband_<event>_829.h5`` and ``baseband_<event>_844.h5`` describe different
+    channels of the same event, so removing the final freq_id gives them the
+    same key within their source namespace.
+
+    Keep the directory or URI prefix: independent campaigns can reuse a
+    filename. Keys without the expected suffix pass through unchanged.
     """
     key = str(unit_key).replace("\\", "/")
     return re.sub(rf"_{int(freq_id)}(?=\.[^/]+$)", "", key)

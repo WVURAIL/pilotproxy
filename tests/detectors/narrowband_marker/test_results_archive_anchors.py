@@ -91,7 +91,7 @@ def test_on_minus_quiet_anchor_cancels_static_structure(tmp_path):
 
 def test_rf_conversion_sign_follows_the_receiver_sense():
     def geometry(sense):
-        residual = -float(np.sign(sense)) * 739.6640625   # sense * (pilot - centre), reduced to the grid
+        residual = -float(np.sign(sense)) * 739.6640625   # sense * (pilot - center), reduced to the grid
         return Geometry(36, 506, 602_309_441.0, 602_343_750.0, sense, residual,
                         int(round(residual / FINE_BIN_HZ)) % FINE_BINS, 0.0, 0.0, 0)
     g_inverted, g_normal = geometry(-1), geometry(1)
@@ -313,14 +313,14 @@ def test_fine_and_psd_axes_agree_on_the_rf_offset_of_a_tone(tmp_path):
         g = p.geometry
     assert g.sense == -1 and g.nominal_fine_bin == NOMINAL
     for d in (500.0, -500.0, 1200.0, -1200.0, 0.0):
-        # receiver-frame offset of the tone from the coarse-channel centre, then the fine axis measures it modulo one coarse bin
+        # receiver-frame offset of the tone from the coarse-channel center, then the fine axis measures it modulo one coarse bin
         receiver = g.sense * (g.pilot_hz + d - g.centre_hz)
         fine_hz = receiver % COARSE_BIN_HZ
         fine_bin = int(round(fine_hz / FINE_BIN_HZ)) % FINE_BINS
         assert abs(anchors.rf_offset_of_bin(fine_bin, g) - d) <= FINE_BIN_HZ / 2 + 1e-9
         psd_bin = (receiver / PSD_BIN_HZ) % NFFT
         assert g.psd_rf_offset_hz(np.array([psd_bin]))[0] == pytest.approx(d, abs=1e-6)
-    # the station itself: the nominal bin converts to +0.566 Hz, the grid residual above the bin centre
+    # the station itself: the nominal bin converts to +0.566 Hz, the grid residual above the bin center
     assert anchors.rf_offset_of_bin(NOMINAL, g) == pytest.approx(g.grid_residual_hz - NOMINAL * FINE_BIN_HZ)
 
 
@@ -329,7 +329,7 @@ def test_rf_offset_shares_one_wrap_with_the_bin_offset(tmp_path):
     path = v5_fixture._write_product(tmp_path / "506.npz", 36)
     with Product(path) as p:
         g = p.geometry
-    assert g.grid_residual_hz > NOMINAL * FINE_BIN_HZ       # residual above the bin centre: the case that used to jump
+    assert g.grid_residual_hz > NOMINAL * FINE_BIN_HZ       # residual above the bin center: the case that used to jump
     bins = np.array([(NOMINAL + k) % FINE_BINS for k in (-128, -127, 0, 127)])
     offsets = anchors.unwrap_bins(bins, NOMINAL)
     assert offsets.tolist() == [-128, -127, 0, 127]

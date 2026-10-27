@@ -1,9 +1,9 @@
-"""Equality-boundary regression for the norm-corrected mask (strict `>`).
+"""Keep frames exactly on the norm-corrected mask boundary.
 
-Random vectors essentially never hit exact rational equality, so `>` and
-`>=` implementations pass identical parity tests; this pins the one input
-class where they differ. Signature-adaptive on purpose: it asserts the
-POLICY (equality is NOT excess) against whatever the reference exposes.
+Random inputs rarely reach exact rational equality, so they may not reveal
+a mistaken ``>=`` in place of ``>``. These tests construct that equality and
+require it to mean no excess. They adapt to the reference's call signature
+while testing the same boundary rule.
 """
 import inspect
 from pilot_proxy import detector_contract as dc

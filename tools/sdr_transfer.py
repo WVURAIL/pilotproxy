@@ -413,7 +413,7 @@ def calibrate_received_controls(
     bandwidth_hz: float,
     expected_pilot_below_data_db: float,
 ) -> dict[str, float]:
-    """Separate received data, pilot, leakage, and injected noise."""
+    """Estimate the received data, pilot, leakage, and injected-noise powers from the controls."""
     frequency, zero_psd = averaged_complex_psd(
         tx_zero,
         sample_rate_hz=float(sample_rate_hz),

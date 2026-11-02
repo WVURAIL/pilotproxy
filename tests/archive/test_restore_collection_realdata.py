@@ -5,10 +5,9 @@ Rebuild minoc replica lists from recorded common paths and filenames, then
 derive the paths and names for every bare/prefixed masking of each sampled
 set. The result must be invariant under which replicas arrive bare.
 
-No network: the datatrail CLI is faked at subprocess.run, same boundary as
-tests/archive/test_datatrail_adapter.py.
-
-Skips itself when a bundle is not mounted.
+The datatrail CLI is faked at subprocess.run, the same boundary as
+tests/archive/test_datatrail_adapter.py, so no test reaches the network. A
+test skips itself when its bundle is not mounted.
 """
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ import pytest
 
 from pilot_proxy.archive import datatrail_client as dt
 
-# Real-data inputs, read from the environment; the tests skip when they are absent.
+# real-data inputs from the environment, skipped when absent
 _BUNDLE = os.path.join(os.environ.get("PILOT_PROXY_ARCHIVE_BUNDLE", "archive_inputs/chime-pilots-v5"),
                        "inventory.source.jsonl")
 _PREFIX = "cadc:CHIMEFRB/"
@@ -55,7 +54,7 @@ def _resolve(monkeypatch, uris):
 
 
 def _read(path, limit, per_event_cap=6):
-    """({key: [prefixed uri, ...]}, {key: recorded common_path})."""
+    """Return ({key: [prefixed uri, ...]}, {key: recorded common_path})."""
     groups: dict = collections.OrderedDict()
     recorded: dict = {}
     with open(path) as fh:

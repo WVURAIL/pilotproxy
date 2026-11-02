@@ -138,8 +138,8 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
             codes = np.asarray(z["psd_frame_db_i16"])
         if step != 0.01 or invalid != -32768 or codes.shape != (eligible.size, NFFT):
             raise ValueError(f"PSD coding changed: channel {ch}")
-        # Mirrored (zone 2): sky = center - m * FINE_HZ, so the pilot sits at
-        # m = (center - pilot) / FINE_HZ; FFT order stores bin m at m mod NFFT.
+        # mirrored zone 2: sky = center - m * FINE_HZ, so the pilot is at
+        # m = (center - pilot) / FINE_HZ, and FFT order stores bin m at m mod NFFT
         exact = (center - pilot) / FINE_HZ
         nominal = int(round(exact))
         offsets = np.arange(-HALF, HALF + 1)

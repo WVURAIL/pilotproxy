@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Execute a frozen long fine-validation campaign with explicit checkpoints.
 
-This is a local process supervisor, not a scheduler. It performs no git or RF
-operations. A scientific failure remains in its report; an execution/integrity
-failure stops the sequence. Finishing generation is not scientific acceptance.
+The supervisor runs the frozen steps in order as local processes and performs
+no git or RF operations. A scientific failure is kept in its report, and an
+execution or integrity failure stops the sequence. Scientific acceptance needs
+the independent full-run audit and the later analyses, which this supervisor
+does not cover.
 """
 from __future__ import annotations
 
@@ -70,7 +72,7 @@ def steps(out):
 
 
 def grid_projection(out):
-    """Operational estimate only; never changes the frozen sampling plan."""
+    """Estimate the size and run time of the evaluation and stress phases without changing the frozen sampling plan."""
     grid = json.loads((out / 'evaluation-grid.json').read_text())
     plan = json.loads((out / 'plan.json').read_text())
     counts = [len(values) for values in grid['grids'].values()]
@@ -153,9 +155,10 @@ def _run_locked(out):
         try:
             return _run_owned(out)
         except BaseException as error:
-            # Only the process holding the lock may change status. Initial
-            # verification failures also need a failed state; a stale prior
-            # PID or missing state must not leave them looking successful.
+            # Only the process holding the lock may change the status. A
+            # failure in the initial verification is also recorded as failed,
+            # so a stale PID or a missing state file cannot leave the campaign
+            # looking successful.
             state_path = target / 'state.json'
             try:
                 state = json.loads(state_path.read_text()) if state_path.exists() else {}

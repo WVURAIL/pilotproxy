@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Generate the deterministic TeX facts shared by the formal documents.
+"""Generate the deterministic TeX macros shared by the formal documents.
 
-Scientific and schema values come from the same checked-in profiles, source
-constants, and weight manifest used by the runtime. The generator deliberately
-uses only the Python standard library so documentation can be checked without a
-GPU or an installed PilotProxy environment.
+The macros are written to ``docs/generated/specs.tex``. Scientific and schema
+values are read from the same checked-in profiles, source constants, and
+weight manifest used by the runtime. Only the Python standard library is used,
+so the documentation can be checked without a GPU or an installed PilotProxy
+environment.
 
 Usage::
 

@@ -1,24 +1,25 @@
 """Storage-safe archive streaming.
 
-This is the fixed part of the tool: a storage-safe streaming loop. For every
-Unit in a selection it:
+The purpose of this module is to stream a selection of archive units through a
+reader and an analyzer with bounded scratch storage. For each Unit in the
+selection, the engine performs these operations in order:
 
-    fetch (downloader thread(s) stage files onto scratch)
-    read  (Reader -> iterable of arrays)
-    analyze (Analyzer.consume_file accumulates)
-    delete the staged file immediately
-    ask the Analyzer to checkpoint its product every N successfully consumed files
+    fetch     downloader thread(s) stage the file onto scratch
+    read      the Reader yields an iterable of arrays
+    analyze   Analyzer.consume_file accumulates the arrays
+    delete    the staged file is removed immediately
+    save      the Analyzer checkpoints its product every N consumed files
 
-Scratch usage is bounded by a semaphore: at most `max_staged_files` files are
-on disk at once. Downloads may finish in any order, but analyzers that require
-source order always receive it.
+Scratch usage is bounded by a semaphore, so at most ``max_staged_files`` files
+are on disk at once. Downloads may finish in any order, and analyzers that
+require source order still receive the units in that order.
 
-Restartable: on restart the analyzer re-loads its product, reports which units it
-already holds, and the engine processes only the rest.
+A run can be restarted. On restart, the analyzer reloads its product and reports
+which units it already holds, and only the remaining units are processed.
 
-The engine knows nothing about file layouts, power spectra, or N^2 visibilities
--- only Units, Readers, and Analyzers. That is what makes one engine serve every
-telescope/source/reader/analyzer combination.
+The engine has no knowledge of file layouts, power spectra, or N^2
+visibilities. It handles only Units, Readers, and Analyzers, so one engine
+serves every telescope, source, reader, and analyzer.
 """
 from __future__ import annotations
 
@@ -46,9 +47,10 @@ from .interfaces import (
 )
 
 _WORKER_POLL_SECONDS = 0.1
-# How long an abnormal stop waits for its download workers. A failure aborts
-# promptly and retains scratch under any writer still active; an interrupt is
-# a request to drain, so a fetch in flight is allowed to finish or fail.
+# Time (s) that an abnormal stop waits for its download workers. After a
+# failure, the run aborts promptly and scratch is retained under any writer
+# still active. An interrupt is a request to drain, so a fetch in flight is
+# allowed to finish or fail.
 _WORKER_JOIN_SECONDS = 2.0
 _INTERRUPT_JOIN_SECONDS = 30.0
 _STAGE_KEY_HEX_LENGTH = 16
@@ -123,12 +125,12 @@ def _validate_units(units: Iterable[Unit]) -> list[Unit]:
 
 
 def _rm(path: Optional[str]) -> None:
-    """Remove a staged file or raise; a missing path is already clean.
+    """Remove a staged file, or raise StagedFileCleanupError.
 
-    Callers may release a staging semaphore slot only after this function
-    returns.  Silently swallowing an unlink failure would make the semaphore
-    describe *logical* capacity while undeleted files continued consuming real
-    scratch space.
+    A missing path is treated as already removed. Callers may release a staging
+    semaphore slot only after this function returns. If an unlink failure were
+    ignored, the semaphore would count a free slot while the undeleted file still
+    used real scratch space.
     """
     if not path:
         return
@@ -150,8 +152,11 @@ def _rm(path: Optional[str]) -> None:
 
 
 def _staged_copy_incomplete(dest, unit) -> str | None:
-    """Why a staged copy cannot be judged: missing, or short of the archive's
-    recorded size. Either is a staging failure to retry, never a quarantine."""
+    """Return the reason a staged copy cannot be judged, or None.
+
+    A copy that is missing or shorter than the archive's recorded size is a
+    staging failure. The unit is retried and never quarantined.
+    """
     if not dest or not os.path.exists(dest):
         return "staged copy missing (errno 2)"
     meta = getattr(unit, "meta", None) or {}
@@ -167,9 +172,12 @@ def _staged_copy_incomplete(dest, unit) -> str | None:
 
 
 def _stage_name(unit: Unit) -> str:
-    """Scratch filename derived from the stable key, so two units with the same
-    basename (the same file under different paths, or a name reused across a
-    selection) never collide on disk and corrupt each other's run."""
+    """Return a scratch filename prefixed with a hash of the unit's stable key.
+
+    Two units with the same basename, such as the same file under different
+    paths or a name reused in a selection, then never collide on disk and
+    corrupt each other's run.
+    """
     h = hashlib.sha256(unit.key.encode("utf-8")).hexdigest()[:_STAGE_KEY_HEX_LENGTH]
     return f"{h}_{os.path.basename(unit.name) or 'file'}"
 
@@ -177,15 +185,15 @@ def _stage_name(unit: Unit) -> str:
 class _OutputLock:
     """Non-blocking, cross-process advisory lock for one analyzer product.
 
-    The sidecar is intentionally retained after release.  Deleting an advisory
-    lock file permits a second process to lock a newly-created inode while a
-    first process still holds the old one, defeating mutual exclusion.
+    The sidecar file is kept after release. If the lock file were deleted, a
+    second process could lock a newly created inode while the first process
+    still held the old one, and both processes would hold the lock at once.
     """
 
     def __init__(self, out_path: str):
         absolute = os.path.abspath(out_path)
-        # Resolve parent-directory symlinks so aliases of the same output cannot
-        # acquire independent sidecars and bypass mutual exclusion.
+        # Parent-directory symlinks are resolved, so aliases of one output share
+        # a single sidecar.
         lock_target = os.path.realpath(absolute)
         directory, basename = os.path.split(lock_target)
         self.out_path = absolute
@@ -243,14 +251,15 @@ class _OutputLock:
 class _QuarantineLedgerLock:
     """Blocking advisory lock for one shared quarantine ledger.
 
-    Different analyzer products intentionally have different output locks but
-    can share a source/reader quarantine ledger. This short-lived lock
-    serializes each ledger read or append without holding it for an entire scan.
+    Each analyzer product has its own output lock, but several products can
+    share one source and reader quarantine ledger. This short-lived lock
+    serializes each ledger read or append and is held only for that operation.
 
-    The sidecar is kept on the same filesystem and is never deleted: deleting a
-    locked sidecar can split ownership across two inodes. As with ``_OutputLock``,
-    exclusion depends on every writer cooperating and on the backing filesystem
-    correctly implementing POSIX ``flock`` or Windows byte-range locks.
+    The sidecar is kept on the same filesystem and is never deleted, since
+    deleting a locked sidecar can split ownership across two inodes. As with
+    ``_OutputLock``, exclusion depends on every writer cooperating and on the
+    backing filesystem implementing POSIX ``flock`` or Windows byte-range locks
+    correctly.
     """
 
     def __init__(self, ledger_path: str):
@@ -318,9 +327,11 @@ class RunResult:
     n_failed: int
     n_quarantined: int = 0
     # True only when out_path is a validated resumed product or was written by
-    # this run.  In particular, an all-quarantined/all-failed run has no product.
+    # this run. When every unit failed or was quarantined, the run has no
+    # product.
     product_available: bool = False
-    # Distinguish a no-op resume from a checkpoint/final save in this invocation.
+    # True when this call saved a checkpoint or the final product. A resume
+    # with nothing to do leaves it False.
     product_written: bool = False
     resumed: bool = False
     stopped_after_checkpoint: bool = False
@@ -351,7 +362,11 @@ class _ReaderIterationError(RuntimeError):
 
 
 def _reader_arrays(reader: Reader, path: str, ctx: RunContext):
-    """Yield reader arrays while preserving the reader/analyzer error boundary."""
+    """Yield the reader's arrays and wrap the reader's errors.
+
+    The wrapper keeps reader errors distinct from analyzer errors, and an
+    UnreadableUnitError is marked as quarantinable.
+    """
     try:
         yield from reader.iter_arrays(path, ctx)
     except UnreadableUnitError as exc:
@@ -365,11 +380,10 @@ def _reader_arrays(reader: Reader, path: str, ctx: RunContext):
 
 
 def _quarantine_key(unit: Unit) -> str:
-    """Stable logical identity used by the quarantine ledger.
+    """Return the stable logical identity used by the quarantine ledger.
 
-    Unit.key is the generic default. A source may provide `quarantine_key` in
-    metadata when the physical fetch URI can change while the logical file stays
-    the same.
+    Unit.key is the default. A source may set ``quarantine_key`` in the metadata
+    when the physical fetch URI can change for the same logical file.
     """
     meta = unit.meta or {}
     value = meta.get("quarantine_key")
@@ -379,9 +393,9 @@ def _quarantine_key(unit: Unit) -> str:
 def _load_quarantine_unlocked(path: str) -> set[str]:
     """Parse one ledger while its caller holds ``_QuarantineLedgerLock``.
 
-    A malformed or historical name-only record fails closed: basename matching
-    can exclude an unrelated unit, and silently skipping a damaged line can
-    reintroduce a file the user intentionally quarantined.
+    A malformed record, or an old record keyed only by name, raises
+    RuntimeError. Matching by basename can exclude an unrelated unit, and
+    skipping a damaged line can bring back a file that the user quarantined.
     """
     keys: set[str] = set()
     if not os.path.exists(path):
@@ -427,9 +441,9 @@ def _append_quarantine(path: Optional[str], unit: Unit, reason: str) -> None:
         "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     with _QuarantineLedgerLock(path):
-        # Two active products may discover the same bad unit from a stale
-        # run-start snapshot. Check again under the ledger lock so that race
-        # produces one disposition record rather than duplicate lines.
+        # Two active products may find the same bad unit from a stale run-start
+        # snapshot. The ledger is checked again under the lock, so that race
+        # writes one disposition record and no duplicate lines.
         if rec["quarantine_key"] in _load_quarantine_unlocked(path):
             return
         with open(path, "a") as fh:
@@ -456,7 +470,7 @@ def run(
     stop_after_checkpoint: bool = False,
     verbose: bool = True,
 ) -> RunResult:
-    """Run one storage-bounded analysis while exclusively owning its product."""
+    """Run one storage-bounded analysis while holding the output lock on its product."""
     with _OutputLock(out_path):
         return _run_with_output_lock_held(
             source=source,
@@ -520,17 +534,18 @@ def _run_with_output_lock_held(
 
     requires_in_order = bool(getattr(analyzer, "requires_in_order", False))
 
-    # Make engine-level run parameters visible to the analyzer BEFORE resume, so it
-    # can stamp them into its product and refuse an incompatible resume (e.g. a
-    # capped smoke-test product must not be silently "completed" by a full run).
-    # RunContext accepts any Mapping, including immutable mappings supplied by
-    # library callers. Copy at the engine boundary before adding run invariants.
+    # Engine-level run parameters are passed to the analyzer before resume, so
+    # it can record them in its product and refuse an incompatible resume. For
+    # example, a capped smoke-test product must not be "completed" by a full
+    # run. RunContext accepts any Mapping, such as an immutable mapping from a
+    # library caller, so the options are copied before the run invariants are
+    # added.
     ctx.options = dict(ctx.options or {})
     ctx.options["max_frames_per_file"] = max_frames_per_file
 
-    # Resume: let the analyzer re-load (and validate) its own product.  Do not
-    # coerce this result: False means specifically "the product was absent";
-    # None, 0, or another false-y value signals a broken analyzer contract.
+    # The analyzer reloads and validates its own product. The result is not
+    # coerced. False means the product was absent, and None, 0, or another
+    # falsy value means the analyzer broke its contract.
     resume_result = analyzer.resume(out_path, ctx)
     analyzer_name = getattr(
         getattr(analyzer, "info", None),
@@ -599,8 +614,9 @@ def _run_with_output_lock_held(
     if verbose and resumed:
         print(f"resume: {len(done_keys)} unit(s) already in {out_path}")
 
-    # Quarantine: records use a stable source-defined identity; name-only
-    # historical records are rejected because they can match unrelated units.
+    # Quarantine records use a stable identity defined by the source. Old
+    # records keyed only by name are rejected, since they can match unrelated
+    # units.
     selected_quarantined = {
         _quarantine_key(unit) for unit in units
         if _quarantine_key(unit) in quarantined_keys
@@ -638,11 +654,11 @@ def _run_with_output_lock_held(
     os.makedirs(tmp_dir, exist_ok=True)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
 
-    # Producer/consumer: downloader thread(s) stage files; the MAIN thread does
-    # all reading, accumulation, and checkpointing as the sole writer while the
-    # run-level output lock prevents a second process from writing this product.
+    # Downloader threads stage files, and the main thread does all reading,
+    # accumulation, and checkpointing as the only writer. The run-level output
+    # lock keeps a second process from writing this product.
     #
-    # A slot is held from fetch through analysis and deletion.
+    # A scratch slot is held from the fetch through analysis and deletion.
     n_workers = min(download_workers, max_staged_files, len(todo))
     n_slots = max_staged_files
     stage_slots = threading.BoundedSemaphore(n_slots)
@@ -662,7 +678,7 @@ def _run_with_output_lock_held(
             cleanup_failures.append(exc)
 
     def _queue_ready(item: _ReadyItem) -> bool:
-        """Queue a fetched item, but let cancellation wake blocked producers."""
+        """Queue a fetched item, or return False on cancellation while the queue is full."""
         while not stop.is_set():
             try:
                 ready_q.put(item, timeout=_WORKER_POLL_SECONDS)
@@ -683,7 +699,7 @@ def _run_with_output_lock_held(
             stage_slots.release()
 
     def _discard_ready() -> None:
-        """Delete buffered files, retaining slots whose delete fails."""
+        """Delete the buffered files, and keep the slot of any undeleted file."""
         buffered = list(pending.values())
         pending.clear()
         while True:
@@ -720,10 +736,10 @@ def _run_with_output_lock_held(
                     return
 
                 dest = os.path.join(tmp_dir, _stage_name(unit))
-                # Expected transient/file-level failures are the source's
-                # explicit ``(False, detail)`` disposition. An exception means
-                # the source implementation or environment failed and must stop
-                # the run; treating it as a retryable file would hide the bug.
+                # A source reports an expected transient or file-level failure
+                # by returning (False, detail). An exception means the source
+                # implementation or its environment failed, and it stops the
+                # run. Retrying the file would hide the bug.
                 fetch_result = source.fetch(unit, dest)
                 if (not isinstance(fetch_result, tuple)
                         or len(fetch_result) != 2
@@ -735,15 +751,16 @@ def _run_with_output_lock_held(
                 ok, err = fetch_result
                 if not _queue_ready(_ReadyItem(ordinal, unit, dest, ok, err)):
                     return
-                # The consumer now owns cleanup and the corresponding slot.
+                # From here, the consumer owns cleanup and the corresponding slot.
                 owns_slot = False
                 ordinal = None
                 unit = None
                 dest = None
         except BaseException as exc:                           # noqa: BLE001
-            # BaseException (notably SystemExit) otherwise terminates this daemon
-            # silently and leaves the main thread waiting forever for len(todo)
-            # ready items.  The unbounded terminal queue cannot be back-pressured.
+            # Without this handler, a BaseException such as SystemExit ends
+            # this daemon thread silently, and the main thread waits forever
+            # for len(todo) ready items. The failure queue is unbounded, so
+            # this put cannot block.
             worker_failures.put(_WorkerFailure(ordinal, unit, exc))
         finally:
             if owns_slot:
@@ -774,7 +791,7 @@ def _run_with_output_lock_held(
         pending[ordinal] = item
 
     def _next_ready(expected: Optional[int] = None) -> _ReadyItem:
-        """Return one staged file, preserving order when requested."""
+        """Return one staged file, in source order when ``expected`` is given."""
         while True:
             while True:
                 try:
@@ -825,8 +842,9 @@ def _run_with_output_lock_held(
             try:
                 worker.start()
             except BaseException:                           # noqa: BLE001
-                # A custom/threading implementation may start and then raise.
-                # Track any thread with an identity so cleanup still joins it.
+                # A custom threading implementation may start the thread and
+                # then raise. Any thread with an identity is tracked, so cleanup
+                # still joins it.
                 if worker.ident is not None:
                     started_workers.append(worker)
                 raise
@@ -841,7 +859,7 @@ def _run_with_output_lock_held(
             unit, dest, ok, err = item.unit, item.dest, item.ok, item.error
             try:
                 if not ok:
-                    # fetch failure == transient (network/cert) -> retry on re-run
+                    # a transient fetch failure (network or cert), retried on re-run
                     fail += 1
                     print(f"  FAIL fetch {unit.name}: {err}", file=sys.stderr)
                     if requires_in_order:
@@ -852,17 +870,18 @@ def _run_with_output_lock_held(
                         break
                     continue
                 try:
-                    # Analyzers need source metadata such as scope, event, and obs_date;
-                    # these fields may not exist in the file. The probe describes the
-                    # staged bytes themselves, so its values take precedence on overlap.
+                    # Analyzers need source metadata such as scope, event, and
+                    # obs_date, and these fields may not exist in the file. The
+                    # probe describes the staged bytes themselves, so its values
+                    # take precedence on overlap.
                     meta = {**dict(unit.meta), **dict(reader.probe(dest))}
                 except UnreadableUnitError as exc:
                     incomplete = _staged_copy_incomplete(dest, unit)
                     if incomplete is not None:
-                        # The staged copy vanished or is shorter than the
-                        # archive says the object is: a staging failure, not
-                        # a property of the archived bytes. Leave the unit
-                        # unrecorded so the next resume fetches it again.
+                        # The staged copy is missing or shorter than the
+                        # archived object. This is a staging failure and says
+                        # nothing about the archived bytes. The unit is left
+                        # unrecorded, so the next resume fetches it again.
                         fail += 1
                         print(f"  FAIL read {unit.name}: {incomplete}; "
                               "will refetch on resume", file=sys.stderr)
@@ -874,9 +893,9 @@ def _run_with_output_lock_held(
                             stop.set()
                             break
                         continue
-                    # The reader explicitly classified this as a deterministic
-                    # problem with the staged bytes. Only that narrow class is
-                    # safe to remember in the persistent quarantine ledger.
+                    # The reader classified this as a deterministic problem with
+                    # the staged bytes. Only this narrow class of error is safe
+                    # to record in the persistent quarantine ledger.
                     reason = f"probe/read: {type(exc).__name__}: {exc}"
                     if quarantine_path:
                         quar += 1
@@ -905,10 +924,11 @@ def _run_with_output_lock_held(
                         "was not quarantined because the reader did not "
                         "classify the error as an unreadable unit."
                     ) from exc
-                # Source/inventory metadata supplies selection/provenance fields,
-                # while the Reader reports facts measured from the staged bytes.
-                # If both provide a key, the probe is authoritative: an inventory
-                # must never relabel the scientific content that was actually read.
+                # The source and inventory metadata supply the selection and
+                # provenance fields, and the Reader reports values measured from
+                # the staged bytes. When both supply a key, the probe value is
+                # used, so an inventory can never relabel the scientific content
+                # that was actually read.
                 probe_meta = meta
                 meta = dict(unit.meta or {})
                 meta.update(probe_meta)
@@ -926,9 +946,9 @@ def _run_with_output_lock_held(
                                 reader_arrays, max_frames_per_file)
                         consumed = analyzer.consume_file(arrays, meta)
                     finally:
-                        # An analyzer may stop early, and islice deliberately does
-                        # not close its input. Close the underlying generator while
-                        # the staged path still exists (essential for HDF5/Windows).
+                        # An analyzer may stop early, and islice does not close
+                        # its input. The underlying generator is closed while the
+                        # staged path still exists, as HDF5 and Windows require.
                         reader_arrays.close()
                 except _ReaderIterationError as exc:
                     reason = f"read: {exc}"

@@ -35,10 +35,11 @@ def test_schema_token_is_strict_and_deterministic() -> None:
 
 
 def test_current_schema_tokens_are_ground_zero_revision_one() -> None:
-    # Every token is revision one except those kernel core 3.0.0 redefined
-    # (frame powers are the all-bin sums of the fine powers): the detector
-    # contract and result schema (2) and the detector-core profile (3; its
-    # revision 2 token is a retired name).
+    # Every token is revision one except those redefined by kernel core 3.0.0,
+    # where frame powers are the all-bin sums of the fine powers. The
+    # detector contract and the result schema are at revision 2. The
+    # detector-core profile is at revision 3, since its revision 2 token is a
+    # retired name.
     assert DETECTOR_CORE_PROFILE_SCHEMA_TOKEN == "pilotproxy_detector_core_profile_v3"
     assert RECEIVER_PROFILE_SCHEMA_TOKEN == "pilotproxy_receiver_profile_v1"
     assert STREAM_MAP_SCHEMA_TOKEN == "pilotproxy_stream_map_v1"

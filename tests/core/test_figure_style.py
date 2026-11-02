@@ -1,4 +1,4 @@
-"""Headless configuration and cleanup on errors."""
+"""Tests of the headless figure configuration and of the PDF subset-tag cleanup on errors."""
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfFile

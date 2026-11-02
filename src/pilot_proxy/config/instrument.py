@@ -44,9 +44,7 @@ _BAND_KEYS = frozenset({
 })
 
 
-# --------------------------------------------------------------------------
 # Instrument geometry
-# --------------------------------------------------------------------------
 @dataclass(frozen=True)
 class FeedLayout:
     """A cylinder array's input layout: cylinder ``i // inputs_per_cylinder`` (EW step
@@ -64,24 +62,24 @@ class Instrument:
     f0_mhz: float          # sky frequency at freq_id 0
     bandwidth_mhz: float   # total processed bandwidth
     n_channels: int        # number of frequency channels
-    descending: bool       # True if higher freq_id => lower frequency (CHIME)
-    nyquist_zone: int      # 1 = upright baseband direction, 2 = mirrored (the
-                           #   sign of the baseband->sky mapping; see nyquist_sign)
-    n_feeds: int           # feeds/inputs incoherently combined
+    descending: bool       # True when frequency falls as freq_id rises (CHIME)
+    nyquist_zone: int      # 1 for the upright baseband direction, 2 for mirrored
+                           #   (sign of the baseband-to-sky mapping, see nyquist_sign)
+    n_feeds: int           # feeds (inputs) summed incoherently
     nfft: int = DEFAULT_NFFT  # default analysis FFT length per frame
-    scopes: tuple[str, ...] = ()  # datatrail baseband scope(s) this station registers;
-                           # the default survey scope(s) when --scope is omitted.
-    reader: str = ""       # canonical reader for this telescope
-                           # (e.g. "chime-baseband"); the default `scan` uses
-                           # when --reader is omitted. Pure data, like the rest.
-    site_longitude_deg: Optional[float] = None  # east-positive site longitude;
+    scopes: tuple[str, ...] = ()  # datatrail baseband scopes registered by this station,
+                           # the default survey scopes when no --scope is given
+    reader: str = ""       # canonical reader for this telescope, such as
+                           # "chime-baseband", used by `scan` when --reader is
+                           # not given
+    site_longitude_deg: Optional[float] = None  # east-positive site longitude,
                            # None when the file records no site
     local_time_zone: str = ""  # IANA zone of the site's civil time ("" if none)
     feed_layout: Optional[FeedLayout] = None  # None when the file records none
 
     @property
     def fs_hz(self) -> float:
-        """Per-channel (complex) sample rate = channel spacing."""
+        """Per-channel complex sample rate, equal to the channel spacing."""
         return self.bandwidth_mhz * 1e6 / self.n_channels
 
     @property
@@ -115,7 +113,7 @@ class Instrument:
         return int(round((float(f_hz) - self.f0_hz) / width))
 
     def hz_of_freq_id(self, freq_id: float) -> float:
-        """Channel-centre sky frequency in Hz for a freq_id, computed in Hz."""
+        """Channel-center sky frequency in Hz for a freq_id, computed in Hz."""
         width = self.channel_width_hz
         if self.descending:
             return self.f0_hz - freq_id * width
@@ -132,17 +130,16 @@ class Instrument:
 
 
 def nyquist_sign(nyquist_zone: int) -> int:
-    """The +1/-1 baseband->sky direction implied by a Nyquist zone.
+    """Return the +1 or -1 baseband-to-sky direction of a Nyquist zone.
 
-    Odd zones keep the baseband direction (sky = f_center + baseband); even zones
-    mirror it (sky = f_center - baseband); see ``nyquist_zone_is_mirrored``.
+    Odd zones keep the baseband direction (sky = f_center + baseband), and even
+    zones mirror it (sky = f_center - baseband). The zone test is
+    ``nyquist_zone_is_mirrored``.
     """
     return -1 if nyquist_zone_is_mirrored(int(nyquist_zone)) else 1
 
 
-# --------------------------------------------------------------------------
-# Loading + discovery
-# --------------------------------------------------------------------------
+# Loading and discovery
 def list_instrument_names(directory: Optional[str] = None) -> List[str]:
     directory = directory or _INSTRUMENT_DIR
     return sorted(os.path.splitext(os.path.basename(p))[0]
@@ -179,10 +176,10 @@ def _resolve_config(name: str, directory: Optional[str] = None,
                     _seen: Optional[set] = None) -> dict:
     """Load <name>.yaml, applying `extends: <parent>` inheritance.
 
-    A telescope that shares another's geometry sets `extends: <parent>` and lists
-    only what differs (feed count, scope, name); the parent's config is loaded
-    first and the child's keys override it. This is what lets the CHIME outriggers
-    be a few lines each instead of a near-duplicate of chime.yaml.
+    A telescope that shares the geometry of another sets `extends: <parent>` and
+    lists only what differs (feed count, scope, name). The parent config is
+    loaded first, and the keys of the child override it. Each CHIME outrigger
+    file is therefore a few lines long and does not repeat chime.yaml.
     """
     _seen = set() if _seen is None else _seen
     if name in _seen:
@@ -378,9 +375,9 @@ def _site_from_config(requested_name: str, site) -> tuple[Optional[float], str]:
 def load_instrument(name: str, directory: Optional[str] = None) -> Instrument:
     """Load <name>.yaml (resolving `extends:`) into an Instrument.
 
-    Configuration uses an explicit `nyquist_zone`; the unsupported `sense` key
-    raises with a correction. The +1/-1 spectral direction is derived on demand
-    via `nyquist_sign(instrument.nyquist_zone)`.
+    Configuration uses an explicit `nyquist_zone`, and the unsupported `sense`
+    key raises an error that gives the correction. The +1/-1 spectral direction
+    is derived on demand with `nyquist_sign(instrument.nyquist_zone)`.
     """
     requested_name = validate_identifier(name, label="instrument name")
     return _instrument_from_config(
@@ -389,7 +386,7 @@ def load_instrument(name: str, directory: Optional[str] = None) -> Instrument:
 
 @dataclass(frozen=True)
 class Readiness:
-    """At-a-glance 'can I use this telescope yet?' summary for `list telescopes`."""
+    """Readiness of one telescope for use, as summarized by `list telescopes`."""
     name: str
     nyquist_zone_set: bool
     scopes_set: bool
@@ -398,7 +395,7 @@ class Readiness:
 
     @property
     def ready(self) -> bool:
-        # Usable out of the box: geometry + a built-in default survey scope.
+        # ready means valid geometry and a built-in default survey scope
         return self.valid and self.nyquist_zone_set and self.scopes_set
 
     @property
@@ -407,9 +404,9 @@ class Readiness:
             return "invalid"
         if self.ready:
             return "ready"
-        # Valid instruments always have a nyquist zone; load_instrument rejects
-        # incomplete geometry before a Readiness value can reach this branch.
-        return "geometry-only"       # no built-in scope -> pass --scope
+        # A valid instrument always has a Nyquist zone, since load_instrument
+        # rejects incomplete geometry before a Readiness value reaches this branch.
+        return "geometry-only"       # no built-in scope, so --scope is needed
 
     def missing(self) -> List[str]:
         out = list(self.problems)

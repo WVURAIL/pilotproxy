@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate or freeze an offline OTA protocol; never opens a radio."""
+"""Validate or freeze an offline OTA protocol without opening a radio."""
 from __future__ import annotations
 
 import argparse

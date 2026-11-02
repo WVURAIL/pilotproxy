@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Prepare or explicitly launch one confined-room, uncalibrated LimeSDR smoke.
+"""Prepare or launch one uncalibrated LimeSDR smoke test in the confined room.
 
 Preparation does not open a device. Capture requires both explicit launch flags.
-This helper does not supply measured dBm, an OTA calibration or an observing policy.
+This helper does not cover measured dBm, an OTA calibration, or an observing policy.
 """
 from __future__ import annotations
 
@@ -163,7 +163,7 @@ def capture(output, *, transmit=False, rf_confined_authorized=False):
         raise
     finally:
         if process is not None and process.poll() is None:
-            # Also clean up unexpected parent-side exceptions, not only timeout.
+            # the child is also stopped after an unexpected parent-side exception
             process.send_signal(signal.SIGTERM)
             try:
                 process.wait(timeout=5)

@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
-# Copy-ahead merge: hand a channel finished by shard 3 to the shard that owns
-# it in its --select list, so the owner skips the channel when it arrives.
+# Hand a channel finished by shard 3 to the shard that owns it in its
+# --select list, so the owner skips the channel when it reaches it.
 #
 #   bash /arc/home/$CANFAR_USER/pp_switch/canfar_merge_channel.sh <channel>
-#   (run on any session -- it works on /arc, and takes the same lock the scans do)
+#   (runs on any session, since it works on /arc and takes the same lock as the scans)
 #
-# Why this is sound: the per-channel product carries the full detector
-# provenance (source hash, kernel hash, weights, contract), and the owner's
-# resume() refuses anything that does not match its own. All three shards run
-# the same frozen source and the same qualified kernel, so a product built by
-# shard 3 is indistinguishable from one the owner would have built. Once the
-# product AND that channel's quarantine rows are in the owner's directory, the
-# owner finds every unit already disposed and prints
+# The per-channel product carries the full detector provenance (source hash,
+# kernel hash, weights, contract), and the owner's resume() refuses anything
+# that does not match its own. All three shards run the same frozen source and
+# the same qualified kernel, so a product built by shard 3 is indistinguishable
+# from one the owner would have built. Once the product and the quarantine rows
+# of that channel are in the owner's directory, the owner finds every unit
+# already disposed and prints
 # "nothing to do -- selection already complete in this product".
 #
-# Refuses unless: shard 3 has fully disposed the channel (no failed, no
-# unprocessed), the owner has no product for it yet, the owner is not
-# currently working it, and the provenance matches an existing owner product.
+# The merge is refused unless shard 3 has fully disposed the channel (no failed
+# and no unprocessed units), the owner has no product for it yet, the owner is
+# not working on it, and the provenance matches an existing owner product.
 set -euo pipefail
-# Site configuration: the CANFAR account name; export it before running (see README.md).
-#   CANFAR_USER  the CANFAR account; the kit and the runs live under /arc/home/$CANFAR_USER/
+# Site configuration, exported before running (see README.md):
+#   CANFAR_USER  CANFAR account name. The kit and the runs are under /arc/home/$CANFAR_USER/.
 : "${CANFAR_USER:?}"
 CH="${1:-}"
 case "$CH" in 767|813|829) OWNER=1 ;; 783|798|844) OWNER=2 ;;
   *) echo "usage: canfar_merge_channel.sh <767|813|829|783|798|844>"; exit 2 ;; esac
 die(){ echo "MERGE-BLOCK: $*" >&2; exit 1; }
 
-SW=/arc/home/$CANFAR_USER/pp_switch          # inventory lives here
+SW=/arc/home/$CANFAR_USER/pp_switch          # holds inventory.jsonl
 R=/arc/home/$CANFAR_USER/pp_runs
 SRC=$R/chime_pilots_rebuild_20260829_canfar_shard3_b59b5c0
 DST=$R/chime_pilots_rebuild_20260829_canfar_shard${OWNER}_b59b5c0
@@ -61,9 +61,10 @@ def entry_channel(p):
 
 ent = next((p for p in scope["pilots"] if entry_channel(p) == ch), None)
 assert ent, "channel not in shard-3 scope"
-# A channel with quarantines reports status "partial" by design (the run's
-# predeclared disposition), so status is not the completeness test --
-# failed and unprocessed both being zero is.
+# A channel with quarantines reports status "partial" by design (the
+# predeclared disposition of the run). The channel is complete when every
+# enumerated unit is completed or quarantined and no unit is failed or
+# unprocessed.
 assert int(ent.get("enumerated", -1)) == (
     int(ent.get("completed", 0)) + int(ent.get("quarantined", 0))
 ), "completed + quarantined does not account for every enumerated unit"
@@ -83,11 +84,10 @@ fi
 echo "  owner shard$OWNER: no product for $CH, currently on ${last:-?}"
 
 # 3. run-wide provenance must match an owner product, and the product must
-#    actually be this channel. weights_hash, target_norm_sq and
-#    reference_norm_sum_sq are functions of the weights EVALUATED FOR A
-#    CHANNEL, so they differ between channels by construction and cannot be
-#    compared across them; the weight BANK and MANIFEST hashes are the
-#    run-wide facts, and they are checked.
+#    be this channel. weights_hash, target_norm_sq and reference_norm_sum_sq
+#    are functions of the weights evaluated for one channel, so they differ
+#    between channels by construction and are not compared. The weight bank
+#    and manifest hashes are the same for the whole run, and they are checked.
 ref=$(ls "$DSTP"/*.npz | head -1)
 python - "$SRCP/$CH.npz" "$ref" "$CH" "$SW/inventory.jsonl" <<'PY' || die "provenance mismatch -- do not merge"
 import json
@@ -120,10 +120,10 @@ with np.load(src, allow_pickle=False) as z:
     hz = float(np.asarray(z["chime_frequency_hz"]).reshape(-1)[0])
 assert got == ch, f"product is channel {got}, not {ch}"
 
-# The exact CHIME centre. Products carry this unrounded, so the comparison is
-# exact. The inventory's freq_mhz is rounded to 4 decimals (100 Hz), which is
-# why it cannot be the tight reference -- it is kept as a sanity cross-check
-# within that rounding.
+# Exact CHIME center frequency of the channel. Products carry it unrounded, so
+# the product must match it to better than 1 Hz. The inventory freq_mhz is
+# rounded to 4 decimals (100 Hz), so it is used only as a cross-check to that
+# resolution.
 exact = (800.0 - 400.0 * ch / 1024.0) * 1e6
 assert abs(hz - exact) < 1.0, (
     f"centre {hz} Hz != exact {exact} Hz for channel {ch}")

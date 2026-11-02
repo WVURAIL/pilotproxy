@@ -1,9 +1,9 @@
 # coding=utf-8
 """Write durable files without exposing a partially written replacement.
 
-Create temporary files with open(2) mode 0666 so the caller's umask applies.
-When replacing an existing file, copy its permission bits to the temporary
-file before publishing it.
+Temporary files are created with open(2) mode 0666 so the caller's umask
+applies. When an existing file is replaced, its permission bits are copied to
+the temporary file before the temporary file is published.
 """
 
 from __future__ import annotations

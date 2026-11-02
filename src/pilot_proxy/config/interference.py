@@ -1,8 +1,8 @@
-"""Interference template: what the emitter looks like, as data.
+"""Interference template: the emitter model, as data.
 
 ``kind`` selects the detector adapter and the residual estimator. The only kind
-today is ``narrowband_marker``: an emitter that carries a narrowband marker at
-a fixed offset from its band edge, with a known power ratio to the band.
+is ``narrowband_marker``, an emitter with a narrowband marker at a fixed offset
+from its band edge and a known power ratio to the band.
 """
 from __future__ import annotations
 

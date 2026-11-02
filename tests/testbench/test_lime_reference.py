@@ -1,4 +1,4 @@
-"""Reference worker tests link a fake API only; no radio access is possible."""
+"""Reference worker tests link a fake LimeSuite API, so no radio access is possible."""
 import json
 import os
 import runpy

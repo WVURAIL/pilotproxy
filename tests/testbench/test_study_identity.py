@@ -45,7 +45,7 @@ def test_untracked_only_tree_reads_as_clean_for_identity() -> None:
 
 
 def test_modified_tracked_sources_still_bind() -> None:
-    """An edited working tree must still separate two studies."""
+    """An edited working tree must still give a different identity."""
     clean = _identity_software(_software(["?? generated/"]))
     edited = _identity_software(
         _software(["?? generated/", " M src/pilot_proxy/detect.py"])
@@ -56,10 +56,10 @@ def test_modified_tracked_sources_still_bind() -> None:
 
 
 def test_written_config_keeps_the_full_dirty_list() -> None:
-    """Identity drops untracked paths; the recorded provenance keeps them."""
+    """Untracked paths are dropped from the identity and kept in the config."""
     software = _software(["?? generated/", " M src/pilot_proxy/detect.py"])
     ident = _identity_software(software)
-    # The input mapping is not mutated -- the written config still shows both.
+    # the input mapping is not mutated, so the written config lists both paths
     assert software["git"]["dirty_paths"] == [
         "?? generated/",
         " M src/pilot_proxy/detect.py",

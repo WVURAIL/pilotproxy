@@ -1,20 +1,19 @@
-r"""
-Local-directory data source.
+r"""Local-directory data source.
 
-For data already sitting on /arc (or anywhere on the filesystem) rather than in a
-remote archive. `enumerate` globs files for the selection; `fetch` hardlinks (or
-copies) the file into the engine's scratch dir -- so the engine's "delete after
-analysis" only ever removes the scratch link, never your original.
+The purpose of this source is to read data that is already on /arc or another
+local filesystem. ``enumerate`` globs the files for the selection, and
+``fetch`` hardlinks or copies each file into the engine's scratch directory.
+The engine's deletion after analysis then removes only the scratch link, and
+the original file is kept.
 
-Two real uses:
-  * collaborators whose data is staged on /arc, not pulled from CADC;
-  * the test/demo path, where a synthetic library stands in for an archive.
+This source is used by collaborators whose data is staged on /arc, and by the
+test and demo path, where a synthetic library takes the place of an archive.
 
-Selection (`ctx.selection`) uses the archive selection grammar:
-freq_ids parse as exact integers from the filename (`--source-freq-id-regex`,
-default `_(\d+)\.h5$`, so selecting 44 does not match `..._844.h5`), events
-via `--source-event-regex` (default `baseband_(\d+)_`), and None / "all"
-takes every file matching `--source-glob`.
+The selection (``ctx.selection``) uses the archive selection grammar. A freq_id
+is parsed as an exact integer from the filename with ``--source-freq-id-regex``
+(default ``_(\d+)\.h5$``), so selecting 44 does not match ``..._844.h5``. An
+event is parsed with ``--source-event-regex`` (default ``baseband_(\d+)_``).
+None or "all" selects every file that matches ``--source-glob``.
 """
 from __future__ import annotations
 
@@ -28,9 +27,10 @@ from typing import Iterable, List
 from ..interfaces import READY, DataSource, PluginInfo, RunContext, Unit
 from ..selection import parse_selection
 
-# Default event capture, matching the canonical baseband naming
-# baseband_<event>_<freq_id>.h5. Override with --source-event-regex for other
-# layouts; a filename with no parseable event simply has no event to filter on.
+# Default event capture for the canonical baseband name
+# baseband_<event>_<freq_id>.h5. Other layouts are read with
+# --source-event-regex. A filename with no parseable event has no event to
+# filter on.
 _DEFAULT_EVENT_RE = r"baseband_(\d+)_"
 
 
@@ -82,13 +82,12 @@ class LocalDirectorySource(DataSource):
         paths = sorted(glob.glob(os.path.join(root, "**", pattern), recursive=True))
         n_channels = getattr(ctx.instrument, "n_channels", None)
         sel = parse_selection(ctx.selection, n_channels=n_channels)
-        # Parse the freq_id as an exact integer from the filename (so selecting 44
-        # does not match baseband_..._844.h5). Override the capture for other
-        # naming schemes with --source-freq-id-regex; likewise the event with
-        # --source-event-regex.
-        # `or` (not a .get default) so an explicit None/"" from a caller -- e.g.
-        # `explore`, which always populates this key -- still falls back instead
-        # of reaching re.compile(None).
+        # The freq_id is parsed as an exact integer from the filename, so
+        # selecting 44 does not match baseband_..._844.h5. Other naming schemes
+        # are read with --source-freq-id-regex and --source-event-regex. The
+        # defaults are applied with ``or`` so that an explicit None or "" from a
+        # caller such as ``explore``, which always sets this key, falls back to
+        # the default and never reaches re.compile(None).
         freq_id_re = re.compile(o.get("source_freq_id_regex") or r"_(\d+)\.h5$")
         event_re = re.compile(o.get("source_event_regex") or _DEFAULT_EVENT_RE)
         units: List[Unit] = []
@@ -116,8 +115,7 @@ class LocalDirectorySource(DataSource):
                 # `explore` reads this metadata to summarize the available bands.
                 meta["freq_id"] = freq_id
             if event is not None:
-                # the companion-lookup key: an analyzer side-loading per-event
-                # auxiliaries (gains, flags) keys them off meta["event"].
+                # key for per-event companion files such as gains and flags
                 meta["event"] = event
             units.append(Unit(key=src_path, name=name, meta=meta))
         return units
@@ -128,9 +126,9 @@ class LocalDirectorySource(DataSource):
             if os.path.exists(dest):
                 os.remove(dest)
             try:
-                os.link(src, dest)                 # cheap: hardlink if same fs
+                os.link(src, dest)                 # hardlink on the same filesystem
             except OSError:
-                shutil.copy2(src, dest)            # fallback: copy across fs
+                shutil.copy2(src, dest)            # copy across filesystems
             expected_size = unit.meta.get("size_bytes")
             expected_sha256 = unit.meta.get("sha256")
             actual_size, actual_sha256 = _file_snapshot(dest)

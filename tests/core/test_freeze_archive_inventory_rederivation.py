@@ -1,25 +1,24 @@
-"""Re-derivation guards for the exclusions / curation pipeline.
+"""Tests that the exclusion and curation pipeline can be re-derived.
 
-``scripts/freeze_archive_inventory.py`` turns a survey inventory plus a
+``scripts/freeze_archive_inventory.py`` turns a survey inventory and a
 detector-product archive into the frozen production bundle
 (``inventory.jsonl``, ``exclusions.jsonl``, ``inventory_manifest.json``).
-``tests/core/test_freeze_archive_inventory.py`` covers the happy path and a
-few refusals.  This module covers the parts a third party has to trust when
-they re-derive the bundle *from scratch* against a **fresh** survey:
+``tests/core/test_freeze_archive_inventory.py`` covers the normal path and a
+few refusals. This module covers the parts that a third party must trust to
+re-derive the bundle from scratch against a fresh survey:
 
-* the ledger's frame-estimate column is read by field name, and the survey
-  renamed that field (``n_frames`` -> ``n_frames_estimate``);
+* The frame-estimate column of the ledger is read by field name, and the
+  survey renamed that field from ``n_frames`` to ``n_frames_estimate``.
 * ``source_line`` is a positional index into the source inventory, so it is
-  not a stable identifier across surveys;
-* the inventory<->product join is a string join on
-  ``common_path + "/" + name``, which couples the freeze directly to the
-  ``cadc:CHIMEFRB/`` collection-prefix normalization in
-  ``pilot_proxy.archive.datatrail_client``;
-* the closure assertions in both directions, and the disjointness of the
-  zero-frame and quarantine sets that makes ``reasons`` single-valued.
+  not a stable identifier across surveys.
+* The inventory-product join is a string join on ``common_path + "/" + name``,
+  which ties the freeze directly to the ``cadc:CHIMEFRB/`` collection-prefix
+  normalization in ``pilot_proxy.archive.datatrail_client``.
+* The closure is asserted in both directions, and the zero-frame and
+  quarantine sets are disjoint, so ``reasons`` holds a single value.
 
-The last test locks the published accounting of the Aug-3 bundle when that
-bundle is present on this machine.
+The tests of the last section check the published accounting of the Aug-3
+bundle when that bundle is present on this machine.
 """
 import json
 import os
@@ -44,17 +43,15 @@ requires_bundle = pytest.mark.skipif(
 )
 
 
-# ---------------------------------------------------------------------------
 # fixture builders
-# ---------------------------------------------------------------------------
 def _row(event, freq_id, name, size, *, estimate_field="n_frames",
          collection="cadc:CHIMEFRB/"):
-    """One inventory row.
+    """Return one inventory row.
 
-    ``estimate_field`` selects the survey schema: ``"n_frames"`` is what the
-    Aug-3 survey wrote (a float), ``"n_frames_estimate"`` is what
+    ``estimate_field`` selects the survey schema. The Aug-3 survey wrote
+    ``"n_frames"`` (a float), and
     ``pilot_proxy.chime.baseband_reader.BasebandReader.annotate_row`` writes
-    today (an int).  ``None`` omits the column entirely.
+    ``"n_frames_estimate"`` (an int). ``None`` omits the column.
     """
     row = {
         "scope": "scope.raw",
@@ -124,7 +121,7 @@ def _product_zip(path, *, unit_uris_506, unit_uris_521, quarantine=(),
 
 
 def _build(tmp_path, rows, *, quarantine=(), product_uris=None):
-    """Source + product archives whose evidence closes over ``rows``."""
+    """Return source and product archives whose evidence closes over ``rows``."""
     by_freq = {}
     for row in rows:
         by_freq.setdefault(row["freq_id"], []).append(_uri(row))
@@ -157,11 +154,9 @@ def _freeze(tmp_path, rows, *, name="frozen", **kwargs):
     return manifest, ledger, output
 
 
-# ---------------------------------------------------------------------------
-# 1. survey schema drift: the frame-estimate column is read by field name
-# ---------------------------------------------------------------------------
+# survey schema drift in the frame-estimate column, which is read by field name
 def test_ledger_records_the_legacy_frame_estimate_column(tmp_path):
-    """The Aug-3 survey wrote ``n_frames`` (float); the ledger reads it."""
+    """The ledger reads the ``n_frames`` column (float) written by the Aug-3 survey."""
     _manifest, ledger, _out = _freeze(
         tmp_path, _default_rows(estimate_field="n_frames")
     )
@@ -172,7 +167,7 @@ def test_ledger_records_the_legacy_frame_estimate_column(tmp_path):
 
 
 def test_ledger_records_the_current_survey_frame_estimate_column(tmp_path):
-    """A fresh survey writes ``n_frames_estimate`` (int); the ledger must read it."""
+    """The ledger reads the ``n_frames_estimate`` column (int) of a fresh survey."""
     manifest, ledger, _out = _freeze(
         tmp_path, _default_rows(estimate_field="n_frames_estimate")
     )
@@ -196,7 +191,7 @@ def test_current_frame_estimate_takes_precedence_over_legacy(tmp_path):
 
 
 def test_missing_frame_estimate_column_is_not_refused(tmp_path):
-    """A row with no estimate column at all still freezes."""
+    """A row without an estimate column still freezes."""
     manifest, ledger, _out = _freeze(
         tmp_path, _default_rows(estimate_field=None)
     )
@@ -204,9 +199,7 @@ def test_missing_frame_estimate_column_is_not_refused(tmp_path):
     assert manifest["accounting"]["low_estimate_exclusions"] == 0
 
 
-# ---------------------------------------------------------------------------
-# 2. source_line is positional, and the ledger order is not line order
-# ---------------------------------------------------------------------------
+# source_line is positional, and the ledger is sorted by identity
 def test_source_line_indexes_the_frozen_source_inventory(tmp_path):
     rows = _default_rows()
     _manifest, ledger, output = _freeze(tmp_path, rows)
@@ -218,10 +211,10 @@ def test_source_line_indexes_the_frozen_source_inventory(tmp_path):
 
 
 def test_source_line_is_positional_and_shifts_when_the_survey_reorders(tmp_path):
-    """Same physical unit, different survey order -> different source_line."""
+    """A reordered survey gives the same physical unit a different source_line."""
     rows = _default_rows()
-    # Hold the product evidence fixed so the same physical units are the
-    # zero-frame ones in both runs; only the inventory's line order changes.
+    # The product evidence is held fixed, so the same physical units have zero
+    # frames in both runs and only the line order of the inventory changes.
     product_uris = {
         506: [_uri(rows[0]), _uri(rows[1])],
         521: [_uri(rows[2]), _uri(rows[3])],
@@ -261,16 +254,15 @@ def test_ledger_is_sorted_by_identity_tuple(tmp_path):
     ]
 
 
-# ---------------------------------------------------------------------------
-# 3. the inventory<->product join is a raw string join on the URI
-# ---------------------------------------------------------------------------
+# the inventory-product join is a raw string join on the URI
 def test_collection_prefix_drift_breaks_evidence_closure(tmp_path):
-    """Bare-replica URIs in the inventory no longer match product unit_order.
+    """Bare-replica URIs in the inventory break the join with the product unit_order.
 
-    ``datatrail_client._restore_collection`` exists precisely to keep the
-    ``cadc:CHIMEFRB/`` prefix on replicas Datatrail now returns bare.  If that
-    normalization regresses, the freeze cannot join a fresh inventory to the
-    Aug-3 products at all -- this is what that failure looks like.
+    Datatrail returns some replicas bare, and
+    ``datatrail_client._restore_collection`` puts the ``cadc:CHIMEFRB/``
+    prefix back. If that normalization regresses, the freeze cannot join a
+    fresh inventory to the Aug-3 products, and this test shows the resulting
+    failure.
     """
     bare_rows = _default_rows(collection="cadc:")
     prefixed = _default_rows(collection="cadc:CHIMEFRB/")
@@ -283,7 +275,7 @@ def test_collection_prefix_drift_breaks_evidence_closure(tmp_path):
 
 
 def test_double_slash_in_common_path_breaks_evidence_closure(tmp_path):
-    """``_uri`` only strips a trailing slash; interior ``//`` is preserved."""
+    """``_uri`` strips only a trailing slash, so an interior ``//`` is kept."""
     rows = _default_rows()
     product_uris = {
         506: [_uri(rows[0]), _uri(rows[1])],
@@ -296,9 +288,7 @@ def test_double_slash_in_common_path_breaks_evidence_closure(tmp_path):
         _freeze(tmp_path, rows, product_uris=product_uris)
 
 
-# ---------------------------------------------------------------------------
-# 4. closure and disjointness assertions
-# ---------------------------------------------------------------------------
+# closure and disjointness assertions
 def test_freeze_refuses_product_unit_absent_from_the_inventory(tmp_path):
     rows = _default_rows()
     product_uris = {
@@ -369,9 +359,7 @@ def test_quarantine_evidence_carries_the_original_reason(tmp_path):
     }
 
 
-# ---------------------------------------------------------------------------
-# 5. published accounting of the Aug-3 bundle
-# ---------------------------------------------------------------------------
+# published accounting of the Aug-3 bundle
 @requires_bundle
 def test_published_bundle_exclusion_accounting_is_internally_consistent():
     manifest = json.loads((BUNDLE / "inventory_manifest.json").read_text())
@@ -410,13 +398,13 @@ def test_published_bundle_exclusion_accounting_is_internally_consistent():
 
 @requires_bundle
 def test_published_bundle_exclusions_equal_the_sub_frame_size_threshold():
-    """The detector's zero-frame verdict is exactly the size test.
+    """The zero-frame verdict of the detector is exactly the size test.
 
     Every excluded unit is either quarantined or smaller than one baseband
-    frame, and no retained unit is smaller than one frame.  This is the
-    property that makes the 728 MB product archive unnecessary for
-    *reproducing the exclusion set* (it is still required to reproduce the
-    manifest's ``product_*`` assertions).
+    frame, and no kept unit is smaller than one frame. With this property,
+    the exclusion set can be reproduced without the 728 MB product archive.
+    The archive is still required to reproduce the ``product_*`` assertions
+    of the manifest.
     """
     source_uris = set()
     small_uris = set()

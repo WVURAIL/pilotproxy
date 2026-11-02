@@ -80,7 +80,7 @@ def test_plan_refuses_ambiguous_or_inconsistent_bands():
 
 
 def test_yaml_exponent_without_sign_is_refused_not_misread():
-    # PyYAML (YAML 1.1) reads 6.0e6 as the string "6.0e6"; the loader refuses it.
+    # PyYAML (YAML 1.1) reads 6.0e6 as the string "6.0e6", and the loader refuses it
     data = yaml.safe_load(
         "kind: narrowband_marker\nband_width_hz: 6.0e6\nresidual_shape: band_thermal\n"
         "reference: r\nmarker: {offset_hz: 1.0, marker_to_band_db: 1.0, "

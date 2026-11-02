@@ -1,4 +1,4 @@
-"""Pure guards and literal CUDA/NumPy parity for the new paired engine."""
+"""Host-only guards and exact CUDA/NumPy parity tests for the literal paired engine."""
 
 from types import SimpleNamespace
 

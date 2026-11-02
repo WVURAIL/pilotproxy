@@ -103,9 +103,12 @@ def test_setup_signatures_marks_void_functions_as_void(monkeypatch) -> None:
 
 
 def test_setup_signatures_does_not_require_the_removed_coarse_entries(monkeypatch) -> None:
-    """Kernel core 3.0.0 removed the float diagnostic and the uint64 power
-    entries; a library without them must load, and the handle constructors
-    take the packed input and geometry only (no float output pointer)."""
+    """A kernel core 3.0.0 library without the coarse entries loads.
+
+    Core 3.0.0 has no float diagnostic or uint64 power entries. The handle
+    constructors take only the packed input and the geometry, with no float
+    output pointer.
+    """
     import ctypes
 
     lib = _setup_current_wrapper(monkeypatch)

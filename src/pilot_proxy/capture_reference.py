@@ -7,9 +7,10 @@ Adapted from Kotekan ``tools/verify_pilotproxy_pipeline.py`` at
 array types and product layouts used here. Only its little-endian LP64 ABI is
 supported. No code is imported from a Kotekan checkout at runtime.
 
-Geometry and file order are explicit: a recording's manifest, rather than the
-small verifier's fixture constants, supplies them. Exact reference arithmetic
-uses the installed package's frozen FFT and fine-decision implementation.
+The geometry and file order are supplied by the recording's manifest, and the
+fixture constants of the small verifier are not used. Exact reference
+arithmetic uses the installed package's frozen FFT and fine-decision
+implementation.
 """
 from __future__ import annotations
 
@@ -56,7 +57,7 @@ def _integer(value: object, name: str, minimum: int = 0) -> int:
 
 @dataclass(frozen=True)
 class CaptureGeometry:
-    """Explicit geometry for one native capture; no instrument defaults."""
+    """Geometry of one native capture, given explicitly with no instrument defaults."""
 
     num_times: int
     k: int
@@ -138,7 +139,7 @@ class RawFrame:
     lost_timesamples: int
 
     def provenance(self) -> dict[str, Any]:
-        """JSON-safe native frame identity including exact source byte ranges."""
+        """Return the JSON-safe native frame identity and its exact source byte ranges."""
         return {
             "source_path": self.source_path,
             "frame_offset": self.frame_offset,
@@ -233,7 +234,8 @@ def read_raw_frames(paths: Sequence[str | Path], frame_size: int) -> list[RawFra
     """Read explicit, ordered rawFileWrite files with native CHORD metadata.
 
     No glob expansion, path sorting or missing-metadata fallback is performed.
-    Byte offsets include the uint32 metadata-size word preceding each frame.
+    Each ``frame_offset`` is the byte offset of the uint32 metadata-size word
+    before its frame.
     """
     frame_size = _integer(frame_size, "frame_size", 1)
     if isinstance(paths, (str, bytes, Path)):
@@ -323,7 +325,7 @@ def validate_frames(
 def detector_rows_from_voltage(
     block_bytes: Any, freq_index: int, time_reverse_windows: bool, *, geometry: CaptureGeometry,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """[T,F,P,D] offset-binary bytes to stream-major int16 rows [streams*128,K]."""
+    """Convert [T,F,P,D] offset-binary bytes to stream-major int16 rows [streams*128,K]."""
     freq_index = _integer(freq_index, "freq_index")
     if freq_index >= geometry.num_freq:
         raise ValueError("freq_index is outside capture geometry")
@@ -345,7 +347,7 @@ def detector_rows_from_voltage(
 
 
 def expected_matched_filter_row_projections(real: np.ndarray, imag: np.ndarray, weights_packed: bytes) -> np.ndarray:
-    """Exact complex projections [three terms, rows, real/imaginary]."""
+    """Return the exact complex projections [three terms, rows, real/imaginary]."""
     if real.dtype != np.dtype(np.int16) or imag.dtype != np.dtype(np.int16):
         raise ValueError("voltage rows must have int16 dtype")
     if real.ndim != 2 or real.shape != imag.shape or real.shape[1] not in (64, 128):
@@ -378,9 +380,9 @@ def expected_products(
     """Compute fine masks, exact frame powers and exact Q16 keep boundaries.
 
     The frame powers are the all-bin sums of the exact fxfft256 fine powers,
-    ``P_r = sum_f S_r[f]`` in uint64 (kernel core 3.0.0), which is what the
-    stage's ``d_power_out`` carries.
-    Unbound frequencies have zero mask/powers and a ``None`` decision, matching
+    ``P_r = sum_f S_r[f]`` in uint64 (kernel core 3.0.0). These are the values
+    in the stage's ``d_power_out``.
+    Unbound frequencies have zero mask/powers and a ``None`` decision, as in
     the submitted stage. Every bound frequency must have a fine calibration.
     Invalid rank support remains a decision with ``valid=False`` and mask zero.
     """

@@ -1,34 +1,37 @@
-/* fxfft --- frozen deterministic fixed-point FFT reference, any supported size.
+/* fxfft, the frozen deterministic fixed-point FFT reference at any supported
+ * size.
  *
- * Larger frames can require a longer fine transform: L_F = 2N/K reaches
+ * Larger frames can need a longer fine transform, since L_F = 2N/K reaches
  * 512, 1024, or 2048 for frame sizes of 2**15 and 2**16. This companion
  * applies the same specification at those supported lengths.
- * fxfft256_ref.c remains the unchanged v1 reference used for the golden
- * vectors and vendored by kotekan.
+ * fxfft256_ref.c is the frozen v1 reference used for the golden vectors and
+ * vendored by kotekan.
  *
- * Same specification, length as a parameter:
+ * The specification is the same, with the length as a parameter:
  *   FX_N-point forward DFT (e^{-2 pi i b m / FX_N}), radix-2 decimation in
  *   time, bit-reversed load of the zero-padded FX_N/2-sample input,
  *   natural-order output, round15 per butterfly, no scaling.
  *
  * Twiddles come from the single master table in fxfft_master_twiddle.h, which
  * is generated from pilot_proxy.fxfft.MASTER_TWIDDLE_Q15. Because
- * W_n[k] = W_M[k * M / n] holds exactly on the pre-rounding real value, the
- * entries a length-n transform reads are bit-identical to a table generated
- * at length n -- adding a size introduces no new rounding decisions. The
- * stride folds into the shift: stage s reads master[t << (FX_MASTER_LOG2 - s)],
- * which at FX_N = 256 selects exactly the entries the frozen table holds.
+ * W_n[k] = W_M[k * M / n] holds exactly on the real value before rounding,
+ * the entries a length-n transform reads are bit-identical to a table
+ * generated at length n. Adding a size therefore adds no new rounding
+ * decisions. The stride is folded into the shift, so stage s reads
+ * master[t << (FX_MASTER_LOG2 - s)], and at FX_N = 256 this selects exactly
+ * the entries the frozen table holds.
  *
- * Set the size at compile time, default 256:
+ * The size is set at compile time and defaults to 256:
  *   cc -O2 -DFX_N=1024 -o fxfft_ref fxfft_ref.c
  *
- * The per-size input contract tightens with stage count, because one butterfly
- * maps the working infinity-norm M to at most (1 + sqrt(2) + 2**-15) M + 1:
+ * The input contract of each size tightens with the stage count, because one
+ * butterfly maps the working infinity-norm M to at most
+ * (1 + sqrt(2) + 2**-15) M + 1:
  *   FX_N   256   512  1024  2048
  *   |x| <= 2**20 2**18 2**17 2**16
- * Deployed row sums are bounded by 128 * K <= 2**14, inside all of them. The
- * eight-stage 2**20 limit would be too large at nine stages, so
- * FX_INPUT_ABS_MAX is derived separately for each size.
+ * Deployed row sums are bounded by 128 * K <= 2**14, below all of these
+ * limits. The eight-stage limit of 2**20 would be too large at nine stages,
+ * so FX_INPUT_ABS_MAX is derived for each size.
  *
  * Build (plain C, no CUDA needed):  cc -O2 -o fxfft_ref fxfft_ref.c
  * Harness protocol: ./fxfft_ref in.bin out.bin
@@ -51,7 +54,7 @@
 #define FX_SHIFT 15
 #define FX_ROUND 16384
 
-/* log2(FX_N), as a compile-time constant expression. */
+/* log2(FX_N) as a compile-time constant, and the input limit of each size */
 #if FX_N == 128
 #define FX_LOG2 7
 #define FX_INPUT_ABS_MAX (1 << 21)
@@ -114,8 +117,8 @@ void fxfft(const int32_t in[FX_NIN][2], int32_t out[FX_N][2])
     }
 }
 
-/* Define FXFFT_REF_NO_MAIN to compile only the transform, e.g. when linking
- * this translation unit into another harness. */
+/* FXFFT_REF_NO_MAIN compiles only the transform, for linking this
+ * translation unit into another harness. */
 #ifndef FXFFT_REF_NO_MAIN
 int main(int argc, char **argv)
 {
@@ -129,8 +132,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s in.bin out.bin (FX_N=%d)\n", argv[0], FX_N);
         return 2;
     }
-    /* toolchain self-checks: arithmetic shift + two's complement, matching
-     * fxfft256_ref.c, then the rounding rule itself at its boundaries. */
+    /* toolchain self-checks for arithmetic shift and two's complement, as in
+     * fxfft256_ref.c, then the rounding rule at its boundaries */
     if ((((int64_t)-3) >> 1) != -2 || (int32_t)0x80000000u >= 0) {
         fprintf(stderr, "toolchain lacks arithmetic shift semantics\n");
         return 2;

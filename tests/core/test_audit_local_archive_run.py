@@ -237,8 +237,8 @@ def test_common_identity_allows_channel_specific_norms_and_decisions() -> None:
     second["freq_id"] = np.asarray([829], dtype=np.int64)
     second["target_norm_sq"] = np.asarray([2], dtype=np.int64)
     second["reference_norm_sum_sq"] = np.asarray([3], dtype=np.int64)
-    # Twice the target fine power: P = (2, 1, 1), and every column follows
-    # from the fine sums (per-pilot v6).
+    # The target fine power is doubled, so P = (2, 1, 1). Every frame column is
+    # then derived from the fine sums (per-pilot v6).
     second["fine_power_u64"] = second["fine_power_u64"].copy()
     second["fine_power_u64"][0, 0, 0] = 2
     second.update(coarse_columns_from_fine(second))

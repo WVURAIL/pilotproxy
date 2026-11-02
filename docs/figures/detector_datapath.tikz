@@ -1,12 +1,11 @@
-% Shared architecture diagram: detector datapath in the two-stage
-% channelizer (filterbank) view.
-% Single source of truth -- \input by PilotProxy_DS001 (Data Sheet) and
-% PilotProxy_UG001 (User Guide); render detector_datapath.svg for markdown
-% use with detector_datapath_standalone.tex. Requires tikz libraries
-% arrows.meta + positioning + calc + decorations.pathreplacing, and the
-% colors PilotProxyBlue, PilotProxyRed, PilotProxyGray, LightGray from the host document
-% (or the standalone wrapper).
-% Re-render the svg after editing:
+% Detector datapath in the two-stage channelizer (filterbank) view.
+% This file is the one source of the diagram. It is \input by PilotProxy_DS001
+% (Data Sheet) and PilotProxy_UG001 (User Guide), and
+% detector_datapath_standalone.tex renders it to detector_datapath.svg for
+% Markdown. It needs the tikz libraries arrows.meta, positioning, calc and
+% decorations.pathreplacing, and the colors PilotProxyBlue, PilotProxyRed,
+% PilotProxyGray and LightGray from the host document or the standalone
+% wrapper. The svg must be rendered again after each edit:
 %   cd docs/figures && pdflatex detector_datapath_standalone.tex \
 %     && pdftocairo -svg detector_datapath_standalone.pdf detector_datapath.svg
 \begin{tikzpicture}[node distance=0.40cm,>=Latex,
@@ -20,14 +19,14 @@
   $N_{\mathrm{streams}}$ streams per frame};
 \node[blk,below=of in] (seg) {Window segmentation: $K=128$ samples per
   window, $W=\mathrm{frame}/K$ windows per stream};
-\node[blk,below=of seg] (s1) {\textbf{Stage 1 --- selected-bin
-  channelizer:} int4 matched weights evaluate 3 of 128 detector bins
-  (target, lower ref, upper ref)\\ \scriptsize a one-tap
-  (rectangular-window) DFT filterbank computing only the needed channels;
-  bin width 3051.76\,Hz; exact int32 row sums $z[n,m]$};
-\node[blk,below=of s1] (s2) {\textbf{Stage 2 --- fine spectrum:}
+\node[blk,below=of seg] (s1) {\textbf{Stage 1 (selected-bin
+  channelizer):} int4 matched weights evaluate 3 of 128 detector bins
+  (target, lower ref, upper ref)\\ \scriptsize one-tap
+  (rectangular-window) DFT filterbank at the needed channels only,
+  bin width 3051.76\,Hz, exact int32 row sums $z[n,m]$};
+\node[blk,below=of s1] (s2) {\textbf{Stage 2 (fine spectrum):}
   $\times 2$ padded fixed-point FFT (fxfft256) across $W$ windows
-  (coherent) $\to$ 256 fine bins, 11.92\,Hz; incoherent feed sum\\
+  (coherent) $\to$ 256 fine bins, 11.92\,Hz, incoherent feed sum\\
   \scriptsize exact uint64 fine powers $S_n[f]$ for the three terms};
 \node[half,anchor=north east] (v1) at ($(s2.south)+(-0.45,-0.55)$)
   {\textbf{Frame powers (survey flag):} $P_n=\sum_f S_n[f]$, exact
@@ -45,7 +44,7 @@
 \draw[->,thick] (s2.south -| v2.north) -- (v2.north);
 \node[font=\scriptsize\color{PilotProxyRed},align=center]
   at ($(s2.south |- v2.south)+(0,-0.32)$)
-  {one spectrum, two readings: no separate coarse power path (core 3.0.0)};
+  {both readings from one fine spectrum (core 3.0.0)};
 
 \coordinate (brx) at ([xshift=0.22cm]s1.east);
 \draw[decorate,decoration={brace,amplitude=5pt},thick,PilotProxyGray]

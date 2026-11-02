@@ -10,14 +10,14 @@
 #include <cstddef>
 #include <vector>
 
-// CUDA-vs-CPU regression for kernel core 3.0.0. Every power the library
-// emits is exact, so every comparison here is bit equality:
-//   * row sums (PilotProxy_Compute_RowSums_I32) == pilotproxy_ref_row_sums_i32;
-//   * fused fine powers (PilotProxy_Compute_FusedFine_U64) == the frozen
-//     fxfft256 v1 reference over the CPU row sums;
-//   * frame powers d_power_out == the host sum over bins of
-//     d_fine_power_out == pilotproxy_ref_powers_from_fine_u64 (the kernel core
-//     3.0.0 definition), on every fused entry that can bind the tap.
+// CUDA regression tests against the CPU reference. Every power the library
+// writes is exact, so every check here tests bit equality:
+//   - row sums (PilotProxy_Compute_RowSums_I32) == pilotproxy_ref_row_sums_i32
+//   - fused fine powers (PilotProxy_Compute_FusedFine_U64) == the frozen
+//     fxfft256 v1 reference over the CPU row sums
+//   - frame powers d_power_out == the host sum over bins of
+//     d_fine_power_out == pilotproxy_ref_powers_from_fine_u64, on every fused
+//     entry that can bind the tap
 
 namespace {
 
@@ -26,7 +26,7 @@ constexpr int INT4_SIGNED_MIN = -8;
 constexpr int INT4_MASK = 0xF;
 constexpr int PACKED_REAL_SHIFT_BITS = 4;
 
-// Numerical Recipes LCG constants; deterministic test data, not cryptography.
+// Numerical Recipes LCG constants for deterministic test data
 constexpr unsigned int LCG_MULTIPLIER = 1664525u;
 constexpr unsigned int LCG_INCREMENT = 1013904223u;
 
@@ -171,7 +171,7 @@ struct FineAndPowers {
     std::vector<unsigned long long> powers;  // [batch][TERMS]
 };
 
-// The kernel core 3.0.0 definition of the frame powers, applied on the host.
+// The frame-power definition P_r = sum_f S_r[f], applied on the host.
 std::vector<unsigned long long> host_sum_over_bins(
     const std::vector<unsigned long long>& fine)
 {
@@ -185,8 +185,8 @@ std::vector<unsigned long long> host_sum_over_bins(
     return out;
 }
 
-// CPU reference chain for one block: row sums -> fxfft256 v1 fine powers ->
-// frame powers.
+// CPU reference chain for one block, from row sums to fxfft256 v1 fine
+// powers to frame powers.
 FineAndPowers cpu_fine_and_powers(
     const std::vector<InputType>& x,
     const std::vector<InputType>& w,
@@ -251,8 +251,8 @@ void assert_fused_matches_cpu(
     }
 }
 
-// Fused fine powers and frame powers against the CPU reference chain for a
-// range of stream counts, with the row-sum tap bound.
+// Fused fine powers and frame powers are compared with the CPU reference
+// chain for a range of stream counts, with the row-sum tap bound.
 void test_fused_fine_exact()
 {
     const int row_counts[] = {WINDOWS, 2 * WINDOWS, 8 * WINDOWS, 33 * WINDOWS};
@@ -286,11 +286,12 @@ void test_fused_fine_exact()
     }
 }
 
-// A unit impulse in window 0 against a unit target weight gives z = (1, 0)
-// in one row and zero elsewhere; the frozen transform of that impulse is
-// exactly one in every bin, so the fused kernel must emit S_target[f] = 1,
-// P_target = 256 and zero for both reference terms --- exactness of the
-// device transform and of the frame-power reduction without any reference.
+// A unit impulse in window 0 with a unit target weight gives z = (1, 0) in
+// one row and zero elsewhere. The frozen transform of that impulse is
+// exactly one in every bin, so the fused kernel must write S_target[f] = 1,
+// P_target = 256, and zero for both reference terms. This tests the
+// exactness of the device transform and of the frame-power reduction with
+// no CPU reference.
 void test_fused_impulse_and_zero_reference_terms()
 {
     const int rows = WINDOWS;
@@ -320,8 +321,9 @@ void test_fused_impulse_and_zero_reference_terms()
     assert_frame_power_identity(gpu);
 }
 
-// The fused entries require whole 128-window streams; anything else is an
-// API error recorded in PilotProxy_LastError, not a launch.
+// The fused entries require whole 128-window streams. Any other row count is
+// recorded as an API error in PilotProxy_LastError, and no kernel is
+// launched.
 void test_fused_rejects_partial_streams()
 {
     const int rows = WINDOWS + 1;
@@ -345,10 +347,10 @@ void test_fused_rejects_partial_streams()
 
 void test_set_stream_matches_default()
 {
-    // A handle bound to a non-blocking stream must produce the same fine and
-    // frame powers as the default stream, and switching back must re-upload
-    // the weights on the new stream rather than reuse a cache ordered on the
-    // old one.
+    // A handle bound to a non-blocking stream must give the same fine and
+    // frame powers as the default stream. Switching back must upload the
+    // weights again on the new stream, since the cached upload was ordered on
+    // the old one.
     const int rows = CACHE_REUSE_ROWS;
     std::vector<InputType> x(rows * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
     std::vector<InputType> w(TERMS * PILOTPROXY_DETECTOR_WINDOW_SAMPLES);
@@ -465,10 +467,10 @@ void test_batch_equivalence()
     }
 }
 
-// Both mask entries share the frame-power reduction: with the optional tap
-// bound they report the same P_r as PilotProxy_Compute_FusedFine_U64 (the host
-// sum over bins of their own fine accumulator); with it unbound the buffer
-// is not touched at all.
+// Both mask entries use the same frame-power reduction. With the optional
+// tap bound, they report the same P_r as PilotProxy_Compute_FusedFine_U64,
+// which is the host sum over bins of their own fine accumulator. With the
+// tap unbound, the buffer is left untouched.
 void test_mask_entries_share_the_frame_power_reduction()
 {
     const int rows = MASK_ROWS;
@@ -537,8 +539,8 @@ void test_mask_entries_share_the_frame_power_reduction()
 
 }  // namespace
 
-// v2 front end: GPU row sums must match the CPU reference EXACTLY (integer
-// outputs, no tolerance) across the grid-stride row counts.
+// GPU row sums must match the CPU reference exactly, as integers with no
+// tolerance, for each of the grid-stride row counts.
 static void test_row_sums_exact()
 {
     const int row_counts[] = {
@@ -577,8 +579,8 @@ static void test_row_sums_exact()
     }
 }
 
-// Batched v2 front end: each batch entry must equal the single-block
-// reference on its own input slice, exactly.
+// Each entry of a batched row-sum launch must equal the single-block
+// reference on its own input slice exactly.
 static void test_row_sums_batch_exact()
 {
     const int rows = 96;
@@ -625,8 +627,9 @@ int main()
     int minor = 0;
     int patch = 0;
     PilotProxy_GetVersion(&major, &minor, &patch);
-    // Guard library <-> source consistency, not a literal: a stale
-    // libpilotproxy.so must fail here before any semantic test runs.
+    // The library version is compared with the source headers instead of a
+    // literal, so a stale libpilotproxy.so fails here before any output test
+    // runs.
     assert(major == PILOTPROXY_CORE_VERSION_MAJOR);
     assert(minor == PILOTPROXY_CORE_VERSION_MINOR);
     assert(patch == PILOTPROXY_CORE_VERSION_PATCH);

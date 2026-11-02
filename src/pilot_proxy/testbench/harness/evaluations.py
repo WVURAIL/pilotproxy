@@ -1,25 +1,25 @@
-"""Readers for pilot-proxy's detector evaluations, and the pooling that turns
-them into estimator-transfer points.
+"""Readers for pilot-proxy detector evaluations and the pooling of their
+trials into estimator-transfer points.
 
-``pilot-proxy evaluate-snr`` writes one directory per run:
+``pilot-proxy evaluate-snr`` writes one directory per run with three files:
 
 - ``dtv_snr_eval.json``: the report (schema
   ``pilotproxy_snr_validation_report_v2``) with the waveform audit, the
-  pilot calibration, the detector geometry and a per-point summary;
-- ``dtv_snr_eval.csv``: one row per noise trial, the exact ``uint64``
-  detector power terms beside the float estimates of every implementation;
+  pilot calibration, the detector geometry, and a per-point summary.
+- ``dtv_snr_eval.csv``: one row per noise trial, with the exact ``uint64``
+  detector power terms beside the float estimates of every implementation.
 - ``dtv_snr_summary.csv``: one row per requested input point, with the
-  powers pooled over the point's trials before any ratio is formed.
+  powers pooled over the trials of that point before any ratio is formed.
 
-The synthetic GNU Radio sweep of 2026-08-25 is forty such directories; the
-channel-35 over-the-air capture evaluation is one. This module loads them and
-pools trials into transfer points exactly the way the frozen
-``estimator_transfer_YYYYMMDD`` release was built (pooled powers, a seeded
-95% trial bootstrap in linear excess, the shelf-SNR conversion through the
-run's own pilot calibration), so ``data/plot_points.csv`` of that release can
-be re-derived from the raw shards and the two checked against each other.
-Interpreting the points is what ``estimator_transfer`` does; this module only
-reads and pools.
+The synthetic GNU Radio sweep of 2026-08-25 has forty such directories, and
+the channel-35 over-the-air capture evaluation has one. This module loads
+them and pools the trials into transfer points in the same way the frozen
+``estimator_transfer_YYYYMMDD`` release was built. The powers are pooled, a
+seeded 95% trial bootstrap is taken in linear excess, and the shelf SNR is
+converted through the run's own pilot calibration. Thus, the
+``data/plot_points.csv`` of that release can be derived again from the raw
+shards, and the two can be checked against each other. The points are
+interpreted in ``estimator_transfer``, and this module only reads and pools.
 """
 from __future__ import annotations
 
@@ -36,9 +36,9 @@ import numpy as np
 
 from .estimator_transfer import Calibration
 
-# Revision 2 (kernel core 3.0.0): the trial u64 powers are the all-bin sums of
-# the fxfft256 fine powers. A revision-1 report holds row-domain powers under
-# the same column names and is refused, not read as current.
+# In revision 2 (kernel core 3.0.0), the trial u64 powers are the all-bin sums
+# of the fxfft256 fine powers. A revision-1 report holds row-domain powers
+# under the same column names, so it is refused.
 REPORT_SCHEMA = "pilotproxy_snr_validation_report_v2"
 REPORT_SCHEMA_V1 = "pilotproxy_snr_validation_report_v1"
 REPORT_NAME = "dtv_snr_eval.json"
@@ -59,9 +59,9 @@ DB = 10.0
 Row = dict[str, float]
 
 
-# ----------------------------------------------------------------- reading
+# Readers
 def read_numeric_csv(path: Path | str, *, required: Iterable[str] = ()) -> list[Row]:
-    """Every cell as a float (non-numeric cells become NaN); the offset defaults to 0."""
+    """Read every cell as a float, with NaN for a non-numeric cell and a default frequency offset of 0."""
     path = Path(path)
     rows: list[Row] = []
     with path.open(newline="", encoding="utf-8") as fh:
@@ -111,7 +111,7 @@ class Evaluation:
 
     @property
     def is_radio(self) -> bool:
-        """Whether the run measured a received input (the SDR path) rather than a requested one."""
+        """True when the run measured a received input on the SDR path instead of a requested one."""
         return any(CONTROL_EXPECTED in row for row in self.summary)
 
 
@@ -136,15 +136,20 @@ def load_evaluation(path: Path | str) -> Evaluation:
 
 
 def load_evaluations(paths: Sequence[Path | str]) -> list[Evaluation]:
-    """Load shards in the given order; the order is part of the pooling identity
-    (the bootstrap resamples trials in their concatenated order)."""
+    """Load the shards in the given order.
+
+    The order is part of the pooling identity, since the bootstrap resamples
+    the trials in their concatenated order.
+    """
     return [load_evaluation(p) for p in paths]
 
 
 def digital_sweep_layout(root: Path | str) -> list[Path]:
-    """The forty shard directories of the 2026-08-25 synthetic sweep, in the order
-    the release pooled them: -60..-45 dB, the -42..-30 dB base and its two
-    extension parts per point, the upper and high bases, then +6..+60 dB."""
+    """Return the forty shard directories of the 2026-08-25 synthetic sweep in the release's pooling order.
+
+    The order is -60..-45 dB, the -42..-30 dB base and its two extension
+    parts per point, the upper and high bases, and then +6..+60 dB.
+    """
     root = Path(root)
     paths = [root / "extreme_low" / f"snr_m{abs(v)}" for v in range(-60, -44, 3)]
     paths.append(root / "lower")
@@ -156,7 +161,7 @@ def digital_sweep_layout(root: Path | str) -> list[Path]:
     return paths
 
 
-# ----------------------------------------------------------------- pooling
+# Pooling
 def _finite(row: Row, *names: str) -> float:
     for name in names:
         value = float(row.get(name, math.nan))
@@ -194,7 +199,7 @@ def _direct_ratio(row: Row, prefix: str) -> float:
 
 
 def _weight(row: Row, prefix: str) -> float:
-    """The trial's reference power: the weight of its ratio in a pooled ratio."""
+    """The trial's reference power, which weights its ratio in a pooled ratio."""
     if prefix == "gpu":
         direct = _finite(row, "p_ref_sum_u64", "p_ref_sum")
         lower, upper = _finite(row, "p_ref_lower_u64", "p_ref_lower"), _finite(row, "p_ref_upper_u64", "p_ref_upper")
@@ -210,7 +215,7 @@ def _weight(row: Row, prefix: str) -> float:
 
 
 def _null_ratio(rows: Sequence[Row], prefix: str) -> float:
-    """Median raw/normalized ratio: the weight-norm null level, for rows that carry only the raw ratio."""
+    """Median of the raw ratio over the normalized ratio, which is the weight-norm null level for rows with only the raw ratio."""
     candidates = []
     for row in rows:
         raw = _raw_ratio(row, prefix)
@@ -251,7 +256,7 @@ def pooled_ratio(rows: Sequence[Row], prefix: str) -> float:
 
 
 def summary_ratio(rows: Sequence[Row], prefix: str) -> float:
-    """The summary's own pooled ratio; overlapping shards are combined by pooled reference power."""
+    """The summary's own pooled ratio, with overlapping shards weighted by their pooled reference power."""
     excess_names = [f"{prefix}_pooled_normalized_pilot_excess"]
     ratio_names = [f"{prefix}_pooled_normalized_coarse_power_ratio"]
     weight_names = [f"{prefix}_pooled_p_ref_sum"]
@@ -275,7 +280,7 @@ def summary_ratio(rows: Sequence[Row], prefix: str) -> float:
 
 
 def point_seed(prefix: str, offset_hz: float, snr_db: float) -> int:
-    """The per-point bootstrap seed the releases used: fixed base plus a CRC of the point's name."""
+    """The per-point bootstrap seed used by the releases, a fixed base plus a CRC of the point's name."""
     token = f"{prefix}:{offset_hz:.9f}:{snr_db:.9f}".encode("ascii")
     return BOOTSTRAP_SEED + int(zlib.crc32(token))
 
@@ -366,7 +371,7 @@ def _concatenate(evaluations: Sequence[Evaluation]) -> tuple[list[Row], list[Row
 def curve_points(evaluations: Sequence[Evaluation], *, prefix: str, calibration: Calibration,
                  offset_hz: float = 0.0, bootstrap_samples: int = BOOTSTRAP_SAMPLES,
                  radio: bool = False) -> dict[float, dict[str, float]]:
-    """Per requested input point: the pooled excess, its shelf-SNR estimate and its interval."""
+    """Return the pooled excess, its shelf-SNR estimate, and its interval for each requested input point."""
     trials, summary = _concatenate(evaluations)
     requested = sorted({float(row[REQUESTED_SNR]) for row in summary
                         if float(row.get(FREQUENCY_OFFSET, 0.0)) == float(offset_hz)
@@ -410,10 +415,10 @@ def transfer_points(evaluations: Sequence[Evaluation], *, calibration: Calibrati
                     bootstrap_samples: int = BOOTSTRAP_SAMPLES) -> list[dict[str, float]]:
     """The digital release's ``plot_points.csv`` rows from the raw shards.
 
-    ``calibration`` defaults to the first shard's own; every shard must agree
-    with it. ``conditioning`` fills the waveform-conditioned column, otherwise
-    NaN (the coefficients are a separate derivation, recorded in the release's
-    ``run/conditioning.json``).
+    ``calibration`` defaults to the first shard's own, and every shard must
+    agree with it. ``conditioning`` fills the waveform-conditioned column,
+    which is NaN without it. The coefficients come from a different
+    derivation and are recorded in the release's ``run/conditioning.json``.
     """
     if not evaluations:
         raise ValueError("no evaluations to pool")
@@ -455,7 +460,7 @@ def transfer_points(evaluations: Sequence[Evaluation], *, calibration: Calibrati
 
 def write_points(rows: Sequence[dict[str, float]], path: Path | str,
                  columns: Sequence[str] = DIGITAL_COLUMNS) -> Path:
-    """Write pooled points the way the releases do: shortest round-trip floats, blanks for NaN."""
+    """Write the pooled points as the releases do, with shortest round-trip floats and blanks for NaN."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fh:

@@ -27,10 +27,11 @@ constexpr int BINS = PILOTPROXY_FINE_NUM_BINS;
 
 constexpr unsigned long long ZERO_POWER = 0ULL;
 constexpr unsigned long long UNIT_POWER = 1ULL;
-// The frozen transform's Parseval departure on the golden vectors is bounded
-// at 5e-3 (tests/core/test_fxfft256.py); random rows at the amplitudes
-// below sit far inside it. This documents the relation P ~ 256 sum|z|^2
-// without asserting an equality the fixed-point transform does not provide.
+// On the golden vectors, the departure of the frozen transform from Parseval
+// is bounded at 5e-3 (tests/core/test_fxfft256.py), and the departure for
+// random rows at the amplitudes used here is far below this bound. The
+// relation P ~ 256 sum|z|^2 is checked to this tolerance, since the
+// fixed-point transform does not give an exact equality.
 constexpr double PARSEVAL_RELATIVE_TOLERANCE = 5.0e-3;
 
 InputType pack_i4(int real, int imag)
@@ -64,11 +65,11 @@ void assert_mul(
     assert(imag == expected_imag);
 }
 
-// A unit impulse in window 0 of one stream transforms to a flat spectrum of
-// exactly one per bin: the impulse only ever enters a butterfly as the top
-// leg and every bottom leg is an exact zero, so no rounding occurs. The fine
-// reference must therefore give S[f] = 1 for all 256 bins and the frame
-// power the transform length; the untouched terms stay zero.
+// A unit impulse in window 0 of one stream is transformed to a flat spectrum
+// of exactly one per bin. The impulse only enters a butterfly as the top leg,
+// and every bottom leg is an exact zero, so no rounding occurs. The fine
+// reference must therefore give S[f] = 1 for all 256 bins and a frame power
+// equal to the transform length. The two terms with no impulse stay zero.
 void assert_impulse_fine_powers(int component)
 {
     std::vector<int> row_sums(static_cast<std::size_t>(TERMS) * WINDOWS * 2, 0);
@@ -88,7 +89,7 @@ void assert_impulse_fine_powers(int component)
     assert(powers[PILOTPROXY_LOWER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
     assert(powers[PILOTPROXY_UPPER_REFERENCE_WEIGHT_INDEX] == ZERO_POWER);
 
-    // Two streams carrying the same impulse: the feed sum doubles exactly.
+    // two streams with the same impulse double the feed sum exactly
     std::vector<int> two(static_cast<std::size_t>(TERMS) * TWO_STREAMS * WINDOWS * 2, 0);
     two[static_cast<std::size_t>(component)] = 1;
     two[static_cast<std::size_t>(WINDOWS) * 2 + component] = 1;
@@ -124,8 +125,8 @@ void assert_null_arguments_are_harmless()
     }
 }
 
-// The frame power is the exact all-bin sum: a hand-built spectrum sums to
-// the closed form, including the uint64 range above 2^32 per bin.
+// The frame power is the exact sum over all bins. A hand-built spectrum with
+// bin values above 2^32 must sum to its closed form in uint64.
 void assert_frame_power_is_the_all_bin_sum()
 {
     unsigned long long fine[TERMS][BINS];
@@ -177,9 +178,9 @@ static void run_row_sums_reference_checks()
         static_cast<std::size_t>(PILOTPROXY_NUM_WEIGHT_TERMS) * rows * 2, 0);
     pilotproxy_ref_row_sums_i32(x.data(), w.data(), rows, row_sums.data());
 
-    // Exact equality against an independently ordered brute force
-    // (term-outer, tap-outer accumulation): integer addition is associative,
-    // so any ordering must agree bit-for-bit.
+    // The row sums must equal a brute-force sum taken in another order, with
+    // the term in the outer loop. Integer addition is associative, so any
+    // order must agree bit for bit.
     for (int n = 0; n < PILOTPROXY_NUM_WEIGHT_TERMS; ++n) {
         for (int m = 0; m < rows; ++m) {
             long long br = 0;
@@ -215,11 +216,12 @@ static void run_row_sums_reference_checks()
     }
 }
 
-// Random rows through the whole reference chain: row sums -> fine spectra ->
-// frame powers. Checks (a) the frame power is the exact all-bin sum of the
-// fine spectrum, (b) the feed sum is additive over streams (the stream
-// indexing of the term-major buffer is right), and (c) the Parseval relation
-// P ~ L_F * sum|z|^2 holds to the frozen transform's rounding.
+// Random rows are passed through the whole reference chain, from row sums to
+// fine spectra to frame powers. The checks are (a) the frame power is the
+// exact sum over all bins of the fine spectrum, (b) the feed sum is additive
+// over streams, which confirms the stream indexing of the term-major buffer,
+// and (c) the Parseval relation P ~ L_F * sum|z|^2 holds to the rounding of
+// the frozen transform.
 static void run_fine_reference_checks()
 {
     const int rows = TWO_STREAMS * WINDOWS;
@@ -248,7 +250,7 @@ static void run_fine_reference_checks()
     pilotproxy_ref_fine_powers_u64(row_sums.data(), TWO_STREAMS, fine);
     pilotproxy_ref_powers_from_fine_u64(fine, powers);
 
-    // (a) definition: P_n == sum_f S_n[f], summed independently here.
+    // (a) P_n == sum_f S_n[f], with the sum formed independently here
     for (int n = 0; n < TERMS; ++n) {
         unsigned long long total = 0ULL;
         for (int f = 0; f < BINS; ++f) {
@@ -258,7 +260,7 @@ static void run_fine_reference_checks()
         assert(powers[n] > ZERO_POWER);
     }
 
-    // (b) additivity over streams: each stream alone, then summed.
+    // (b) additivity over streams, with each stream alone and then summed
     unsigned long long fine_sum[TERMS][BINS] = {};
     for (int s = 0; s < TWO_STREAMS; ++s) {
         std::vector<int> one(static_cast<std::size_t>(TERMS) * WINDOWS * 2, 0);
@@ -286,7 +288,7 @@ static void run_fine_reference_checks()
         }
     }
 
-    // (c) Parseval to rounding: |P - L_F sum|z|^2| / (L_F sum|z|^2) small.
+    // (c) Parseval to rounding, |P - L_F sum|z|^2| / (L_F sum|z|^2) is small
     for (int n = 0; n < TERMS; ++n) {
         double energy = 0.0;
         for (int m = 0; m < rows; ++m) {

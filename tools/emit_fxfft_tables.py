@@ -3,11 +3,12 @@
 """Generate the shared fixed-point FFT twiddles as literal C values.
 
 The device and reference transforms need identical coefficients. Reading a
-single table avoids platform-dependent runtime trigonometry. This generator
-writes ``pilot_proxy.fxfft.MASTER_TWIDDLE_Q15`` and its hash into C source.
+single table avoids platform-dependent runtime trigonometry. The table
+``pilot_proxy.fxfft.MASTER_TWIDDLE_Q15`` and its hash are written into C
+source by this generator.
 
-A length-n transform takes every M/n-th entry of the length-M master because
-``W_n[k] = W_M[k * M / n]`` exactly; see ``fxfft.py``. At radix-2 stage ``s``,
+A length-n transform takes every M/n-th entry of the length-M master, because
+``W_n[k] = W_M[k * M / n]`` exactly (see ``fxfft.py``). At radix-2 stage ``s``,
 the index is ``master[t << (log2(M) - s)]``. For n = 256 this selects the
 frozen transform's entries, and other supported lengths introduce no new
 twiddle rounding decisions.

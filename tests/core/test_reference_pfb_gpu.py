@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Parity of the GPU synthesis twins against the CPU reference chain."""
+"""Tests that the GPU synthesis and channelization functions match the CPU reference chain."""
 
 from __future__ import annotations
 

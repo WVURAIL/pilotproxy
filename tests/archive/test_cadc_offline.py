@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
 """
-Offline test environment for the live CADC / Datatrail path.
+Offline test of the live CADC and Datatrail path.
 
-The real `cadc-datatrail` source is what we cannot exercise without CANFAR: its
-enumerate() reads an inventory.jsonl, and its fetch() pulls each file with
-cadcget (with retry + backoff). This test drives that REAL source code
-end-to-end with NO CADC access, by injecting a fake StorageInventoryClient that
-serves synthetic baseband files from a local fixture directory, then analyzing
-them with the detector analyzer on a CPU stand-in backend (no GPU).
+Without CANFAR, the `cadc-datatrail` source cannot be run against the archive.
+Its enumerate() reads an inventory.jsonl, and its fetch() pulls each file with
+cadcget, with retries and backoff. This test runs that source code end to end
+with no CADC access. A fake StorageInventoryClient serves synthetic baseband
+files from a local fixture directory, and the files are analyzed by the
+detector analyzer on a CPU stand-in backend, so no GPU is needed.
 
-It validates the integration glue that otherwise only runs on CANFAR:
-  * inventory enumeration -> per-freq_id fan-out -> stage -> analyze -> product;
-  * resume (re-running is a no-op);
-  * self-healing -- a freq_id whose fetches all fail is left incomplete and a
-    nonzero exit is returned, then completed on a later run once the "outage"
-    clears (resume retries what was never recorded as done);
-  * quarantine -- an unreadable file is excluded + recorded, the run still
-    completes, and a re-run skips it without re-fetching;
-  * dedup -- duplicate inventory rows collapse to a single fetch.
+The tests cover the integration code that otherwise runs only on CANFAR:
 
-Network sleeps are patched out so retries don't slow the test.
+  * inventory enumeration, per-freq_id fan-out, staging, analysis, and the
+    product
+  * resume, where a second run does nothing
+  * self-healing, where a freq_id whose fetches all fail is left incomplete
+    with a nonzero exit and is completed on a later run once the simulated
+    outage clears, because resume retries every file not recorded as done
+  * quarantine, where an unreadable file is excluded and recorded, the run
+    still completes, and a re-run skips the file without fetching it again
+  * deduplication, where duplicate inventory rows collapse to a single fetch
 
-Run:  PYTHONPATH=src python tests/test_cadc_offline.py
+The retry sleeps are patched out to keep the test fast.
+
+Run:  PYTHONPATH=src:tests/support python tests/archive/test_cadc_offline.py
 """
 from __future__ import annotations
 
@@ -46,7 +48,7 @@ FREQ_IDS = (614, 706)        # two explicit freq_ids for the archive scan
 
 
 class FakeStorageClient:
-    """Stand-in for cadcdata.StorageInventoryClient: cadcget over a fixture dir."""
+    """Stand-in for cadcdata.StorageInventoryClient that serves cadcget from a fixture directory."""
 
     def __init__(self, fixture_dir: str, fail_always=()):
         self.fixture_dir = fixture_dir
@@ -65,11 +67,12 @@ class FakeStorageClient:
 
 
 def build_fixture(d: str):
-    """Synthetic baseband for two freq_ids + a matching inventory.jsonl.
+    """Write synthetic baseband for two freq_ids and a matching inventory.jsonl.
 
-    Inventory records use the real cadc-datatrail schema; the URIs the source
-    builds from them resolve (by basename) to the fixture files the fake client
-    serves. Each file carries a tone at F_TONE_BB so the PSD product is checkable.
+    The inventory records use the cadc-datatrail schema. The URIs built from them
+    by the source resolve by basename to the fixture files served by the fake
+    client. Each file has a tone at F_TONE_BB, so the PSD peak of the product
+    can be checked.
     """
     fix = os.path.join(d, "fixture"); os.makedirs(fix)
     inst = inst_mod.load_instrument("chime")
@@ -101,9 +104,9 @@ def fake_cadc(fake: FakeStorageClient):
     orig_preflight = cadc_datatrail.CadcDatatrailSource.fetch_preflight
     orig_sleep = cadc_datatrail.time.sleep
     cadc_datatrail.CadcDatatrailSource._make_client = lambda self, cert=None: fake
-    # `scan` now runs the same fail-closed preflight as `doctor`. This test's
-    # injected client is the credential/dependency boundary, so certify that
-    # boundary explicitly instead of requiring a real CADC install.
+    # `scan` runs the same fail-closed preflight as `doctor`. The injected client
+    # is the credential and dependency boundary of this test, so the preflight
+    # is stubbed to pass and no CADC install is needed.
     cadc_datatrail.CadcDatatrailSource.fetch_preflight = (
         lambda self, ctx: (True, [], []))
     cadc_datatrail.time.sleep = lambda *a, **k: None
@@ -164,24 +167,25 @@ def run_offline() -> int:
     sel = ",".join(str(c) for c in freq_ids)
     ok = True
 
-    # 1. full scan through the REAL cadc-datatrail source, network faked --------
+    # full scan through the cadc-datatrail source with a faked network
     root = os.path.join(work, "run1")
     with fake_cadc(FakeStorageClient(fix)):
         if _scan(inv, root, sel, os.path.join(work, "t1")) != 0:
             print("  FAIL: scan returned nonzero"); ok = False
     if not _products_ok(root, freq_ids):
         ok = False
-    # resume = no-op
+    # resume does nothing
     with fake_cadc(FakeStorageClient(fix)):
         if _scan(inv, root, sel, os.path.join(work, "t1")) != 0:
             print("  FAIL: resume returned nonzero"); ok = False
     print(f"  archive scan: {len(freq_ids)} freq_ids via real cadc-datatrail "
           f"(faked cadcget), resume clean")
 
-    # 2. self-healing across runs ----------------------------------------------
-    # Make every fetch for the highest freq_id fail in run 1: that product is
-    # left incomplete and the scan exits nonzero. Run 2 with the "outage" cleared
-    # must complete it via resume (the failed files were never recorded done).
+    # self-healing across runs
+    # Every fetch for the highest freq_id fails in run 1, so that product is left
+    # incomplete and the scan exits nonzero. Run 2, with the simulated outage
+    # cleared, must complete it on resume, since the failed files were never
+    # recorded as done.
     root2 = os.path.join(work, "run2")
     bad_freq_id = freq_ids[-1]
     bad = files_by_freq_id[bad_freq_id]
@@ -208,14 +212,13 @@ def run_offline() -> int:
 
 
 def test_cadc_datatrail_offline():
-    """pytest entry point: the real archive path works offline and self-heals."""
+    """The archive path runs offline and self-heals across runs."""
     assert run_offline() == 0
 
 
-# ---------------------------------------------------------------------------
-# Quarantine: a file that won't read (bad header) is excluded + recorded, the
-# run still completes, and a re-run skips it without re-fetching.
-# ---------------------------------------------------------------------------
+# quarantine
+# A file with a bad header cannot be read, so it is excluded and recorded. The
+# run still completes, and a re-run skips the file without fetching it again.
 def _read_jsonl(path):
     out = []
     if os.path.exists(path):
@@ -228,7 +231,7 @@ def _read_jsonl(path):
 
 
 def _single_freq_id_fixture(d, good_events, freq_id=614, extra_rows=False):
-    """One freq_id: synth files for good_events, return (fix, inv, ch, names)."""
+    """Write synth files for good_events at one freq_id and return (fix, inv, ch, names)."""
     fix = os.path.join(d, "fixture"); os.makedirs(fix)
     inst = inst_mod.load_instrument("chime")
     inv = os.path.join(d, "inventory.jsonl")
@@ -256,7 +259,7 @@ def run_quarantine() -> int:
     fix, inv, ch, good = _single_freq_id_fixture(work, ["good_0", "good_1"])
     ok = True
 
-    # add one file with a bad header (not valid HDF5) + its inventory row
+    # one file with a bad header (not valid HDF5) and its inventory row
     bad = f"baseband_corrupt_0_{ch}.h5"
     with open(os.path.join(fix, bad), "wb") as bf:
         bf.write(b"NOT-an-HDF5-file: truncated/garbage header\n" * 64)
@@ -295,8 +298,8 @@ def run_quarantine() -> int:
         print(f"  FAIL: unexpected quarantine reason {recs[0].get('reason')!r}")
         ok = False
 
-    # re-run: the bad file is already quarantined -> skipped with no re-fetch,
-    # the run is clean, and the ledger is not duplicated
+    # on the re-run the quarantined file is skipped with no fetch, the run is
+    # clean, and the ledger gains no duplicate record
     fake2 = FakeStorageClient(fix)
     with fake_cadc(fake2):
         rc2 = _scan(
@@ -322,7 +325,7 @@ def run_quarantine() -> int:
 
 def run_dedup() -> int:
     work = tempfile.mkdtemp(prefix="pilot_proxy_dedup_")
-    # two unique files, but every inventory row written twice
+    # two unique files, with every inventory row written twice
     fix, inv, ch, names = _single_freq_id_fixture(
         work, ["e_0", "e_1"], extra_rows=True)
     ok = True
@@ -350,12 +353,12 @@ def run_dedup() -> int:
 
 
 def test_quarantine_bad_header():
-    """pytest entry point: an unreadable file is quarantined, not fatal."""
+    """An unreadable file is quarantined and the run continues."""
     assert run_quarantine() == 0
 
 
 def test_inventory_dedup():
-    """pytest entry point: duplicate inventory rows collapse to one fetch."""
+    """Duplicate inventory rows collapse to one fetch."""
     assert run_dedup() == 0
 
 

@@ -2,9 +2,10 @@
 """Check that per-frame spectra survive their int16 dB encoding.
 
 The analyzer sums a 16384-point FFT power spectrum over feeds for each frame.
-Keeping each frame's spectrum allows later masks to select different frames;
-an accumulated spectrum alone cannot do that. The tests here check the
-encoding round trip so this retained information has a known precision.
+The spectrum of each frame is kept so that a later mask can select a
+different set of frames, which is not possible with the accumulated spectrum
+alone. The tests here check the encoding round trip, so the kept spectra
+have a known precision.
 """
 from __future__ import annotations
 
@@ -21,11 +22,11 @@ STEP_PER_CODE = 0.01  # dB
 
 
 def _encode(stack: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Mirror of the analyzer: each frame encoded about its own reference.
+    """Encode each frame about its own reference, as the analyzer does.
 
-    Encoding on arrival is what keeps residency at int16 rather than holding
-    float64 for a whole channel, so the reference is per frame rather than per
-    product.
+    Each frame is encoded on arrival, so a whole channel is held in memory as
+    int16 instead of float64. The reference is therefore chosen for each
+    frame.
     """
     codes = np.empty(stack.shape, dtype=np.int16)
     refs = np.empty(stack.shape[0], dtype=np.float64)
@@ -70,7 +71,7 @@ def test_round_trip_error_is_within_half_a_step() -> None:
 
 
 def test_strong_lines_survive_the_encoding() -> None:
-    """A 40x line must still stand ~16 dB above the floor after decoding."""
+    """A 40x line is still about 16 dB above the floor after decoding."""
     stack = _realistic()
     codes, refs = _encode(stack)
     back = _decode(codes, refs)
@@ -92,13 +93,13 @@ def test_invalid_frames_decode_to_nan_not_a_power() -> None:
 
 
 def test_the_sentinel_is_not_a_reachable_measurement() -> None:
-    """_PSD_DB_INVALID must sit outside the clipped code range."""
+    """_PSD_DB_INVALID is below the clipped code range."""
     assert _PSD_DB_INVALID < _PSD_DB_MIN <= _PSD_DB_MAX
     assert _PSD_DB_MIN == -32767 and _PSD_DB_MAX == 32767
 
 
 def test_summed_frames_reproduce_an_integrated_spectrum() -> None:
-    """The accumulators the product still carries are derivable from the frames."""
+    """The accumulated spectrum of the product is recovered from the decoded frames to 0.2%."""
     stack = _realistic()
     codes, refs = _encode(stack)
     back = _decode(codes, refs)

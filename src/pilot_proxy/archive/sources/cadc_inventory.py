@@ -1,9 +1,9 @@
-"""Strict inventory schema and identity for the CADC Datatrail source.
+"""Strict inventory schema and unit identity for the CADC Datatrail source.
 
-The source owns archive identity and verified URI fields; readers own only the
-relative filenames and product-specific columns. Keeping those rules here gives
-survey and enumeration one validation boundary without coupling them to the
-survey's network or persistence machinery.
+The source sets the archive identity and the verified URI fields of each row. A
+reader sets only the relative filename and its product-specific columns. These
+rules are kept in this module so that survey and enumeration validate rows the
+same way, and neither depends on the survey's network or persistence code.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def join_uri(common_path, name) -> str:
 
 
 def _safe_archive_name(name: str) -> bool:
-    """Whether a verified filename is a canonical relative POSIX path."""
+    """Return True when a verified filename is a canonical relative POSIX path."""
     if (not name or name != name.strip() or "\\" in name or any(ord(c) < 32 for c in name)
             or name.startswith("/")):
         return False
@@ -38,18 +38,21 @@ def _safe_archive_name(name: str) -> bool:
 
 
 def _safe_common_path(value: str) -> bool:
-    # Collection-qualified paths and local test/source identifiers share the
-    # same component contract. Never normalize away a parent traversal.
+    # Collection-qualified paths and local test or source identifiers follow
+    # the same component rules. A parent traversal is rejected and is never
+    # normalized.
     suffix = value.split(":", 1)[-1]
     return _safe_archive_name(suffix)
 
 
 def _legacy_baseband_row(row):
-    """Restore only the documented schema-1 CHIME baseband filename.
+    """Return an old row with the documented schema-1 CHIME baseband filename added.
 
-    This is a read-time view, never a rewrite of the inventory. The historical
-    floating size estimate is preserved and is not promoted to a frame count.
-    Partial current rows and unrelated product types still fail validation.
+    The copy is made in memory when the row is read, and the inventory file is
+    not rewritten. The old floating n_frames estimate is also copied to
+    ``n_frames_legacy_estimate`` and is not used as a frame count. Partial
+    current rows and other product types are returned unchanged and still fail
+    validation.
     """
     required = {"scope", "event", "freq_id", "size_bytes", "common_path",
                 "obs_date", "datasets", "freq_mhz", "n_frames"}
@@ -104,7 +107,7 @@ def candidate_file(item, reader_name: str) -> tuple[str, dict]:
 
 
 def annotate_row(shape, row: dict, instrument) -> None:
-    """Run reader annotation while protecting source-verified identity."""
+    """Run the reader's annotate_row and reject changes to source-owned fields."""
     before = {key: deepcopy(row[key]) for key in RESERVED_FIELDS if key in row}
     shape.annotate_row(row, instrument)
     changed = [key for key, value in before.items()
@@ -118,7 +121,7 @@ def annotate_row(shape, row: dict, instrument) -> None:
 
 
 def logical_unit_key(scope, event, name) -> str:
-    """Archive-location-independent identity used by resume and quarantine."""
+    """Return the location-independent unit identity used by resume and quarantine."""
     return "cadc-datatrail:" + json.dumps(
         [str(scope), str(event), str(name)], separators=(",", ":"))
 
@@ -131,7 +134,7 @@ def _inventory_error(path: str, line_number: int, detail: str) -> SystemExit:
 
 
 def parse_row(text: str, path: str, line_number: int) -> dict:
-    """Parse one current-schema row, failing closed with its exact location."""
+    """Parse one current-schema row, and report the file and line of any error."""
     try:
         row = json.loads(text)
     except (json.JSONDecodeError, ValueError) as exc:

@@ -1,21 +1,23 @@
 # coding=utf-8
-"""Weight-norm zero-point regression tests for the positive-excess mask.
+"""Tests of the weight-norm zero point of the positive-excess mask.
 
-int4 quantization of the steering vectors leaves the three weight-term norms
-unequal, so under a flat noise floor E[F] = null_power_ratio = 2*target_norm_sq/
-reference_norm_sum_sq differs from 1 per channel (~0.985..1.011 across the shipped
-ATSC 14-36 bank). Comparing the unnormalized ratio directly with one would pin the H0 mask
-fraction toward 0 or 1 per channel. These tests pin the corrected behavior:
+The int4 quantization of the steering vectors leaves the three weight-term
+norms unequal. Under a flat noise floor, E[F] is therefore the null power
+ratio R_null = 2*target_norm_sq/reference_norm_sum_sq. R_null differs from 1
+by channel, and across the shipped ATSC 14-36 bank it is found to lie between
+about 0.985 and 1.011. Comparing the unnormalized ratio directly with 1
+would push the H0 mask fraction toward 0 or 1 on each channel.
 
-* ``weight_term_norms_sq`` matches a brute-force unpack exactly;
-* the normalized rule reduces to ``2*p_target > p_ref_sum`` when the
-  target-to-reference norm ratio is 1:2, and remains
-  exact at the integer cross-multiplication boundary;
-* Monte Carlo through the shipped ROM's real int4 weights shows E[F] tracks
-  R_null (not 1) and the normalized mask restores an ~50% H0 mask fraction on the
-  two most-biased channels;
-* exported runtime bundles declare per-channel half-threshold rationals
-  ``nt : (nl+nu)`` that the bundle validator cross-checks against the weights.
+First, ``weight_term_norms_sq`` is checked to match a brute-force unpack
+exactly. Next, the normalized rule is shown to reduce to
+``2*p_target > p_ref_sum`` when the target-to-reference norm ratio is 1:2,
+and to stay exact at the integer cross-multiplication boundary. A Monte Carlo
+run through the real int4 weights of the shipped ROM then shows that E[F]
+tracks R_null and differs from 1. On the two most-biased channels, the
+normalized mask is shown to restore an H0 mask fraction near 50%. Finally,
+exported runtime bundles are checked to declare the per-channel
+half-threshold rationals ``nt : (nl+nu)``, which the bundle validator
+compares with the weights.
 """
 from __future__ import annotations
 
@@ -36,9 +38,10 @@ from pilot_proxy.detector_reference import (
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.paths import DEFAULT_WEIGHTS_PATH
 
-# 4096 rows x 200 trials keeps the Monte Carlo a few seconds while giving
-# sigma(mean F) small enough to separate null_power_ratio from 1 by >5 sigma on the two
-# most-biased shipped channels (|null_power_ratio - 1| ~ 0.011..0.015 vs SEM ~ 0.0014).
+# 4096 rows and 200 trials run in a few seconds and give a standard error of
+# about 0.0014 on the mean F. On the two most-biased shipped channels,
+# |null_power_ratio - 1| is about 0.011 to 0.015, so null_power_ratio differs
+# from 1 by more than 5 sigma.
 _MC_ROWS = 4096
 _MC_TRIALS = 200
 _MC_SEED = 20260701
@@ -75,14 +78,15 @@ def test_normalized_rule_reduces_to_unit_null_for_1_2_norms() -> None:
 
 
 def test_normalized_rule_exact_boundary() -> None:
-    # nt=5, nrs=9 -> mask iff p_target*9 > 5*p_ref_sum, strictly.
+    # for nt = 5 and nrs = 9 the mask is set only when p_target*9 > 5*p_ref_sum, strictly
     assert normalized_positive_excess(11, 20, target_norm_sq=5, reference_norm_sum_sq=9) == 0
     assert normalized_positive_excess(12, 20, target_norm_sq=5, reference_norm_sum_sq=9) == 1
     # equality is not an excess
     assert normalized_positive_excess(10, 18, target_norm_sq=5, reference_norm_sum_sq=9) == 0
     # invalid reference floor
     assert normalized_positive_excess(10, 0, target_norm_sq=5, reference_norm_sum_sq=9) == 0
-    # exactness beyond float precision: (2**60 + 1) * 2 > 2 * 2**60 must mask
+    # the integer rule is exact past float precision, so
+    # (2**60 + 1) * 2 > 2 * 2**60 must mask
     big = 2**60
     assert normalized_positive_excess(
         big + 1, 2 * big, target_norm_sq=1, reference_norm_sum_sq=2
@@ -160,11 +164,12 @@ def test_normalized_mask_rule_string_is_current_and_stable() -> None:
 
 def _mc_h0_frames(weights_packed: np.ndarray, *, rows: int, trials: int,
                   seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """White noise through the real int4 path: per-frame (F, p_target, p_ref).
+    """Return per-frame F, p_target and p_ref for white noise on the real int4 path.
 
-    The frame powers are the kernel's (core 3.0.0): exact row projections
-    through the frozen fxfft256, summed over all fine bins, so the zero point
-    is tested on the deployed statistic.
+    The frame powers follow kernel core 3.0.0. The row projections are
+    computed exactly and passed through the frozen fxfft256, and the fine
+    powers are summed over all fine bins, so the zero point is tested on the
+    deployed statistic.
     """
     rng = np.random.default_rng(seed)
     power_ratios = np.empty(trials, dtype=np.float64)
@@ -195,8 +200,8 @@ def test_shipped_rom_h0_zero_point_and_normalized_mask(channel: int) -> None:
     nt, nl, nu = weight_term_norms_sq(weights)
     nrs = int(nl + nu)
     null_power_ratio = null_power_ratio_from_weight_norms(nt, nrs)
-    # The shipped bank's quantized norms are unequal on these channels; that
-    # inequality is the entire point of the correction, so guard it.
+    # The correction exists because the quantized norms are unequal, so the
+    # shipped norms on these channels are first confirmed to be unequal.
     assert abs(null_power_ratio - 1.0) > 5e-3, (
         f"channel {channel}: shipped null_power_ratio={null_power_ratio!r} is ~1; pick a channel with a "
         "larger norm imbalance for this regression test"
@@ -209,8 +214,8 @@ def test_shipped_rom_h0_zero_point_and_normalized_mask(channel: int) -> None:
         seed=_MC_SEED + channel,
     )
     sem = power_ratios.std(ddof=1) / np.sqrt(len(power_ratios))
-    # E[F] under H0 is null_power_ratio rather than 1: the bias is detected at >5 sigma and the
-    # measured mean agrees with null_power_ratio within 6 sigma.
+    # Under H0, the measured mean of F is less than 6 sigma from
+    # null_power_ratio and more than 5 sigma from 1.
     assert abs(power_ratios.mean() - null_power_ratio) < 6.0 * sem
     assert abs(power_ratios.mean() - 1.0) > 5.0 * sem
 
@@ -223,7 +228,8 @@ def test_shipped_rom_h0_zero_point_and_normalized_mask(channel: int) -> None:
         ]
     )
     fraction = float(normalized_mask.mean())
-    # P(F > null_power_ratio | H0) ~ 0.5; 200 trials -> binomial sigma 0.035, band = +-4 sigma.
+    # P(F > null_power_ratio | H0) is about 0.5, and 200 trials give a binomial
+    # sigma of 0.035, so the band is +-4 sigma.
     assert 0.36 <= fraction <= 0.64, (
         f"channel {channel}: normalized H0 mask fraction {fraction:.3f} is not ~0.5"
     )

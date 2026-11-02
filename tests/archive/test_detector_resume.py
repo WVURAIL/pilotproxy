@@ -1,20 +1,18 @@
 # coding=utf-8
-"""Resume / relaunch safety for the ``pilot-proxy-detector`` analyzer.
+"""Resume and relaunch safety for the ``pilot-proxy-detector`` analyzer.
 
-A multi-day CANFAR detector run outlives a single interactive session, so
-correctness on relaunch is essential: a killed run must continue from its
-checkpoint without starting over (scarce GPU) and without corrupting the
-product. These
-tests drive the analyzer and the real scan entry point with an injected CPU
-detector (no GPU) and assert:
+A multi-day CANFAR detector run outlives a single interactive session, and GPU
+time is scarce. A killed run must therefore continue from its checkpoint and
+leave the product intact. These tests drive the analyzer and the scan entry
+point with an injected CPU detector and check that:
 
-  * a stream interrupted mid-way, resumed from its checkpoint, yields a product
-    byte-identical to one consumed in a single pass (no reprocessing, no drift);
-  * relaunching a scan whose channel is already complete is a no-op rather
-    than an error (the produced-check counts resumed units, not just new
-    ones);
-  * a product built with a per-file cap refuses to be silently "completed" by an
-    uncapped run.
+  * a stream interrupted midway and resumed from its checkpoint yields the
+    same product as a single pass, with integer and string arrays exact and
+    float arrays to 1e-9, so no frame is reprocessed and nothing drifts
+  * relaunching a scan whose channel is already complete does nothing and
+    raises no error, because the produced-check counts resumed units as well
+    as new ones
+  * a product built with a per-file cap cannot be completed by an uncapped run
 """
 from __future__ import annotations
 
@@ -46,7 +44,8 @@ N_FEEDS = 4
 F_CENTER_MHZ = 470.3125
 FREQ_ID = 844
 
-# arrays that must match exactly / to fp tolerance between a clean and resumed run
+# arrays that must match exactly, or to floating-point tolerance, between a
+# clean and a resumed run
 _EXACT = ("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64",
           "p_ref_sum_u64", "fine_power_u64", "reject_mask", "valid", "frame_index",
           "unit_keys", "unit_order", "frame_unit_index", "frame_in_unit",
@@ -59,8 +58,10 @@ _CLOSE = ("coarse_power_ratio", "normalized_coarse_power_ratio_db", "pilot_exces
 
 
 def _cpu_ref_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
-    """Input-dependent CPU reference standing in for the GPU kernel: the exact
-    kernel chain (rows -> fxfft256 -> all-bin sums)."""
+    """Input-dependent CPU stand-in for the GPU kernel.
+
+    It runs the exact kernel chain of row sums, fxfft256, and all-bin sums.
+    """
     return exact_cpu_detector_fn(
         packed=packed,
         weights=weights,
@@ -119,7 +120,7 @@ def _assert_products_equal(ref, got):
                            rtol=1e-9, atol=1e-9, equal_nan=True), name
 
 
-# -- analyzer level: a mid-stream checkpoint resumes to the same product ------
+# analyzer level, where a mid-stream checkpoint must resume to the same product
 
 def test_analyzer_resume_matches_uninterrupted(tmp_path):
     rng = np.random.default_rng(7)
@@ -145,14 +146,15 @@ def test_analyzer_resume_matches_uninterrupted(tmp_path):
         for i in idxs:
             analyzer.consume_file(reader.iter_arrays(str(paths[i]), ctx), _meta(i))
 
-    # uninterrupted: all three files through one analyzer
+    # uninterrupted run with all three files through one analyzer
     a_clean = PilotProxyDetectorAnalyzer()
     a_clean.begin(ctx, _meta(0))
     _consume(a_clean, [0, 1, 2])
     clean_path = tmp_path / "clean.npz"
     a_clean.save(str(clean_path))
 
-    # interrupted: files 0,1 -> checkpoint, then a fresh analyzer resumes file 2
+    # interrupted run, where files 0 and 1 are checkpointed and a fresh
+    # analyzer resumes with file 2
     a1 = PilotProxyDetectorAnalyzer()
     a1.begin(ctx, _meta(0))
     _consume(a1, [0, 1])
@@ -162,7 +164,7 @@ def test_analyzer_resume_matches_uninterrupted(tmp_path):
     a2 = PilotProxyDetectorAnalyzer()
     assert a2.resume(str(ckpt), ctx) is True
     assert a2.processed_keys() == {"synth:0", "synth:1"}
-    a2.begin(ctx, _meta(2))            # first NEW file
+    a2.begin(ctx, _meta(2))            # first new file
     _consume(a2, [2])
     a2.save(str(ckpt))
 
@@ -207,8 +209,8 @@ def test_analyzer_resume_refuses_fine_products_off(tmp_path):
     )
     resumed = PilotProxyDetectorAnalyzer()
     assert resumed.resume(str(checkpoint), changed_ctx)
-    # The frame powers are the fine powers' sums (product schema v6): there
-    # is no retention mode to change.
+    # In product schema v6 the frame powers are the sums of the fine powers, so
+    # the fine products have no retention mode to switch off.
     with pytest.raises(ValueError, match="fine products are mandatory"):
         resumed.begin(changed_ctx, _meta(1))
 
@@ -479,7 +481,7 @@ def test_analyzer_resume_rejects_changed_python_source(tmp_path, monkeypatch):
     checkpoint = tmp_path / "release_bump.npz"
     first.save(str(checkpoint))
 
-    # The release: new label, new tree hash, same detector.
+    # a release with a new label and tree hash and the same detector
     monkeypatch.setattr(pilot_proxy, "__version__", "1.0.0")
     monkeypatch.setattr(detector_mod, "package_source_sha256", lambda *a, **k: "0c66af82" * 8)
     resumed = PilotProxyDetectorAnalyzer()
@@ -491,12 +493,12 @@ def test_analyzer_resume_rejects_changed_python_source(tmp_path, monkeypatch):
 def test_analyzer_resume_allows_changed_storage_service(tmp_path, monkeypatch):
     """A run may change which replica it fetches from and still resume.
 
-    The storage service is transport: both replicas serve the same object, and
-    fetch() checks every staged file against the inventory's recorded size. So
-    a run started while the default locator is degraded must be able to move
-    back to it later without rebuilding the product. This is the deliberate
-    counterpart to the source-build guard above -- implementation identity is
-    fingerprinted, the route is not.
+    The storage service is only the transport. Both replicas serve the same
+    object, and fetch() checks every staged file against the size recorded in
+    the inventory. A run started while the default locator is degraded must
+    therefore be able to move back to it later without rebuilding the product.
+    The fingerprint covers the implementation identity (see the source-build
+    guard above) and does not cover the fetch route.
     """
     from pilot_proxy.archive.sources.cadc import STORAGE_SERVICE_ENV
 
@@ -517,7 +519,7 @@ def test_analyzer_resume_allows_changed_storage_service(tmp_path, monkeypatch):
         m["scope"] = "local"
         return m
 
-    # first pass: fetched through a pinned replica
+    # first pass fetches through a pinned replica
     monkeypatch.setenv(STORAGE_SERVICE_ENV, "ivo://cadc.nrc.ca/uvic/minoc")
     first = PilotProxyDetectorAnalyzer()
     first.begin(ctx, _meta(0))
@@ -525,12 +527,13 @@ def test_analyzer_resume_allows_changed_storage_service(tmp_path, monkeypatch):
     checkpoint = tmp_path / "route_change.npz"
     first.save(str(checkpoint))
 
-    # the locator recovers: back to the library default, same build
+    # the locator recovers, so the run moves back to the library default with
+    # the same build
     monkeypatch.delenv(STORAGE_SERVICE_ENV, raising=False)
     resumed = PilotProxyDetectorAnalyzer()
     assert resumed.resume(str(checkpoint), ctx) is True
     assert resumed.processed_keys() == {"synth:0"}
-    resumed.begin(ctx, _meta(1))          # must not raise: route is not identity
+    resumed.begin(ctx, _meta(1))          # must not raise, since the route is not part of the identity
     resumed.consume_file(reader.iter_arrays(str(paths[1]), ctx), _meta(1))
     resumed.save(str(checkpoint))
 
@@ -539,7 +542,7 @@ def test_analyzer_resume_allows_changed_storage_service(tmp_path, monkeypatch):
         assert got["frame_index"].shape[0] == 2 * N_FRAMES
 
 
-# -- scan level: relaunch through the real entry point ------------------------
+# scan level, with a relaunch through the real entry point
 
 def _fake_fetch_factory(files):
     def _fake_fetch(self, unit, dest, *a, **k):
@@ -583,8 +586,8 @@ def test_scan_resume_and_noop_relaunch(tmp_path, monkeypatch):
     _scan(resumed, max_files=2, allow_partial=True)               # process 2 of 3
     partial = np.load(resumed / "_per_pilot" / f"{FREQ_ID}.npz")
     assert partial["frame_index"].shape[0] == 2 * N_FRAMES        # checkpoint at 2
-    _scan(resumed)                                                # resume -> 3rd file
-    _scan(resumed)                                                # complete -> no-op (not an error)
+    _scan(resumed)                                                # resume with the 3rd file
+    _scan(resumed)                                                # complete, so a no-op with no error
     got = np.load(resumed / "_per_pilot" / f"{FREQ_ID}.npz")
     assert got["frame_index"].shape[0] == 3 * N_FRAMES
     _assert_products_equal(ref, got)
@@ -617,9 +620,9 @@ def test_scan_refuses_incompatible_cap(tmp_path, monkeypatch):
         "verbose": False,
         "max_chunks_per_file": 1,
     }
-    # A finite chunk cap is conservatively partial: a persisted frame does not
-    # prove that its multi-frame source unit was fully consumed, so publication
-    # requires the caller's explicit acknowledgement.
+    # A finite chunk cap is treated as partial, since a persisted frame does not
+    # show that its multi-frame source unit was fully consumed. Publication
+    # therefore requires explicit acknowledgment from the caller.
     with pytest.raises(SystemExit, match="--allow-partial"):
         run_chime_scan(**capped_args)
     assert not (out / "chime_detector_outputs.npz").exists()
@@ -631,11 +634,11 @@ def test_scan_refuses_incompatible_cap(tmp_path, monkeypatch):
     assert pilot["capped"] == 2
     assert pilot["unprocessed"] == 0
 
-    # The same cap is resume-compatible and becomes a no-op, but the output is
-    # still published only with explicit partial acceptance.
+    # The same cap is resume-compatible, and the relaunch is a no-op. The
+    # output, however, is published only with explicit partial acceptance.
     run_chime_scan(**capped_args, allow_partial=True)
     assert (out / "chime_detector_outputs.npz").exists()
-    # relaunch WITHOUT the cap must refuse rather than complete the capped product
+    # a relaunch without the cap must refuse to complete the capped product
     with pytest.raises(SystemExit, match="capped product cannot be completed"):
         run_chime_scan(output_dir=out, source="cadc-datatrail", inventory=inv,
                        analyzer="pilot-proxy-detector", select=str(FREQ_ID),
@@ -648,14 +651,15 @@ def test_scan_refuses_incompatible_cap(tmp_path, monkeypatch):
     assert incompatible_pilot["capped"] == 2
 
 
-# -- fine-width invariants across resume --------------------------------------
+# fine-width invariants across resume
 
 @pytest.mark.parametrize(
     "status", ["disabled_by_option", "not_applicable_pilot_out_of_band"]
 )
 def test_resume_refuses_an_in_band_checkpoint_without_fine_powers(tmp_path, status):
-    # The v5 placeholders for a scan without fine terms have no v6 meaning:
-    # an in-band product's frame powers are the sums of its fine powers.
+    # The v5 placeholders for a scan without fine terms have no meaning in v6,
+    # where the frame powers of an in-band product are the sums of its fine
+    # powers.
     weights = np.ones((3, K), dtype=np.int8)
     files = _make_files(tmp_path / "data", n_events=1)
     path = files[("evt0", FREQ_ID)]
@@ -707,7 +711,7 @@ def test_zero_frame_checkpoint_resume_keeps_fine_width(tmp_path):
     meta["unit_key"] = "synth:0"
     meta["scope"] = "local"
 
-    # checkpoint before any frame fixes the fine width
+    # checkpoint taken before any frame has fixed the fine width
     a1 = PilotProxyDetectorAnalyzer()
     a1.begin(ctx, meta)
     ckpt = tmp_path / "zero.npz"
@@ -741,16 +745,16 @@ def test_resume_refuses_fine_width_change(tmp_path):
 
 
 def test_resume_refuses_fine_definition_change_end_to_end(tmp_path, monkeypatch):
-    """Behavioral coverage for the width guard across a real save/resume.
+    """Test the fine-width guard across a real save and resume.
 
-    An nfft change between runs is already refused by the resumed-identity
-    check in begin() (nfft is part of the identity tuple), so the width
-    guard's distinct job is the same-identity case: a fine-reduction
-    definition change between software epochs (e.g. a FINE_PAD_FACTOR bump)
-    that alters the width while file geometry, contract, and weights all
-    still match. Simulate that epoch change by rebinding the detector
-    module's fine_bin_count, and assert the refusal comes from the guard,
-    not from the identity or provenance checks.
+    A change of nfft between runs is already refused by the resumed-identity
+    check in begin(), since nfft is part of the identity tuple. The width guard
+    covers the case of an unchanged identity, where the fine-reduction
+    definition changes between software epochs (such as a larger
+    FINE_PAD_FACTOR) and alters the width while the file geometry, contract,
+    and weights still match. The epoch change is simulated by rebinding
+    fine_bin_count in the detector module. The identity and provenance checks
+    must pass, and the refusal must come from the width guard.
     """
     rng = np.random.default_rng(13)
     weights = rng.integers(-120, 121, size=(3, K)).astype(np.int8)
@@ -778,7 +782,8 @@ def test_resume_refuses_fine_definition_change_end_to_end(tmp_path, monkeypatch)
     fixed = int(np.load(str(ckpt))["fine_num_bins"])
     assert fixed > 0
 
-    # "new software epoch": identical files and identity, doubled fine width
+    # a new software epoch with identical files and identity and a doubled
+    # fine width
     import pilot_proxy.archive.detector as det_mod
     monkeypatch.setattr(det_mod, "fine_bin_count", lambda windows: 2 * fixed)
 
@@ -789,15 +794,15 @@ def test_resume_refuses_fine_definition_change_end_to_end(tmp_path, monkeypatch)
         a2.consume_file(reader.iter_arrays(str(files[("evt1", FREQ_ID)]), ctx), _meta(1))
 
 
-# -- fine detection ragged list: frame labels must be global frame indices ----
+# fine detection ragged list, whose frame labels must be global frame indices
 
 def _tone_matched_filter_row_projections_detector_fn(*, packed, weights, kernel, emit_row_projections=False):
-    """Injected detector emitting v2 row sums with a guaranteed fine tone.
+    """Injected detector that emits v2 row sums with a fine tone in every frame.
 
-    The target term carries a pure envelope tone (detected bin every frame);
-    the references are small broadband integers. The frame powers are the
-    all-bin sums of the same rows' fixed-point fine spectra, so the v6
-    frame-power invariant holds by construction.
+    The target term holds a pure envelope tone, so a bin is detected in every
+    frame, and the references are small broadband integers. The frame powers
+    are the all-bin sums of the fixed-point fine spectra of the same rows, so
+    the v6 frame-power invariant holds by construction.
     """
     from pilot_proxy.fine_reduction import frame_powers_from_fine_u64
 

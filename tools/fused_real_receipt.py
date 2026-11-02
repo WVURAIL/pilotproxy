@@ -2,37 +2,40 @@
 # coding=utf-8
 """Compare the fused fine-mask entry point with the staged path on CHIME frames.
 
-The staged path is the library's staged entry points
-(``PilotProxy_Compute_RowSums_I32`` and ``PilotProxy_Compute_FinePowers_U64``, called by
-``detect_packed_detector_input``), whose frame powers are the host's exact
-uint64 all-bin sums of the staged fine powers (``P_r = sum_f S_r[f]``), with the fine decision made in Python by
-``fine_decision.fine_mask_decision``.
-kotekan instead calls the fused entry point,
-``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` (or
-``PilotProxy_Compute_FusedFineMask_U64`` when no support buffer is bound). This tool
-replays CHIME baseband files through both and compares every output word:
+In the staged path, the library's staged entry points
+``PilotProxy_Compute_RowSums_I32`` and ``PilotProxy_Compute_FinePowers_U64``
+are called by ``detect_packed_detector_input``. The frame powers of this path
+are the host's exact uint64 sums of the staged fine powers over all bins
+(``P_r = sum_f S_r[f]``), and the fine decision is made in Python by
+``fine_decision.fine_mask_decision``. kotekan calls the fused entry point
+``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` instead, or
+``PilotProxy_Compute_FusedFineMask_U64`` when no support buffer is bound.
+CHIME baseband files are replayed through both paths, and every output word
+is compared:
 
-* the fused mask, ``rank_valid`` and ``n_bulk`` against ``fine_mask_decision``
+* the fused mask, ``rank_valid``, and ``n_bulk`` against ``fine_mask_decision``
   on the staged fine powers, at each channel's working word and rank;
 * the fused fine-power tap against the staged fine powers, and the fused
-  frame-power tap (the device's all-bin sums) against the host sums of the
-  staged fine powers;
-* the fused entry point without support outputs or taps, against the same decision;
+  frame-power tap (the device's sums over all bins) against the host sums of
+  the staged fine powers;
+* the fused entry point with no support outputs or taps against the same
+  decision;
 * optionally, a boundary probe at the frame's exact required multiplier
-  (``fine_required_multiplier_q16``) and one below it, so both mask values are
-  exercised on every valid frame;
+  (``fine_required_multiplier_q16``) and at one word below it, so both mask
+  values are exercised on every valid frame;
 * optionally, the staged fine powers against the stored ``fine_power_u64`` of
   a per-pilot product, and the staged frame powers against the sums of those
-  stored fine powers (``product_contract.frame_powers_from_fine``), which ties
-  the frames to the products the results were computed from. A schema v5
-  product's stored ``p_*_u64`` are the retired row-domain powers and are not
-  compared; a v6 product's equal the fine sums by its invariant.
+  stored fine powers (``product_contract.frame_powers_from_fine``). This ties
+  the frames to the products the results were computed from. The stored
+  ``p_*_u64`` of a schema v5 product are the retired row-domain powers and are
+  not compared. In a v6 product they equal the fine sums by the schema
+  invariant.
 
-Frames are packed exactly as the archive analyzer packs them (native
-offset-binary int4, lossless, ``pilot_proxy.archive.detector``). Geometry and
-words come from a working-threshold file (``channels[*].score_geometry`` and
-``channels[*].threshold.eta_q16``). The tool writes one JSON record and stops at
-the first difference; it never edits its inputs. Example::
+Frames are packed exactly as the archive analyzer packs them, as lossless
+native offset-binary int4 (``pilot_proxy.archive.detector``). The geometry and
+words are read from a working-threshold file (``channels[*].score_geometry``
+and ``channels[*].threshold.eta_q16``). One JSON record is written, the run
+stops at the first difference, and the inputs are never edited. Example::
 
     python tools/fused_real_receipt.py \\
         --thresholds WORKING_THRESHOLDS.json.gz \\
@@ -235,8 +238,8 @@ class ProductIndex:
     """Stored exact fine powers of one per-pilot product, keyed by (event, frame).
 
     ``powers`` are the frame powers summed from the stored fine powers
-    (``frame_powers_from_fine``), never the stored ``p_*_u64``: in a schema v5
-    product those are the retired row-domain powers.
+    (``frame_powers_from_fine``). The stored ``p_*_u64`` are not used, because
+    in a schema v5 product they are the retired row-domain powers.
     """
 
     def __init__(self, path: Path) -> None:
@@ -610,7 +613,7 @@ def run_receipt(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def merge_receipts(paths: Sequence[Path]) -> dict[str, Any]:
-    """Combine receipts of disjoint inputs made with one tool, library and word set."""
+    """Merge receipts of disjoint inputs made with one tool, library, and word set."""
     parts = [(Path(p), json.loads(Path(p).read_text(encoding="utf-8"))) for p in paths]
     if not parts:
         raise SystemExit("nothing to merge")

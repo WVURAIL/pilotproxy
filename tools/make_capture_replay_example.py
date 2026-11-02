@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate a small, deterministic native capture fixture, never telescope data.
+"""Generate a small, deterministic native capture fixture from synthetic draws.
 
-The default pair contains one valid random block and one invalid all-zero block.
-Use --valid-only for uniform synthetic draws suitable for testing the population
-handoff. Neither fixture qualifies a threshold or exercises a GPU implementation.
+The default pair has one valid random block and one invalid all-zero block.
+With --valid-only, both blocks are uniform synthetic draws, which suits a test
+of the population handoff. Neither fixture can qualify a threshold or test a
+GPU implementation.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ def file_ref(path, root):
 
 
 def native_frame(payload, *, kind, sequence, counter, geometry):
-    """Serialize the pinned little-endian metadata ABI for synthetic examples."""
+    """Pack one synthetic payload after its metadata in the pinned little-endian ABI."""
     layouts = {
         "voltage": (
             "E",

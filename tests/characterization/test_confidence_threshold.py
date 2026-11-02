@@ -1,4 +1,4 @@
-"""Fixed-rank tolerance limits and the separate null-sampling qualification."""
+"""Fixed-rank tolerance limits and the qualification of independent null sampling."""
 
 import numpy as np
 import pytest

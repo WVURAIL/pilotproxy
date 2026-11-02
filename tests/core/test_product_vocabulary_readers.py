@@ -75,7 +75,7 @@ def _exact_terms(n_frames: int = 2, bins: int = 4) -> np.ndarray:
 def test_fine_power_ratio_is_formed_from_the_exact_terms() -> None:
     ratio = fine_power_ratio_of({"fine_power_u64": _exact_terms()})
     assert ratio.dtype == np.float64 and ratio.shape == (2, 4)
-    # 2 S_t / (S_l + S_u); a zero denominator gives 0.0, as fine_reduce does.
+    # ratio is 2 S_t / (S_l + S_u), and a zero denominator gives 0.0 as in fine_reduce
     np.testing.assert_allclose(ratio[0], [2.0, 2.0, 2.0, 0.0])
     np.testing.assert_allclose(ratio[1], [2.0, 2.0, 0.0, 2.0])
 

@@ -1,19 +1,20 @@
 """Era list: author-dated eras per band and dated transmitter-off intervals.
 
-Two files:
-- the author-dated era list, kept byte for byte as released: ``version``,
-  ``criterion``, ``unchanged_channels`` (bands whose eras the predeclared rule
-  places), ``channels`` (band label -> ordered ``[first, last, evidence]``
-  spans in YYYY-MM) and ``notes``;
-- the transmitter-off intervals: band label -> a list of ``{from, through,
-  evidence, independently_verified}``. ``from`` null is the start of the
-  record and ``through`` null is open-ended, so an intermittent emitter is
-  several intervals. ``external_record`` (optional) is the class of the best
-  external record found for the date (``confirmed``, ``consistent``,
-  ``contradicted``, ``not found``); an interval is independently verified only
-  with a confirmed record.
+The era list is read from two files.
 
-The era states are the vocabulary the project declares (``project.yaml``).
+- The author-dated era list is kept byte for byte as released. It holds
+  ``version``, ``criterion``, ``unchanged_channels`` (bands whose eras the
+  predeclared rule places), ``channels`` (a mapping of band label to ordered
+  ``[first, last, evidence]`` spans in YYYY-MM) and ``notes``.
+- The transmitter-off intervals map each band label to a list of ``{from,
+  through, evidence, independently_verified}``. A null ``from`` is the start
+  of the record and a null ``through`` is open-ended, so an intermittent
+  emitter has several intervals. The optional ``external_record`` is the class
+  of the best external record found for the date (``confirmed``,
+  ``consistent``, ``contradicted``, ``not found``). An interval is
+  independently verified only with a confirmed record.
+
+The era states are the vocabulary declared by the project (``project.yaml``).
 """
 from __future__ import annotations
 
@@ -62,7 +63,8 @@ class EraList:
     transmitter_off_sha256: str
 
     def overrides_spec(self) -> dict[int, list[tuple[str, str, str]]]:
-        """The overrides in the release driver's form: int band -> span tuples."""
+        """The overrides in the release driver's form, a mapping of integer band
+        to span tuples."""
         return {int(label): [(s.first_month, s.last_month, s.evidence) for s in spans]
                 for label, spans in self.overrides.items()}
 

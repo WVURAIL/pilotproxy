@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """Regression test for the survey stall on a deterministic Datatrail refusal.
 
-Field signature (chime-controls survey, 2026-08): one event whose minoc
-replica sat outside the expected 'cadc:CHIMEFRB/' collection was classified
-as "service unreachable", so the survey retried the SAME event with capped
-backoff and would then have aborted the entire 10k-event run at
-_MAX_SERVICE_WAIT with a misleading renew-your-certificate message.
+In the chime-controls survey of 2026-08, one event whose minoc replica was not
+in the expected 'cadc:CHIMEFRB/' collection was classified as "service
+unreachable". The survey retried the same event with capped backoff and would
+have aborted the whole 10k-event run at _MAX_SERVICE_WAIT with a misleading
+message to renew the certificate.
 
-The fix separates the verdicts: a payload the adapter cannot act on raises
-DatatrailContractError (deterministic, never retried), and survey() commits
-the event as `refused`, ledgers the reason -- including the offending URI --
-in no_files_events.jsonl, and moves on. These tests pin:
+The adapter keeps the two verdicts apart. A payload the adapter cannot act on
+raises DatatrailContractError, which is deterministic and never retried.
+survey() commits the event as `refused`, records the reason with the offending
+URI in the ledger no_files_events.jsonl, and moves on. The tests check that:
 
-  * files() raises for an out-of-collection replica, naming the URI;
-  * files() raises for replicas spanning two collections;
+  * files() raises for an out-of-collection replica and names the URI
+  * files() raises for replicas that span two collections
   * the transient error envelope still returns the retried not-answered
-    verdict, unchanged;
-  * a survey with one refused and one good event completes, writes the good
-    event's rows, commits the refused event (resume skips it), and ledgers
-    the refusal reason verbatim.
+    verdict unchanged
+  * a survey with one refused and one good event completes, writes the rows
+    of the good event, commits the refused event so that a resume skips it,
+    and records the refusal reason verbatim
 
-Run:  PYTHONPATH=src python -m pytest tests/test_survey_contract_refusal.py -q
+Run:  PYTHONPATH=src python -m pytest tests/archive/test_survey_contract_refusal.py -q
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ FREQ_IDS = [614, 706]
 STRAY_URI = "cadc:CHIMEB/raw/2024/01/01/100200200/baseband_100200200_614.h5"
 
 
-# ---------------------------------------------------------------- files()
+# files()
 def _payload(uris):
     return {"files": {"file_replica_locations": {"minoc": list(uris)}}}
 
@@ -81,10 +81,10 @@ def test_error_envelope_stays_transient(monkeypatch):
     assert (cp, names, ok) == (None, [], False)
 
 
-# ---------------------------------------------------------------- survey()
+# survey()
 @contextlib.contextmanager
 def fake_archive():
-    """Patch survey()'s three seams: one refused event, one good one."""
+    """Patch the three seams of survey() with one refused event and one good one."""
     orig_enum = cadc_datatrail._enumerate_events
     orig_ps = cadc_datatrail.DATATRAIL.common_path
     orig_size = cadc_datatrail.CadcDatatrailSource._cadc_size
@@ -132,14 +132,15 @@ def _rows(path):
 def test_refused_event_is_ledgered_and_survey_completes():
     with tempfile.TemporaryDirectory() as out, fake_archive():
         text, src = _survey(out)
-        # The good event's rows landed; the refusal did not stall or abort.
+        # The rows of the good event were written, and the refusal did not
+        # stall or abort the survey.
         rows = _rows(os.path.join(out, "inventory.jsonl"))
         assert {r["event"] for r in rows} == {GOOD_EVENT}
         assert len(rows) == len(FREQ_IDS)
         assert "contract refusal -- recorded and skipped" in text
         assert "1 contract-refused" in text
         assert "service unreachable" not in text
-        # Ledger entry carries the reason with the offending URI, verbatim.
+        # The ledger entry holds the reason with the offending URI, verbatim.
         ledger = _rows(os.path.join(out, "no_files_events.jsonl"))
         refusals = [r for r in ledger
                     if r.get("reason") == "datatrail-contract-refusal"]
@@ -149,7 +150,8 @@ def test_refused_event_is_ledgered_and_survey_completes():
         assert src.survey_completeness_issues(out) == {
             "incomplete": 0, "refused": 1, "pending": 0,
         }
-        # Committed: a second pass resumes past it and re-does nothing.
+        # The event is committed, so a second pass resumes past it and repeats
+        # no work.
         text2, resumed_src = _survey(out)
         assert "resume: 2 events already done" in text2
         assert "0 contract-refused" in text2

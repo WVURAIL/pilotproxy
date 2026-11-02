@@ -1,23 +1,26 @@
 """Literal paired fine-detector ablations resident on one CUDA device.
 
-This module performs no threshold fitting or scientific acceptance. Each call
-materializes independent Gaussian samples for every stream/window/sample. The
-common input realization is complex64 (float32 normal draws and addition), as
-in the existing literal sensitivity driver; all unquantized projections, FFTs,
-and power sums are complex128/float64. "Floating" therefore describes detector
-arithmetic, not an assertion of infinitely precise waveform/noise generation.
+This module does not fit thresholds or decide scientific acceptance. Each
+call draws independent Gaussian samples for every stream, window, and sample.
+The common input realization is complex64 (float32 normal draws and
+addition), as in the literal sensitivity driver. All unquantized projections,
+FFTs, and power sums are complex128 or float64. Thus, "floating" refers to
+the detector arithmetic, and the waveform and noise are generated only to
+complex64 precision.
 
-The joint quantized floating stage transforms exact integer row sums divided
-by the two dequantization scales. This avoids recomputing an algebraically
-identical dot product. Audits independently compare the explicitly unpacked
-floating dot product, every fixed integer row, every fixed fine bin, and every
-frame power. No finite-stream pool or modeled aggregate is used.
+In the joint quantized floating stage, the exact integer row sums are divided
+by the two dequantization scales and then transformed. This avoids
+recomputing an algebraically identical dot product. In an audit
+(``audit_against_cpu``), the explicitly unpacked floating dot product, every
+fixed integer row, every fixed fine bin, and every frame power are compared
+independently with NumPy. No finite-stream pool or modeled aggregate is used.
 
-Every stage's frame powers (``coarse_by_stage``) are the all-bin sums of that
-stage's fine powers, ``P_r = sum_f S_r[f]`` (the kernel's definition since
-core 3.0.0). For the floating stages the exact transform makes that
-``L_F * sum_m |z_m|^2``; for the fixed stage it is the uint64 sum of the
-fixed-point fine powers, which the device's frame-power output must equal.
+The frame powers of each stage (``coarse_by_stage``) are the all-bin sums of
+that stage's fine powers, ``P_r = sum_f S_r[f]``, which is the kernel
+definition in core 3.0.0 and later. For the floating stages, the exact
+transform makes this sum equal to ``L_F * sum_m |z_m|^2``. For the fixed
+stage, it is the uint64 sum of the fixed-point fine powers, and the device's
+frame-power output must equal it.
 """
 
 from __future__ import annotations
@@ -98,10 +101,11 @@ def integer_bounds(num_streams, packed_weights):
     for _ in range(8):
         transformed += (twiddle_l1 * transformed + 16384) // 32768 + 1
     fine_sum = 2 * transformed * transformed * streams
-    # Frame power P_r = sum_f S_r[f]: Parseval bound of the exact transform,
-    # L_F * 2 * row^2 * W per stream, with the kernel's 1.001 fixed-point
-    # slack (cuda/config.h, frame-power closure). The per-bin bound summed
-    # over 256 bins is far looser and is not used.
+    # The frame power P_r = sum_f S_r[f] is bounded by Parseval's theorem for
+    # the exact transform, which gives L_F * 2 * row^2 * W per stream. The
+    # kernel's fixed-point slack of 1.001 (cuda/config.h, frame-power closure)
+    # is applied. The per-bin bound summed over 256 bins is far looser and is
+    # not used.
     frame_sum = FINE_BINS * 2 * row * row * streams * WINDOWS
     frame_sum += frame_sum // 1000
     if (
@@ -134,10 +138,11 @@ def arrays_sha256(arrays):
 
 @dataclass(frozen=True)
 class LiteralNoiseDraw:
-    """One independent literal draw, reusable across paired stages/profiles.
+    """One independent literal noise draw, reusable by paired stages and profiles.
 
-    Treat samples as read-only. Engine evaluation never mutates them. Sharing a
-    draw deliberately pairs profiles/SNRs and does not create independent draws.
+    The caller must treat the samples as read-only, and engine evaluation
+    never changes them. Profiles or SNRs that share a draw are paired by
+    design, and they do not count as independent draws.
     """
 
     seed: int
@@ -191,11 +196,12 @@ def _quantized_inputs(rows, input_scale, cp):
 
 @dataclass(frozen=True)
 class PreparedNullInput:
-    """One literal H0 input, packed/dequantized/cast once for paired profiles.
+    """One literal H0 input, packed, dequantized, and cast once for paired profiles.
 
-    Treat the arrays as read-only. This is the same Gaussian sample array, not
-    a sufficient-statistic resampling approximation. Different profiles using
-    it are paired and must not be counted as independent null trials.
+    The caller must treat the arrays as read-only. They hold the Gaussian
+    sample array itself, with no sufficient-statistic resampling. Profiles
+    that use the same input are paired and must not be counted as independent
+    null trials.
     """
 
     noise_draw: LiteralNoiseDraw
@@ -249,7 +255,7 @@ def _decision(values):
 
 
 class FineValidationEngine:
-    """Reusable literal engine; one instance fixes weights, signals and M."""
+    """Reusable literal engine. Each instance fixes the weights, the signals, and M."""
 
     def __init__(
         self,
@@ -331,7 +337,7 @@ class FineValidationEngine:
             axis=1,
             dtype=cp.float64,
         )
-        # Frame powers: the all-bin sums of the fine powers.
+        # frame powers are the all-bin sums of the fine powers
         coarse = cp.sum(fine, axis=-1, dtype=cp.float64)
         return cp.asnumpy(fine), cp.asnumpy(coarse)
 
@@ -350,12 +356,12 @@ class FineValidationEngine:
         decision=None,
         null_input=None,
     ):
-        """Return full powers plus exact provenance; audit additionally retains inputs.
+        """Return the full powers and exact provenance, and keep the inputs when audit is set.
 
-        Raw seeds are uint64 identities; CuPy receives seed modulo 2**63.
-        The caller must freeze and check uniqueness of effective seeds across
-        calibration/evaluation. This engine does not infer independence from
-        stage labels or collect old observations.
+        Raw seeds are uint64 identities, and CuPy receives the seed modulo
+        2**63. The caller must freeze the effective seeds and check that they
+        are unique across calibration and evaluation. The engine does not
+        infer independence from stage labels or collect old observations.
         """
         seed = _integer(seed, "seed", 0, (1 << 64) - 1)
         amplitude = _positive(amplitude, "amplitude", allow_zero=True)
@@ -527,8 +533,9 @@ class FineValidationEngine:
                 execution = "composed_exact_row_fine_frame_power"
             cp.cuda.get_current_stream().synchronize()
             fine[STAGE_FIXED_FLOAT_DECISION] = cp.asnumpy(fixed_fine)
-            # Frame powers: the exact uint64 all-bin sums of the fine powers.
-            # The fused entries also reduce them on the device; both must agree.
+            # The frame powers are the exact uint64 all-bin sums of the fine
+            # powers. The fused entry points also reduce them on the device,
+            # and the two results must agree.
             host_frame_powers = fine[STAGE_FIXED_FLOAT_DECISION].sum(
                 axis=-1, dtype=np.uint64
             )

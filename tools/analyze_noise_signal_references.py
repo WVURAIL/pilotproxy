@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Single-row floating reference-ratio comparison; never opens radio hardware.
+"""Compare single-row target-to-reference power ratios of SDR captures with F laws.
 
-Fixed geometry:2MHz complex IQ,K128,target+100kHz,references +/-2 tap-grid bins.
-The central/noncentral F curves require independent proper complex Gaussian
-projections with equal noise variance and central reference branches. These are
-conditional comparison models, not assumed properties of an SDR measurement.
+The tool never opens radio hardware. The geometry is fixed at 2 MHz complex
+IQ, K = 128, a target at +100 kHz and references 2 tap-grid bins either side
+of it. The ratios are formed from floating-point projections. The central and noncentral F curves hold for independent, proper
+complex Gaussian projections with equal noise variance and central reference
+branches. These curves are conditional models, and an SDR measurement is not
+assumed to meet their conditions.
 """
 from __future__ import annotations
 
@@ -69,7 +71,7 @@ def weights():
 
 def geometry():
     w = weights()
-    # Cov(z_r,conj(z_s))/sigma2 = sum conj(w_r)*w_s.
+    # Cov(z_r, conj(z_s)) / sigma^2 = sum conj(w_r) * w_s
     gram = np.conj(w) @ w.T
     norm = np.real(np.diag(gram))
     corr = gram/np.sqrt(norm[:, None]*norm[None, :])
@@ -105,13 +107,14 @@ def ratios(z):
 
 
 def simulation(rows, lam, seed):
-    """Independent unnormalized proper white Gaussian samples, then the same projection.
+    """Return the projections of simulated white Gaussian IQ with a target tone.
 
-    E|noise[k]|^2=1. Aligned deterministic amplitude sqrt(lambda/(2K))
-    gives target noncentrality2*(A*K)^2/K=lambda. No projection, exact-energy
+    The noise is independent, proper and white, with E|noise[k]|^2 = 1. A tone
+    aligned with the target at amplitude A = sqrt(lambda/(2K)) gives the target
+    a noncentrality of 2(AK)^2/K = lambda. No projection, exact-energy
     normalization or conditioning is applied to the noise realization. The raw
-    IQ is rounded to complex64 to match the capture representation before the
-    common complex128 projection; analytic F is the continuous-noise ideal.
+    IQ is rounded to complex64, as in a capture, before the complex128
+    projection. The analytic F law is the ideal for continuous noise.
     """
     if rows <= 0 or not np.isfinite(lam) or lam < 0:
         raise ValueError("positive rows and finite nonnegative lambda required")
@@ -145,7 +148,7 @@ def diagnostics(iq, z):
     corr = np.divide(covariance, divisor, out=np.zeros_like(covariance), where=divisor>0)
     pseudocov = centered.T @ centered/len(z)
     pseudo = np.divide(pseudocov, divisor, out=np.zeros_like(pseudocov), where=divisor>0)
-    # Fixed contiguous20-bin summaries, with every row used. No stationarity-based exclusions.
+    # 20 fixed contiguous row windows, with no row excluded for stationarity
     windows = []
     for indexes in np.array_split(np.arange(len(z)), 20):
         vals = r[indexes]
@@ -154,7 +157,7 @@ def diagnostics(iq, z):
                         "mean_branch_power": p[indexes].mean(axis=0).tolist(),
                         "median_ratio": float(np.median(finite)) if finite.size else None,
                         "q95_ratio": float(np.quantile(finite,.95)) if finite.size else None})
-    # Use bounded indicator/log diagnostics, since the ideal ratio has infinite variance.
+    # bounded indicator and log diagnostics, since the ideal ratio has infinite variance
     safe = np.where(np.isfinite(r), r, 0.)
     result = {"rows": len(z), "ratio_status": counts, "mean_branch_power": p.mean(axis=0).tolist(),
               "reference_power_lower_over_upper": float(p[:,1].mean()/p[:,2].mean()) if p[:,2].mean()>0 else None,
@@ -178,7 +181,7 @@ def diagnostics(iq, z):
 
 
 def distribution(lam):
-    # Use central f explicitly at lambda0 (some SciPy ncf versions have sf edge behavior).
+    # central F at lambda = 0, since ncf.sf is unreliable at zero noncentrality in some SciPy versions
     return f(2,4) if lam == 0 else ncf(2,4,lam)
 
 
@@ -207,7 +210,7 @@ def distribution_figure(output, name, observed, simulated, lam, label):
         axes[1,0].plot(grid,np.where(tail>0,tail,np.nan),color=wvu.MEASURED,alpha=.3,lw=.9)
     for values, color, text in ((pooled,wvu.MEASURED,label),(simulated,wvu.MODEL,"Matched raw-IQ white-Gaussian simulation")):
         counts, _ = np.histogram(values,bins=bins)
-        # Density divides by ALL rows, not only rows falling within displayed limits.
+        # density is normalized by the total row count, so rows off the plotted range still count
         axes[0,0].stairs(counts/(len(values)*np.diff(bins)),bins,color=color,label=text)
         cdf = ecdf(values,grid)
         axes[0,1].plot(grid,cdf,color=color,lw=1.8,label=text)
@@ -240,7 +243,7 @@ def distribution_figure(output, name, observed, simulated, lam, label):
 
 
 def preview(output, rows=93750):
-    """Offline proof-of-method only; lambda20 is illustrative and never fitted."""
+    """Run the method on simulated IQ only, with an illustrative lambda = 20 that is not fitted."""
     output = Path(output).resolve(); output.mkdir(parents=True,exist_ok=False)
     report = {"schema":"noise-signal-simulation-preview-v1","scope":"No radio data: independent raw-IQ Gaussian simulations versus ideal laws", "config":CONFIG,"geometry":geometry(),"source_sha256":sha(__file__),"rows_each":rows,"lambda_tone":20.,"seeds":{}}
     for mode,lam,index in (("noise",0.,0),("steady-signal",20.,1)):

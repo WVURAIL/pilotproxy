@@ -1,13 +1,14 @@
 # coding=utf-8
-"""GPU gates for the v2 row-sum front end (run on CUDA hosts, e.g. the A100).
+"""GPU gates for the v2 row-sum front end, run on CUDA hosts such as the A100.
 
-Three gates, all pre-registered:
-1. exact equality of kernel row projections against the numpy int reference;
-2. the frame-power identity of kernel core 3.0.0: the fused ``d_power_out``
-   == the host sum over bins of the staged ``FinePowers_U64`` ==
-   ``fine_power_fx(rows).sum(axis=-1)``, all exact uint64;
-3. ULP-tolerance parity of the cupy complex64 fine reduction against the
-   numpy complex128 prototype.
+The three gates were pre-registered.
+
+1. The kernel row projections must equal the numpy integer reference exactly.
+2. The frame-power identity of kernel core 3.0.0 must hold in exact uint64.
+   The fused ``d_power_out`` must equal the host sum over bins of the staged
+   ``FinePowers_U64`` output and ``fine_power_fx(rows).sum(axis=-1)``.
+3. The cupy complex64 fine reduction must agree with the numpy complex128
+   prototype to a ULP-level relative tolerance.
 """
 from __future__ import annotations
 
@@ -26,8 +27,8 @@ WINDOWS = 128
 FINE_BINS = 256
 ROWS = STREAMS * WINDOWS
 RNG_SEED = 20260729
-# One float32 ULP at the fine-power scale, with margin for FFT ordering:
-# relative gate, pre-registered before A100 runs.
+# Relative gate of one float32 ULP at the fine-power scale, with a margin for
+# FFT ordering. It was pre-registered before the A100 runs.
 FINE_FFT_RELATIVE_TOLERANCE = 5.0e-6
 
 
@@ -52,7 +53,7 @@ def _sign_extend_i4(v: np.ndarray) -> np.ndarray:
 def _numpy_reference_matched_filter_row_projections(
     packed: np.ndarray, weights: np.ndarray
 ) -> np.ndarray:
-    """Exact int reference: unpack int4, conj-multiply, integer sums."""
+    """Return the exact integer row projections from int4 unpacking, conjugate multiplication, and integer sums."""
     xr = _sign_extend_i4((packed.astype(np.int32) >> 4)).astype(np.int64)
     xi = _sign_extend_i4(packed.astype(np.int32)).astype(np.int64)
     wr = _sign_extend_i4((weights.astype(np.int32) >> 4)).astype(np.int64)
@@ -100,7 +101,8 @@ def test_gpu_matched_filter_row_projections_exactly_match_numpy_reference():
             1,
             int(d_fine_staged.data.ptr),
         )
-        # Fused entry: fine powers plus the device-reduced frame powers.
+        # fused entry, which returns the fine powers and the device-reduced
+        # frame powers
         kernel.compute_fused_fine_u64(
             handle,
             weights.ctypes.data,
@@ -122,8 +124,9 @@ def test_gpu_matched_filter_row_projections_exactly_match_numpy_reference():
     np.testing.assert_array_equal(got, expected)
 
     # Gate 2: the frame powers are the all-bin sums of the fine spectrum on
-    # every path --- fused d_power_out == host sum of the staged fine powers
-    # == fine_power_fx over the exact rows, summed. All uint64, no tolerance.
+    # every path. The fused d_power_out must equal the host sum of the staged
+    # fine powers and the summed fine_power_fx of the exact rows, in exact
+    # uint64 with no tolerance.
     reference_fine = fine_power_fx(
         expected.astype(np.int64), num_streams=STREAMS, windows_per_stream=WINDOWS
     )

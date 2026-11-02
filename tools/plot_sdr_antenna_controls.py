@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Plot all completed antenna-control frame ratios without fitting a reference.
 
-Read only finalized analysis and hash-bound frame arrays. No capture, hardware
-API, source correction, thermal-noise qualification or statistical gate is used.
+Only the finalized analysis and the hash-bound frame arrays are read. No capture,
+hardware API, source correction, thermal-noise qualification, or statistical gate
+is used.
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ def require(condition, message):
 
 
 def load_completed(study):
-    """Require final orchestration/analysis and recount all displayed statuses."""
+    """Load a study with a final run and analysis, and recount every displayed status."""
     study = Path(study).resolve()
     # This receipt is created only when orchestration has completed or stopped.
     run = json.loads((study / "run-receipt.json").read_text())

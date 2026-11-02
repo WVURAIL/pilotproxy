@@ -1,1 +1,1 @@
-"""Per-pilot products: the contract reader, the archive acceptance gate and safe NPZ loading."""
+"""Per-pilot product reader, archive acceptance gate, and pickle-free NPZ loader."""

@@ -37,11 +37,12 @@ WEIGHT_VERSION = 3
 HEADER_FIXED_FMT = "<9sIIIIIIIddHH"
 HEADER_FIXED_SIZE = struct.calcsize(HEADER_FIXED_FMT)
 CRC_SIZE = 4
-# zlib.crc32 returns a signed-looking Python int on some platforms; mask to the
-# unsigned 32-bit field stored in the weight-file trailer.
+# zlib.crc32 can return a signed-looking Python int on some platforms. The
+# mask reduces it to the unsigned 32-bit CRC field stored at the end of the
+# weight-file header.
 CRC32_UNSIGNED_MASK = 0xFFFFFFFF
-# Physical ATSC pilot matching should be exact to the manifest, with a small
-# tolerance for decimal MHz/Hertz roundoff in command-line inputs.
+# Physical ATSC pilots are matched to the manifest exactly, with a small
+# tolerance for decimal MHz and Hz roundoff in command-line inputs.
 DEFAULT_PILOT_FREQUENCY_TOLERANCE_HZ = 10.0
 HZ_PER_MHZ = 1.0e6
 WEIGHT_MANIFEST_SCHEMA_NAME = "pilotproxy_weight_manifest"
@@ -406,10 +407,10 @@ class DetectorWeightBank:
     def get_weights(self, freq_mhz: float) -> tuple[np.ndarray | None, bool]:
         """Return packed weights for the nearest reference-channel entry.
 
-        This is an advanced nearest-channel lookup. Public detector paths should
-        use get_weights_for_pilot_frequency or get_weights_for_physical_channel
-        so the requested pilot is
-        validated against the shipped weight manifest.
+        This is an advanced nearest-channel lookup. Public detector paths use
+        get_weights_for_pilot_frequency or get_weights_for_physical_channel,
+        which validate the requested pilot against the shipped weight
+        manifest.
         """
         requested = _finite_frequency_mhz(freq_mhz)
         if self._receiver_band_mhz is None or self.reference_freqs.size == 0:
@@ -568,9 +569,9 @@ def _receiver_frequency_grid_from_manifest(
 ) -> tuple[np.ndarray, dict[str, object], tuple[float, float]] | None:
     """Build the ROM-index RF grid from its embedded receiver profile.
 
-    Receiver profiles own channel order, center offset, RF bounds, and channel
-    count.  Reconstructing a generic ascending 400--800 MHz grid would select
-    the wrong ROM row for both the shipped CHIME and CHORD banks.
+    The receiver profile sets the channel order, center offset, RF bounds,
+    and channel count. A generic ascending 400-800 MHz grid would select the
+    wrong ROM row for both the shipped CHIME and CHORD banks.
     """
     if not manifest:
         return None
@@ -580,17 +581,17 @@ def _receiver_frequency_grid_from_manifest(
             "Current weight manifest requires an embedded receiver_profile "
             "for frequency lookup."
         )
-    # Keep this import local: integration.__init__ also exposes weight-generation
-    # helpers that import this loader, so a module-level import creates a cycle.
+    # integration.__init__ also exposes weight-generation helpers that import
+    # this loader, so a module-level import here would create an import cycle.
     from pilot_proxy.integration.receiver_profile import (
         ReceiverProfile,
         receiver_frequency_to_channel,
         validate_weight_manifest_profile_hash,
     )
 
-    # The manifest hash is the cryptographic binding between ROM row order and
-    # the embedded receiver geometry.  Without this check a one-field edit to
-    # frequency_axis.order silently selects a different row for every pilot.
+    # The manifest hash binds the ROM row order to the embedded receiver
+    # geometry. Without this check, a one-field edit to frequency_axis.order
+    # would select a different row for every pilot with no error.
     profile = ReceiverProfile.from_dict(dict(receiver_profile))
     validate_weight_manifest_profile_hash(manifest, profile)
     rf_band = receiver_profile.get("rf_band")

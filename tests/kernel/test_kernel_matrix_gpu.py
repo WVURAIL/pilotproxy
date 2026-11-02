@@ -22,7 +22,7 @@ WINDOWS = 128
 FINE_BINS = 256
 UNWRITTEN = 123  # sentinel the kernel must overwrite (or, for an unbound tap, leave)
 
-# Exercise each implementation choice at both K values, including grid stride.
+# each implementation choice at both K values, with small grids for the grid stride
 CONFIGURATIONS = [
     pytest.param((k, mode, threads, grid), id=f"k{k}-{mode}-t{threads}-g{grid}")
     for k in (64, 128)
@@ -112,7 +112,7 @@ def integer_rows(packed, weights):
 
 
 def frame_powers(fine):
-    """Kernel core 3.0.0: the frame powers are the all-bin sums of the fine spectrum."""
+    """Return the frame powers as the all-bin sums of the fine spectrum (kernel core 3.0.0)."""
     return np.asarray(fine).sum(axis=-1, dtype=np.uint64)
 
 
@@ -156,8 +156,9 @@ def test_all_exact_paths_and_reused_outputs(kernel_build, streams, batch, patter
     bulk = np.zeros(FINE_BINS, dtype=bool)
     bulk[::2] = True
     try:
-        # Staged path: row projections, then the fine stage over the same
-        # device buffer; the host forms the frame powers as the bin sums.
+        # In the staged path, the row projections are computed and the fine
+        # stage is run over the same device buffer. The frame powers are formed
+        # on the host as the bin sums.
         kernel.compute_row_projections_i32(handle, weights.ctypes.data, tap.data.ptr)
         np.testing.assert_array_equal(cp.asnumpy(tap), expected_rows)
         kernel.compute_fine_powers_u64(
@@ -166,7 +167,8 @@ def test_all_exact_paths_and_reused_outputs(kernel_build, streams, batch, patter
         np.testing.assert_array_equal(cp.asnumpy(fine), expected_fine)
         np.testing.assert_array_equal(frame_powers(cp.asnumpy(fine)), expected_power)
 
-        # Fused path: fine powers and the device-reduced frame powers.
+        # fused path, which returns the fine powers and the device-reduced
+        # frame powers
         kernel.compute_fused_fine_u64(
             handle, weights.ctypes.data, fine.data.ptr, powers.data.ptr, tap.data.ptr
         )
@@ -174,9 +176,9 @@ def test_all_exact_paths_and_reused_outputs(kernel_build, streams, batch, patter
         np.testing.assert_array_equal(cp.asnumpy(powers), expected_power)
         np.testing.assert_array_equal(cp.asnumpy(tap), expected_rows)
 
-        # Repeated calls must clear counters and fine powers, including zero
-        # frames; the optional frame-power tap carries the same sums and an
-        # unbound tap is left untouched.
+        # Repeated calls must clear the counters and fine powers, even for zero
+        # frames. The optional frame-power tap must carry the same sums, and an
+        # unbound tap must be left untouched.
         for anchor, width, rank, multiplier in (
             (0, 2, 0, 1),
             (255, 127, 127, (1 << 64) - 1),
@@ -261,7 +263,7 @@ def test_device_wide_integer_compares_against_python_bigints(kernel_build):
     values = rng.integers(0, 1 << 64, (10000, 6), dtype=np.uint64)
     edges = [0, 1, (1 << 32) - 1, 1 << 32, (1 << 63) - 1, 1 << 63, (1 << 64) - 1]
     values[: len(edges)] = np.array(edges, dtype=np.uint64)[:, None]
-    # Equal products exercise the strict comparison at all magnitudes.
+    # Equal products exercise the strict inequality at all magnitudes.
     values[100:200, 3:] = values[100:200, :3]
     expected = []
     for row in values:

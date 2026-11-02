@@ -1,13 +1,13 @@
 # coding=utf-8
-"""Golden-vector and cross-implementation gate for fxfft256 v1.
+"""Golden-vector and cross-implementation tests of fxfft256 v1.
 
-This suite is the verification contract for the deployed fine-reduction
-FFT: the Python reference, the C port template, and (later) the CUDA
-implementation must all reproduce ``tests/data/fxfft256_golden_v1.npz``
-bit-for-bit. Tolerance tests (float proximity, Parseval drift, fine-
-statistic parity) carry frozen bounds set at 4-8x the measured values in
-``tools/fxfft_report.py``; a spec change that moves them is a contract
-change and must be versioned, not absorbed.
+The deployed fine-reduction FFT is verified by this suite. The Python
+reference, the C port template and the CUDA implementation must each
+reproduce ``tests/data/fxfft256_golden_v1.npz`` bit for bit. The tolerance
+tests (float proximity, Parseval drift and fine-statistic parity) have frozen
+bounds set at 4 to 8 times the values measured by ``tools/fxfft_report.py``.
+A spec change that moves these values changes the contract, and it must be
+released as a new spec version.
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def test_twiddle_table_is_frozen_and_tie_free(golden):
         th = 2.0 * math.pi * k / 256.0
         xc, xs = 32768.0 * math.cos(th), -32768.0 * math.sin(th)
         assert c == round(xc) and s == round(xs)
-        # no value may sit near a rounding tie (spec unambiguity)
+        # no value may lie near a rounding tie, so the spec is unambiguous
         for v in (xc, xs):
             assert abs(abs(v % 1.0) - 0.5) > 1e-3 or float(v).is_integer()
 
@@ -139,12 +139,12 @@ def test_input_contract_enforced():
 
 
 def test_float64_proximity(golden):
-    """Frozen bound: per-vector max error <= 16 + 2e-4 * spectrum peak.
+    """Check the frozen bound, per-vector max error <= 16 + 2e-4 * spectrum peak.
 
-    The constant term covers small-amplitude structured vectors (rounding
-    accumulation at ~0.5 LSB per butterfly); the proportional term covers
-    Q15 twiddle quantization. Measured maxima sit at roughly half of both
-    terms (``tools/fxfft_report.py``).
+    The constant term covers small-amplitude structured vectors, where
+    rounding accumulates at about 0.5 LSB per butterfly. The proportional term
+    covers the Q15 twiddle quantization. The measured maxima are about half of
+    each term (``tools/fxfft_report.py``).
     """
     x = golden["inputs"]
     X = fxfft256(x).astype(np.float64)
@@ -166,7 +166,7 @@ def test_parseval_drift_bounded(golden):
 
 
 def test_fine_statistic_parity_with_float_pipeline():
-    """F2 via fx powers tracks the analyzer float pipeline to <= 5e-3."""
+    """F2 from the fx powers agrees with the float analyzer pipeline to 5e-3."""
     rng = np.random.default_rng(99)
     streams, windows = 32, 128
     rows = streams * windows

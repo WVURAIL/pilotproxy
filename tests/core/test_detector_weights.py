@@ -390,8 +390,9 @@ def test_weight_bank_rejects_manifest_binary_binding_mismatch(tmp_path) -> None:
         DEFAULT_WEIGHTS_PATH.suffix + ".manifest.json"
     )
     manifest = json.loads(source_manifest.read_text(encoding="utf-8"))
-    # The current manifest binds the binary via artifacts.weights_sha256;
-    # corrupt that field so the loader's manifest/binary check must reject it.
+    # The manifest binds the binary through artifacts.weights_sha256. This
+    # field is corrupted, so the manifest/binary check of the loader must
+    # reject it.
     manifest["artifacts"]["weights_sha256"] = "0" * 64
     copied.with_suffix(copied.suffix + ".manifest.json").write_text(
         json.dumps(manifest), encoding="utf-8"
@@ -523,10 +524,13 @@ def test_weight_bank_rejects_v2_manifest_without_input_preprocessing(
 
 
 def test_frame_origin_and_channel_edge_diagnostics_on_chime_profile() -> None:
-    """Under the center-at-DC CHIME profile the channel-14 ``edge_wrapped`` flag
-    is a wrap across DC (the forbidden tone sits in the skipped guard), while
-    channel 21 is the channel whose reference crosses the physical +-fs/2
-    coarse-channel half-width. Neither event changes the placement."""
+    """Check the frame-origin and channel-edge diagnostics of the CHIME profile.
+
+    In the center-at-DC CHIME profile, the ``edge_wrapped`` flag of channel 14
+    marks a wrap across DC, and the forbidden tone falls in the skipped guard.
+    The reference of channel 21 crosses the physical +-fs/2 half-width of the
+    coarse channel. Neither event changes the placement.
+    """
     profile = load_receiver_profile(
         CONFIGS_DIR / "receiver_profiles" / "chime_dtv_fengine.json"
     )

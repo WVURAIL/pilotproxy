@@ -39,8 +39,8 @@ MPEG_TS_PID_HIGH_SHIFT = 8
 # Avoid PID 8191, the reserved null-packet PID, in deterministic test payloads.
 MPEG_TS_PID_MODULUS = 8191
 
-# GNU Radio ATSC blocks below require their historical vector sizes and RRC
-# shaping parameters; these are not detector-tunable values.
+# The GNU Radio ATSC blocks below require these vector sizes and RRC shaping
+# parameters, and the detector does not tune them.
 ATSC_BASEBAND_LOWER_EDGE_HZ = -3.0e6
 ATSC_FIELD_MUX_BLOCK_ITEMS = 1024
 ATSC_PAYLOAD_ITEMS_PER_BLOCK = 832

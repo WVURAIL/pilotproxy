@@ -1,5 +1,8 @@
-"""Repository hygiene: no workstation path in the code, no version suffix in a file name but a format's, no reference
-to a removed path except at the commit that holds it."""
+"""Repository hygiene checks.
+
+The code holds no workstation path, a version suffix in a file name only names a file format, and a removed path is
+cited only at a commit that holds it.
+"""
 from __future__ import annotations
 
 import ast
@@ -14,7 +17,7 @@ REMOVED = ROOT / "tests" / "data" / "removed_paths.txt"
 # records: frozen evidence and provenance keep the paths they were written with
 RECORDS = ("docs/evidence/", "data/provenance/", "CHANGELOG.md", "tests/data/removed_paths.txt", "tests/golden/",
            "tests/config/data/", "projects/chime_atsc/eras/")
-# version suffixes that name a format, not a revision of a tool
+# files whose version suffix names a file format
 KEPT_VERSIONED = re.compile(r"^(tests/data/fxfft256_golden_v1\.npz"
                             r"|tests/products/(data/pilotproxy_v5_fixture\.json|test_pilotproxy_v5\.py|test_pre_v5_refused\.py))$")
 

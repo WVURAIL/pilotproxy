@@ -1,19 +1,21 @@
 """Estimator-transfer figures from a frozen release.
 
 A release directory (``estimator_transfer_YYYYMMDD`` or
-``sdr_ota_transfer_YYYYMMDD``) carries ``data/plot_points.csv`` with the
-pooled estimator outputs per input point and their bootstrap intervals, and
-``data/analysis.json`` describing the sweep. This module renders the two
-dissertation figures from those tables alone, in the dissertation style, so
-the figure and the release it came from can be re-derived from each other.
+``sdr_ota_transfer_YYYYMMDD``) holds ``data/plot_points.csv`` and
+``data/analysis.json``. The CSV has the pooled estimator outputs for each
+input point with their bootstrap intervals, and the JSON describes the sweep.
+This module renders the two dissertation figures in the dissertation style
+from those tables alone, so each figure can be derived again from its release
+and checked against it.
 
-The secondary axes express the same quantities as one-bin pilot excess; the
-conversion needs the detector's pilot calibration, which the over-the-air
-release records in ``run/run_state.json`` and the digital release does not.
-Pass ``calibration`` explicitly for the latter. The two releases were
-calibrated differently: the digital release used the waveform audit's pilot
-level, 11.918446870168612 dB below the data, and the settled sweep 11.264 dB
-(each is recorded with its release).
+The secondary axes show the same quantities as one-bin pilot excess. This
+conversion requires the detector's pilot calibration, which is recorded in
+``run/run_state.json`` for the over-the-air release and is not recorded for
+the digital release. For the digital release, ``calibration`` must be passed
+explicitly. The two releases were calibrated with different pilot levels.
+The digital release used the waveform audit's pilot level of
+11.918446870168612 dB below the data, and the settled sweep used 11.264 dB.
+Each value is recorded with its release.
 """
 from __future__ import annotations
 
@@ -115,8 +117,11 @@ def _interval_label(release: Release) -> str:
 
 
 def _series(ax, x, y, low, high, *, color, label, linestyle, marker, y_floor, ci_label):
-    """One estimator series: line through finite points, CI bars, and floor
-    markers where the pooled excess was not positive (no finite estimate)."""
+    """Plot one estimator series as a line through the finite points with CI bars.
+
+    Floor markers are drawn where the pooled excess was not positive and no
+    finite estimate exists.
+    """
     finite = np.isfinite(y)
     if finite.any():
         ax.plot(x[finite], y[finite], color=color, linestyle=linestyle, marker=marker,
@@ -221,6 +226,6 @@ _PREAMBLE = r"\usepackage[T1]{fontenc}\usepackage{lmodern}\usepackage{amsmath}"
 
 def figure_estimator_transfer(release: Release, *, out: Path, title: str | None = None,
                               y_min_db: float | None = None) -> Path:
-    """Render the transfer figure for a release; returns the PDF path."""
+    """Render the transfer figure for a release and return the PDF path."""
     with matplotlib.rc_context({"text.latex.preamble": _PREAMBLE}):
         return _render(release, out=out, title=title, y_min_db=y_min_db)

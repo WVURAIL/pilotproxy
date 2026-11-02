@@ -39,8 +39,8 @@ SELECTED_CHANNEL_INDICES = [179, 180]
 REFERENCE_WEIGHT_TERMS = 3
 COMBINED_TEST_WINDOW = 4
 COMBINED_TEST_FEEDS = 2
-# One whole fxfft256 stream per feed: the frame powers are the all-bin sums
-# of the fine powers (kernel core 3.0.0), which add over streams.
+# Each feed holds one whole fxfft256 stream, since the frame powers are the
+# all-bin sums of the fine powers (kernel core 3.0.0) and add over streams.
 COMBINED_TEST_WINDOWS_PER_FEED = 128
 COARSE_POWER_RATIO_SCALE = 2.0
 INT4_COMPONENT_BITS = 4

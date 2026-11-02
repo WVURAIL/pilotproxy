@@ -13,13 +13,13 @@ import numpy as np
 from pilot_proxy.schema_identity import schema_token
 
 # A real ADC sampling at f_s puts the RF band [(n - 1) f_s / 2, n f_s / 2] in
-# Nyquist zone n. Even zones fold the band onto baseband mirrored, so inside
-# every coarse channel the frequency runs backwards; odd zones keep it upright.
-# CHIME samples 400-800 MHz at 800 MS/s (zone 2, mirrored); CHORD samples
+# Nyquist zone n. Even zones fold the band onto baseband mirrored, so the
+# frequency runs backwards in every coarse channel. Odd zones keep it upright.
+# CHIME samples 400-800 MHz at 800 MS/s (zone 2, mirrored), and CHORD samples
 # 300-1500 MHz at 3.2 GS/s (zone 1).
 DEFAULT_NYQUIST_ZONE = 1
 MIRRORED_NYQUIST_ZONE = 2
-# Profiles, manifests and bundles written before the zone was recorded state
+# Profiles, manifests, and bundles written before the zone was recorded state
 # only its parity, under this key, as "normal" (odd) or "inverted" (even).
 OLD_FREQUENCY_AXIS_KEY = "spectral_sense"
 OLD_FREQUENCY_AXIS_VALUES = {
@@ -42,7 +42,7 @@ SUPPORTED_COMBINE_MODES = frozenset(
 
 
 def normalize_nyquist_zone(value: Any | None) -> int:
-    """Return a validated Nyquist zone (a positive integer; None means 1).
+    """Return a validated Nyquist zone (a positive integer, with None read as 1).
 
     The words of the old ``spectral_sense`` key are read as the zone parity
     they stated: "normal" as zone 1, "inverted" as zone 2.
@@ -79,8 +79,8 @@ def nyquist_zone_from_old_word(value: str) -> int:
 def add_nyquist_zone_argument(parser: argparse.ArgumentParser, *, help: str) -> None:
     """Add ``--nyquist-zone`` (default 1) to a command-line parser.
 
-    The flag it replaced, ``--spectral-sense normal|inverted``, is still
-    accepted, as zone 1 or 2, but no longer listed.
+    The old flag ``--spectral-sense normal|inverted`` is accepted as zone 1
+    or 2 and is hidden from the help text.
     """
     parser.add_argument(
         "--nyquist-zone",
@@ -98,7 +98,7 @@ def add_nyquist_zone_argument(parser: argparse.ArgumentParser, *, help: str) -> 
 
 
 def nyquist_zone_is_mirrored(value: Any | None) -> bool:
-    """Return whether the channel-internal spectrum is mirrored (even zone).
+    """Return True when the channel-internal spectrum is mirrored (even zone).
 
     A mirrored channel needs its detector windows time-reversed before the
     kernel, and its RF offsets enter the fine grid with the opposite sign.
@@ -138,9 +138,9 @@ def frequency_axis_nyquist_zone(
 
 
 # Half-width of the default designated window in padded fine bins. The
-# predicted line position is exact up to the station's own carrier offset;
-# the survey measured offsets up to ~340 Hz (ch35), so +/-30 bins of
-# 11.92 Hz (+/-358 Hz) covers the observed population with margin.
+# predicted line position is exact up to the station's own carrier offset.
+# The survey measured offsets up to about 340 Hz (ch35), so +/-30 bins of
+# 11.92 Hz (+/-358 Hz) cover the observed offsets with margin.
 DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS = 30
 
 
@@ -161,10 +161,11 @@ def predicted_pilot_fine_bin(
     need not lie at fine bin zero. Watching only bin zero could miss the
     line and leave it in the CFAR background bins.
 
-    The mirrored, even-zone mapping was checked on all six strong
-    2018--2026 carriers. Their positions are within about 30 bins of the
-    prediction. The remaining displacement is each station's carrier
-    offset, covered by the designated window's half-width.
+    The mirrored, even-zone mapping was confirmed on all six strong
+    carriers of 2018 to 2026. Their positions are found to be about 30
+    bins or less from the prediction. The remaining displacement is each
+    station's carrier offset, which the half-width of the designated window
+    covers.
     """
     windows = int(nfft) // int(detector_window_samples)
     fine_bins = int(pad_factor) * windows
@@ -179,7 +180,7 @@ def predicted_pilot_fine_bin(
 def predicted_fine_designated_bins(
     predicted_bin: int, half_width: int, fine_bins: int
 ) -> list[int]:
-    """Designated window ``predicted_bin +/- half_width``, modulo the grid."""
+    """Return the designated window ``predicted_bin +/- half_width``, modulo the grid."""
     if not 0 <= int(half_width) < int(fine_bins) // 2:
         raise ValueError("half_width must be in [0, fine_bins/2).")
     return [(int(predicted_bin) + i) % int(fine_bins)

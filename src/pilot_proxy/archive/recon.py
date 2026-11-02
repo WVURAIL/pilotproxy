@@ -28,11 +28,12 @@ def recon(named_scopes, terms: List[str], out_dir: str,
           map_name: str = "scopes.jsonl") -> str:
     """Recursively list datasets without enumerating archive files.
 
-    Explicit scopes win. Otherwise the live Datatrail namespace is optionally
-    narrowed by the telescope's first scope component. Checked adapter calls
-    keep outages distinct from genuine empty lists. With ``expand``, each
-    matching container is opened one level and its resolvable children become
-    the map rows.
+    Explicitly named scopes are used when given. Otherwise the scopes are
+    listed from the live Datatrail namespace and, when ``telescope`` is set,
+    limited to the scopes whose first component matches it. The checked
+    adapter calls distinguish between a service outage and a genuine empty
+    list. With ``expand``, each matching container is opened one level and its
+    resolvable children become the map rows.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

@@ -3,9 +3,9 @@
 #   run_estimator_transfer.sh [RESULT_DIR]
 #   run_estimator_transfer.sh --check-runtime
 #
-# The second form resolves and reports the Python that would be used and exits
-# without running anything, which is the cheap way to find out whether this
-# machine can drive the sweep before committing hours to it.
+# The second form resolves and reports the Python that would be used, then
+# exits without running anything. It is a quick test that this machine can
+# drive the sweep before hours are spent on it.
 #
 # Runtime selection, in order: $PILOT_PROXY_PYTHON, an activated virtualenv,
 # the repository's own .venv, the venv scripts/setup_env.sh builds
@@ -22,16 +22,14 @@ result_dir=${1:-"$project_dir/../estimator_transfer_2026-08-25"}
 max_parallel=${ESTIMATOR_TRANSFER_JOBS:-4}
 
 # Every point below is launched as "$runtime", so a runtime that does not
-# resolve fails 26 times over inside per-point logs with nothing on the
-# console --- which is exactly how the hardcoded ~/rail/venvs/ppci default
-# rotted unnoticed once that venv was removed. Discover the interpreter from
-# the conventions this repository already documents, and prove the one we pick
-# can import what the sweep needs before spending the first CPU-hour on it.
-# The probe runs under the same PYTHONNOUSERSITE=1 PYTHONPATH=src environment
-# as the sweep points themselves, so an interpreter whose cupy lives only in
-# ~/.local is rejected here rather than at the first point. It must echo the
-# sentinel: a non-Python executable would otherwise read the here-document,
-# ignore it and exit 0.
+# resolve fails 26 times in the per-point logs and prints nothing to the
+# console. The interpreter is therefore found from the conventions this
+# repository documents, and it must import what the sweep needs before the
+# first CPU-hour is spent. The probe runs under the same PYTHONNOUSERSITE=1
+# PYTHONPATH=src environment as the sweep points, so an interpreter whose cupy
+# is only in ~/.local is rejected here, before the first point runs. The probe
+# must echo a sentinel, since a non-Python executable would read the
+# here-document, ignore it and exit 0.
 probe_runtime() {
   local reply
   reply=$(PYTHONNOUSERSITE=1 PYTHONPATH="$project_dir/src" "$1" - <<'PROBE' 2>/dev/null
@@ -46,7 +44,7 @@ PROBE
 resolve_runtime() {
   local candidates=() rejected=() cand found
   if [[ -n "${PILOT_PROXY_PYTHON:-}" ]]; then
-    # An explicit override is a deliberate choice: use it or say why not.
+    # an explicit override is the only candidate, with no fallback
     candidates=("$PILOT_PROXY_PYTHON")
   else
     [[ -n "${VIRTUAL_ENV:-}" ]] && candidates+=("$VIRTUAL_ENV/bin/python")

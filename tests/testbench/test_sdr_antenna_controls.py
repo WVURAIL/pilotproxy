@@ -54,7 +54,7 @@ class FakeCapture:
             receipt["plan_sha256"] = "0" * 64
         if fail and self.failure == "interval":
             receipt["accepted_interval_confirmed"] = False
-        # Sparse fake file: byte-count check only; never a measured IQ record.
+        # sparse fake file for the byte-count check, with no measured IQ in it
         with (output / "accepted.cfile").open("wb") as stream:
             stream.truncate(16 if fail and self.failure == "short" else 32_000_000)
         if not (fail and self.failure == "receipt"):

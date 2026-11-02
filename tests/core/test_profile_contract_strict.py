@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Ground-zero tests for exact receiver and detector-core documents."""
+"""Tests that receiver and detector-core documents are exact and canonical."""
 
 from __future__ import annotations
 

@@ -31,7 +31,7 @@ def test_thresholds_are_the_controls_quantiles_at_supported_rates_only():
     rng = np.random.default_rng(4)
     control = {"n_valid": 5000, "f": rng.standard_normal(5000)}
     thresholds, usable = injection.matched_thresholds(control, [1e-3, 1e-2, 0.1], statistics={"power_ratio": "f"})
-    assert usable == [0.1, 0.01]                      # 1e-3 would need 10,000 frames
+    assert usable == [0.1, 0.01]                      # 1e-3 would need 10000 frames
     assert thresholds["power_ratio"]["0.1"] == float(np.quantile(control["f"], 0.9))
     point = {"n_valid": 4, "f": np.array([-10.0, 10.0, 10.0, thresholds["power_ratio"]["0.1"]])}
     row = injection.detection_rates(point, thresholds, usable, statistics={"power_ratio": "f"})

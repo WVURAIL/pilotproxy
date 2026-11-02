@@ -8,8 +8,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# Included reference front end: 800 MS/s real ADC, 400-800 MHz analysis band,
-# 4-tap/2048-point PFB, retaining the positive-frequency 1024 channels.
+# The reference front end is an 800 MS/s real ADC, a 400 to 800 MHz analysis
+# band and a 4-tap, 2048-point PFB. The 1024 positive-frequency rFFT bins 1 to
+# 1024 are kept as channels 0 to 1023.
 REFERENCE_ADC_SAMPLE_RATE_HZ = 800.0e6
 REFERENCE_BAND_LOWER_HZ = 400.0e6
 REFERENCE_BANDWIDTH_HZ = 400.0e6
@@ -113,7 +114,14 @@ def complex_envelope_to_real_adc_blocks(
     start_adc_sample: int = 0,
     chunk_samples: int = DEFAULT_ADC_CHUNK_SAMPLES,
 ) -> np.ndarray:
-    """Interpolate a complex envelope onto the real ADC sample grid."""
+    """Interpolate a complex envelope onto the real ADC sample grid.
+
+    The envelope is linearly interpolated at each ADC sample time and mixed to
+    its offset ``rf_center_hz - band_lower_hz`` above the band edge. The real
+    part of the mixed signal is returned as float32 blocks of shape
+    ``(n_blocks, block_size)``. Samples are processed in chunks of
+    ``chunk_samples`` to bound memory.
+    """
     iq = np.asarray(iq, dtype=np.complex64).reshape(-1)
     if iq.size < 2:
         raise ValueError("iq must contain at least two complex samples.")
@@ -180,11 +188,11 @@ def complex_envelope_to_real_adc_blocks_gpu(
     start_adc_sample: int = 0,
     chunk_samples: int = DEFAULT_GPU_ADC_CHUNK_SAMPLES,
 ) -> np.ndarray:
-    """GPU twin of :func:`complex_envelope_to_real_adc_blocks`.
+    """Evaluate :func:`complex_envelope_to_real_adc_blocks` with CuPy.
 
-    Same interpolation and mixing arithmetic evaluated with cupy; the result
-    returns to host memory, so downstream code is unchanged. Agreement with
-    the CPU path is limited only by libm-vs-CUDA trig rounding.
+    The interpolation and mixing arithmetic is the same as on the CPU, and the
+    result is copied back to host memory. The two paths differ only by the
+    rounding of the trigonometric functions in libm and CUDA.
     """
     import cupy as cp
 
@@ -245,7 +253,7 @@ def channelize_real_blocks_to_reference_channels_gpu(
     spec: ReferenceChannelizerSpec | None = None,
     output_chunk_samples: int = DEFAULT_GPU_OUTPUT_CHUNK_SAMPLES,
 ) -> np.ndarray:
-    """GPU twin of :func:`channelize_real_blocks_to_reference_channels`."""
+    """Evaluate :func:`channelize_real_blocks_to_reference_channels` with CuPy."""
     import cupy as cp
 
     spec = spec or ReferenceChannelizerSpec()
@@ -297,7 +305,14 @@ def channelize_real_blocks_to_reference_channels(
     spec: ReferenceChannelizerSpec | None = None,
     output_chunk_samples: int = DEFAULT_OUTPUT_CHUNK_SAMPLES,
 ) -> np.ndarray:
-    """Run real ADC blocks through the reference PFB and select channels."""
+    """Run real ADC blocks through the reference PFB and select channels.
+
+    Each output spectrum is formed from ``n_tap`` consecutive blocks. Each
+    block is weighted by its row of the prototype response, the weighted
+    blocks are summed, and the sum is transformed with a real FFT. Channel
+    index i is rFFT bin i + 1. Returns complex64 of shape
+    ``(len(channel_indices), n_blocks - n_tap + 1)``.
+    """
     spec = spec or ReferenceChannelizerSpec()
     response = (
         sinc_hamming_pfb_response(spec.n_tap, spec.n_sample)
@@ -345,7 +360,13 @@ def apply_reference_archive_phase_convention(
     *,
     start_sample_index: int = 0,
 ) -> np.ndarray:
-    """Map centered rFFT-bin streams to lower-edge detector coordinates."""
+    """Map centered rFFT-bin streams to lower-edge detector coordinates.
+
+    Each stream is conjugated and multiplied by (-1)**n, where n is the
+    sample index, starting at ``start_sample_index``. The conjugate
+    reverses the frequency axis, and the factor shifts it by half the channel
+    sample rate.
+    """
     streams = np.asarray(streams, dtype=np.complex64)
     if streams.ndim != 2:
         raise ValueError(

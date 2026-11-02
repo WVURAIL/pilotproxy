@@ -14,7 +14,7 @@ SPEC.loader.exec_module(RUNNER)
 
 
 def test_ratio_pools_powers_before_dividing():
-    # A mean of row ratios would be 9; ratio of pooled powers is 18/9=2.
+    # the ratio of pooled powers is 18/9 = 2, and a mean of row ratios would be 9
     z = np.array([[[3, 0], [1, 2], [0, 2]]], dtype=complex)
     powers, q = RUNNER.powers_and_ratio(z)
     np.testing.assert_array_equal(powers, [[9, 5, 4]])
@@ -27,11 +27,11 @@ def test_zero_reference_is_explicit_failure():
 
 
 def signed_fixture():
-    # x=2-3i; conjugated weights 1,-i,-1+i give 2-3i,-3-2i,1+5i.
+    # x = 2-3i, and the conjugated weights 1, -i and -1+i give 2-3i, -3-2i and 1+5i
     x = np.full((1, 128, 128), 0x2D, dtype=np.uint8)
     weights = np.repeat(np.array([0x10, 0x01, 0xFF], dtype=np.uint8)[:, None], 128, axis=1)
     projections = np.repeat((128*np.array([[2, -3], [-3, -2], [1, 5]]))[None, :, None, :], 128, axis=2)
-    # Frame powers: all-bin sums of the frozen fxfft256 fine powers.
+    # frame powers are the all-bin sums of the frozen fxfft256 fine powers
     powers = np.array([[
         sum(re*re + im*im for re, im in fxfft256_scalar(projections[0, term]))
         for term in range(3)
@@ -56,8 +56,7 @@ def test_packed_stage_ratio_is_the_fine_sum_ratio():
     powers = fixture['term_power_sums'].astype(float)
     fixture['coarse_ratio'] = 2*powers[:, 0]/(powers[:, 1]+powers[:, 2])
     np.testing.assert_array_equal(RUNNER.packed_ratio(fixture), fixture['coarse_ratio'])
-    # The row-domain ratio of the same projections is not what the packed
-    # stage reports.
+    # the row-domain ratio of the same projections differs from the packed stage ratio
     rows = fixture['projections_i32'].astype(np.int64)
     row_power = (rows*rows).sum(axis=(2, 3))
     assert 2*row_power[0, 0]/(row_power[0, 1]+row_power[0, 2]) != fixture['coarse_ratio'][0]

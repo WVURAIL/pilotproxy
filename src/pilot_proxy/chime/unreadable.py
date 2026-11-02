@@ -1,4 +1,4 @@
-"""Translate expected on-disk failures into an explicit data disposition."""
+"""Report expected on-disk read failures as UnreadableUnitError."""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -8,7 +8,11 @@ from pilot_proxy.archive.interfaces import UnreadableUnitError
 
 @contextmanager
 def unreadable_file():
-    """Mark HDF5/open/schema failures without hiding programming errors."""
+    """Convert HDF5, open and schema failures to UnreadableUnitError.
+
+    OSError, KeyError and ValueError are converted. Other exceptions are
+    programming errors and pass through unchanged.
+    """
     try:
         yield
     except UnreadableUnitError:

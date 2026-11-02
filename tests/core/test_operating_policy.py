@@ -1,4 +1,4 @@
-"""The threshold rule's decisions compile to the permanent mask and the deployed words; refusal paths."""
+"""The threshold rule's decisions compile to the permanent mask and the deployed words, and inconsistent inputs are refused."""
 
 import importlib.util
 import json

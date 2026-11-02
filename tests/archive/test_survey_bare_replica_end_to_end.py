@@ -1,22 +1,21 @@
-"""End-to-end survey() coverage for the bare-minoc-replica patch, plus the
-files() contract branches that no test in tests/archive reaches.
+"""End-to-end survey() tests for bare minoc replicas, and the files()
+contract branches that no other test in tests/archive reaches.
 
-Two things measured coverage showed were missing (stdlib sys.monitoring line
-trace over the whole tests/archive run, 2026-08-28):
+A line trace with stdlib sys.monitoring over the whole tests/archive run on
+2026-08-28 found two gaps in coverage.
 
-1. Every survey()-level test fakes ``DATATRAIL.common_path`` itself
-   (tests/archive/test_survey_contract_refusal.py:106,
-   tests/archive/test_survey_empty_events.py, ...), i.e. they stub out the
-   exact function the patch changed. Nothing drives survey() through the real
-   ``files()`` normalization, so no test can observe what a restored bare
-   replica does to the rows survey writes. The tests here fake only the one
-   real seam -- ``dt.subprocess.run`` -- so ``_restore_collection`` runs for
-   real.
+1. Every survey-level test fakes ``DATATRAIL.common_path`` itself
+   (tests/archive/test_survey_contract_refusal.py,
+   tests/archive/test_survey_empty_events.py and others), which is the
+   function that restoration changed. No test drove survey() through the real
+   ``files()`` normalization, so the effect of a restored bare replica on the
+   rows written by survey was never observed. The tests here fake only the
+   real seam, ``dt.subprocess.run``, so ``_restore_collection`` runs for real.
 
-2. datatrail_client.files() lines 388, 390-391, 397-398, 401 and 403-404 --
-   the file_replica_locations/minoc shape branches -- were never executed.
+2. The shape branches of datatrail_client.files() for file_replica_locations
+   and minoc were never executed.
 
-Offline: no network, no live datatrail, no CADC.
+No test reaches the network, a live datatrail or CADC.
 """
 from __future__ import annotations
 
@@ -55,7 +54,7 @@ class _Proc:
 def _fake_ps(monkeypatch, minoc):
     """Answer `datatrail ps ... --json` with this minoc replica list.
 
-    Patches the adapter's ONE subprocess boundary, so files(),
+    The adapter's only subprocess boundary is patched, so files(),
     _restore_collection() and the common-path split all run for real.
     """
     monkeypatch.setitem(sys.modules, "dtcli", types.ModuleType("dtcli"))
@@ -69,8 +68,11 @@ def _fake_ps(monkeypatch, minoc):
 
 
 def _fake_archive(monkeypatch):
-    """cadcinfo: a real size for objects that exist, a definitive absence
-    (size None, err None -- an answer, not an outage) for everything else."""
+    """Fake cadcinfo with a real size for each object that exists.
+
+    Any other object returns size None and error None, which is a definitive
+    absence with no outage.
+    """
     seen = []
 
     def fake_size(self, uri, *a, **k):
@@ -103,11 +105,9 @@ def _rows(path):
             if line.strip()]
 
 
-# ==========================================================================
-# The documented real case: every replica bare, all in the event directory.
-# survey() must produce exactly the rows it produced before Datatrail
-# dropped the prefix -- same common_path, same URIs.
-# ==========================================================================
+# The documented real case has every replica bare and in the event directory.
+# survey() produces the same rows as before Datatrail dropped the prefix, with
+# the same common_path and the same URIs.
 def test_all_bare_replicas_survey_to_the_same_rows(monkeypatch, tmp_path):
     _fake_ps(monkeypatch, [f"{EVENT_DIR}/{baseband_filename(EVENT, fid)}"
                            for fid in FREQ_IDS])
@@ -119,8 +119,8 @@ def test_all_bare_replicas_survey_to_the_same_rows(monkeypatch, tmp_path):
                                          for fid in FREQ_IDS]
     assert {r["common_path"] for r in rows} == {f"cadc:CHIMEFRB/{EVENT_DIR}"}
     assert {r["obs_date"] for r in rows} == {"2020-07-15"}
-    # every probe went to a URI that exists -- the restored prefix is the one
-    # cadcinfo resolves, not merely one that passes the collection check
+    # every probe went to a URI that exists, so the restored prefix is one that
+    # cadcinfo resolves as well as one that passes the collection check
     assert set(probed) == ARCHIVE
     assert "0 contract-refused" in text
     assert "accepted-empty" in text and "0 accepted-empty" in text
@@ -168,11 +168,8 @@ def test_sibling_directory_refusal_stays_visible_until_resurveyed(
     assert _rows(retry / "no_files_events.jsonl") == []
 
 
-# ==========================================================================
-# files(): the file_replica_locations / minoc shape branches. Measured as
-# never executed by tests/archive before this file
-# (datatrail_client.py:388, 390-391, 397-398, 401, 403-404).
-# ==========================================================================
+# files(): the shape branches for file_replica_locations and minoc, which no
+# other test in tests/archive executed in the 2026-08-28 trace
 def _files(monkeypatch, files_value):
     monkeypatch.setitem(sys.modules, "dtcli", types.ModuleType("dtcli"))
     monkeypatch.setattr(dt, "_cli_version", lambda: (0, 11, 0))
@@ -184,13 +181,13 @@ def _files(monkeypatch, files_value):
 
 
 def test_absent_replica_locations_is_no_data_not_a_refusal(monkeypatch):
-    # line 388: "file_replica_locations": null -> queried OK, no bytes
+    # "file_replica_locations": null means the query succeeded with no bytes
     assert _files(monkeypatch, {"file_replica_locations": None}) == (
         None, [], True)
 
 
 def test_empty_minoc_list_is_no_data_not_a_refusal(monkeypatch):
-    # line 401: an empty list is an answer, never an outage
+    # an empty minoc list is an answer, never an outage
     assert _files(monkeypatch, {"file_replica_locations": {"minoc": []}}) == (
         None, [], True)
 
@@ -201,13 +198,13 @@ def test_empty_minoc_list_is_no_data_not_a_refusal(monkeypatch):
 ])
 def test_non_object_replica_locations_refuses(monkeypatch, locations,
                                               fragment):
-    # lines 390-391
+    # file_replica_locations that is not an object
     with pytest.raises(DatatrailContractError, match=fragment):
         _files(monkeypatch, {"file_replica_locations": locations})
 
 
 def test_non_list_minoc_refuses(monkeypatch):
-    # lines 397-398: a bare string would otherwise be iterated per-character
+    # a bare string would otherwise be iterated per character
     with pytest.raises(DatatrailContractError, match="non-list 'minoc'"):
         _files(monkeypatch, {"file_replica_locations":
                              {"minoc": "cadc:CHIMEFRB/data/x/y.h5"}})
@@ -215,7 +212,7 @@ def test_non_list_minoc_refuses(monkeypatch):
 
 @pytest.mark.parametrize("bad", [None, "", "   ", 7, ["nested"], {}])
 def test_malformed_minoc_entry_refuses(monkeypatch, bad):
-    # lines 403-404: one bad entry poisons the list; never a partial answer
+    # one bad entry refuses the whole list, so no partial answer is returned
     with pytest.raises(DatatrailContractError, match="malformed 'minoc'"):
         _files(monkeypatch, {"file_replica_locations": {"minoc": [
             "cadc:CHIMEFRB/data/x/y.h5", bad]}})

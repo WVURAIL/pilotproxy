@@ -29,7 +29,7 @@ def write(path, value):
 
 
 def study(tmp_path):
-    """Two deterministic fake-power observations, with actual reducer/calibrator."""
+    """Build a study of two deterministic fake-power observations with the actual reducer and calibrator."""
     out = FIXTURES.fixture(tmp_path)
     path = out / "trial-identities.npy"
     ids = np.load(path, allow_pickle=False)

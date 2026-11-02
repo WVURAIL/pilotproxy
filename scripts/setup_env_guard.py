@@ -173,12 +173,14 @@ def validate_venv_target(
 ) -> Path:
     """Validate and canonicalize a target before ``python -m venv --clear``.
 
-    An existing non-empty directory is accepted only when a durable ownership
-    sidecar or a prior in-directory marker exists. A standard, unmarked venv
-    may be adopted only with an explicit opt-in. Checkout containment is
-    rejected in both directions: clearing a checkout ancestor would erase the
-    checkout, while placing the managed environment inside a checkout risks
-    erasing tracked or user-created project content on a later rerun.
+    The filesystem root, the home directory and its ancestors are always
+    refused. An existing non-empty directory is accepted only when a durable
+    ownership sidecar or a prior in-directory marker exists. A standard,
+    unmarked venv may be adopted only with an explicit opt-in. Checkout
+    containment is refused in both directions. Clearing an ancestor of a
+    checkout would erase the checkout, and a managed environment in a
+    checkout could erase tracked or user-created project content on a later
+    rerun.
     """
     resolved = canonical_path(target)
     resolved_home = canonical_path(home)
@@ -243,9 +245,10 @@ def prepare_venv_target(
         checkouts=checkouts,
         adopt_legacy=adopt_legacy,
     )
-    # Create the directory itself before claiming it so the durable sidecar can
-    # bind to st_dev/st_ino. ``venv --clear`` removes children but preserves
-    # this root identity, while deletion/recreation invalidates the claim.
+    # The directory is created before it is claimed so the durable sidecar can
+    # bind to st_dev/st_ino. ``venv --clear`` removes the children and keeps
+    # this root identity, and deleting and recreating the directory
+    # invalidates the claim.
     resolved.mkdir(parents=True, exist_ok=True)
     resolved = validate_venv_target(
         resolved,

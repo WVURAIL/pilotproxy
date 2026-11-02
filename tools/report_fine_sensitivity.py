@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Report complete frozen H1 cohorts without retuning policies or SNR grids.
 
-Ordinary paired bootstrap draws are represented by integer multiplicities.
-Each original null sample is sorted once; cumulative resampled multiplicities
-select the exact higher order statistic. Common resampling arrays are reused
-across every channel/case, both Pfa levels, all stages and both Pd targets.
-Pointwise intervals and raw-grid bounds do not establish all-band equivalence.
+The ordinary paired bootstrap draws are represented by integer
+multiplicities. Each original null sample is sorted once, and the cumulative
+resampled multiplicities select the exact higher order statistic. The same
+resampling arrays are reused for every channel and case, both Pfa levels, all
+stages, and both Pd targets. This report does not cover all-band equivalence,
+since the intervals are pointwise and the grid bounds are raw.
 """
 from __future__ import annotations
 
@@ -70,7 +71,7 @@ def artifact(out, name, schema, plan):
 
 
 def raw_headers(path, metadata):
-    """Validate every NPY header/byte length without examining power values."""
+    """Validate each NPY header and member byte length without reading the power values."""
     n, ns = metadata["stop"] - metadata["start"], len(metadata["snr_db"])
     expected = {"float_fine": ((n, ns, 5, 3, 256), np.dtype(np.float64)),
                 "float_coarse": ((n, ns, 5, 3), np.dtype(np.float64)),
@@ -158,7 +159,7 @@ def inventory(out, plan, ids, phase, grid):
 
 
 def resampling(null_ids, h1_ids, *, replicates, seed):
-    """Ordinary independent bootstrap weights, preserving original paired IDs."""
+    """Return ordinary independent bootstrap multiplicities that keep the original paired IDs."""
     null_ids, h1_ids = np.asarray(null_ids), np.asarray(h1_ids)
     if (null_ids.ndim != 1 or h1_ids.ndim != 1 or not len(null_ids) or not len(h1_ids)
             or len(np.unique(null_ids)) != len(null_ids) or len(np.unique(h1_ids)) != len(h1_ids)
@@ -194,7 +195,7 @@ def _multiplicities(counts, trials):
 
 
 def weighted_thresholds(samples, counts, *, pfa, exact=False):
-    """Exact higher threshold on each resampled multiset; no float Q16 cast."""
+    """Return the exact higher threshold of each resampled multiset without a float cast of Q16 values."""
     from fractions import Fraction
     if np.iscomplexobj(samples):
         raise ValueError("Null scalar responses must be real")
@@ -222,7 +223,7 @@ def weighted_thresholds(samples, counts, *, pfa, exact=False):
 
 
 def bootstrap_rates(samples, thresholds, available, counts, *, exact=False, batch=32):
-    """Paired H1 proportions [replicate,SNR], preserving ties and sentinels."""
+    """Return the paired H1 detection proportions [replicate, SNR] with ties and sentinels kept."""
     if np.iscomplexobj(samples):
         raise ValueError("H1 responses must be real")
     samples = np.asarray(samples, dtype=object if exact else float)
@@ -282,7 +283,7 @@ def crossing_arrays(snrs, rates, target):
 
 
 def loss_bounds(left, right):
-    """Outer difference of the two raw adjacent SNR brackets, second-first."""
+    """Return the outer difference of the two raw adjacent SNR brackets (second minus first)."""
     if left["status"] != "unique" or right["status"] != "unique":
         return {"status": "unresolved", "lower_db": None, "upper_db": None, "point_loss_db": None}
     a, b = left["upward_brackets"][0], right["upward_brackets"][0]
@@ -292,7 +293,7 @@ def loss_bounds(left, right):
 
 
 def curve_summary(samples, valid, threshold, snrs, *, exact=False, always=None):
-    """All trials stay in the denominator; invalid frozen decisions force keep."""
+    """Summarize one Pd curve with every trial in the denominator and each invalid frozen decision counted as keep."""
     if samples.shape != valid.shape or samples.ndim != 2:
         raise ValueError("Curve samples/validity must be [trial,SNR]")
     invalid = np.count_nonzero(~valid, axis=0)
@@ -314,7 +315,7 @@ def curve_summary(samples, valid, threshold, snrs, *, exact=False, always=None):
 
 
 def paired_ladder(null_by_stage, h1_by_stage, qualified, point_crossings, snrs, weights, pfas):
-    """All eight paired stage contrasts from one globally paired resampling plan."""
+    """Evaluate all eight paired stage contrasts from one globally paired resampling plan."""
     b = len(weights["null_counts"])
     estimates = np.full((len(pfas), 2, len(STAGES), b), np.nan)
     codes = np.full(estimates.shape, 4, dtype=np.uint8)

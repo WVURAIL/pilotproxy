@@ -1,4 +1,4 @@
-"""Rescoring a score cache on a fine geometry: its own geometry reproduces it; a guard band changes the bulk."""
+"""Rescoring a score cache on its own fine geometry reproduces it, and a guard band changes the bulk."""
 import numpy as np
 import pytest
 

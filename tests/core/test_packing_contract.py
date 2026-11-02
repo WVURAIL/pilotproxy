@@ -1,4 +1,4 @@
-"""Observable packing contracts: exact order, scales, and invalid inputs."""
+"""Tests of the packed sample order, the quantization scales and the refusal of invalid inputs."""
 
 import numpy as np
 import pytest

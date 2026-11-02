@@ -1,32 +1,33 @@
 #!/usr/bin/env python3
 """
-Failure-injection stress tests for the datatrail contract boundary -- the part
-of a survey that otherwise only exercises against the live CANFAR/CADC service.
+Failure-injection stress tests for the datatrail contract boundary of a survey.
 
-A healthy `chime-survey` run reaches exactly ONE of the three verdicts this
-source defines (`progress`), so a single happy-path run is no evidence at all
-about the other two. Measured with a stdlib line tracer over a full clean
-survey_chime() call (2026-08-28): `service_down`, `refused` and `no_data` were
-never executed, nor were any of the eight DatatrailContractError raise sites in
-datatrail_client.files(), nor any of the five not-answered branches in
+This boundary is otherwise exercised only against the live CANFAR/CADC
+service. A healthy `chime-survey` run reaches exactly one of the three verdicts
+this source defines (`progress`), so a single clean run gives no evidence about
+the other two. A stdlib line tracer was run over a full clean
+survey_chime() call on 2026-08-28. The `service_down`, `refused` and `no_data`
+verdicts were never executed, and neither were the eight DatatrailContractError
+raise sites in datatrail_client.files() or the five not-answered branches in
 _list_result_checked(). This file drives every one of them.
 
-Everything here is offline. The ONLY seams faked are:
-  * `datatrail_client.subprocess.run` -- the adapter's single child-process
-    boundary, so files(), _restore_collection(), the collection/span checks and
-    the common-path split all run for real (and the fake asserts the invocation
-    contract itself: same-interpreter `-m dtcli.cli`, trailing `--json`);
-  * `CadcDatatrailSource._cadc_size` -- the single CADC boundary. It returns
-    (size, None) present, (None, None) DEFINITIVELY ABSENT (cadc.py:473-474
-    reports NotFound as an answer, not an error) and (None, exc) hard error;
-  * `cadc._enumerate_events` for the tests that are not about enumeration.
-    The `ls`-drift tests deliberately leave it real and drive the walk through
-    the fake CLI.
-  * the clocks, for the outage-circuit tests -- ONE fake clock shared by
+All tests run offline. Only these seams are faked:
+  * `datatrail_client.subprocess.run`, the single child-process boundary of the
+    adapter. files(), _restore_collection(), the collection and span checks and
+    the common-path split all run for real. The fake also asserts the
+    invocation contract: same-interpreter `-m dtcli.cli` and a trailing
+    `--json`.
+  * `CadcDatatrailSource._cadc_size`, the single CADC boundary. It returns
+    (size, None) for a present file, (None, None) for a definitive absence and
+    (None, exc) for a hard error. NotFound is reported as an answer, so it
+    gives (None, None).
+  * `cadc._enumerate_events`, for the tests that are not about enumeration.
+    The `ls` drift tests use the real walk and drive it through the fake CLI.
+  * the clocks, for the outage-circuit tests. One fake clock is shared by
     cadc._monotonic, cadc._sleep and datatrail_client.time, because the outage
-    deadline is compared inside BOTH modules. Patching only one of them makes
-    _run_json return at datatrail_client.py:110-111 before spawning a child, so
-    the test silently measures nothing (measured: 0 child calls).
+    deadline is compared in both modules. If only one module is patched,
+    _run_json returns at its deadline check before it spawns a child, and the
+    test measures nothing (0 child calls were measured).
 
 Run:
   TMPDIR=/tmp PYTHONPATH=src python -m pytest tests/archive/test_survey_stress_contract.py
@@ -58,36 +59,36 @@ FREQ_IDS = [0, 1]
 BIG = MINIMUM_ARCHIVE_BYTES + 4096
 
 
-# ==========================================================================
-# the fake datatrail CLI -- same shape as tests/archive/test_datatrail_adapter.py
-# so the two files cannot drift: handler(args) -> (rc, stdout, stderr), where
+# Fake datatrail CLI
+#
+# The fake has the same shape as the one in tests/archive/test_datatrail_adapter.py,
+# so the two files cannot drift. handler(args) returns (rc, stdout, stderr).
 # args excludes the [sys.executable, -m, dtcli.cli] prefix and the trailing
-# --json, both of which the fake asserts.
-# ==========================================================================
+# --json, and the fake asserts both.
 class _Proc:
     def __init__(self, rc, out, err=""):
         self.returncode, self.stdout, self.stderr = rc, out, err
 
 
 class _MisWiredFake(BaseException):
-    """A fake-CLI contract violation, raised as a BaseException ON PURPOSE.
+    """A fake-CLI contract violation, raised as a BaseException on purpose.
 
-    _run_json catches `Exception` and reports it as "the CLI did not answer"
-    (datatrail_client.py:116-117), which survey escalates to a one-hour outage
-    circuit. An AssertionError from a mis-wired fake would therefore be
-    swallowed and the test would hang for 3600 fake-free seconds instead of
-    failing. Deriving from BaseException makes a harness mistake loud.
+    _run_json catches `Exception` and reports it as "the CLI did not answer",
+    which survey escalates to a one-hour outage circuit. An AssertionError from
+    a mis-wired fake would be swallowed, and the test would hang for the 3600 s
+    circuit instead of failing. A BaseException makes a harness mistake fail
+    at once.
     """
 
 
 def _install_fake_cli(monkeypatch, handler=None, version=(0, 11, 0)):
-    """datatrail "installed" at `version`; CLI calls answered by `handler`.
+    """Install a fake datatrail at `version` and answer its CLI calls with `handler`.
 
-    Returns the list of arg-vectors the adapter actually spawned, so a test can
-    assert how many children a code path costs (an outage circuit that spins
-    is a service-abuse bug, not just a slow test). The invocation contract
-    itself is checked here -- same-interpreter `-m dtcli.cli`, trailing
-    `--json` -- so a drifting invocation fails loudly.
+    Returns the list of argument vectors the adapter spawned, so a test can
+    assert how many children a code path costs. An outage circuit that spins
+    abuses the shared service. The invocation contract (same-interpreter
+    `-m dtcli.cli`, trailing `--json`) is checked here, so a drifting
+    invocation fails at once.
     """
     calls: list = []
     monkeypatch.setitem(sys.modules, "dtcli", types.ModuleType("dtcli"))
@@ -107,8 +108,8 @@ def _install_fake_cli(monkeypatch, handler=None, version=(0, 11, 0)):
     return calls
 
 
-# dtcli's group callback prints this to STDOUT ahead of any command output when
-# PyPI shows a newer release -- _extract_json must skip it.
+# Update banner that the dtcli group callback prints to stdout ahead of any
+# command output when PyPI has a newer release. _extract_json must skip it.
 _BANNER = "A new release of datatrail-cli is available: 0.11.0 -> 0.12.0\n\n"
 
 
@@ -124,15 +125,16 @@ def _minoc(uris):
 
 def _ls_handler(*, scopes=None, larger_datasets=None, datasets=None,
                 ps=None):
-    """Route `ls` by arity exactly as _list_result_checked does.
+    """Route `ls` by arity in the same way as _list_result_checked.
 
-    len(args)==1 -> {"scopes"}; ==2 -> {"larger_datasets"}; ==3 -> {"datasets"}.
-    Any value may be a callable(args) returning (rc, stdout, stderr) so a test
-    can fail one dataset part-way through a walk.
+    len(args) == 1 answers {"scopes"}, 2 answers {"larger_datasets"} and 3
+    answers {"datasets"}. Any value may be a callable(args) that returns
+    (rc, stdout, stderr), so a test can fail one dataset part-way through a
+    walk.
 
-    `ps` answers the file-listing arity; it defaults to the no-data shape so an
-    enumeration test that happens to find an event resolves it immediately
-    instead of falling into the outage circuit.
+    `ps` answers the file-listing arity. Its default is the no-data shape, so
+    an enumeration test that finds an event resolves it at once and does not
+    fall into the outage circuit.
     """
     def handler(args):
         if not args:
@@ -157,12 +159,12 @@ def _ls_handler(*, scopes=None, larger_datasets=None, datasets=None,
     return handler
 
 
-# ==========================================================================
-# clocks. datatrail_client.files() compares the outage deadline against
-# `time.monotonic()` in ITS OWN module (datatrail_client.py:109, :355), while
-# survey compares it against cadc._monotonic. One clock must therefore drive
-# both, or the test measures a code path that never spawns a child.
-# ==========================================================================
+# Clocks
+#
+# datatrail_client.files() and _run_json compare the outage deadline against
+# `time.monotonic()` in their own module, while survey compares it against
+# cadc._monotonic. One clock must drive both, or the test measures a code path
+# that never spawns a child.
 class _Clock:
     def __init__(self, start: float = 1000.0) -> None:
         self.t = float(start)
@@ -186,11 +188,11 @@ def _install_clock(monkeypatch) -> _Clock:
 
 
 def _no_backoff(monkeypatch) -> list:
-    """Real monotonic, recorded no-op sleep inside the adapter.
+    """Keep the real monotonic clock and record the adapter's sleeps without sleeping.
 
-    Without this, every not-answered files() call sleeps 4+8+16 = 28 REAL
-    seconds (measured), which is the difference between a 6-second suite and a
-    stalled one.
+    Without this, every not-answered files() call sleeps 4 + 8 + 16 = 28 s of
+    real time (measured), and the suite stalls instead of finishing in about
+    6 s.
     """
     slept: list = []
     monkeypatch.setattr(dt, "time", types.SimpleNamespace(
@@ -198,15 +200,15 @@ def _no_backoff(monkeypatch) -> list:
     return slept
 
 
-# ==========================================================================
-# the survey harness. Three seams, nothing else: the CLI child, the CADC
-# probe, and (where the test is not about enumeration) the event walk.
-# ==========================================================================
+# Survey harness
+#
+# Three seams are faked and nothing else: the CLI child, the CADC probe and,
+# where the test is not about enumeration, the event walk.
 def _day_dir(days_ago: int) -> str:
-    """An archive day directory `days_ago` days before today, UTC.
+    """Return the archive day directory `days_ago` days before today (UTC).
 
-    _obs_age_days is UTC (cadc.py:127-136); datetime.date.today() is LOCAL and
-    would skew the 30-day boundary by a day in some timezones.
+    _obs_age_days uses the UTC date. datetime.date.today() is local and would
+    shift the 30-day boundary by a day in some timezones.
     """
     day = (datetime.datetime.now(datetime.timezone.utc).date()
            - datetime.timedelta(days=days_ago))
@@ -223,7 +225,7 @@ def _fake_enumeration(monkeypatch, events):
 
 
 def _fake_archive(monkeypatch, present=(), *, size=BIG, error_for=()):
-    """cadcinfo answers. Returns the list of URIs actually probed."""
+    """Fake the cadcinfo answers and return the list of URIs probed."""
     probed: list = []
     present, error_for = set(present), set(error_for)
 
@@ -233,7 +235,7 @@ def _fake_archive(monkeypatch, present=(), *, size=BIG, error_for=()):
             return None, OSError("archive probe failed")
         if uri in present:
             return size, None
-        return None, None                 # definitive absence, NOT an error
+        return None, None                 # definitive absence (an answer)
     monkeypatch.setattr(cadc_src.CadcDatatrailSource, "_cadc_size", fake_size)
     return probed
 
@@ -256,11 +258,11 @@ def _lines(path):
 
 
 def _state(out):
-    """Everything a survey leaves behind, read from the files AND the DB.
+    """Return everything a survey leaves behind, read from the files and the DB.
 
-    The JSONL/text files are only VIEWS of survey_state.sqlite3
-    (survey_state.py:385-408), so a test that reads only the views cannot tell
-    a missing commit from a missing render.
+    The JSONL and text files are only views of survey_state.sqlite3, rendered
+    by SurveyStore.render_views. A test that reads only the views cannot tell a
+    missing commit from a missing render.
     """
     rows = [json.loads(ln) for ln in _lines(out / "inventory.jsonl")]
     ledger = [json.loads(ln) for ln in _lines(out / "no_files_events.jsonl")]
@@ -283,18 +285,17 @@ def _state(out):
     )
 
 
-# ##########################################################################
-# TIER C -- `ps --json` schema drift. Every deterministic refusal site in
-# datatrail_client.files(), plus the four shapes that are a no-data ANSWER.
-# retries=0 keeps these sub-millisecond and proves no retry is attempted for a
-# deterministic answer.
-# ##########################################################################
+# `ps --json` schema drift
+#
+# These cases cover every deterministic refusal site in datatrail_client.files()
+# and the four shapes that are a no-data answer. retries=0 keeps each case under
+# a millisecond and shows that no retry is made for a deterministic answer.
 _B = f"cadc:CHIMEFRB/{_event_dir(days_ago=2000)}"
 
-# (id, files-half, expectation). Expectation is one of
+# (id, files-half, expectation). The expectation is one of
 #   ("refuse", <substring of the message>) | ("nodata",) | ("ok", cp, names)
 _PS_SHAPES = [
-    # -- deterministic refusals -------------------------------------------
+    # deterministic refusals
     ("files-non-dict-str", "Server hiccup", ("refuse", "non-dict 'files' value (str)")),
     ("files-non-dict-list", [], ("refuse", "non-dict 'files' value (list)")),
     ("locations-list", {"file_replica_locations": []},
@@ -322,7 +323,7 @@ _PS_SHAPES = [
      ("refuse", "not a canonical path")),
     ("directory-only", _minoc([f"{_B}/"]),
      ("refuse", "not a canonical path")),
-    # -- no-data ANSWERS: queried fine, this dataset has no minoc files ----
+    # no-data answers: the query succeeded and the dataset has no minoc files
     ("files-null", None, ("nodata",)),
     ("files-empty-dict", {}, ("nodata",)),
     ("locations-null", {"file_replica_locations": None}, ("nodata",)),
@@ -330,13 +331,13 @@ _PS_SHAPES = [
      ("nodata",)),
     ("minoc-null", {"file_replica_locations": {"minoc": None}}, ("nodata",)),
     ("minoc-empty-list", _minoc([]), ("nodata",)),
-    # -- positive shapes ---------------------------------------------------
+    # positive shapes
     ("single-replica", _minoc([f"{_B}/b_0.h5"]), ("ok", _B, ["b_0.h5"])),
     ("two-replicas", _minoc([f"{_B}/b_0.h5", f"{_B}/b_1.h5"]),
      ("ok", _B, ["b_0.h5", "b_1.h5"])),
-    # multi-segment names are LEGITIMATE: the intensity scope splits one event
+    # Multi-segment names are valid. The intensity scope splits one event
     # across per-beam subdirectories, so a "no slashes in names" guard would be
-    # wrong. Pinned here so nobody adds one.
+    # wrong. This case is pinned so that such a guard is not added.
     ("beam-subdirectories", _minoc([f"{_B}/2068/a.msgpack", f"{_B}/2069/b.msgpack"]),
      ("ok", _B, ["2068/a.msgpack", "2069/b.msgpack"])),
 ]
@@ -353,8 +354,9 @@ def test_ps_payload_shape_taxonomy(monkeypatch, case_id, files_half, expect):
             adapter.files(SCOPE, EVENT, retries=0)
         assert expect[1] in str(excinfo.value), str(excinfo.value)
     elif expect[0] == "nodata":
-        # a no-data ANSWER: ok=True. Never conflated with an outage, because
-        # survey commits ok=False as `service_down` and rides the circuit.
+        # A no-data answer has ok=True. It must never read as an outage,
+        # because survey commits ok=False as `service_down` and enters the
+        # outage circuit.
         assert adapter.files(SCOPE, EVENT, retries=0) == (None, [], True)
     else:
         cp, names, ok = adapter.files(SCOPE, EVENT, retries=0)
@@ -362,9 +364,10 @@ def test_ps_payload_shape_taxonomy(monkeypatch, case_id, files_half, expect):
 
 
 def test_a_payload_without_a_files_key_is_a_refusal_not_no_data(monkeypatch):
-    # 0.11's success payload always carries "files" (it may be null). A
-    # non-error dict WITHOUT it is a newer CLI, and must never read as "this
-    # dataset has no files" -- that would silently drop the event's rows.
+    # The success payload of datatrail-cli 0.11 always carries "files", which
+    # may be null. A non-error dict without the key comes from a newer CLI. It
+    # must never read as "this dataset has no files", since that would drop the
+    # event's rows with no warning.
     _install_fake_cli(monkeypatch, lambda args: (
         0, json.dumps({"dataset": "d", "scope": "s", "policies": {}}), ""))
     with pytest.raises(DatatrailContractError) as excinfo:
@@ -374,9 +377,9 @@ def test_a_payload_without_a_files_key_is_a_refusal_not_no_data(monkeypatch):
 
 
 def test_a_deterministic_refusal_spawns_exactly_one_child(monkeypatch):
-    # Retrying cannot change a deterministic answer. If a refusal ever started
-    # being retried it would cost 4x the calls against a shared production
-    # service for every affected event.
+    # Retrying cannot change a deterministic answer. A retried refusal would
+    # cost 4 times the calls against the shared production service for every
+    # affected event.
     calls = _install_fake_cli(
         monkeypatch,
         lambda args: (0, _ps_payload(_minoc(["cadc:SOMEONE_ELSE/x/y.h5"])), ""))
@@ -387,7 +390,8 @@ def test_a_deterministic_refusal_spawns_exactly_one_child(monkeypatch):
 
 
 def test_ambiguous_bare_and_mixed_replies_are_refused(monkeypatch):
-    # A bare reply cannot identify a collection when two are configured.
+    # The collection of a bare reply cannot be determined when two are
+    # configured.
     monkeypatch.setattr(dt, "_MINOC_COLLECTIONS",
                         ("cadc:CHIMEFRB/", "cadc:CHIMEOUTRIGGER/"))
     bare = ["data/kko/baseband/raw/2025/01/01/a/b_0.h5",
@@ -397,7 +401,7 @@ def test_ambiguous_bare_and_mixed_replies_are_refused(monkeypatch):
     with pytest.raises(DatatrailContractError, match="outside the expected collection"):
         dt.Datatrail().files(SCOPE, EVENT, retries=0)
 
-    # A prefixed member cannot establish the identity of a bare member.
+    # A prefixed member does not determine the collection of a bare member.
     mixed = ["cadc:CHIMEOUTRIGGER/data/kko/x/b_0.h5", "data/kko/x/b_1.h5"]
     _install_fake_cli(monkeypatch,
                       lambda args: (0, _ps_payload(_minoc(mixed)), ""))
@@ -416,9 +420,10 @@ def test_restoration_refuses_to_guess_between_two_collections(monkeypatch):
 
 
 def test_restoration_stays_narrow(monkeypatch):
-    # The patch's blast radius is _BARE_REPLICA_ROOTS. Every spelling that is
-    # NOT exactly "data/..." must still be refused, or a drifting replica list
-    # gets a fabricated common_path instead of a loud refusal.
+    # Restoration applies only to the roots in _BARE_REPLICA_ROOTS. Every
+    # spelling other than exactly "data/..." must still be refused. Otherwise a
+    # drifting replica list is given a fabricated common_path and no refusal is
+    # raised.
     for uri in ("/data/chime/x/f.h5",            # site-SE spelling
                 "//data/chime/x/f.h5",           # collapses to the above
                 "./data/chime/x/f.h5",
@@ -443,10 +448,11 @@ def test_restoration_is_idempotent_and_does_not_double_prefix(monkeypatch):
 
 
 def test_a_triple_slash_survives_the_collapse_but_not_the_split(monkeypatch):
-    # str.replace does ONE non-overlapping pass: "a///b" -> "a//b". The
-    # residual slash is swallowed by lstrip("/") in the split, so the derived
-    # path is unharmed -- but the collapse is not a normalizer, and nothing
-    # else canonicalizes. Pinned so a "cleanup" that removes lstrip() is caught.
+    # str.replace makes one non-overlapping pass, so "a///b" becomes "a//b".
+    # The remaining slash is removed by lstrip("/") in the split, and the
+    # derived path is correct. The replace() collapse does not normalize the
+    # path, and no other step canonicalizes it. This case is pinned so that a
+    # cleanup that removes lstrip() is caught.
     assert "cadc:CHIMEFRB///d/x".replace("//", "/") == "cadc:CHIMEFRB//d/x"
     _install_fake_cli(monkeypatch, lambda args: (0, _ps_payload(_minoc([
         f"cadc:CHIMEFRB//{_event_dir(days_ago=2000)}/b_0.h5",
@@ -456,10 +462,10 @@ def test_a_triple_slash_survives_the_collapse_but_not_the_split(monkeypatch):
 
 
 def test_duplicate_replicas_are_not_deduplicated(monkeypatch):
-    # CHARACTERIZATION. Nothing between datatrail_client.py:424 and :434
-    # deduplicates, so a repeated replica yields a repeated name. Harmless for
-    # common_path() (which discards names) but wrong for the documented
-    # companion-resolution use of files().
+    # This is a characterization test. No code between the name split in
+    # files() and its return removes duplicates, so a repeated replica yields a
+    # repeated name. This is harmless for common_path(), which discards the
+    # names, and wrong for the documented companion-resolution use of files().
     _install_fake_cli(monkeypatch, lambda args: (0, _ps_payload(_minoc([
         f"{_B}/b_0.h5", f"{_B}/b_0.h5", f"{_B}/b_1.h5"])), ""))
     cp, names, ok = dt.Datatrail().files(SCOPE, EVENT, retries=0)
@@ -467,9 +473,9 @@ def test_duplicate_replicas_are_not_deduplicated(monkeypatch):
     assert dt.Datatrail().common_path(SCOPE, EVENT, retries=0) == (cp, True)
 
 
-# ##########################################################################
-# TIER D -- `ls --json` drift. These drive the REAL _enumerate_events walk.
-# ##########################################################################
+# `ls --json` drift
+#
+# The enumeration tests here drive the real _enumerate_events walk.
 _LS_SHAPES = [
     ("scopes-str", 0, {"scopes": "Host not in allowlist"},
      "non-list 'scopes' value (str)"),
@@ -482,8 +488,8 @@ _LS_SHAPES = [
      "contains non-string or empty entries"),
     ("error-envelope", 1, {"error": "Server not responding."},
      "Server not responding."),
-    # a FALSY error is reported as a schema problem for what is really a
-    # service problem -- worth knowing, and pinned.
+    # A falsy error is reported as a schema problem, although it is a service
+    # problem. These two cases pin that behavior.
     ("empty-error", 1, {"error": ""}, "no 'scopes' key"),
     ("null-error", 1, {"error": None}, "no 'scopes' key"),
     ("renamed-key", 0, {"renamed_in_0_12": ["a"]},
@@ -497,8 +503,9 @@ def test_ls_payload_shape_taxonomy(monkeypatch, capsys, case_id, rc, payload,
                                    expect_stderr):
     _install_fake_cli(monkeypatch, lambda args: (rc, json.dumps(payload), ""))
     scopes, ok = dt.Datatrail().list_scopes_checked()
-    # ok=False is "couldn't determine", never "no scopes" -- a discovery walk
-    # that treated these as emptiness would write an empty inventory and exit 0.
+    # ok=False means the scopes could not be determined. A discovery walk that
+    # read these replies as an empty list would write an empty inventory and
+    # exit 0.
     assert (scopes, ok) == ([], False)
     assert expect_stderr in capsys.readouterr().err
 
@@ -516,15 +523,15 @@ def test_non_json_stdout_is_not_answered(monkeypatch, capsys, stdout):
 
 
 def test_a_top_level_json_array_is_not_answered(monkeypatch):
-    # _extract_json returns None for a non-dict payload (datatrail_client.py:93).
+    # _extract_json returns None for a non-dict payload.
     _install_fake_cli(monkeypatch, lambda args: (0, "[1, 2]", ""))
     assert dt.Datatrail().list_scopes_checked() == ([], False)
 
 
 def test_enumeration_aborts_when_a_scope_cannot_be_listed(monkeypatch, tmp_path):
-    # SurveyUnavailableError, and -- the load-bearing half -- NO enum_cache.json
-    # is written. A half-walked map cached as complete would silently shrink
-    # every subsequent run of that directory.
+    # The survey raises SurveyUnavailableError and writes no enum_cache.json.
+    # A half-walked map cached as complete would shrink every later run of that
+    # directory with no warning.
     _install_fake_cli(monkeypatch, _ls_handler())          # every ls errors
     _no_backoff(monkeypatch)
     _fake_archive(monkeypatch)
@@ -552,24 +559,26 @@ def test_enumeration_aborts_mid_walk_without_a_partial_cache(monkeypatch,
         _survey(tmp_path)
     assert "could not list children of" in str(excinfo.value)
     assert "'2021'" in str(excinfo.value)
-    # the walk stopped at the failing dataset; the events it DID find are
-    # discarded rather than cached as the whole map.
+    # The walk stops at the failing dataset. The events it found are
+    # discarded, and no partial map is cached.
     assert [a[1:] for a in calls] == [
         [SCOPE], [SCOPE, "2020"], [SCOPE, "2021"]]
     assert not (tmp_path / "enum_cache.json").exists()
 
 
-# ##########################################################################
-# TIER A -- silent wrong data: no exception, no warning, wrong inventory.
-# ##########################################################################
+# Wrong data with no error
+#
+# These failures raise no exception and print no warning, and the inventory is
+# wrong.
 @pytest.mark.parametrize("child,expected_events", [
     ("100200200", 1),
     ("astro-100200200", 1),
     ("chime.event.baseband.raw.100200200", 1),
-    # \b never matches next to an underscore (it is a word character), so the
-    # underscore-separated names datatrail actually uses for astro datasets
-    # yield NOTHING. If datatrail renames child datasets to this form, the
-    # survey enumerates 0 events, writes an empty inventory, and EXITS 0.
+    # \b never matches next to an underscore, since the underscore is a word
+    # character. datatrail names its astro datasets with an underscore before
+    # the event ID, so these names yield no event. If datatrail renames child
+    # datasets to this form, the survey enumerates 0 events, writes an empty
+    # inventory and exits 0.
     ("astro_100200200", 0),
     ("baseband_100200200", 0),
     ("2020-07-15_100200200", 0),
@@ -588,10 +597,10 @@ def test_child_dataset_name_grammar(monkeypatch, tmp_path, child,
 
 def test_a_grammar_drift_reports_success_with_an_empty_inventory(monkeypatch,
                                                                  tmp_path):
-    # The whole failure, end to end: the ONLY signal is the generic empty
-    # inventory warning -- identical to the signal for a legitimately empty
-    # archive -- and --strict-completeness still PASSES, because there is
-    # nothing pending, incomplete or refused.
+    # The whole failure is run end to end. The generic empty-inventory warning
+    # is the only signal, and an archive with no events gives the same warning.
+    # --strict-completeness still passes, because nothing is pending,
+    # incomplete or refused.
     _install_fake_cli(monkeypatch, _ls_handler(
         larger_datasets=["2020"], datasets=[f"astro_{EVENT}"]))
     _no_backoff(monkeypatch)
@@ -613,9 +622,9 @@ def test_a_grammar_drift_reports_success_with_an_empty_inventory(monkeypatch,
 
 def test_an_empty_enumeration_is_cached_and_silently_reused(monkeypatch,
                                                             tmp_path):
-    # Pass 1 hits the grammar drift and caches an EMPTY map. Pass 2 runs after
-    # the service is fixed and still reports 0 events, making ZERO ls calls --
-    # the cache is only invalidated by --re-enumerate.
+    # Pass 1 hits the grammar drift and caches an empty map. Pass 2 runs after
+    # the service is fixed and still reports 0 events with no ls calls. Only
+    # --re-enumerate invalidates the cache.
     _install_fake_cli(monkeypatch, _ls_handler(
         larger_datasets=["2020"], datasets=[f"astro_{EVENT}"]))
     _no_backoff(monkeypatch)
@@ -625,12 +634,13 @@ def test_an_empty_enumeration_is_cached_and_silently_reused(monkeypatch,
     calls = _install_fake_cli(monkeypatch, _ls_handler(
         larger_datasets=["2020"], datasets=[EVENT]))
     assert "to survey: 0 events" in _survey(tmp_path)
-    assert calls == []                       # cache hit: no listing at all
+    assert calls == []                       # cache hit, no listing
     assert "enumerated 1 unique events" in _survey(tmp_path, re_enumerate=True)
 
 
 def test_a_valid_but_empty_listing_is_not_an_outage(monkeypatch, tmp_path):
-    # key present with [] is ok=True: a genuine "nothing registered".
+    # A present key holding [] is ok=True, a real answer that nothing is
+    # registered.
     _install_fake_cli(monkeypatch, _ls_handler(larger_datasets=[]))
     _no_backoff(monkeypatch)
     _fake_archive(monkeypatch)
@@ -646,7 +656,8 @@ def test_a_valid_but_empty_listing_is_not_an_outage(monkeypatch, tmp_path):
 ])
 def test_absent_and_present_but_unusable_bytes_have_explicit_reasons(
         monkeypatch, tmp_path, case, size):
-    # Byte-presence and reader eligibility are separate observations.
+    # Byte presence and reader eligibility are recorded as two observations,
+    # each with its own reason.
     cp = f"cadc:CHIMEFRB/{_event_dir(days_ago=400)}"
     _install_fake_cli(monkeypatch, lambda args: (0, _ps_payload(_minoc(
         [f"{cp}/{baseband_filename(EVENT, f)}" for f in FREQ_IDS])), ""))
@@ -705,9 +716,10 @@ def test_a_sub_floor_file_is_ledgered_differently_from_an_absent_one(
     (28, False), (29, False), (30, True), (31, True)])
 def test_the_empty_age_gate_flips_exactly_at_the_configured_day(
         monkeypatch, tmp_path, days_ago, written_off):
-    # aged_out = age_days >= empty_age_days (cadc.py:771-772), default 30.
-    # Asserting the constant here too, so moving it forces this table to be
-    # re-derived rather than silently changing every write-off decision.
+    # survey() sets aged_out = age_days >= empty_age_days, with a default of
+    # 30. The constant is asserted here as well, so a change to it forces this
+    # table to be derived again and cannot change every write-off decision
+    # unnoticed.
     assert cadc_src._EMPTY_TERMINAL_AGE_DAYS == 30
     cp = f"cadc:CHIMEFRB/{_event_dir(days_ago=days_ago)}"
     _install_fake_cli(monkeypatch, lambda args: (0, _ps_payload(_minoc(
@@ -725,7 +737,7 @@ def test_the_empty_age_gate_flips_exactly_at_the_configured_day(
         assert state.ledger[0]["age_days"] == days_ago
         assert state.attempts == {}          # cleared on commit
     else:
-        assert state.statuses == {}          # not committed: retried next run
+        assert state.statuses == {}          # not committed, retried next run
         assert state.ledger == []
         assert state.attempts == {key: 1}
 
@@ -746,7 +758,7 @@ def test_empty_age_days_zero_writes_off_a_fresh_observation(monkeypatch,
 
 def test_an_unreachable_age_gate_still_terminates_at_max_attempts(monkeypatch,
                                                                   tmp_path):
-    # --empty-age-days can never make an empty event immortal: _MAX_ATTEMPTS
+    # --empty-age-days cannot keep an empty event open forever. _MAX_ATTEMPTS
     # closes it on the third sighting with reason "max-attempts".
     cp = f"cadc:CHIMEFRB/{_event_dir(days_ago=400)}"
     _install_fake_cli(monkeypatch, lambda args: (0, _ps_payload(_minoc(
@@ -769,9 +781,9 @@ def test_an_unreachable_age_gate_still_terminates_at_max_attempts(monkeypatch,
 
 def test_an_undatable_common_path_fails_open_into_the_retry_path(monkeypatch,
                                                                  tmp_path):
-    # _DATE_RE needs "/raw/YYYY/MM/DD/". A common path without it is
-    # obs_date="unknown", age_days=None, and the age gate CANNOT fire -- the
-    # event keeps its cross-resume allowance instead of being written off.
+    # _DATE_RE needs "/raw/YYYY/MM/DD/". A common path without it gives
+    # obs_date="unknown" and age_days=None, so the age gate cannot fire. The
+    # event keeps its cross-resume allowance and is not written off.
     cp = "cadc:CHIMEFRB/data/chime/misc/astro_100200200"
     _install_fake_cli(monkeypatch, lambda args: (0, _ps_payload(_minoc(
         [f"{cp}/{baseband_filename(EVENT, f)}" for f in FREQ_IDS])), ""))
@@ -805,7 +817,7 @@ def test_unverified_restoration_remains_pending_across_retries(
     pending = json.loads((tmp_path / "patched" / "pending_events.json").read_text())
     assert pending[f"{SCOPE}|{EVENT}"]["reason"] == "unverified-restored-collection"
 
-    # the same reply with restoration reverted: a refusal that names the URI.
+    # With restoration reverted, the same reply is a refusal that names the URI.
     monkeypatch.setattr(dt, "_restore_collection", lambda uri: uri)
     _survey(tmp_path / "reverted")
     reverted = _state(tmp_path / "reverted")
@@ -828,7 +840,8 @@ def test_a_restored_uri_that_resolves_to_nothing_is_not_terminal(monkeypatch,
 
 def test_restored_and_prefixed_rows_share_identity_but_record_origin(
         monkeypatch, tmp_path):
-    # URI identity and verified bytes agree while restoration remains auditable.
+    # Restored and prefixed rows have the same URI identity and verified
+    # bytes, and collection_restored records which origin each row has.
     day = _day_dir(400)
     event_dir = f"{day}/astro_{EVENT}"
     names = [baseband_filename(EVENT, f) for f in FREQ_IDS]
@@ -856,9 +869,9 @@ def test_restored_and_prefixed_rows_share_identity_but_record_origin(
     assert bare.statuses == {f"{SCOPE}|{EVENT}": "complete"}
 
 
-# ##########################################################################
-# TIER B -- the three-way verdict taxonomy, driven end to end.
-# ##########################################################################
+# Three-way verdict taxonomy
+#
+# Each verdict is driven end to end.
 _OLD = _event_dir(days_ago=400)
 _YOUNG = _event_dir(days_ago=3)
 
@@ -898,8 +911,8 @@ def test_verdict_taxonomy(monkeypatch, tmp_path, case_id, files_half, present,
     assert len(state.rows) == n_rows
     assert tag in text
     if reason is None:
-        # NOTE: a `no-data` verdict writes NO ledger row anywhere. It is only
-        # recoverable as the residual surveyed - rows - no_files.
+        # A `no-data` verdict writes no ledger row. It can be recovered only
+        # as the residual surveyed - rows - no_files.
         assert state.ledger == []
     else:
         assert [r["reason"] for r in state.ledger] == [reason]
@@ -931,14 +944,14 @@ def test_a_contract_refusal_names_the_offending_uri_and_does_not_stall(
     assert "cadc:SOMEONE_ELSE/data/x/y.h5" in detail
     assert "1/1 replicas affected" in detail
     assert state.ledger[0]["common_path"] is None
-    # a refusal is a per-event decision: it never rides the outage circuit.
+    # a refusal is a per-event decision and never enters the outage circuit
     assert "service unreachable" not in text
 
 
 def test_a_mixed_probe_result_becomes_incomplete_on_the_third_sighting(
         monkeypatch, tmp_path):
-    # 1 of 2 candidates hard-errors. Passes 1-2 write nothing and bump the
-    # attempt counter; pass 3 accepts what verified and flags the event.
+    # 1 of 2 candidates hard-errors. Passes 1 and 2 write nothing and bump the
+    # attempt counter. Pass 3 accepts the verified file and flags the event.
     cp = f"cadc:CHIMEFRB/{_OLD}"
     names = [baseband_filename(EVENT, f) for f in FREQ_IDS]
     _install_fake_cli(monkeypatch, lambda args: (
@@ -958,16 +971,17 @@ def test_a_mixed_probe_result_becomes_incomplete_on_the_third_sighting(
                       ({}, {key: "incomplete"}, 1)]
     assert "INCOMPLETE(1)" in text
     assert _state(tmp_path).incomplete == [f"{key}\tunresolved={names[1]}"]
-    # and the single written row carries NO marker that its event is partial:
+    # The single written row carries no marker that its event is partial.
     # incomplete_events.txt is the only signal.
     assert "incomplete" not in json.dumps(_state(tmp_path).rows[0])
 
 
 def test_every_candidate_erroring_takes_the_outage_circuit_not_incomplete(
         monkeypatch, tmp_path):
-    # The true expired-certificate signature: datatrail answers fine, every
-    # CADC probe fails. len(errored)==len(cand) diverts to service_down
-    # (cadc.py:666), so such an event can never be committed as `incomplete`.
+    # This is the signature of an expired certificate. datatrail answers, and
+    # every CADC probe fails. verify() in survey() diverts
+    # len(errored) == len(cand) to service_down, so such an event can never be
+    # committed as `incomplete`.
     cp = f"cadc:CHIMEFRB/{_OLD}"
     names = [baseband_filename(EVENT, f) for f in FREQ_IDS]
     _install_fake_cli(monkeypatch, lambda args: (
@@ -981,16 +995,17 @@ def test_every_candidate_erroring_takes_the_outage_circuit_not_incomplete(
     assert "remained unreachable for 3600s" in str(excinfo.value)
     state = _state(tmp_path)
     assert state.statuses == {} and state.rows == [] and state.attempts == {}
-    # the circuit backs off exponentially and never spins: every wait is at
-    # least the initial backoff except the final clamp to the deadline.
+    # The circuit backs off exponentially and never spins. Every wait is at
+    # least the initial backoff, except the final wait, which is clamped to the
+    # deadline.
     assert clock.sleeps[:4] == [60.0, 120.0, 240.0, 480.0]
     assert sum(clock.sleeps) == pytest.approx(float(cadc_src._MAX_SERVICE_WAIT))
 
 
 def test_a_mixed_result_can_never_reach_the_outage_circuit(monkeypatch,
                                                            tmp_path):
-    # Structural gate: with 1..n-1 candidates erroring the event stays on the
-    # `progress` path, so a partial archive outage cannot abort a whole survey.
+    # With 1 to n-1 candidates erroring, the event stays on the `progress`
+    # path, so a partial archive outage cannot abort a whole survey.
     cp = f"cadc:CHIMEFRB/{_OLD}"
     names = [baseband_filename(EVENT, f) for f in FREQ_IDS]
     _install_fake_cli(monkeypatch, lambda args: (
@@ -1008,9 +1023,9 @@ def test_a_mixed_result_can_never_reach_the_outage_circuit(monkeypatch,
 
 def test_a_sustained_transient_aborts_with_the_certificate_advice(monkeypatch,
                                                                   tmp_path):
-    # The full ladder through the REAL child boundary: datatrail keeps
-    # answering with the error envelope, survey rides the circuit for exactly
-    # _MAX_SERVICE_WAIT and then aborts, having preserved its state.
+    # The full ladder is run through the real child boundary. datatrail keeps
+    # answering with the error envelope. survey stays in the outage circuit for
+    # exactly _MAX_SERVICE_WAIT, then aborts with its state preserved.
     calls = _install_fake_cli(monkeypatch, lambda args: (
         1, json.dumps({"error": "Server not responding."}), ""))
     _fake_enumeration(monkeypatch, [EVENT])
@@ -1022,27 +1037,27 @@ def test_a_sustained_transient_aborts_with_the_certificate_advice(monkeypatch,
     message = str(excinfo.value)
     assert "remained unreachable for 3600s" in message
     assert "cadc-get-cert" in message
-    # 9 outage rounds x files()'s 4 attempts (1 + 3 retries)
+    # 9 outage rounds of 4 files() attempts each (1 + 3 retries)
     assert len(calls) == 36, len(calls)
     outage = [s for s in clock.sleeps if s >= 48.0]
     assert outage == [60.0, 120.0, 240.0, 480.0, 600.0, 600.0, 600.0, 600.0,
                       48.0]
     assert sum(clock.sleeps) == pytest.approx(float(cadc_src._MAX_SERVICE_WAIT))
-    # the finally block still rendered every view before propagating
+    # the finally block renders every view before the error propagates
     for name in ("inventory.jsonl", "surveyed_events.txt",
                  "incomplete_events.txt", "no_files_events.jsonl",
                  "attempts.json"):
         assert (tmp_path / name).exists(), name
 
 
-# ##########################################################################
-# The child-process boundary itself: how a broken child is classified.
-# ##########################################################################
+# Child-process boundary
+#
+# These tests cover how a broken child is classified.
 def test_a_valid_payload_with_a_stdout_epilogue_reads_as_an_outage(monkeypatch):
-    # _extract_json parses from the FIRST '{' to end-of-string, so anything
-    # printed AFTER the payload breaks the parse and the healthy service reads
-    # as "did not answer" -- which survey escalates to a 1-hour outage and a
-    # misleading "renew the certificate" abort.
+    # _extract_json parses from the first '{' to the end of the string. Any
+    # text printed after the payload breaks the parse, and the healthy service
+    # reads as "did not answer". survey escalates that to a one-hour outage and
+    # a misleading "renew the certificate" abort.
     good = json.dumps({"scopes": ["a"]})
     assert dt._extract_json(good) == {"scopes": ["a"]}
     assert dt._extract_json(good + "\nDone.\n") is None
@@ -1051,8 +1066,8 @@ def test_a_valid_payload_with_a_stdout_epilogue_reads_as_an_outage(monkeypatch):
 
 
 def test_a_banner_containing_a_brace_defeats_the_payload_parse(monkeypatch):
-    # The documented banner tolerance is narrower than datatrail_client.py:24-26
-    # claims: it holds only for a preamble with no '{'.
+    # The banner tolerance is narrower than the datatrail_client module
+    # docstring claims. It holds only for a preamble with no '{'.
     good = json.dumps({"scopes": ["a"]})
     assert dt._extract_json(_BANNER + good) == {"scopes": ["a"]}
     assert dt._extract_json("note {see docs}\n" + good) is None
@@ -1065,9 +1080,9 @@ def test_a_banner_containing_a_brace_defeats_the_payload_parse(monkeypatch):
 ])
 def test_child_spawn_failures_are_transient_not_refusals(monkeypatch, exc,
                                                          fragment):
-    # datatrail_client.py:116 catches Exception, so even MemoryError is
-    # classified as a retryable outage rather than a fault. Characterized here
-    # because widening or narrowing that except clause changes the verdict.
+    # _run_json catches Exception, so even a MemoryError is classified as a
+    # retryable outage. This is characterized here because widening or
+    # narrowing that except clause changes the verdict.
     def boom(args):
         raise exc
     _install_fake_cli(monkeypatch, boom)
@@ -1079,7 +1094,7 @@ def test_child_spawn_failures_are_transient_not_refusals(monkeypatch, exc,
 
 def test_keyboardinterrupt_propagates_through_the_cli_boundary(monkeypatch):
     # KeyboardInterrupt is a BaseException, so it escapes the `except
-    # Exception` above. Widening that clause would silently turn Ctrl-C into a
+    # Exception` in _run_json. Widening that clause would turn Ctrl-C into a
     # one-hour outage wait.
     def boom(args):
         raise KeyboardInterrupt
@@ -1097,8 +1112,9 @@ def test_a_killed_child_is_an_outage(monkeypatch, capsys):
 
 
 def test_an_exhausted_deadline_returns_before_spawning_a_child(monkeypatch):
-    # datatrail_client.py:108-112. This is the trap that silently neuters
-    # clock-faking tests: with the deadline already past, NO child runs.
+    # This is the deadline check at the top of _run_json. With the deadline
+    # already past, no child runs. A clock-faking test that patches only one
+    # module hits this check and measures nothing.
     calls = _install_fake_cli(monkeypatch, lambda args: (0, "{}", ""))
     payload, diag = dt._run_json(["ps", SCOPE, EVENT],
                                  deadline=dt.time.monotonic() - 1)
@@ -1107,8 +1123,9 @@ def test_an_exhausted_deadline_returns_before_spawning_a_child(monkeypatch):
 
 
 def test_a_pre_json_cli_aborts_with_the_upgrade_message(monkeypatch):
-    # A datatrail-cli older than 0.11 rejects --json. That must abort loudly,
-    # not read as an outage -- and it must escape BOTH arities.
+    # A datatrail-cli older than 0.11 rejects --json. The run must abort with
+    # the upgrade message and never read as an outage. The abort must escape
+    # both arities, files() and list_scopes_checked().
     _install_fake_cli(monkeypatch,
                       lambda args: (2, "", "Error: No such option: --json"))
     for call in (lambda: dt.Datatrail().files(SCOPE, EVENT, retries=0),

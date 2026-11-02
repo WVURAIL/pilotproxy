@@ -11,7 +11,7 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "pilot_proxy"
 GENERAL = sorted([*SRC.joinpath("characterization").rglob("*.py"), *SRC.joinpath("products").rglob("*.py")])
 DOMAIN = re.compile(r"pilot|atsc|dtv|chime|bao|radiofisher", re.IGNORECASE)
 # Names fixed on disk by the product contract (v5 product keys), a frozen table column, or the archive's
-# directory layout: they are read and written as they are, whatever the layer.
+# directory layout. Every layer reads and writes them unchanged.
 FROZEN_NAMES = {
     "pilot_hz": "v5 product key",
     "chime_frequency_hz": "v5 product key",
@@ -22,7 +22,10 @@ BAND_COUNT = 23
 
 
 def _defined_names(tree: ast.Module):
-    """Function, class and module-level names, parameters and class attributes: the layer's vocabulary."""
+    """Yield (name, line) for the names that make up a layer's vocabulary.
+
+    These are function, class and module-level names, parameters and class attributes.
+    """
     def visit(node, top):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             yield node.name, node.lineno
@@ -52,7 +55,7 @@ def test_no_domain_word_in_the_layers_vocabulary(path):
     assert not found, found
 
 
-# Vocabulary retired by the refactor: a scenario is not a "world", and no variance split remains.
+# retired names: "world" for a scenario, and r_sys_no_split for the removed variance split
 RETIRED = re.compile(r"(?:^|_)worlds?(?:_|$)|^r_sys_no_split$", re.IGNORECASE)
 
 

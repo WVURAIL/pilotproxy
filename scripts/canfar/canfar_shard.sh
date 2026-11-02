@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
-# CANFAR two-shard production controller -- pilot-proxy v5, frozen tag.
-#   bash /arc/home/$CANFAR_USER/pp_switch/canfar_shard.sh <1|2> <update|gate|launch|resume|tripwire|status|stop>
+# CANFAR shard controller for the pilot-proxy v5 archive run at the frozen tag.
+#   bash /arc/home/$CANFAR_USER/pp_switch/canfar_shard.sh <1|2|3> <update|gate|launch|resume|run|tripwire|status|stop>
 #
-# Shard 1 (notebook1): 506,521,537,552,568,583,675,752,767,813,829  (13.50 TiB, 86,541 files)
-# Shard 2 (notebook2): 598,614,629,644,660,690,706,721,736,783,798,844  (13.46 TiB, 85,896 files)
-# Shard 3 (notebook3): 767,783,813,829,798,844 -- tail channels of shards 1/2, merged back
-#   with canfar_merge_channel.sh as each completes (7.13 TiB, 48,779 files)
-# One shard per session/node. Same frozen identity as the local run:
-# tag archive-run-source-20260829, package e30ec73f..., inventory e97a57f9...,
-# qualified sm90 kernel 33b6e1c45c47 (cross-arch smoke PASS 2026-09-01).
+# Shard 1 (notebook1): 506,521,537,552,568,583,675,752,767,813,829  (13.50 TiB, 86541 files)
+# Shard 2 (notebook2): 598,614,629,644,660,690,706,721,736,783,798,844  (13.46 TiB, 85896 files)
+# Shard 3 (notebook3): 767,783,813,829,798,844, the tail channels of shards 1 and 2,
+#   merged back with canfar_merge_channel.sh as each completes (7.13 TiB, 48779 files)
+# One shard runs per session and node. gate() checks the same frozen identity
+# for every shard: source REV, package PKG, inventory e97a57f9..., weights WSHA
+# and the qualified sm90 kernel 33b6e1c45c47 (cross-arch smoke PASS 2026-09-01).
 #
 # Predeclared dispositions (same as local, split by shard):
-#   * sub-frame quarantines EXPECTED: shard1 cap 2374, shard2 cap 2333 (total 4707)
-#   * --allow-partial stays OFF: the FINAL invocation of each shard exits
-#     NONZERO with "incomplete requested scope" once only quarantined rows
-#     remain. That exit is the designed endpoint, not a failure.
-#   * outage signature: cadcget "Not found" while cadcinfo answers = OUTAGE,
-#     never a missing file.
-# launch requires PP_LAUNCH_CONFIRM=YES; resume requires PP_RESUME_CONFIRM=YES.
+#   * sub-frame quarantines are expected: shard1 cap 2374, shard2 cap 2333
+#     (total 4707), and shard3 cap 1406 on the channels it shares with them.
+#   * --allow-partial stays off. Once only quarantined rows remain, the final
+#     invocation of each shard exits nonzero with "incomplete requested scope",
+#     and that exit is the designed endpoint of the shard.
+#   * a cadcget "Not found" while cadcinfo answers is treated as an outage,
+#     and the file is not counted as missing.
+# launch requires PP_LAUNCH_CONFIRM=YES, resume requires PP_RESUME_CONFIRM=YES
+# and run requires PP_RUN_CONFIRM=YES.
 set -uo pipefail
-# Site configuration: the CANFAR account name; export it before running (see README.md).
-#   CANFAR_USER  the CANFAR account; the kit and the runs live under /arc/home/$CANFAR_USER/
+# Site configuration, exported before running (see README.md):
+#   CANFAR_USER  CANFAR account name. The kit and the runs are under /arc/home/$CANFAR_USER/.
 : "${CANFAR_USER:?}"
 umask 077
 die(){ echo "SHARD-BLOCK: $*" >&2; exit 1; }
@@ -29,14 +31,14 @@ say(){ printf '\n===== %s =====\n' "$*"; }
 SHARD="${1:-}"; MODE="${2:-status}"
 case "$SHARD" in 1|2|3) ;; *) die "usage: canfar_shard.sh <1|2|3> <update|gate|launch|resume|run|tripwire|status|stop>";; esac
 
-TAG=archive-run-source-20260829       # superseded; REV below is authoritative
-# Which Storage Inventory service to fetch through. Empty = the library
-# default (global raven), which is what you want whenever raven is healthy:
-# it load-balances across replicas and measured 15-160 MiB/s, whereas pinning
-# a single replica measured ~1.7 MiB/s sustained and timed out under load
-# (2026-09-01). Pin one only to ride out a raven outage:
+TAG=archive-run-source-20260829       # superseded by REV below
+# Storage Inventory service to fetch through. Empty selects the library
+# default (global raven), which is used whenever raven is healthy. Raven
+# load-balances across replicas and measured 15-160 MiB/s, while a single
+# pinned replica measured about 1.7 MiB/s sustained and timed out under load
+# (2026-09-01). A replica is pinned only to ride out a raven outage:
 #   PP_STORAGE_SERVICE=ivo://cadc.nrc.ca/uvic/minoc bash canfar_shard.sh ...
-# Check raven first:  curl -s https://cadc-west-01.canfar.net/raven/availability
+# raven status:  curl -s https://cadc-west-01.canfar.net/raven/availability
 SVC="${PP_STORAGE_SERVICE-}"
 export PILOT_PROXY_STORAGE_SERVICE="$SVC"
 REV=b59b5c05fed2a9509a31e206f0911e76ca2d2885
@@ -67,12 +69,13 @@ case "$SHARD" in
   GATE_MD5=9c082ed5909039f7809ac30c088a226a
   ;;
 3)
-  # Added 2026-09-03 after a third session probed 150 MiB/s while shards 1
-  # and 2 ran: bandwidth is per-session, not pooled. Takes the TAIL of each
-  # owner's list (767,813,829 from shard 1; 783,798,844 from shard 2), ordered
-  # by how soon the owner would otherwise reach them. Finished channels are
-  # handed to the owner with canfar_merge_channel.sh so it skips them.
-  # 48,779 files, 7,297.5 GiB, predeclared sub-frame quarantines 1,406.
+  # A third session probed 150 MiB/s while shards 1 and 2 ran (2026-09-03),
+  # so bandwidth is per session and a third shard adds throughput. Shard 3
+  # takes the tail of each owner's list (767,813,829 from shard 1 and
+  # 783,798,844 from shard 2), ordered by how soon the owner would otherwise
+  # reach them. Finished channels are handed to the owner with
+  # canfar_merge_channel.sh, so the owner skips them.
+  # 48779 files, 7297.5 GiB and 1406 predeclared sub-frame quarantines.
   SEL=767,783,813,829,798,844
   SUBFRAME_CAP=1406
   GATE_URI=cadc:CHIMEFRB/data/chime/baseband/raw/2020/07/15/astro_100050005/baseband_100050005_844.h5
@@ -82,9 +85,10 @@ esac
 GATE_BYTES=91311880
 # Products carry the source identity that built them, and the detector
 # refuses to append frames from a different build (detector_version embeds
-# the package source hash). So each source gets its own run directory: the
-# 20260829-source products stay untouched as evidence, and this build starts
-# its own clean run rather than silently mixing implementations.
+# the package source hash). Each source therefore gets its own run directory.
+# The products built from the 20260829 source (package e30ec73f...) stay
+# untouched as evidence, and this build starts a clean run so that two
+# implementations are never mixed in one product.
 SRC_SHORT=${REV:0:7}
 OUT=/arc/home/$CANFAR_USER/pp_runs/chime_pilots_rebuild_20260829_canfar_shard${SHARD}_${SRC_SHORT}
 STG=/tmp/pp_stage_shard${SHARD}_${SRC_SHORT}
@@ -131,10 +135,10 @@ gate(){
 
   test -f "$CERT" || die "no cert at $CERT -- run: cadc-get-cert -u $CANFAR_USER --days-valid 30"
   # CANFAR rewrites this shared file with a fresh 7-day delegated cert on every
-  # session launch, so a 14-day floor made the gate unpassable after any new
-  # session (it blocked shard 3 entirely). Supervisors resume constantly, so
-  # what matters is that the cert outlives the next stretch of work, not the
-  # whole run: refuse under 3 days, warn under 10.
+  # session launch, so a 14-day floor would fail the gate after any new
+  # session (it blocked shard 3 entirely). The supervisor resumes often, so
+  # the cert only has to outlive the next stretch of work. The gate refuses
+  # under 3 days and warns under 10.
   openssl x509 -in "$CERT" -noout -checkend $((3*86400)) >/dev/null \
     || die "cert expires within 3 days ($(openssl x509 -in "$CERT" -noout -enddate)) -- run: cadc-get-cert -u $CANFAR_USER --days-valid 30"
   if openssl x509 -in "$CERT" -noout -checkend $((10*86400)) >/dev/null; then
@@ -164,8 +168,9 @@ gate(){
   rm -f /tmp/pp_gate_obj.h5
   echo "byte gate : $GATE_BYTES bytes, md5 verified (route: ${SVC:-default raven})"
 
-  # cupy JIT-compiles at runtime and needs CUDA toolkit headers. The scan dies
-  # on its first file without them (shard 3, 2026-09-03), so prove it here.
+  # cupy JIT-compiles at runtime and needs the CUDA toolkit headers. Without
+  # them the scan dies on its first file (shard 3, 2026-09-03), so the gate
+  # compiles one kernel before any scan starts.
   if [ -z "${CUDA_PATH:-}" ]; then
     for c in "${CUDA_HOME:-}" /usr/local/cuda /opt/conda              "$(dirname "$(dirname "$(command -v nvcc 2>/dev/null || echo /nonexistent/x)")")"; do
       [ -n "$c" ] && [ -r "$c/include/cuda.h" ] && { export CUDA_PATH="$c"; break; }
@@ -201,8 +206,8 @@ launch(){
   mkdir -p "$STG" "$LOGDIR"
   echo "$(hostname) $(date -u +%FT%TZ) launch" >> "$OUT.hostlog" 2>/dev/null || true
   # setsid -f (foreground fork) keeps SIGINT at its default disposition in the
-  # child; a bash async job (&) would start it with SIGINT ignored and make
-  # every later kill -INT a silent no-op (learned 2026-09-01).
+  # child. A bash async job (&) would start the scan with SIGINT ignored, and
+  # every later kill -INT would do nothing (2026-09-01).
   # shellcheck disable=SC2046
   setsid -f pilot-proxy $(scan_args) >> "$LOG" 2>&1 < /dev/null
   sleep 1
@@ -219,7 +224,7 @@ resume(){
   pgrep -f "pilot-proxy chime-scan.*$OUT" >/dev/null && die "scan already running for $OUT"
   mkdir -p "$STG" "$LOGDIR"
   echo "$(hostname) $(date -u +%FT%TZ) resume" >> "$OUT.hostlog" 2>/dev/null || true
-  # setsid -f, not a bash async job: see launch() comment (SIGINT stays usable).
+  # setsid -f keeps SIGINT usable (see the comment in launch())
   # shellcheck disable=SC2046
   setsid -f pilot-proxy $(scan_args) >> "$LOG" 2>&1 < /dev/null
   sleep 1
@@ -248,7 +253,7 @@ with np.load(npz, allow_pickle=False) as z:
     assert len(pairs) == len(set(pairs)), "duplicate frames"
     fine = z["fine_power_u64"]
     assert fine.dtype == np.uint64 and fine.shape[1:] == (3, 256), fine.shape
-    # v6: each frame power is the exact all-bin sum of its fine powers
+    # each frame power is the exact all-bin sum of its fine powers (schema v6)
     sums = fine.sum(axis=2, dtype=np.uint64)
     for term, key in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
         assert np.array_equal(z[key][:, 0], sums[:, term]), key + " is not the fine-power sum"
@@ -258,13 +263,14 @@ with np.load(npz, allow_pickle=False) as z:
     print("units / frames   :", len(order), "/", len(pairs))
     print("valid frames     : %d/%d (%.1f%%)" % (int(valid.sum()), len(valid), 100.0*valid.sum()/max(len(valid),1)))
     print("identity stamped : frozen source + qualified sm90 kernel")
-# Quarantine classes, kept distinct on purpose:
-#   sub-frame        predeclared, capped, expected
-#   archive-truncated the stored object is shorter than its own HDF5 superblock
-#                    claims, so it can never be read by anyone; permanent and
-#                    not ours. Counted and capped, does not stop the run.
-#   other            still fails: this is the check that caught the staging
-#                    removal silently quarantining readable units.
+# Quarantine classes:
+#   sub-frame          predeclared, capped and expected
+#   archive-truncated  stored object shorter than its own HDF5 superblock
+#                      claims, so no reader can ever read it. The fault is in
+#                      the archive copy and is permanent. Counted and capped,
+#                      and the run continues.
+#   other              fails the tripwire. This check caught the staging
+#                      removal that quarantined readable units.
 ARCHIVE_TRUNCATED_CAP = 50
 n = sub = trunc = bad = 0
 truncated_names = []
@@ -309,8 +315,9 @@ run_foreground(){
   pgrep -f "pilot-proxy chime-scan.*$OUT" >/dev/null && die "scan already running for $OUT on this node"
   mkdir -p "$STG" "$LOGDIR"
   echo "$(hostname) $(date -u +%FT%TZ) run-foreground" >> "$OUT.hostlog" 2>/dev/null || true
-  # Foreground: this process IS the session command (headless sessions end
-  # when it exits). Log still goes to /arc for uniform monitoring.
+  # In the foreground, this process is the session command, and a headless
+  # session ends when it exits. The log still goes to /arc so every shard is
+  # monitored the same way.
   exec >> "$LOG" 2>&1
   # shellcheck disable=SC2046
   exec pilot-proxy $(scan_args)

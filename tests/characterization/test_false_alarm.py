@@ -12,7 +12,7 @@ def test_the_higher_index_is_the_exact_ceiling():
             q = 1 - Fraction(str(pfa)) if not isinstance(pfa, Fraction) else 1 - pfa
             expected = -((-q.numerator * (n - 1)) // q.denominator)          # ceil((1 - pfa)(n - 1)) exactly
             assert fa.higher_index(n, pfa) == expected
-    # the float 0.001 is read as its decimal, not as its binary expansion
+    # the float 0.001 is read as the decimal 1/1000
     assert fa.higher_index(1001, 0.001) == 999
 
 

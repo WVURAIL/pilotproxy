@@ -62,9 +62,9 @@ def current_files() -> list[Path]:
 def searchable_text(text: str) -> str:
     r"""Normalize presentation escapes before checking retired identifiers.
 
-    TeX writes identifiers as ``name\_with\_underscores``. Searching only the
-    source spelling allowed a retired schema token to survive in generated
-    formal-document input, so compare both the source and rendered spelling.
+    TeX writes identifiers as ``name\_with\_underscores``, and a search of the
+    source spelling alone misses a retired schema token in generated TeX
+    input. Both the source and the rendered spelling are therefore searched.
     """
     return text + "\n" + text.replace(r"\_", "_")
 

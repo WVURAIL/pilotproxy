@@ -1,7 +1,8 @@
 """Authenticated, offline fine replay of a declared native CHORD capture.
 
-Contracts describe the recorded hardware state; replay checks their consistency,
-not their physical truth. Invalid decisions and product mismatches are retained.
+The contracts describe the recorded hardware state. The replay checks the
+contracts for consistency and takes the hardware state they describe as
+declared. Invalid decisions and product mismatches are kept in the output.
 """
 
 from __future__ import annotations
@@ -97,7 +98,7 @@ def _load_contracts(plan, base, bindings):
         name: _bound_file(plan.get(name), base, bindings)
         for name in ("receiver_profile", "packing_contract", "input_state_contract", "producer")
     }
-    # Parse even the receiver through the strict reader before its typed loader.
+    # the receiver profile also goes through the strict reader before its typed loader
     data = {name: _read(path) for name, path in paths.items()}
     receiver = load_receiver_profile(paths["receiver_profile"])
     packing, state, producer = (data[k] for k in ("packing_contract", "input_state_contract", "producer"))
@@ -279,7 +280,7 @@ def _encoded_json(value):
 
 
 def replay_capture(plan_path):
-    """Compute deterministic artifacts in memory; preserve failed parity as data."""
+    """Compute the deterministic replay artifacts in memory and keep failed parity as data."""
     path = Path(plan_path).resolve()
     plan_sha = sha256(path)
     plan = _read(path)
@@ -363,8 +364,10 @@ def replay_capture(plan_path):
             "mask_frame": captures["masks"][block].provenance(),
             "power_frame": captures["powers"][block].provenance(),
         }
-        # Stable observational identity survives capture/file/trial relabeling.
-        # Independent-unit labels still require the supplied sampling evidence.
+        # The trial identity is formed from the voltage hash, timing and
+        # frequencies, so it is unchanged when a capture, file or trial is
+        # relabeled. Independent-unit labels still require the supplied
+        # sampling evidence.
         trial_identity = {
             "voltage_sha256": hashlib.sha256(payload.tobytes()).hexdigest(),
             "fpga_seq_num": voltage[0].fpga_seq_num,
@@ -404,8 +407,9 @@ def replay_capture(plan_path):
             })
     parity = all(row["mask_matches"] and row["powers_match"] for row in comparisons)
     invalid = sum(not row["valid"] for rows in rows_by_channel.values() for row in rows)
-    # Authenticate declarations even when parity fails, but emit no calibrator input
-    # that could conceal failed product agreement.
+    # Population declarations are authenticated even when parity fails. The
+    # population file, which is the calibrator input, is written only when the
+    # products agree, so a failed product agreement cannot be hidden.
     for channel, profile in profiles.items():
         rows = rows_by_channel[channel]
         artifacts[f"scores_CH{channel}.json"] = {"schema_version": "pilotproxy_capture_fine_scores_v1", "profile_id": profile["profile_id"], "scores": rows}
@@ -428,7 +432,8 @@ def replay_capture(plan_path):
         "interpretation": "Sampled replay checks declared contracts and recorded products. It does not verify hardware state, IID sampling, signal absence, full-rate validity, or telescope release acceptance.",
     }
     artifacts["replay.json"] = report
-    # Recheck after parsing/computation so changed source files never seal a result.
+    # Every input and source is hashed again after parsing and computation, so a
+    # file changed during the replay cannot seal a result.
     for name, digest in bindings.items():
         _require(sha256(name) == digest, f"Input changed during replay: {name}")
     _same(producer_receipt["reference"], _source_identity(), "reference changed during replay")
@@ -436,7 +441,7 @@ def replay_capture(plan_path):
 
 
 def write_replay(plan_path, output_dir):
-    """Write a new evidence directory, including invalid and mismatch outcomes."""
+    """Write a new evidence directory with every invalid and mismatch outcome."""
     output = Path(output_dir)
     _require(not output.exists(), "Replay output directory must not exist")
     artifacts = replay_capture(plan_path)

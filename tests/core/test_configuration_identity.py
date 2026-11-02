@@ -132,7 +132,7 @@ def test_detector_contract_revision_two_defines_frame_powers_from_fine_powers() 
         "coarse_power_definition": "sum_of_fxfft256_fine_powers",
     }
     validate_detector_contract(contract)
-    # The revision-1 field is retired, and so is any other definition.
+    # The revision-1 field name and any other definition are rejected.
     retired = dict(contract["fine_reduction"])
     retired["v1_marginal_identity"] = retired.pop("coarse_power_definition")
     with pytest.raises(ValueError, match="coarse_power_definition"):

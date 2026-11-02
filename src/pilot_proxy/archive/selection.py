@@ -1,7 +1,7 @@
 """Select archive units by frequency channel, event, or both.
 
 Every source reads the user's selection from ``ctx.selection``. A channel
-filter selects that frequency across events; an event filter can select all
+filter selects that frequency across events, and an event filter can select all
 frequencies of one acquisition. When both are supplied, a unit must pass both.
 
 Accepted forms::
@@ -16,12 +16,13 @@ Accepted forms::
 
 Event selection requires an explicit dictionary key or prefix. Inferring it
 from an integer's size would make the grammar depend on the current range of
-archive identifiers. A unit missing a filtered field does not match: for
-example, a frequency filter excludes a calibration product with no freq_id.
+archive IDs. A unit with no value for a filtered field does not match.
+For example, a frequency filter excludes a calibration product that has no
+freq_id.
 
 Empty strings or collections, comma-only values, nested collections, negative
-channels, and channels outside the known geometry are errors. Use ``all`` or
-``*`` to request every unit explicitly.
+channels, and channels at or above the instrument's channel count are errors.
+Only an explicit ``all`` or ``*`` selects every unit.
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ def _selection_error(sel, detail: str = "") -> SystemExit:
 
 
 def _validated_n_channels(n_channels: Optional[int]) -> Optional[int]:
-    """Validate optional instrument geometry without permissive coercion."""
+    """Return the optional instrument channel count after a strict type check."""
     if n_channels is None:
         return None
     if (isinstance(n_channels, bool)
@@ -55,7 +56,7 @@ def _validated_n_channels(n_channels: Optional[int]) -> Optional[int]:
 
 
 def _freq_id(value, original, n_channels: Optional[int]) -> int:
-    """Strictly coerce one channel identifier and enforce known geometry."""
+    """Return one channel id as an int, checked against the instrument geometry."""
     if isinstance(value, bool):
         raise _selection_error(original, f"boolean {value!r} is not a channel id")
     if isinstance(value, Integral):
@@ -80,7 +81,7 @@ def _freq_id(value, original, n_channels: Optional[int]) -> int:
 
 
 def _add_bounded(out: set[int], values, original) -> None:
-    """Deduplicate channels without ever exceeding the memory guard."""
+    """Add each channel to ``out`` once, up to ``_MAX_SELECTION_CARDINALITY``."""
     for channel in values:
         if channel in out:
             continue
@@ -91,19 +92,20 @@ def _add_bounded(out: set[int], values, original) -> None:
 
 
 def parse_freq_ids(sel, *, n_channels: Optional[int] = None) -> Optional[FrozenSet[int]]:
-    """The freq_id grammar: None for 'all', else a set.
+    """Parse a freq_id selection into a set, or None for every freq_id.
 
-    Accepts whatever an analyzer's plan_runs hands down:
-      None / 'all' / '*'       -> None  (no filter -- every freq_id)
+    The accepted forms are those an analyzer's plan_runs passes down::
+
+      None / 'all' / '*'       -> None  (no filter, every freq_id)
       int                      -> {int}
       list / tuple / set       -> {ints}
       '844'                    -> {844}
       '614,706'                -> {614, 706}
       '506-844'                -> {506, 507, ..., 844}
 
-    Malformed input raises SystemExit (actionable, never a bare int()
-    traceback): a plan_runs typo must name itself, not surface as
-    `ValueError: invalid literal` three frames deep.
+    Malformed input raises SystemExit with a message that names the bad token,
+    so a typo in plan_runs is reported at its source. A bare ``int()`` call
+    would raise ``ValueError: invalid literal`` three frames deep.
     """
     n_channels = _validated_n_channels(n_channels)
     if sel is None:
@@ -123,7 +125,7 @@ def parse_freq_ids(sel, *, n_channels: Optional[int] = None) -> Optional[FrozenS
     if not s:
         raise _selection_error(sel, "an empty value does not mean 'all'")
     if s.startswith(_EVENT_PREFIXES):
-        # the one wrong-slot mistake worth naming: {"freq_ids": "events:..."}
+        # an event selection in the freq_ids slot, {"freq_ids": "events:..."}
         raise SystemExit(
             f"{sel!r} is an event selection in a freq_id slot -- events go in "
             f"the 'events' key of a selection dict, or as the whole selection "
@@ -157,11 +159,12 @@ def parse_freq_ids(sel, *, n_channels: Optional[int] = None) -> Optional[FrozenS
 
 
 def _parse_events(sel) -> Optional[FrozenSet[str]]:
-    """Event IDs -> a frozenset of strings (None = no filter).
+    """Parse an event selection into a frozenset of strings, or None for no filter.
 
-    Events are compared as strings because they are archive identifiers, not
-    numbers: inventory rows may carry them as int or str depending on how the
-    JSON was written, and a filename parse always yields str.
+    Event IDs name archive acquisitions and are never used as numbers, so they
+    are compared as strings. Inventory rows can hold them as int or str,
+    depending on how the JSON was written, and a filename parse always yields
+    str.
     """
     if sel is None:
         return None
@@ -206,13 +209,18 @@ def _parse_events(sel) -> Optional[FrozenSet[str]]:
 
 @dataclass(frozen=True)
 class Selection:
-    """A parsed selection: two independent, ANDed filters (None = no filter)."""
+    """Parsed selection with two independent filters that a unit must both pass.
+
+    A filter of None selects every unit.
+    """
     freq_ids: Optional[FrozenSet[int]] = None
     events: Optional[FrozenSet[str]] = None
 
     def wants_freq_id(self, freq_id) -> bool:
-        """True if `freq_id` passes the filter. A unit with NO freq_id
-        (freq_id=None) fails a set filter -- exact-match semantics."""
+        """Return True when ``freq_id`` passes the channel filter.
+
+        Matching is exact, so a unit with no freq_id (None) fails any set filter.
+        """
         if self.freq_ids is None:
             return True
         if isinstance(freq_id, bool) or freq_id is None:
@@ -237,11 +245,11 @@ class Selection:
 
 
 def parse_selection(sel: Any, *, n_channels: Optional[int] = None) -> Selection:
-    """Turn any accepted selection form into a `Selection`.
+    """Parse any accepted selection form into a ``Selection``.
 
-    Raises SystemExit (actionable, not a traceback) on a malformed dict or an
-    empty `events:` prefix, so a typo in a plan_runs sub-selection fails loudly
-    instead of silently selecting nothing.
+    A malformed dict or an empty ``events:`` prefix raises SystemExit with a
+    message, so a typo in a plan_runs sub-selection stops the run instead of
+    selecting nothing.
     """
     n_channels = _validated_n_channels(n_channels)
     if sel is None:

@@ -1,11 +1,12 @@
 # coding=utf-8
-"""Smoke gate for the coherent-gain Monte Carlo tool.
+"""Smoke tests for the coherent-gain Monte Carlo tool.
 
-The critical assertion is the verify stage: the tool's batched
-reduction must equal the packaged pipeline (float32-identical fine spectra,
-coarse F from the all-bin sums of the fine powers). The MC smoke then checks the machinery
-end to end at a reduced geometry: sane H0 thresholds and Pd -> 1 at
-strong injection.
+The main assertion is in the verify stage. The batched reduction of the
+tool must equal the packaged pipeline, with float32-identical fine spectra
+and the coarse F taken from the all-bin sums of the fine powers. The Monte
+Carlo smoke test then runs the tool end to end at a reduced geometry and
+checks that the H0 thresholds are sane and that Pd approaches 1 at strong
+injection.
 """
 from __future__ import annotations
 
@@ -38,7 +39,7 @@ def test_mc_smoke_thresholds_and_detection(tmp_path):
     assert 0.9 < np.median(c0) < 1.1
     assert 0.9 < np.median(f0) < 1.3
     c1, f1, _ = mfg.collect(out, "h1_*dB_s*.npz")
-    # strong injection: fine statistic far above the entire H0 sample
+    # at strong injection every fine statistic is above the whole H0 sample
     assert f1.min() > f0.max()
     assert c1.min() > np.quantile(c0, 0.99)
 

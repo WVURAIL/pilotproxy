@@ -22,7 +22,7 @@ def test_reversal_does_not_reverse_slow_time():
 
 
 def test_noninteger_weight_phase_and_mirrored_absolute_powers():
-    # Non-bin-centred exponentials prevent a trivial integer-bin phase shortcut.
+    # Non-bin-centered exponentials prevent a trivial integer-bin phase shortcut.
     sample = np.arange(128)
     weights = np.exp(-2j * np.pi * np.array([0.11731, -0.31917, 0.27641])[:, None] * sample)
     t = np.arange(128 * 128)
@@ -45,8 +45,9 @@ def test_native_offset_repack_all_bytes_including_negative_eight():
 
 
 def test_frame_powers_are_the_all_bin_sums_of_the_fine_powers():
-    # Kernel core 3.0.0: P_r = sum_f S_r[f]; for the zero-padded 256-point
-    # transform of 128 windows that is 256 times the row-domain sum.
+    # In kernel core 3.0.0 the frame power is P_r = sum_f S_r[f]. For the
+    # zero-padded 256-point transform of 128 windows, this sum is 256 times
+    # the row-domain sum.
     rng = np.random.default_rng(11)
     sample = np.arange(128)
     weights = np.exp(-2j * np.pi * np.array([0.11731, -0.31917, 0.27641])[:, None] * sample)

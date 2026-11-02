@@ -1,13 +1,13 @@
 # PilotProxy archive integration
 
-CHIME archive runs need bounded staging, restartable products, and one detector
-product per selected pilot. PilotProxy now owns that runtime. Archive discovery
-uses the pinned `datatrail-cli` client; file inspection and transfer use CADC
-clients directly.
+The purpose of the PilotProxy archive runtime is to process the CHIME archive
+with bounded staging, restartable products, and one detector product per
+selected pilot. Archive discovery uses the pinned `datatrail-cli` client, and
+file inspection and transfer use the CADC clients directly.
 
 The bundled archive engine enumerates files, limits the staging area, streams
-arrays, requests checkpoints, and fans a run out by channel. PilotProxy supplies
-the packed CHIME reader, detector analyzer, CUDA detector call, and
+arrays, requests checkpoints, and splits a run by channel. PilotProxy supplies
+the packed CHIME reader, the detector analyzer, the CUDA detector call, and the
 product writers.
 
 ## Runtime layout
@@ -18,7 +18,7 @@ product writers.
 | source | bundled `local` and `cadc-datatrail` sources |
 | reader | bundled packed CHIME reader for detector runs |
 | analyzer | bundled detector analyzer |
-| discovery client | tested revision pinned in `requirements/archive.txt`; indexed release required by the `archive` extra |
+| discovery client | tested revision pinned in `requirements/archive.txt`, indexed release required by the `archive` extra |
 
 `pilot-proxy chime-scan` writes one `<freq_id>.npz` product for each selected
 pilot with usable input. When products share `(event, frame-in-file)` identities,
@@ -35,8 +35,8 @@ completed per-pilot products under `_per_pilot/`. Use
 `pilot-proxy chime-combine --report` to inspect compatible subsets.
 
 The `nfft=16384` value is the target frame size for the CHIME F-engine upgrade.
-It is not a statement that every deployed CHIME product uses this size. Verify
-the frame size and stream layout against the data product used for each run.
+Deployed CHIME products may use other sizes, so the frame size and stream layout
+must be verified against the data product of each run.
 
 ## Setup
 
@@ -61,12 +61,12 @@ do not require a GPU.
 
 ## Selection uses CHIME `freq_id`
 
-`pilot-proxy chime-scan --select` accepts CHIME coarse-channel identifiers,
+`pilot-proxy chime-scan --select` accepts CHIME coarse-channel indices,
 called `freq_id`s. It does not accept ATSC physical-channel numbers. For the
 `cadc-datatrail` source, `--select` is optional. When omitted, the command reads
 the distinct `freq_id`s from the inventory and prints the resolved set before
-staging any file. A local source has no inventory from which to infer the scope,
-so `--select` is required.
+staging any file. A local source has no inventory to infer the scope from, so
+`--select` is required.
 
 Archive-style filenames use:
 
@@ -80,8 +80,8 @@ bundled geometry, the physical-channel 14 pilot maps to `freq_id=844`.
 
 ## Local source
 
-The default local filename expression is `_(\d+)\.h5$`. Inspect the identifiers
-before selecting one:
+The default local filename expression is `_(\d+)\.h5$`. Inspect the `freq_id`
+values before selecting one:
 
 ```bash
 find "$LOCAL_H5" -maxdepth 1 -name "*.h5" \
@@ -119,8 +119,8 @@ pilot-proxy chime-survey \
   --max-events 5
 ```
 
-The managed inventory is written under the canonical inventory root and the
-command prints the exact `inventory.jsonl` path. The default remains:
+The managed inventory is written under the canonical inventory root, and the
+command prints the exact `inventory.jsonl` path. The default path is:
 
 ```text
 ~/datatrawl-inventories/chime-pilots/inventory.jsonl
@@ -149,8 +149,8 @@ pilot-proxy chime-scan \
   --allow-partial
 ```
 
-`--allow-partial` is required because the cap deliberately leaves inventoried
-files unprocessed. Omit the caps and that acknowledgement for a production run:
+`--allow-partial` is required because the caps leave inventoried files
+unprocessed. A production run omits the caps and that acknowledgement:
 
 ```bash
 pilot-proxy chime-scan \
@@ -182,8 +182,8 @@ pilot-proxy chime-combine \
 The detector analyzer appends frames in file delivery order. `chime-scan` tags
 downloads with their inventory position and buffers early completions, so
 concurrent transfers cannot change `frame_index` or `relative_time_s`. The
-defaults remain one worker and one staged file. Raise the bounds explicitly with
-`--download-workers` and `--max-staged-files`.
+defaults are one worker and one staged file. The bounds are raised explicitly
+with `--download-workers` and `--max-staged-files`.
 
 ## Inventory and resume compatibility
 
@@ -195,18 +195,19 @@ Detector checkpoints bind the PilotProxy source tree. After source changes, an
 in-progress detector checkpoint fails closed. Start a fresh output directory.
 Completed current products remain valid inputs to `chime-combine`.
 
-Compatibility fields and storage tokens are data-format identifiers kept so
-completed inventories and products stay readable, not a runtime dependency.
+Compatibility fields and storage tokens are data-format names. They keep
+completed inventories and products readable and add no runtime dependency.
 
 ## Verification
 
 The offline archive suite checks array layout, orchestration, resume behavior,
 product combination, selection, metadata inference, and parity against the
-single-process `chime-run` runner. It does not replace these operational gates:
+single-process `chime-run` runner. The following operational gates are not
+covered by the suite:
 
-- CUDA detector execution on a GPU node;
-- authenticated streaming through `cadc-datatrail`;
-- real-data parity against a separately validated CHIME run.
+- CUDA detector execution on a GPU node
+- authenticated streaming through `cadc-datatrail`
+- real-data parity against an independently validated CHIME run
 
 Run the archive checks with:
 
@@ -231,15 +232,15 @@ tests/archive/
 
 ## Exact profile documents
 
-Receiver profiles and detector-core profiles are current-only contract
-documents. The receiver profile has one nested representation; the detector
-core has one `kernel_contract` representation. Every authoritative field is
-required, unknown structural fields are rejected, and serialization emits
-exactly the accepted shape.
+Receiver profiles and detector-core profiles are contract documents with one
+current form. The receiver profile has one nested representation, and the
+detector core has one `kernel_contract` representation. Every authoritative
+field is required, unknown structural fields are rejected, and serialization
+emits exactly the accepted shape.
 
 The receiver profile declares both the normalized coarse-channel center and the
-normalized physical data-DC location. It also declares whether the adapter
-reverses detector windows before the post-Nyquist-zone weight bank, and states
-its Nyquist zone (`channelizer.frequency_axis.nyquist_zone`; an even zone
-mirrors each channel's spectrum). There is no implicit center-at-Nyquist or
+normalized physical data-DC location. It also declares if the adapter reverses
+detector windows before the post-Nyquist-zone weight bank, and it states its
+Nyquist zone (`channelizer.frequency_axis.nyquist_zone`), where an even zone
+mirrors the spectrum of each channel. There is no implicit center-at-Nyquist or
 zone fallback.

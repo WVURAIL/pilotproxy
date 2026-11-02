@@ -4,8 +4,8 @@ This repository, WVURAIL/pilotproxy, starts from one snapshot commit. Its first
 (root) commit is the tree of the private development repository at commit
 `76b5ecf4937bb89a340ac8dc31a2ebb71ff41c26`, and the next change on main ports that
 repository's commit `d59baa24d7e8c3083569ce17e3de4fa612dba222` (coherence gain as the
-lag sum at 33 frames, 40.00 for every band; tolerance table on inter-cylinder
-baselines). From there, all work is in this repository.
+lag sum at 33 frames, 40.00 for every band, and the tolerance table on
+inter-cylinder baselines). From there, all work is in this repository.
 
 The private development repository holds the full development history and is the
 record of provenance. Its history is kept as a git bundle in the WVU RAIL lab

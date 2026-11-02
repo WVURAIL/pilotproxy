@@ -1,13 +1,14 @@
 # coding=utf-8
 """GPU-free parity test for the `pilot-proxy-detector` analyzer.
 
-The CUDA kernel is GPU-only, so this test does what PilotProxy's own runner test does:
-inject a CPU-reference ``detector_fn`` + a stub kernel + explicit weights. The
-*reference* is PilotProxy's ``run_chime_analysis`` (the batch runner); the *candidate*
-is the archive analyzer streaming the same file through the same injected pieces.
-They must produce the same per-frame ``chime_detector_outputs`` arrays, which
-validates the analyzer's packing / windowing / accumulation / schema. The actual
-fixed-point kernel + real-data parity is a separate CANFAR/GPU step.
+The CUDA kernel runs only on a GPU, so a CPU-reference ``detector_fn``, a
+stub kernel, and explicit weights are injected, as in the PilotProxy runner
+test. The reference is the batch runner ``run_chime_analysis``, and the
+candidate is the archive analyzer streaming the same file through the same
+injected pieces. Both must produce the same per-frame ``chime_detector_outputs``
+arrays, which tests the packing, windowing, accumulation, and output schema of
+the analyzer. Parity of the fixed-point kernel on real data is tested in its
+own step on a CANFAR GPU.
 """
 from __future__ import annotations
 
@@ -61,7 +62,7 @@ def test_detector_analyzer_matches_runner(tmp_path):
     profile_path = tmp_path / "receiver_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict()), encoding="utf-8")
 
-    # reference: PilotProxy's own runner with the CPU-reference detector
+    # reference run of the batch runner with the CPU-reference detector
     ref_dir = tmp_path / "ref"
     run_chime_analysis(
         input_dir=input_dir, output_dir=ref_dir,
@@ -73,7 +74,7 @@ def test_detector_analyzer_matches_runner(tmp_path):
     )
     ref = np.load(ref_dir / "chime_detector_outputs.npz")
 
-    # Candidate: the archive analyzer with the same file and injected pieces.
+    # candidate run of the archive analyzer on the same file and injected pieces
     ctx = RunContext(instrument=load_instrument("chime"), selection=[FREQ_ID], options={
         "detector_fn": exact_cpu_detector_fn,
         "kernel": stub_kernel(K),
@@ -94,9 +95,10 @@ def test_detector_analyzer_matches_runner(tmp_path):
     assert int(got["freq_id"][0]) == FREQ_ID
     assert got["p_target_u64"].shape == ref["p_target_u64"].shape == (N_FRAMES, 1)
 
-    # exact-equal integer arrays. The runner's canonical output keeps the legacy
-    # `mask` field; the analyzer's per-channel product renames it `reject_mask`
-    # (same values, 1 = discard), so compare those two across the name change.
+    # The integer arrays must match exactly. The canonical runner output keeps
+    # the legacy name `mask` for the frame mask, and the per-channel product of
+    # the analyzer names it `reject_mask`. The values are the same (1 = discard),
+    # so these two are compared across the name change.
     for name in ("p_target_u64", "p_ref_sum_u64", "valid", "frame_index"):
         assert np.array_equal(np.asarray(ref[name]), np.asarray(got[name])), name
     assert np.array_equal(

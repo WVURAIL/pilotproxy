@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Observed live layouts + a hardened candidate predicate for the patch.
+"""Live replica layouts and a hardened candidate for _restore_collection.
 
 The payload fixtures below are verbatim `datatrail ps <scope> <event> --json`
-output captured on 2026-08-28 (see the module docstring of each test for the
-exact command). Nothing here goes to the network: they are replayed through
-the fake CLI boundary.
+output captured on 2026-08-28, with each command given in the comment above
+its fixture. Each fixture is replayed through the fake CLI boundary, so no
+test reaches the network.
 
-_restore_collection_v2 is the proposed replacement. It is exercised through
-the SAME derivation by monkeypatching dt._restore_collection, so every
-assertion is about real adapter behavior, not about the helper in isolation.
+_restore_collection_v2 is a candidate replacement. The tests of acceptance and
+refusal run it through the same derivation by monkeypatching
+dt._restore_collection, so they test the behavior of the real adapter.
 """
 from __future__ import annotations
 
@@ -23,9 +23,7 @@ from pilot_proxy.archive import datatrail_client as dt
 _PREFIX = "cadc:CHIMEFRB/"
 
 
-# ----------------------------------------------------------------------
-# live-captured layouts (2026-08-28, datatrail-cli 0.12.0)
-# ----------------------------------------------------------------------
+# layouts captured live on 2026-08-28 with datatrail-cli 0.12.0
 # $ python -m dtcli.cli ps kko.event.baseband.raw 307070707 --json
 #   file_replica_locations: {"minoc": [1024 x bare], "kko": [1024 x /-rooted]}
 # $ cadcinfo cadc:CHIMEFRB/data/kko/baseband/raw/2023/08/01/astro_307070707/
@@ -85,29 +83,28 @@ def _resolve(monkeypatch, locs, restore=None):
         return ("REFUSED", str(exc))
 
 
-# ======================================================================
-# 1/2. what Datatrail really serves today
-# ======================================================================
+# replica lists as served by Datatrail
 def test_kko_outrigger_scope_returns_every_minoc_replica_bare(monkeypatch):
-    """The kko.event.baseband.raw scope -- one of the four the instrument
-    YAMLs declare -- returns bare minoc URIs, so the patch is load-bearing
-    for outriggers, not only for CHIME."""
+    """Bare minoc URIs are returned by the kko.event.baseband.raw scope, one of
+    the four declared in the instrument YAMLs. Restoration is therefore needed
+    for the outriggers as well as for CHIME."""
     assert all(not u.startswith("cadc:") for u in _KKO_MINOC)
     r = _resolve(monkeypatch, {"minoc": _KKO_MINOC, "kko": _KKO_SITE})
     assert r[0] == "OK" and r[1] == _KKO_CP, r
     assert sorted(r[2]) == ["baseband_307070707_560.h5",
                             "baseband_307070707_604.h5",
                             "baseband_307070707_945.h5"]
-    # ...and pre-patch every outrigger event was a hard refusal
+    # without restoration every outrigger event is refused
     pre = _resolve(monkeypatch, {"minoc": _KKO_MINOC}, restore=lambda u: u)
     assert pre[0] == "REFUSED" and "3/3 replicas affected" in pre[1], pre
 
 
 def test_intensity_scope_also_returns_bare_and_keeps_beam_subdirectories(
         monkeypatch):
-    """Bare-ness is not baseband-specific. This scope also nests a per-beam
-    subdirectory, so once an event spans two beams a legitimate 'name'
-    contains a '/' -- a no-slashes-in-names guard would be wrong."""
+    """Bare URIs also occur in scopes other than baseband. This scope nests a
+    per-beam subdirectory, so an event that spans two beams has legitimate
+    names that contain a '/'. A guard against slashes in names would refuse
+    these events."""
     r = _resolve(monkeypatch, {"minoc": _INT_MINOC})
     assert r[0] == "OK", r
     assert r[1] == ("cadc:CHIMEFRB/data/chime/intensity/raw/2025/06/24/"
@@ -124,36 +121,33 @@ def test_intensity_scope_also_returns_bare_and_keeps_beam_subdirectories(
 
 
 def test_site_storage_element_spelling_is_the_narrowness_hole(monkeypatch):
-    """The SAME paths, as the kko site SE spells them, are '/data/...'.
-    _BARE_REPLICA_ROOTS=('data/',) does not match that spelling, so if minoc
-    ever adopts it every outrigger event goes back to being refused."""
+    """In the kko site storage element (SE), the same paths are spelled
+    '/data/...'. _BARE_REPLICA_ROOTS = ('data/',) does not match that
+    spelling, so if minoc adopts it every outrigger event is refused."""
     r = _resolve(monkeypatch, {"minoc": _KKO_SITE})
     assert r[0] == "REFUSED", r
     assert "outside the expected collection" in r[1]
 
 
-# ======================================================================
-# the hardened candidate
-# ======================================================================
+# hardened candidate
 _BARE_REPLICA_ROOTS_V2 = ("data/",)
 
 
 def _restore_collection_v2(uri: str) -> str:
-    """Hardened replacement for _restore_collection.
+    """Hardened candidate replacement for _restore_collection.
 
-    Differences from the shipped version:
-      1. tolerates a single leading '/' (the spelling the site storage
-         elements use, and what a '//'-collapse leaves behind);
-      2. only restores when exactly ONE collection is configured, so widening
-         _MINOC_COLLECTIONS can never silently assign a bare replica to the
-         wrong collection behind the span check;
-      3. refuses to restore a non-canonical path ('.', '..', '' segments),
-         which can never name a real artifact.
+    As in the shipped version, a bare path is restored only when exactly one
+    collection is configured, so a wider _MINOC_COLLECTIONS cannot assign a
+    bare replica to the wrong collection behind the span check. A single
+    leading '/' is also accepted, which is the spelling of the site storage
+    elements and what the '//' collapse leaves behind. A non-canonical path,
+    with an empty, '.' or '..' segment, is never restored because it cannot
+    name a real artifact.
     """
     if uri.startswith(tuple(dt._MINOC_COLLECTIONS)):
         return uri
     if len(dt._MINOC_COLLECTIONS) != 1:
-        return uri                      # ambiguous: let the caller refuse
+        return uri                      # ambiguous, left for the caller to refuse
     rel = uri[1:] if uri.startswith("/") else uri
     if not rel.startswith(_BARE_REPLICA_ROOTS_V2):
         return uri
@@ -163,9 +157,9 @@ def _restore_collection_v2(uri: str) -> str:
 
 
 @pytest.mark.parametrize("uris,expect", [
-    (_KKO_MINOC, _KKO_CP),                          # bare, as served today
-    (_KKO_SITE, _KKO_CP),                           # /-rooted: now ACCEPTED
-    ([_PREFIX + u for u in _KKO_MINOC], _KKO_CP),   # prefixed: unchanged
+    (_KKO_MINOC, _KKO_CP),                          # bare, as served
+    (_KKO_SITE, _KKO_CP),                           # /-rooted, accepted by v2 only
+    ([_PREFIX + u for u in _KKO_MINOC], _KKO_CP),   # prefixed, unchanged
     ([_PREFIX + _KKO_MINOC[0]] + _KKO_MINOC[1:], _KKO_CP),   # mixed
     (["/" + _KKO_MINOC[0]] + _KKO_MINOC[1:], _KKO_CP),       # mixed spelling
 ])
@@ -185,7 +179,8 @@ def test_v2_refuses_a_non_canonical_bare_path(monkeypatch):
 
 def test_v2_refuses_to_guess_when_more_than_one_collection_is_configured(
         monkeypatch):
-    """The current implementation and proposed spelling extension both refuse ambiguity."""
+    """The shipped version and the candidate both refuse a bare path when two
+    collections are configured."""
     monkeypatch.setattr(dt, "_MINOC_COLLECTIONS",
                         ("cadc:CHIMEFRB/", "cadc:CHIMEOUTRIGGER/"))
     uris = ["data/kko/baseband/raw/2023/08/01/a/b_0.h5",
@@ -209,7 +204,7 @@ def test_v2_is_idempotent_and_a_no_op_on_prefixed_uris():
 
 
 def test_v2_matches_the_shipped_version_on_every_form_seen_in_production():
-    """No regression: for the bare and prefixed spellings that actually occur,
-    v2 and the shipped predicate agree byte-for-byte."""
+    """For the bare and prefixed spellings seen in production, v2 and the
+    shipped version return identical URIs."""
     for u in _KKO_MINOC + _INT_MINOC + [_PREFIX + x for x in _KKO_MINOC]:
         assert _restore_collection_v2(u) == dt._restore_collection(u), u

@@ -31,8 +31,9 @@ def _append_after_signal(ledger, key, started, done):
 
 
 def _append_under_product_lock(out_path, ledger, key, ready, start):
-    # Distinct product paths prove the ordinary output locks do not serialize
-    # these scans. The shared quarantine sidecar owns only the ledger operation.
+    # Each worker holds the output lock of a distinct product path, so the
+    # output locks do not serialize these scans. Only the ledger append is
+    # serialized, by the lock of the shared quarantine sidecar.
     with pipeline._OutputLock(out_path):
         ready.put(os.getpid())
         if not start.wait(_WAIT_SECONDS):

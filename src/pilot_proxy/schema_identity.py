@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Small, strict helpers for current PilotProxy schema identities."""
+"""Build and validate the tokens that name PilotProxy schemas."""
 
 from __future__ import annotations
 

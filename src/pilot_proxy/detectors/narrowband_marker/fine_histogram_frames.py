@@ -2,17 +2,18 @@
 
     pilot-proxy characterize fine-histogram-frames --frames DIR --output NEW_DIR
 
-Z63 is max(T in the designated set) / the 63rd smallest usable bulk T,
-where T = 2*S0/(S1+S2). It is a median-normalized score, not a per-bin F
-statistic. The saved current-era anchor is reused across all archive frames;
-the control uses its nominal marker. No anchor or era is fitted here.
+The score Z63 is max(T in the designated set) divided by the 63rd smallest
+usable bulk T, where T = 2*S0/(S1+S2). It is one median-normalized score per
+frame, and the export holds no per-bin F statistic. The saved current-era
+anchor is reused for all archive frames, and the control uses its nominal
+marker. No anchor or era is fitted here.
 
-Geometry options (detector v2 calibration): ``--designated-half-width`` h and
-``--marker-guard-bins`` g (:func:`anchors.bulk_mask`). With either changed the
-rank is the median of the resulting bulk (``scores.candidate_rho_values``, the
-rule that gives 63 for the 125- and 126-bin bulks), the score is Z<rho> and the
-fields carry that rank in their names. The defaults (h = 2, g = 0) are the
-export of record.
+The marker geometry is set by two options of the detector v2 calibration,
+``--designated-half-width`` h and ``--marker-guard-bins`` g
+(:func:`anchors.bulk_mask`). With either one changed, the rank is the median
+of the resulting bulk (``scores.candidate_rho_values``, the rule that gives 63
+for the 125- and 126-bin bulks). The score is then Z<rho>, and the field
+names carry that rank. The defaults (h = 2, g = 0) are the export of record.
 """
 from __future__ import annotations
 
@@ -38,12 +39,13 @@ MANIFEST_SCHEMA = "fine-histogram-frames-manifest-v1"
 
 
 def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask, designated_half_width=WIDTH, rho=None):
-    """Return full-frame score arrays; excluded frames remain uncomputed.
+    """Return the score arrays over all frames, with unselected frames left uncomputed.
 
-    Exact keep boundaries use the production scorer. The unquantized ratio
-    uses exact rational ordering before its final conversion to float64.
-    With ``rho`` None the geometry of record is required (h = 2 and a 125- or
-    126-bin bulk, rank 63); otherwise ``rho`` is the one-based rank.
+    The exact keep boundaries come from the production scorer. The
+    unquantized ratio is ordered and divided in exact rational arithmetic and
+    converted to float64 only at the end. With ``rho`` None, the geometry of
+    record is required (h = 2 and a 125- or 126-bin bulk, rank 63). Otherwise
+    ``rho`` is the one-based rank.
     """
     powers = np.asarray(powers)
     selected = np.asarray(selected)
@@ -139,8 +141,11 @@ def _ordinal(n):
 
 
 def _geometry(product, metadata, designated_half_width=WIDTH, marker_guard_bins=0):
-    """The export geometry; returns the anchor, the bulk, the geometry record and the rank
-    (None for the geometry of record, which final_score_arrays checks itself)."""
+    """Return the anchor, the bulk, the geometry record, and the rank of the export geometry.
+
+    The rank is None for the geometry of record, which :func:`final_score_arrays`
+    checks itself.
+    """
     sources = metadata["source_records"]
     records = {name: json.loads(Path(record["path"]).read_text())
                for name, record in sources.items() if name == "ledger"}
@@ -211,8 +216,8 @@ def process_channel(frames, item, output, *, designated_half_width=WIDTH, marker
         raise ValueError("input already contains fine export fields")
     with Product(product_path, require_health=True) as product:
         raw_archive = product.archive
-        # The coarse exporter's archive wrapper: frame powers from the fine
-        # sums, spectral members forbidden.
+        # The coarse exporter's archive wrapper is used, so the frame powers
+        # are formed from the fine sums and the spectral members cannot be read.
         product._z = coarse.FrameExportArchive(raw_archive, product_path)
         if (product.view.physical_channel, product.view.freq_id) != (item["channel"], item["freq_id"]):
             raise ValueError("source product identity differs")

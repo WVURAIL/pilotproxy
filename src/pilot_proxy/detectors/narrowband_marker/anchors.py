@@ -1,6 +1,6 @@
-"""Locate the pilot within a stable era and define the surrounding reference bins.
+"""Locate the pilot in a stable era and define the reference bins around it.
 
-Definitions implemented, quoted from the dissertation.
+The definitions below are quoted from the dissertation.
 
 ch08 ``sec:calibration:anchors``, eq:calibration:anchor: "For fine bin f, let
 T_f^on and T_f^quiet denote the sets of recorded fine statistics in
@@ -18,79 +18,88 @@ designated set spans the padded main lobe, D = {(f_a + k) mod L_F : |k| <= 2}.
 The usable null bulk B contains alternate bins from the independent subset
 ..., excludes D and any census-marked persistent features, and omits bins with
 zero reference denominator. An even-parity anchor leaves 125 bulk bins and an
-odd-parity anchor leaves 126." The zero-denominator omission is per frame and
-belongs to the frame scorer (:mod:`.scores`); the bulk
-mask here is the static part.
+odd-parity anchor leaves 126." The zero-denominator omission is made per
+frame by the frame scorer (:mod:`.scores`). The bulk mask in this module is
+the static part of B.
 
-Inputs. A :class:`~pilot_proxy.products.reader.Product` and a boolean
-frame mask: the frames of the era under study. The caller supplies the mask
-(``product.selected`` for the whole archive, an era mask from ``characterization.eras``,
-a block mask from ``characterization.blocks``); a previous era's anchor is the same
-function on a second mask. ``T_f`` per frame is ``products.reader.fine_power_ratio``
-of the exact fine terms, read once per channel and released.
+The inputs are a :class:`~pilot_proxy.products.reader.Product` and a boolean
+mask of the frames of the era under study. The mask is supplied by the
+caller and can be ``product.selected`` for the whole archive, an era mask from
+``characterization.eras``, or a block mask from ``characterization.blocks``.
+A previous era's anchor is found with the same function on a second mask. The
+per-frame ``T_f`` is ``products.reader.fine_power_ratio`` of the exact fine
+terms, which are read once per channel and released.
 
-Cohorts. ``on = mask & valid & rejected`` (the survey flag ``F > mu_0``),
-``quiet = mask & valid & ~rejected``. The text names ``valid`` only for the
-quiet cohort; it is applied to both here (inert on the products, whose masks
-are subsets of ``valid``). Each cohort must hold ``MIN_COHORT_FRAMES`` (30)
-frames for the estimator of record (``method = 'on_minus_quiet'``); below that
-on the quiet side the contrast is the plain median over the on frames, and
-when fewer than 30 frames are coarse-detected the plain median over all masked
-frames (``method = 'median_fallback'``, ``fallback_cohort`` 'on' or 'all').
+The two cohorts are ``on = mask & valid & rejected``, where ``rejected`` is
+the survey flag ``F > mu_0``, and ``quiet = mask & valid & ~rejected``. The
+dissertation names ``valid`` only for the quiet cohort, but it is applied to
+both cohorts here. This has no effect on the products, whose masks are
+subsets of ``valid``. The estimator of record (``method = 'on_minus_quiet'``)
+requires ``MIN_COHORT_FRAMES`` (30) frames in each cohort. When the quiet
+cohort is smaller, the contrast is the plain median over the on frames. When
+fewer than 30 frames are coarse-detected, the contrast is the plain median
+over all masked frames. Both cases are labeled ``method = 'median_fallback'``,
+with ``fallback_cohort`` set to 'on' or 'all'.
 
-Argmax. The estimator of record is the argmax over all 256 bins (design
-section 6). The argmax within ``nominal_fine_bin +- WINDOW_HALF_WIDTH`` (30,
-the scan's acquisition window) is reported beside it, and
-``aliased_out_of_window`` is set when the two differ. The flag marks the
-disagreement; whether the out-of-window argmax is the alias of an out-of-span
-feature (channel 33's co-channel carrier at -3.7 kHz, folded by one coarse bin
-to -674 Hz) or a lobe inside the fine span but beyond the window (channel 23,
-33 bins) is settled against the per-frame spectra by ``archive.psd``. Ties
-resolve to the lowest bin. The runner-up is the best bin
-outside D(f_a), so the lobe's own padded shoulders do not count as competitors;
-``separation`` is the anchor contrast minus the runner-up contrast.
+The anchor is the argmax of the contrast over all 256 bins (design section
+6). A second argmax, over ``nominal_fine_bin +- WINDOW_HALF_WIDTH`` (30 bins,
+the scan's acquisition window), is reported beside it, and
+``aliased_out_of_window`` is set when the two differ. This flag records only
+the disagreement. The out-of-window argmax can be the alias of a feature off
+the fine span, such as channel 33's co-channel carrier at -3.7 kHz, folded by
+one coarse bin to -674 Hz. It can also be a lobe in the fine span but past the
+window, such as the lobe of channel 23 at 33 bins. Which case applies is
+determined from the per-frame spectra by ``archive.psd``. Ties resolve to the
+lowest bin. Since the runner-up is the best bin not in D(f_a), the padded
+shoulders of the lobe itself are not counted as competitors. ``separation`` is
+the anchor contrast minus the runner-up contrast.
 
-Median. ``blocks.weighted_quantile`` at ``q = 0.5`` (the lower middle value
-for an even count), evaluated column-wise in one pass by :class:`SortedCohort`
-so that the point estimate and every bootstrap replicate use one statistic;
-the tests check the vectorised form against ``blocks.weighted_quantile``.
+Each median is ``blocks.weighted_quantile`` at ``q = 0.5``, which is the
+lower middle value for an even count. It is evaluated column-wise in one pass
+by :class:`SortedCohort`, so the point estimate and every bootstrap replicate
+use the same statistic. The tests check the vectorized form against
+``blocks.weighted_quantile``.
 
-Coordinates (design section 2). ``anchor_bin`` is the padded fine bin;
-``anchor_fine_hz`` its fine-axis offset (``products.fine_hz_of_bin``);
-``anchor_offset_bins`` the signed offset from the nominal bin unwrapped to
-[-128, 128), positive towards higher padded bins; ``anchor_rf_offset_hz`` the
-RF offset from the nominal pilot (``products.fine_offset_to_rf_hz`` with the
-geometry's grid residual and sense; positive towards higher RF, so under the
-campaign's ``sense = -1`` a positive bin offset is a negative RF offset).
+The anchor is reported in four coordinates (design section 2).
+``anchor_bin`` is the padded fine bin, and ``anchor_fine_hz`` is its
+fine-axis offset (``products.fine_hz_of_bin``). ``anchor_offset_bins`` is
+the signed offset from the nominal bin, unwrapped to [-128, 128) and positive
+toward higher padded bins. ``anchor_rf_offset_hz`` is the RF offset from the
+nominal pilot, given by ``products.fine_offset_to_rf_hz`` with the geometry's
+grid residual and sense. It is positive toward higher RF, so under the
+campaign's ``sense = -1`` a positive bin offset is a negative RF offset.
 
-Bootstrap. ``blocks.block_bootstrap`` over whole acquisitions,
-``BOOTSTRAP_REPLICATES`` (1000) replicates, seed ``BOOTSTRAP_SEED``
-(20260907); the replicate statistic is the weighted-median contrast argmax as
-an unwrapped offset from the nominal bin, so its quantiles do not straddle the
-wrap. Reported: the 2.5/16/84/97.5 percentiles in bins (offset from nominal)
-and in RF Hz (the same replicates converted), the modal replicate bin and its
-probability mass, and the mass at the point estimate. The method (cohorts) is
-fixed by the point estimate; a replicate whose cohort draws no frame is NaN
-and counted out of ``boot_replicates_used``.
+The spread of the anchor is estimated with ``blocks.block_bootstrap``, which
+resamples whole acquisitions. It uses ``BOOTSTRAP_REPLICATES`` (1000)
+replicates and seed ``BOOTSTRAP_SEED`` (20260907). The replicate statistic is
+the argmax of the weighted-median contrast as an unwrapped offset from the
+nominal bin, so its quantiles do not straddle the wrap. Its 2.5, 16, 84, and
+97.5 percentiles are reported in bins from nominal and in RF Hz (the same
+replicates converted), along with the modal replicate bin, its probability
+mass, and the mass at the point estimate. Both the method and its cohorts are
+fixed by the point estimate. A replicate whose cohort draws no frame is NaN
+and is not counted in ``boot_replicates_used``.
 
-Bulk. ``B = independent_bin_mask(256, pad_factor, designated_bins=(f_a,),
-guard_fine_bins, census_excluded_bins)`` with pilot-proxy's semantics (every
-``pad_factor``-th bin, minus ``f_a +- guard * pad`` padded bins, minus the
-census-excluded bins), with D removed as well so the bundle's contract holds
-for any guard. With the campaign's pad 2 and guard 1 the guard removes exactly
-D, giving 125 bulk bins for an even anchor and 126 for an odd one.
+The bulk is ``B = independent_bin_mask(256, pad_factor, designated_bins=(f_a,),
+guard_fine_bins, census_excluded_bins)`` with pilot-proxy's semantics. That
+is, B is every ``pad_factor``-th bin, minus the ``f_a +- guard * pad`` padded
+bins and the census-excluded bins. D is removed as well, so the bundle's
+contract holds for any guard. With the campaign's pad factor of 2 and guard
+of 1, the guard removes exactly D, giving 125 bulk bins for an even anchor
+and 126 for an odd one.
 
-Marker guard band and wider markers (detector v2 calibration options).
-``marker_guard_bins = g`` also removes the ``g`` padded bins on each side of D
-from the bulk, ``{(f_a + k) mod L_F : h < |k| <= h + g}`` for half-width ``h``,
-so a line just outside the markers (Paper I finds them on channels 22 and 28)
-cannot enter the reference rank. ``designated_half_width`` widens the markers
-themselves. The defaults (``g = 0``, ``h = 2``) are the calibration of record;
-the bundle records a nonzero guard as ``fine_calibration.marker_guard_bins``.
-The anchor table's ``bulk_size`` reflects the guard band.
+Two calibration options of detector v2 change the marker geometry. With
+``marker_guard_bins = g``, the ``g`` padded bins on each side of D are also
+removed from the bulk. These are ``{(f_a + k) mod L_F : h < |k| <= h + g}``
+for half-width ``h``, so a line just past the markers cannot enter the
+reference rank (Paper I finds such lines on channels 22 and 28).
+``designated_half_width`` widens the markers themselves. The defaults
+(``g = 0``, ``h = 2``) are the calibration of record. A nonzero guard is
+recorded in the bundle as ``fine_calibration.marker_guard_bins``, and the
+anchor table's ``bulk_size`` reflects the guard band.
 
-Columns of the anchor table (``ANCHOR_COLUMNS``, one row per channel per mask
-label): ``channel, freq_id, label, status, frames_masked, frames_on,
+The anchor table (``ANCHOR_COLUMNS``) has one row per channel per mask label
+and the columns ``channel, freq_id, label, status, frames_masked, frames_on,
 frames_quiet, min_cohort_frames, method, fallback_cohort, nominal_fine_bin,
 grid_residual_hz, sense, anchor_bin, anchor_fine_hz, anchor_offset_bins,
 anchor_rf_offset_hz, anchor_contrast, runner_up_bin, runner_up_contrast,
@@ -101,13 +110,14 @@ bulk_guard_bins, census_excluded_count, boot_status, boot_replicates,
 boot_replicates_used, boot_seed, boot_blocks, boot_offset_bins_q025,
 boot_offset_bins_q16, boot_offset_bins_q84, boot_offset_bins_q975,
 boot_rf_hz_q025, boot_rf_hz_q16, boot_rf_hz_q84, boot_rf_hz_q975,
-boot_mode_bin, boot_mode_mass, boot_mass_at_anchor``. ``designated_bins`` is
-``;``-joined; booleans are ``True``/``False``; floats ``repr()``, NaN blank.
+boot_mode_bin, boot_mode_mass, boot_mass_at_anchor``. In the table,
+``designated_bins`` is joined with ``;``, booleans are written as ``True`` or
+``False``, floats as their ``repr()``, and NaN as a blank cell.
 
-Output columns of :func:`write_contrast_curves` (one row per bin per channel
-per label, for the appendix plates): ``channel, label, bin, offset_bins,
-fine_hz, rf_offset_hz, median_on, median_quiet, contrast, in_window,
-in_designated, in_bulk``.
+The file written by :func:`write_contrast_curves` has one row per bin per
+channel per label, for the appendix plates, and the columns ``channel, label,
+bin, offset_bins, fine_hz, rf_offset_hz, median_on, median_quiet, contrast,
+in_window, in_designated, in_bulk``.
 """
 from __future__ import annotations
 
@@ -153,11 +163,11 @@ def unwrap_bins(bin_index, reference_bin: int, fine_bins: int = FINE_BINS):
 def rf_offset_of_bin(bin_index, geometry: Geometry):
     """RF offset from the nominal pilot, in Hz, of padded fine bins.
 
-    The bin offset is unwrapped about the nominal bin, the same wrap
-    :func:`unwrap_bins` gives ``anchor_offset_bins``, so the two coordinates
-    agree at every offset including -128 (wrapping about the real-valued grid
-    residual instead would put that one bin a full coarse bin away whenever
-    the residual lies above the nominal bin's center).
+    The bin offset is unwrapped about the nominal bin, which is the same wrap
+    :func:`unwrap_bins` gives ``anchor_offset_bins``. The two coordinates
+    therefore agree at every offset, even -128. A wrap about the
+    real-valued grid residual would put that one bin a full coarse bin away
+    whenever the residual lies above the center of the nominal bin.
     """
     nominal = int(geometry.nominal_fine_bin)
     fine_hz = unwrap_bins(bin_index, nominal) * FINE_BIN_HZ + fine_hz_of_bin(nominal)
@@ -171,16 +181,18 @@ def designated_set(anchor_bin: int, half_width: int = DESIGNATED_HALF_WIDTH,
 
 
 def window_bins(centre_bin: int, half_width: int = WINDOW_HALF_WIDTH, fine_bins: int = FINE_BINS) -> np.ndarray:
-    """The bins ``centre +- half_width`` (mod L_F), in k order."""
+    """The bins ``centre_bin +- half_width`` (mod L_F), in k order."""
     return (int(centre_bin) + np.arange(-int(half_width), int(half_width) + 1)) % fine_bins
 
 
 def independent_bin_mask(num_bins: int, *, pad_factor: int, designated_bins: Sequence[int] = (),
                          guard_fine_bins: int, census_excluded_bins: Sequence[int] = ()) -> np.ndarray:
-    """``pilot_proxy.fine_reduction.independent_bin_mask``, restated so this
-    module needs no pilot-proxy import: every ``pad_factor``-th bin, minus each
-    designated bin with ``guard_fine_bins * pad_factor`` padded bins on either
-    side, minus the census-excluded bins."""
+    """Return the same mask as ``pilot_proxy.fine_reduction.independent_bin_mask``.
+
+    The mask is every ``pad_factor``-th bin, minus each designated bin with
+    ``guard_fine_bins * pad_factor`` padded bins on either side, and minus the
+    census-excluded bins.
+    """
     n = int(num_bins)
     mask = np.zeros(n, dtype=bool)
     mask[:: int(pad_factor)] = True
@@ -195,8 +207,7 @@ def independent_bin_mask(num_bins: int, *, pad_factor: int, designated_bins: Seq
 def bulk_mask(anchor_bin: int, *, pad_factor: int, guard_fine_bins: int, census_excluded_bins: Sequence[int] = (),
               designated_half_width: int = DESIGNATED_HALF_WIDTH, marker_guard_bins: int = 0,
               fine_bins: int = FINE_BINS) -> np.ndarray:
-    """The static bulk ``B`` for a measured anchor (module docstring, "Bulk" and
-    "Marker guard band")."""
+    """The static bulk ``B`` for a measured anchor, minus any marker guard band (module docstring)."""
     guard = int(marker_guard_bins)
     if guard != marker_guard_bins or guard < 0 or int(designated_half_width) + guard >= fine_bins // 2:
         raise ValueError("marker_guard_bins must be a nonnegative integer with half width + guard below L_F / 2")
@@ -212,7 +223,7 @@ class SortedCohort:
     median of every bin under new frame weights is a single pass.
 
     ``values`` must be finite (``fine_power_ratio`` is). ``rows`` are the frame
-    indices of the cohort on the full frame axis; ``weighted_median`` takes the
+    indices of the cohort on the full frame axis. ``weighted_median`` takes the
     full-axis integer weights of ``blocks.block_bootstrap`` and returns the
     ``blocks.weighted_quantile`` value per bin (NaN where the cohort's total
     weight is zero).
@@ -252,7 +263,7 @@ class ContrastEstimator:
     """The contrast curve of one era as a function of frame weights.
 
     ``method`` and ``fallback_cohort`` are fixed from the unweighted cohort
-    sizes; ``contrast(weights)`` returns ``median_on - median_quiet`` for the
+    sizes. ``contrast(weights)`` returns ``median_on - median_quiet`` for the
     estimator of record and the plain weighted median of the fallback cohort
     otherwise.
     """
@@ -272,7 +283,7 @@ class ContrastEstimator:
         return self.fallback.weighted_median(weights)
 
     def anchor_bin(self, weights: np.ndarray) -> int:
-        """Argmax of the contrast over all bins (lowest bin on ties); -1 when undefined."""
+        """Argmax of the contrast over all bins (lowest bin on ties), or -1 when undefined."""
         c = self.contrast(weights)
         return int(np.argmax(c)) if np.isfinite(c).any() else -1
 
@@ -284,13 +295,15 @@ class ContrastEstimator:
 
 def build_estimator(ratio: np.ndarray, *, mask, valid, rejected, nominal_fine_bin: int,
                     min_cohort_frames: int = MIN_COHORT_FRAMES, quiet_usable: bool = True) -> ContrastEstimator:
-    """Cohorts and method from the per-frame ratio ``(N, 256)`` and the frame flags.
+    """Build the contrast estimator from the per-frame ratio ``(N, 256)`` and the frame flags.
 
-    ``quiet_usable`` is False when the caller knows the coarse-quiet frames
-    are not a null population (the block's bulk sits far above ``mu_0``, so
-    the frames below it are the carrier-on distribution's lower tail, and
-    on-minus-quiet would contrast the carrier against itself); the plain
-    median of the on cohort is used instead, labelled.
+    ``quiet_usable`` is set to False by the caller when the coarse-quiet
+    frames are known not to be a null population. This is the case when the
+    block's bulk is far above ``mu_0``. The frames below ``mu_0`` are then
+    the lower tail of the carrier-on distribution, and an on-minus-quiet
+    contrast would compare the carrier with itself. The plain median of the
+    on cohort is used instead, with the label 'on (quiet cohort is not a
+    null)'.
     """
     mask = np.asarray(mask, dtype=bool)
     valid = np.asarray(valid, dtype=bool)
@@ -314,7 +327,7 @@ def build_estimator(ratio: np.ndarray, *, mask, valid, rejected, nominal_fine_bi
 # ------------------------------------------------------------------ result
 @dataclass(frozen=True)
 class AnchorResult:
-    """One channel's anchor on one frame mask; every column of the table plus the curves."""
+    """One channel's anchor on one frame mask, with every column of the table and the curves."""
 
     channel: int
     freq_id: int
@@ -329,16 +342,16 @@ class AnchorResult:
     nominal_fine_bin: int
     grid_residual_hz: float
     sense: int
-    anchor_bin: int                     # padded fine bin of the argmax over all bins; -1 when empty
+    anchor_bin: int                     # padded fine bin of the argmax over all bins, -1 when empty
     anchor_fine_hz: float               # its fine-axis offset
     anchor_offset_bins: int             # unwrapped signed offset from the nominal bin (fine-array direction)
     anchor_rf_offset_hz: float          # RF offset from the nominal pilot, positive toward higher RF
     anchor_contrast: float              # the contrast curve at the anchor
-    runner_up_bin: int                  # best bin outside D(f_a)
+    runner_up_bin: int                  # best bin not in D(f_a)
     runner_up_contrast: float
     separation: float                   # anchor_contrast - runner_up_contrast
     window_half_width: int
-    window_anchor_bin: int              # argmax within nominal +- window_half_width
+    window_anchor_bin: int              # argmax over nominal +- window_half_width
     window_anchor_offset_bins: int
     window_anchor_rf_offset_hz: float
     window_anchor_contrast: float
@@ -362,7 +375,7 @@ class AnchorResult:
     boot_rf_hz_q16: float
     boot_rf_hz_q84: float
     boot_rf_hz_q975: float
-    boot_mode_bin: int                  # most frequent replicate anchor (padded bin); -1 when none
+    boot_mode_bin: int                  # most frequent replicate anchor (padded bin), -1 when none
     boot_mode_mass: float               # its share of the defined replicates
     boot_mass_at_anchor: float          # share of defined replicates equal to the point estimate
     contrast: np.ndarray = field(repr=False, compare=False)       # (256,) the curve of record
@@ -433,8 +446,9 @@ def anchor_from_ratio(ratio: np.ndarray, *, mask, valid, rejected, unit_index, g
                       min_blocks: int = MIN_BOOTSTRAP_BLOCKS, quiet_usable: bool = True) -> AnchorResult:
     """The anchor from a precomputed per-frame ratio ``(N, 256)`` and the frame flags.
 
-    ``anchor`` is the product-facing wrapper; this form lets several masks
-    (eras, blocks) share one read of the fine terms and lets tests use arrays.
+    :func:`anchor` is the wrapper that takes a product. This form allows for
+    several masks (eras, blocks) to share one read of the fine terms, and for
+    tests to pass arrays.
     """
     ratio = np.asarray(ratio, dtype=np.float64)
     if ratio.ndim != 2 or ratio.shape[1] != FINE_BINS:
@@ -538,7 +552,7 @@ def anchor(product: Product, mask, label: str = "archive", *, ratio: np.ndarray 
     """The anchor of one product on one frame mask.
 
     ``ratio`` (from :func:`fine_ratio`) may be passed when several masks share
-    a channel; otherwise the fine terms are read here and released. Keyword
+    a channel. Otherwise the fine terms are read here and released. Keyword
     parameters are those of :func:`anchor_from_ratio` after the geometry and
     product constants, which come from the product.
     """
@@ -583,7 +597,7 @@ def _native(value):
 
 
 def anchor_record(result: AnchorResult) -> dict:
-    """The ledger record of one result: native ints, floats (NaN kept) and bools; tuples joined with ';'."""
+    """The ledger record of one result as native ints, floats (NaN kept), and bools, with tuples joined with ';'."""
     return {name: _native(getattr(result, name)) for name in ANCHOR_COLUMNS}
 
 
@@ -597,7 +611,7 @@ def contrast_rows(result: AnchorResult) -> list[dict[str, str]]:
         in_designated[list(result.designated_bins)] = True
     offsets = unwrap_bins(bins, result.nominal_fine_bin)
     fine_hz = fine_hz_of_bin(bins)
-    # the same wrap as rf_offset_of_bin: about the nominal bin, so offsets -128 and 127 are one fine bin apart
+    # same wrap as rf_offset_of_bin, about the nominal bin, so offsets -128 and 127 are one fine bin apart
     rf = float(np.sign(result.sense) or 1) * (offsets * FINE_BIN_HZ + fine_hz_of_bin(result.nominal_fine_bin)
                                               - result.grid_residual_hz)
     rows = []

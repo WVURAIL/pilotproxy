@@ -1,19 +1,16 @@
 # coding=utf-8
-"""Cross-implementation gate for the size-parameterized C reference.
+"""Tests of the size-parameterized C reference against the Python transform.
 
 ``cuda/fxfft_ref.c`` is the C companion to :func:`pilot_proxy.fxfft.fxfft`.
-This suite compiles it at every supported length and requires bit-identical
-output against the Python reference, the same standard the frozen
-``fxfft256_ref.c`` is held to, extended across the family.
+It is compiled at every supported length, and its output must be
+bit-identical to the Python reference, the standard the frozen
+``fxfft256_ref.c`` is held to. At ``FX_N = 256`` the general C path must
+reproduce the frozen ``fxfft256`` exactly, so the deployed geometry does not
+move. The header ``cuda/fxfft_master_twiddle.h`` must also match the table
+emitted from the Python master, so the device tables and the Python
+reference cannot drift apart.
 
-Two properties matter beyond "it computes an FFT":
-
-* at ``FX_N = 256`` the generalized C path must reproduce the *frozen*
-  ``fxfft256`` exactly, so nothing about the deployed geometry moves; and
-* ``cuda/fxfft_master_twiddle.h`` must match what the Python master emits,
-  so the device tables and the Python reference cannot drift apart.
-
-Skipped when no C compiler is available.
+The tests are skipped when no C compiler is available.
 """
 
 from __future__ import annotations
@@ -60,7 +57,7 @@ def _run(exe: pathlib.Path, tmp_path: pathlib.Path, x: np.ndarray, n: int) -> np
 
 
 def test_emitted_table_matches_the_python_master():
-    """CI gate: the committed header cannot drift from the generator."""
+    """The committed header matches the output of the table generator."""
     proc = subprocess.run(
         [sys.executable, str(EMITTER), "--check"], capture_output=True, text=True
     )
@@ -78,7 +75,7 @@ def test_c_reference_matches_python(tmp_path, n):
 
 
 def test_c_reference_at_256_matches_the_frozen_transform(tmp_path):
-    """The generalization must not move the deployed geometry."""
+    """At FX_N = 256 the C reference reproduces the frozen fxfft256."""
     exe = _build(tmp_path, 256)
     rng = np.random.default_rng(20260807)
     x = rng.integers(-(2 ** 13), 2 ** 13, size=(24, 128, 2)).astype(np.int32)

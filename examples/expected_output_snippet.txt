@@ -1,7 +1,7 @@
 # Output structure from examples/quickstart.sh.
 # Numeric measurements depend on the generated waveform, noise realization,
-# hardware, and software revision. Retain the actual console transcript for a
-# release; do not substitute the placeholders below into a result record.
+# hardware, and software revision. The actual console transcript is kept for a
+# release, and the placeholders below are never written into a result record.
 
 Wrote generated/atsc/atsc_8vsb_complex64.cfile
 Wrote generated/atsc/atsc_waveform_audit.json

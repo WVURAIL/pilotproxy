@@ -1,8 +1,8 @@
 """Exact Q16 keep boundaries for marker-to-background power ratios.
 
-The archive scorer and synthetic frontier studies share this sorted-rank
-implementation. ``fine_decision`` retains the independent counting reference
-used to check it and the CUDA decision.
+The archive scorer and the synthetic frontier studies use this sorted-rank
+implementation. ``fine_decision`` holds the independent counting reference
+that is used to check it and the CUDA decision.
 """
 from __future__ import annotations
 
@@ -40,9 +40,23 @@ def required_multipliers_by_rank(
 ) -> tuple[int, ...]:
     """Return the smallest keeping Q16 multiplier at every usable bulk rank.
 
-    Ranks are one-based, in ascending ratio order; ties use bin order. Zero
-    reference denominators are excluded. ``ALWAYS_MASKED_Q16`` identifies a
-    valid rank for which no uint64 multiplier keeps the frame.
+    Each fine bin b has the ratio 2 S_t[b] / (S_l[b] + S_u[b]), formed from
+    rows 0, 1 and 2 of ``fine_powers``. The bulk bins with a positive
+    denominator are sorted by this ratio, and ties are broken by bin order.
+    Ranks are one-based in this order. For each rank, the boundary is the
+    smallest Q16 multiplier m such that (m / 2**16) times the rank's ratio is
+    at least the largest designated-bin ratio. ``ALWAYS_MASKED_Q16`` marks a
+    valid rank where no uint64 multiplier keeps the frame. When no
+    designated bin has a positive ratio, every boundary is 1.
+
+    Parameters
+    ----------
+    fine_powers : ndarray of uint64, shape (3, 256)
+        Exact target, lower-reference and upper-reference fine powers.
+    designated : sequence of int
+        Designated (marker) bins in [0, 256).
+    bulk_mask : ndarray of bool, shape (256,)
+        Bulk reference bins. Must exclude every designated bin.
     """
     powers = np.asarray(fine_powers)
     if powers.shape != (3, FINE_BINS) or powers.dtype != np.dtype(np.uint64):

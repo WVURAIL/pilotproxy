@@ -1,6 +1,6 @@
-# CHIME -- the reference instrument. The outrigger stations (gbo, hco, kko) share
-# this channelization and inherit it via `extends: chime`, overriding only what
-# differs (feed count, baseband scope).
+# CHIME, the reference instrument. The outrigger stations (gbo, hco, kko) share
+# this channelization. Each inherits it with `extends: chime` and overrides only
+# the values that differ (feed count, baseband scope, feed layout and site).
 name: chime
 
 band:
@@ -9,26 +9,27 @@ band:
   n_channels: 1024       # channel spacing => fs = 400e6/1024 = 390625 Hz
   descending: true       # freq_id increases as frequency decreases
 
-nyquist_zone: 2          # second Nyquist zone: inverted baseband frequency axis
-                         # measured on a strong in-band carrier.
-n_feeds: 2048            # feeds incoherently combined (square-then-average)
+nyquist_zone: 2          # second Nyquist zone, so the baseband frequency axis is
+                         # inverted (measured on a strong in-band carrier)
+n_feeds: 2048            # feeds in the incoherent average (squared, then averaged)
 nfft: 16384              # analysis FFT length per frame (Df = 23.84 Hz)
 
-# Datatrail baseband scope(s) this station registers. Used as the default survey
-# scope(s) when --scope is omitted; an explicit --scope overrides. Non-baseband
-# CHIME products live under other scopes and are not listed here -- this is only
-# what the chime-baseband reader handles.
+# Datatrail baseband scopes registered by this station. They are the default
+# survey scopes when no --scope is given, and an explicit --scope overrides them.
+# Only the scopes read by the chime-baseband reader are listed. The other CHIME
+# products are stored under other scopes.
 scopes:
   - chime.event.baseband.raw
   - chime.scheduled.baseband.raw
 
-reader: chime-baseband   # canonical reader; `scan` uses it when --reader is
-                         # omitted (override for a different file format).
+reader: chime-baseband   # canonical reader, used by `scan` when --reader is
+                         # not given (override it for a different file format)
 
 # Feed layout: input i sits on cylinder i // inputs_per_cylinder, EW spacing
 # ew_spacing_m between cylinders, at NS position i % positions_per_cylinder,
-# ns_spacing_m between positions (each cylinder holds both polarisations of
-# its positions). The capture's baseline lengths and bearing fit read it.
+# ns_spacing_m between positions (each cylinder holds both polarizations of
+# its positions). It is read by the baseline-length and bearing fit of the
+# capture.
 feed_layout:
   ew_spacing_m: 22.0
   ns_spacing_m: 0.3048

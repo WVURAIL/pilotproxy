@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Freeze and build phase-preserving full-reference-PFB fine-validation fixtures."""
+"""Freeze a plan and build phase-preserving fine-validation fixtures through the full reference PFB."""
 from __future__ import annotations
 
 import argparse
@@ -73,7 +73,7 @@ def runtime(backend):
 
 
 def geometry_cases(layout):
-    """Exact rational frequency design, independent of any generated signal."""
+    """Return the exact rational frequency design of each case, independent of any generated signal."""
     delta=Fraction(str(layout['dtv_pilot_hz']))-Fraction(str(layout['coarse_channel_center_hz']))
     nominal_k=round(delta/STEP)
     align=nominal_k*STEP-delta
@@ -141,8 +141,10 @@ def freeze(args):
         profiles.append({'physical_channel':channel,'layout':dict(layout),'reference_channel_index':reference_index,
                          'packed_profile_sha256':hashlib.sha256(np.asarray(packed).tobytes()).hexdigest(),
                          'cases':geometry_cases(layout)})
-    # These calibrate a deterministic digital normalization only; they are not
-    # independent detector-noise trials or physical thermal measurements.
+    # These seeds calibrate only a deterministic digital normalization. Their
+    # draws are not independent detector-noise trials or physical thermal
+    # measurements. The check below confirms that the 23 seeds are distinct and
+    # that none collides with a reserved seed.
     gain_seeds={str(c):int.from_bytes(hashlib.sha256(f'fine-validation-pfb-gain-v1:{c}'.encode()).digest()[:8],'big') for c in range(14,37)}
     prior=RAIL/'results/channel29_residual_controls_2026-09-09/preflight'
     with np.load(prior/'seed-exclusions.npz',allow_pickle=False) as z:

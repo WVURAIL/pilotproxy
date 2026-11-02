@@ -8,9 +8,9 @@ channels. Its center frequency gives the archive ``freq_id`` (0..1023)::
     f_center = f0 - freq_id * coarse_width        (f0 = 800 MHz, top of band)
     freq_id  = round((f0 - f_center) / coarse_width)
 
-Selection uses freq_id because that is how the inventory and filenames name
-channels. Products also carry the ATSC physical-channel label for the pilot.
-Keeping freq_id alongside it lets a later 6 MHz mask-expansion step find the
+Channels are selected by freq_id, since the inventory and the file names use
+it. Products also carry the ATSC physical-channel label for the pilot. The
+freq_id is kept with it so that a later 6 MHz mask-expansion step can find the
 other coarse channels in that television band without reopening the raw data.
 """
 from __future__ import annotations
@@ -37,23 +37,23 @@ def chime_freq_id_from_hz(
     """Return the coarse-channel index (``freq_id``, 0..1023) for a center freq.
 
     ``freq_id = round((f0 - f_center) / coarse_width)``. ``f0`` defaults to the
-    CHIME band top (800 MHz) and ``coarse_width`` to 400e6/1024; pass an
-    instrument's own values for non-CHIME geometries. With the defaults this is
+    CHIME band top (800 MHz) and ``coarse_width`` to 400e6/1024. Other
+    instruments pass their own values. With the defaults this is
     ``Instrument.freq_id_of_hz`` of the CHIME instrument file.
     """
     return int(round((float(f0_hz) - float(f_center_hz)) / float(coarse_width_hz)))
 
 
 def source_event_key(unit_key: object, freq_id: int) -> str:
-    """Identify an event by removing its file's trailing frequency-channel token.
+    """Return the event key of a file by removing its trailing freq_id token.
 
-    Combining pilots requires a common event key. The files
-    ``baseband_<event>_829.h5`` and ``baseband_<event>_844.h5`` describe different
+    Pilots are combined on a common event key. The files
+    ``baseband_<event>_829.h5`` and ``baseband_<event>_844.h5`` hold different
     channels of the same event, so removing the final freq_id gives them the
-    same key within their source namespace.
+    same key in their source namespace.
 
-    Keep the directory or URI prefix: independent campaigns can reuse a
-    filename. Keys without the expected suffix pass through unchanged.
+    The directory or URI prefix is kept, since independent campaigns can reuse
+    a filename. Keys without the expected suffix pass through unchanged.
     """
     key = str(unit_key).replace("\\", "/")
     return re.sub(rf"_{int(freq_id)}(?=\.[^/]+$)", "", key)

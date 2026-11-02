@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """
-Regression tests for the engine/resume hardening (the external review findings).
+Regression tests for the engine and resume findings of an external review.
 
-Each test pins a behavior that previously could silently violate one of the
-headline guarantees -- bounded scratch, product compatibility, "resume means
-complete" -- or a source-selection / readiness bug. They run fully offline.
+Each test pins a behavior that could otherwise break one of the engine
+guarantees (bounded scratch, product compatibility, and "resume means
+complete") or cause a source-selection or readiness bug. The tests run
+offline.
 
-Coverage map (review finding -> tests):
-  #1 bounded scratch          -> test_staged_file_bound_* , scratch-empty asserts
-  #2 unique scratch names      -> test_stage_name_unique , test_duplicate_basenames_*
-  #3/#4 resume compatibility   -> the detector analyzer's resume tests (test_detector_resume.py)
-  #5 analysis order            -> test_default_delivers_source_order
-  #7 local freq_id selection   -> test_local_source_44_not_844 , _duplicate_basenames_*
-  #8 doctor readiness          -> test_geometry_only_telescope_not_archive_ready
-  #9 failure boundary          -> test_reader_iteration_failure_quarantines_and_aborts,
-                                  test_analyzer_failure_aborts_without_quarantine_and_cleans_scratch
-  #10 quarantine identity      -> test_quarantine_uses_stable_unit_identity
+Coverage map (review finding and its tests):
+  #1 bounded scratch           test_staged_file_bound_*, scratch-empty asserts
+  #2 unique scratch names      test_stage_name_unique*, test_duplicate_basenames_*
+  #3/#4 resume compatibility   resume tests of the detector analyzer (test_detector_resume.py)
+  #5 analysis order            test_default_delivers_source_order*
+  #7 local freq_id selection   test_local_source_44_not_844, *_duplicate_basenames_*
+  #8 doctor readiness          test_geometry_only_telescope_not_archive_ready
+  #9 failure boundary          test_reader_iteration_failure_quarantines_and_aborts,
+                               test_analyzer_failure_aborts_without_quarantine_and_cleans_scratch
+  #10 quarantine identity      test_quarantine_uses_stable_unit_identity*
+  #13 staging failures         test_incomplete_staged_copy_*, test_short_but_archive_sized_copy_*
 
-Run:  PYTHONPATH=src python -m pytest tests/test_engine_safety.py -q
+Run:  PYTHONPATH=src python -m pytest tests/archive/test_engine_safety.py -q
 """
 from __future__ import annotations
 
@@ -44,9 +46,7 @@ from pilot_proxy.archive.sources.local import LocalDirectorySource
 F_TONE_BB = 12000.0
 
 
-# ---------------------------------------------------------------------------
 # helpers
-# ---------------------------------------------------------------------------
 def _tmp(prefix: str) -> str:
     return tempfile.mkdtemp(prefix=f"dt_{prefix}_")
 
@@ -54,9 +54,9 @@ def _tmp(prefix: str) -> str:
 class _FakeSynthSource(DataSource):
     """A source that synthesizes a baseband file per unit on fetch().
 
-    Lets a test control unit identity (key/name) and fetch timing independently
-    of the local filesystem, and records the peak number of files co-resident on
-    scratch so the storage bound can be asserted.
+    The unit identity (key and name) and the fetch timing are set by the test
+    and do not depend on the local filesystem. The peak number of files on
+    scratch at one time is recorded, so the storage bound can be asserted.
     """
     info = PluginInfo(name="fake", kind="source",
                       summary="synthetic in-test source", status=READY,
@@ -140,9 +140,7 @@ class _ExplodingAnalyzer(_RecordingAnalyzer):
         raise ValueError("science bug")
 
 
-# ---------------------------------------------------------------------------
-# #2  unique scratch names
-# ---------------------------------------------------------------------------
+# #2 unique scratch names
 def test_stage_name_unique_for_same_basename_different_key():
     u1 = Unit(key="src://A/baseband_dup_844.h5", name="baseband_dup_844.h5")
     u2 = Unit(key="src://B/baseband_dup_844.h5", name="baseband_dup_844.h5")
@@ -152,7 +150,7 @@ def test_stage_name_unique_for_same_basename_different_key():
 
 
 def test_duplicate_basenames_distinct_keys_both_processed():
-    """Two units sharing a basename must not collide on scratch (provenance + data)."""
+    """Two units sharing a basename must not collide on scratch (provenance and data)."""
     work = _tmp("dup")
     inst = inst_mod.load_instrument("chime")
     fcen = inst.freq_of_freq_id(844) * 1e6
@@ -172,9 +170,7 @@ def test_duplicate_basenames_distinct_keys_both_processed():
     assert os.listdir(tmp) == []                               # scratch clean
 
 
-# ---------------------------------------------------------------------------
-# #1  bounded scratch
-# ---------------------------------------------------------------------------
+# #1 bounded scratch
 def _bound_run(work, n_units, workers, staged):
     inst = inst_mod.load_instrument("chime")
     fcen = inst.freq_of_freq_id(844) * 1e6
@@ -206,16 +202,14 @@ def test_staged_file_bound_respects_max_staged_files():
     assert os.listdir(tmp) == []
 
 
-# ---------------------------------------------------------------------------
-# #5  analysis order under the default
-# ---------------------------------------------------------------------------
+# #5 analysis order under the default
 def test_default_delivers_source_order_even_if_later_file_is_faster():
     work = _tmp("order")
     inst = inst_mod.load_instrument("chime")
     fcen = inst.freq_of_freq_id(844) * 1e6
     u1 = Unit(key="k1", name="f1_844.h5", meta={"f_center_hz": fcen})
     u2 = Unit(key="k2", name="f2_844.h5", meta={"f_center_hz": fcen})
-    # u1 is slow, u2 is fast -- under the default (1 worker) u1 still arrives first.
+    # u1 is slow and u2 is fast, and with the default of 1 worker u1 still arrives first
     src = _FakeSynthSource(fcen, n_frames=2, delay_keys={"k1"})
     analyzer = _RecordingAnalyzer()
     ctx = RunContext(instrument=inst, selection=[844], options={})
@@ -225,9 +219,7 @@ def test_default_delivers_source_order_even_if_later_file_is_faster():
     assert analyzer.order == ["k1", "k2"]
 
 
-# ---------------------------------------------------------------------------
-# #9  reader failures are file-level; analyzer failures are run-level
-# ---------------------------------------------------------------------------
+# #9 reader failures are file-level, and analyzer failures are run-level
 def test_reader_iteration_failure_quarantines_and_aborts():
     work = _tmp("reader_fail")
     inst = inst_mod.load_instrument("chime")
@@ -283,9 +275,7 @@ def test_analyzer_failure_aborts_without_quarantine_and_cleans_scratch():
     assert os.listdir(tmp) == []
 
 
-# ---------------------------------------------------------------------------
-# #7  local source freq_id selection
-# ---------------------------------------------------------------------------
+# #7 local source freq_id selection
 def _touch(path):
     with open(path, "wb") as fh:
         fh.write(b"\x00")
@@ -300,7 +290,7 @@ def test_local_source_44_not_844():
                      options={"source_root": work, "source_glob": "*.h5"})
     units = list(LocalDirectorySource().enumerate(ctx))
     names = sorted(u.name for u in units)
-    assert names == ["baseband_s0_44.h5"]              # 844 must NOT match 44
+    assert names == ["baseband_s0_44.h5"]              # 844 must not match 44
     assert all(u.meta["scope"] == "local" for u in units)
 
 
@@ -316,7 +306,7 @@ def test_local_source_duplicate_basenames_distinct_keys():
     units = list(LocalDirectorySource().enumerate(ctx))
     assert len(units) == 2                             # both subdirs enumerated
     assert len({u.key for u in units}) == 2            # distinct keys
-    assert len({_stage_name(u) for u in units}) == 2   # -> distinct scratch names
+    assert len({_stage_name(u) for u in units}) == 2   # so distinct scratch names
 
 
 def test_local_source_rejects_bytes_changed_after_enumeration():
@@ -352,25 +342,27 @@ def test_quarantine_uses_stable_unit_identity_for_duplicate_basenames():
     assert _quarantine_key(good) not in keys
 
 
-# ---------------------------------------------------------------------------
-# #8  doctor readiness
-# ---------------------------------------------------------------------------
+# #8 doctor readiness
 def test_geometry_only_telescope_not_archive_ready():
-    """The readiness rule `doctor` enforces: a telescope with geometry + `nyquist_zone`
-    but no declared baseband `scopes` is usable with a LOCAL source and counts as
-    'geometry-only' -- not an out-of-the-box archive combo (it still works against an
-    archive source if you pass --scope).
+    """A telescope with geometry and no declared scopes is geometry-only.
 
-    Hermetic by construction -- it writes a throwaway geometry-only instrument and
-    checks the readiness logic directly, so it depends neither on which shipped
-    telescopes happen to declare scopes (all current ones do) nor on local CADC
-    packages / proxy-cert state."""
+    This is the readiness rule enforced by `doctor`. A telescope with its
+    geometry and `nyquist_zone` set but no declared baseband `scopes` can be
+    used with a local source and counts as 'geometry-only', which `doctor` does
+    not report as archive-ready. It still works with an archive source when
+    --scope is passed.
+
+    The test writes a throwaway geometry-only instrument and checks the
+    readiness logic directly. It therefore does not depend on the set of
+    shipped telescopes that declare scopes (all current ones do) or on the
+    local CADC packages and proxy certificate.
+    """
     with tempfile.TemporaryDirectory() as d:
         with open(os.path.join(d, "geomonly.yaml"), "w") as f:
             f.write(
                 "name: geomonly\n"
                 "band: {f0_mhz: 800.0, bandwidth_mhz: 400.0, n_channels: 1024}\n"
-                "nyquist_zone: 2\n"   # geometry + Nyquist zone set, but no scopes declared
+                "nyquist_zone: 2\n"   # geometry and Nyquist zone set, with no scopes declared
             )
         rd = inst_mod.instrument_readiness("geomonly", directory=d)
         assert rd.nyquist_zone_set is True
@@ -384,12 +376,11 @@ if __name__ == "__main__":
     sys.exit(rc)
 
 
-# ---------------------------------------------------------------------------
-# #13 staging failures are retried, not quarantined: a staged copy that has
-# vanished or is short of the archive's recorded size says nothing about the
-# archived bytes (2026-09-01: a staging directory removed under a live scan
-# quarantined 14 readable units).
-# ---------------------------------------------------------------------------
+# #13 staging failures are retried
+# A staged copy that has vanished, or is shorter than the size recorded by the
+# archive, says nothing about the archived bytes, so the unit is retried and
+# is not quarantined. On 2026-09-01 a staging directory removed under a live
+# scan quarantined 14 readable units.
 class _VanishingReader(ChimeBasebandReader):
     """Loses the staged copy before it can read it."""
 
@@ -408,7 +399,7 @@ class _TruncatingReader(ChimeBasebandReader):
 
 
 def _synth_size(work, fcen):
-    """Size of the file _FakeSynthSource will stage, to declare as the archive's."""
+    """Return the size of the file staged by _FakeSynthSource, declared as the archive size."""
     probe = os.path.join(work, "size_probe.h5")
     make_synth_file(probe, 2 * NFFT, 16, fcen / 1e6, F_TONE_BB, seed=1)
     size = os.path.getsize(probe)
@@ -426,7 +417,7 @@ def test_incomplete_staged_copy_is_a_transient_failure_not_a_quarantine(reader_c
     fcen = inst.freq_of_freq_id(844) * 1e6
     meta = {"f_center_hz": fcen}
     if declare_short:
-        meta["size_bytes"] = _synth_size(work, fcen)   # the archive's size; the copy will be shorter
+        meta["size_bytes"] = _synth_size(work, fcen)   # archive size, and the staged copy is cut shorter
     unit = Unit(key="src://staged", name="staged_844.h5", meta=meta)
     src = _FakeSynthSource(fcen, n_frames=2)
     ctx = RunContext(instrument=inst, selection=[844], options={})
@@ -448,7 +439,7 @@ def test_incomplete_staged_copy_is_a_transient_failure_not_a_quarantine(reader_c
 
 
 def test_short_but_archive_sized_copy_is_still_quarantined():
-    """A file the archive itself stores short is a property of the object."""
+    """A file that is short in the archive itself is a fault of the object and is quarantined."""
     work = _tmp("archive_short")
     inst = inst_mod.load_instrument("chime")
     fcen = inst.freq_of_freq_id(844) * 1e6

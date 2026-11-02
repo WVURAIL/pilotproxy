@@ -22,11 +22,11 @@ from pilot_proxy.archive.interfaces import (
     UnreadableUnitError,
 )
 
-# A hang guard, NOT a rendezvous. Every wait that uses it is on an event some
-# other thread is already committed to setting, so nothing here schedules work
-# by wall clock and the ceiling is never reached; it only turns a genuine
-# deadlock into a failure instead of a hung suite. The 2s waits this replaced
-# were short enough to expire under CPU load (9 failures in 130 loaded runs).
+# The ceiling is a hang guard. Every wait that uses it is on an event that
+# another thread is already committed to setting, so no work is scheduled by
+# wall clock and the ceiling is never reached in a passing run. Its only
+# effect is that a deadlock fails the test instead of hanging the suite. Waits
+# of 2 s were found to expire under CPU load (9 failures in 130 loaded runs).
 _RENDEZVOUS_CEILING = 120.0
 
 
@@ -192,10 +192,11 @@ class _LaterFailureWithBlockedPeerSource(_ByteSource):
 class _JoinablePeerSource(_LaterFailureWithBlockedPeerSource):
     """The blocked-peer source, plus the download worker thread running it.
 
-    `peer_returned` is set from INSIDE fetch(), so it proves only that the
+    `peer_returned` is set in fetch(), so it shows only that the
     source call is about to return. The worker still has to hand the result
-    back, delete its staged file and release its slot before the thread ends,
-    so a test that needs the worker to have FINISHED must join this thread.
+    back, delete its staged file, and release its slot before the thread ends.
+    A test that needs the worker to have finished must therefore join this
+    thread.
     """
 
     def __init__(self):
@@ -810,11 +811,11 @@ def test_worker_finishing_during_prefix_save_returns_partial_result(
     release_errors = []
 
     def release_during_save():
-        # Hold the ordered prefix save open until the blocked download worker
-        # has genuinely FINISHED -- that is the scenario this test is named
-        # for. Waiting on the thread rather than on peer_returned (which fires
-        # while fetch() is still on the stack) is what makes the worker's exit
-        # a fact instead of a race against however long save() happens to take.
+        # The ordered prefix save is held open until the blocked download
+        # worker has finished, which is the case this test is named for. The
+        # thread is joined, since peer_returned is set while fetch() is still
+        # on the stack. The join makes the exit of the worker certain, with no
+        # race against the time taken by save().
         try:
             assert analyzer.save_started.wait(timeout=_RENDEZVOUS_CEILING)
             source.release_peer.set()
@@ -979,8 +980,8 @@ def test_download_worker_count_is_clamped_to_staging_capacity_and_work(
 def test_partial_worker_startup_retains_scratch_under_active_writer(
         tmp_path, monkeypatch):
     source = _BlockingSource()
-    # Put the blocking unit first so the only successfully started worker is
-    # demonstrably writing when creation of the second worker fails.
+    # the blocking unit is first, so the only worker that started is known to
+    # be writing when the second worker fails to start
     units = [Unit(key="unit-2", name="unit-2.dat"),
              Unit(key="unit-1", name="unit-1.dat")]
     real_start = threading.Thread.start
@@ -1083,7 +1084,7 @@ def test_reader_probe_metadata_is_authoritative_over_inventory(tmp_path):
 
 def test_delete_failure_is_surfaced_without_freeing_scratch_slot(
         tmp_path, monkeypatch):
-    """An undeleted file remains the sole resident; the next fetch never starts."""
+    """An undeleted file keeps its scratch slot, so the next fetch never starts."""
     source = _ByteSource()
     units = [Unit(key="unit-1", name="unit-1.dat"),
              Unit(key="unit-2", name="unit-2.dat")]
@@ -1330,8 +1331,11 @@ def _release_after(source, seconds):
 
 
 def test_interrupt_drains_an_active_fetch_instead_of_retaining_scratch(tmp_path, monkeypatch):
-    """An interrupt asks for a drain: a fetch in flight finishes within the
-    interrupt window, so scratch is cleaned and no writer is left active."""
+    """An interrupt drains a fetch in flight before scratch is cleaned.
+
+    The fetch finishes in the interrupt window, so scratch is cleaned and no
+    writer is left active.
+    """
     monkeypatch.setattr(pipeline, "_WORKER_JOIN_SECONDS", 0.05)
     monkeypatch.setattr(pipeline, "_INTERRUPT_JOIN_SECONDS", 3.0)
     source = _BlockingSource()
@@ -1345,9 +1349,12 @@ def test_interrupt_drains_an_active_fetch_instead_of_retaining_scratch(tmp_path,
 
 
 def test_interrupt_window_is_the_interrupt_one(tmp_path, monkeypatch):
-    """With the interrupt window shorter than the fetch, the interrupt still
-    reports the active worker and retains scratch -- the failure window is
-    not what governs an interrupt."""
+    """An interrupt is governed by the interrupt window.
+
+    With the interrupt window (0.05 s) shorter than the fetch, the interrupt
+    reports the active worker and keeps scratch. The error names the 0.05 s
+    interrupt window, and the 3 s failure window has no effect.
+    """
     monkeypatch.setattr(pipeline, "_WORKER_JOIN_SECONDS", 3.0)
     monkeypatch.setattr(pipeline, "_INTERRUPT_JOIN_SECONDS", 0.05)
     source = _BlockingSource()

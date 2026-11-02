@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Freeze and execute a resumable literal full-array fine-detector campaign.
 
-This driver preserves powers, not only thresholded counts. Calibration, grid
-discovery, evaluation and spatial-scaling draws have separate frozen identities.
-An interrupted shard is regenerated from exactly the same identities; completed
-shards are verified before reuse. A failed scientific gate is a result.
+For every trial, the float and fixed fine and coarse powers are stored in raw
+shards, and thresholds are applied to them after the run. Calibration, grid
+discovery, evaluation and spatial-scaling draws each have their own frozen
+trial identities. An interrupted shard is regenerated from the same identities,
+and a completed shard is verified against its receipt before it is reused. A
+failed scientific gate counts as a result of the campaign. Precision, margins,
+sample counts, seeds and grids are fixed before evaluation.
 """
 
 from __future__ import annotations
@@ -107,8 +110,10 @@ def payload_for(phase, index):
         return 0
     if phase == "stress":
         return 1
-    # A predeclared independently randomized 50:50 mixture of two fixed,
-    # qualified waveform fixtures. Not two draws from all possible ATSC signals.
+    # In the remaining phases, fixture 2 or 3 is drawn with equal probability.
+    # Each choice is fixed before the campaign by a hash of the phase and trial
+    # index. The mixture is limited to these two fixed, qualified waveform
+    # fixtures and does not cover other ATSC signals.
     identity = f"{SCHEMA}:fixture-choice:{phase}:{index}".encode()
     return 2 + (hashlib.sha256(identity).digest()[0] & 1)
 
@@ -800,8 +805,9 @@ def freeze(args):
         exclusions.update(seed_file_values(path))
         exclusion_files[str(path)] = sha(path)
     engineering_seeds, engineering_files = engineering_exclusions()
-    # Repeated engineering preflights intentionally replay their same declared
-    # engineering namespace. Scientific seeds must avoid all of them.
+    # Repeated engineering preflights replay the same declared engineering
+    # seed namespace. These seeds are therefore excluded only when a scientific
+    # campaign is frozen.
     if not args.engineering:
         exclusions.update(engineering_seeds)
     exclusion_files.update(engineering_files)
@@ -827,7 +833,7 @@ def freeze(args):
         if not path.is_file():
             raise ValueError(f"Required frozen analysis source is not ready: {path}")
         sources[str(path)] = sha(path)
-    # CUDA source, transform tables, wrapper and binary are separate identities.
+    # each CUDA source, transform table, wrapper and binary gets its own hash
     for path in (ROOT / "cuda").rglob("*"):
         if path.is_file() and path.suffix in (".cu", ".cuh", ".h", ".cpp"):
             sources[str(path)] = sha(path)

@@ -1,4 +1,4 @@
-"""Fine score profiles and populations: exact boundaries, the profile guard and the strict reader."""
+"""Tests of the fine score profiles and populations, covering the exact boundaries, the profile guard and the strict reader."""
 
 import numpy as np
 import pytest

@@ -242,7 +242,7 @@ def test_validate_products_accepts_consistent_run(tmp_path) -> None:
 
 
 def _as_revision_1_record(contract) -> None:
-    # What a run written before kernel core 3.0.0 carries.
+    # contract fields of a run written before kernel core 3.0.0
     contract["schema_version"] = "pilotproxy_detector_contract_v1"
     contract["coarse_power_ratio_definition"] = (
         "R_coarse = 2 * P_target / (P_ref_lower + P_ref_upper)"
@@ -617,7 +617,8 @@ def test_validate_products_detects_fast_generation_publish(
         if not published:
             published = True
             # All canonical bytes are unchanged, but a complete generation is
-            # committed between the validator's before/after identity reads.
+            # committed between the identity reads that the validator makes
+            # before and after its checks.
             combine_module._write_recovery_generation_manifest(run_dir)
         return result
 
@@ -701,10 +702,10 @@ def test_validate_products_journal_check_is_final_observation(
 
 
 def test_validate_products_checks_normalized_mask_rule(tmp_path) -> None:
-    # The corrupted cell [0, 0] (mask forced to 1) is legal under the legacy
-    # F>1 rule (2*11 > 20) but illegal under the declared normalized rule
-    # (11*9 <= 5*20), so this only fails if the validator dispatches to the
-    # normalized rule.
+    # The corrupted cell [0, 0] (mask forced to 1) is legal under the fixed
+    # rule F > 1 (2*11 > 20) and illegal under the declared normalized rule
+    # (11*9 <= 5*20). The error is reported only when the validator applies
+    # the normalized rule.
     run_dir = tmp_path / "run"
     _write_products(run_dir, corrupt_normalized_positive_excess_mask=True)
 

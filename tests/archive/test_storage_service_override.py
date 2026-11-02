@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Offline tests for the Storage Inventory service override -- the escape hatch
-that lets a run fetch straight from a replica when the global locator is
-degraded. No CADC access: cadcdata's client is replaced by a recorder, so the
-tests lock the actual constructor contract (whether resource_id is passed, and
-with what) rather than restating the helper's logic.
+Offline tests for the Storage Inventory service override.
+
+The override lets a run fetch straight from a replica when the global locator
+is degraded. The cadcdata client is replaced by a recorder, so no test reaches
+CADC. The tests check the constructor contract itself, which is the presence
+of resource_id and its value, and do not restate the logic of the helper.
 
 Run:  PYTHONPATH=src python -m pytest tests/archive/test_storage_service_override.py
 """
@@ -14,9 +15,10 @@ import pytest
 
 from pilot_proxy.archive.sources import cadc as src
 
-# cadcdata is optional (the CADC client is not installed in the smoke jobs).
-# The module under test imports it lazily inside _make_client, so importing
-# pilot_proxy stays fine; only these tests need the real class to patch.
+# cadcdata is optional, and the CADC client is not installed in the smoke
+# jobs. The module under test imports it lazily in _make_client, so
+# pilot_proxy still imports without it. Only these tests need the real class
+# to patch.
 cadcdata = pytest.importorskip("cadcdata")
 
 
@@ -24,11 +26,12 @@ _UNSET = object()
 
 
 class _RecordingClient:
-    """Stands in for cadcdata.StorageInventoryClient.
+    """Stand-in for cadcdata.StorageInventoryClient that records its arguments.
 
-    resource_id defaults to a sentinel so a test can tell "argument omitted"
-    (library default applies) from "argument passed", which a real default
-    string would hide.
+    resource_id defaults to a sentinel so a test can distinguish between an
+    argument that is not passed, where the library default applies, and one
+    that is passed. A real default string would make the two cases look
+    the same.
     """
 
     def __init__(self, subject, resource_id=_UNSET, host=None, insecure=False):
@@ -43,9 +46,7 @@ def recorder(monkeypatch):
     return _RecordingClient
 
 
-# ==========================================================================
-# storage_service_override(): unset/blank means "use the default locator"
-# ==========================================================================
+# storage_service_override(): an unset or blank value selects the default locator
 def test_override_absent_when_env_unset(monkeypatch):
     monkeypatch.delenv(src.STORAGE_SERVICE_ENV, raising=False)
     assert src.storage_service_override() is None
@@ -68,9 +69,7 @@ def test_override_accepts_a_bare_url(monkeypatch):
     assert src.storage_service_override() == "https://ws-uv.canfar.net/minoc"
 
 
-# ==========================================================================
 # _make_client(): the override reaches the real constructor, or is omitted
-# ==========================================================================
 def test_client_omits_resource_id_without_override(monkeypatch, recorder):
     monkeypatch.delenv(src.STORAGE_SERVICE_ENV, raising=False)
     client = src.CadcDatatrailSource()._make_client()
@@ -86,7 +85,7 @@ def test_client_receives_resource_id_from_override(monkeypatch, recorder):
 
 
 def test_blank_override_does_not_pin_a_service(monkeypatch, recorder):
-    """A blank value must behave as "unset", not as an empty resource_id."""
+    """A blank value behaves as unset and never passes an empty resource_id."""
     monkeypatch.setenv(src.STORAGE_SERVICE_ENV, "  ")
     client = src.CadcDatatrailSource()._make_client()
     assert client.resource_id is _UNSET
@@ -94,10 +93,10 @@ def test_blank_override_does_not_pin_a_service(monkeypatch, recorder):
 
 def test_override_is_read_per_client_not_cached_at_import(
         monkeypatch, recorder):
-    """Each client construction re-reads the environment.
+    """The environment is read again at each client construction.
 
     Clients are built lazily per thread, so a value captured once at import
-    would silently apply the wrong route to threads created later.
+    would apply the wrong route to threads created later, with no warning.
     """
     monkeypatch.delenv(src.STORAGE_SERVICE_ENV, raising=False)
     source = src.CadcDatatrailSource()

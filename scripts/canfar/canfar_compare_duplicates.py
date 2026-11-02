@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Field-level comparison of the channels two shards both built, NaN-aware.
+"""Compare the channels that two shards both built.
 
     python scripts/canfar/canfar_compare_duplicates.py <local root>
 
-where <local root> holds shard1/, shard2/, shard3/ each with _per_pilot/.
+where <local root> holds shard1/, shard2/ and shard3/, each with _per_pilot/.
 
-Byte identity (sha256) is the headline for every pair. The field pass is the
-confirmation: NaN in the same positions counts as equal, since NaN != NaN
-would otherwise report an identical file as differing."""
+Byte identity (sha256) is reported for every pair. Merged channels are copies,
+so only their bytes are compared. For the independently built channels, a
+field pass confirms the result, and NaN in the same positions counts as equal,
+since NaN != NaN would otherwise report an identical file as differing."""
 import hashlib, sys
 import numpy as np
 if len(sys.argv) < 2:

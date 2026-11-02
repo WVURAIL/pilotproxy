@@ -1,4 +1,4 @@
-"""A control band's frame export: the profile decides, and no threshold is drawn."""
+"""The frame export of a control band. The role of the band is set by the profile, and no threshold is drawn."""
 from importlib.util import module_from_spec, spec_from_file_location
 import json
 from pathlib import Path

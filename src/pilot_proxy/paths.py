@@ -98,7 +98,7 @@ def resolve_user_path(
     *,
     relative_to: str | os.PathLike[str] | None = None,
 ) -> Path:
-    """Resolve a user path against the caller's directory, not package files."""
+    """Resolve a user path against the caller's working directory or ``relative_to``."""
     path = normalize_user_path(value).expanduser()
     if not path.is_absolute():
         base = Path.cwd() if relative_to is None else Path(relative_to)

@@ -1,17 +1,21 @@
 # coding=utf-8
-"""Smoke test: the staged GPU library against the exact CPU reference chain.
+"""Smoke test of the staged GPU library against the exact CPU reference chain.
 
-Runs the frozen chain once on prebuilt DTV weights and a quantized
-noise-plus-tone frame: GPU row projections -> GPU fine powers -> frame
-powers (the all-bin sums, kernel core 3.0.0), and checks every integer
-against the CPU chain ``matched_filter_row_projections_cpu_reference_packed``
--> ``fine_power_fx`` -> sum, plus the fused entry's device-reduced
-``d_power_out``. Exact uint64 equality, no tolerance. The packed CPU reference
-``coarse_power_ratio_cpu_reference_packed`` is that same exact chain. The
-float prototype ``coarse_power_ratio_cpu_reference`` (the sum of |z|^2 over
-rows of the unpacked frame) is compared on the same frame only to document
-the Parseval-level proximity of the fixed-point definition; it is bounded by
-the frozen transform's drift gate, not asserted equal.
+The frozen chain is run once on the prebuilt DTV weights and a quantized
+noise-plus-tone frame. On the GPU, the row projections are computed first,
+then the fine powers, and the frame powers are formed as the all-bin sums of
+the fine powers (kernel core 3.0.0). Every integer is compared with the CPU
+chain of ``matched_filter_row_projections_cpu_reference_packed``,
+``fine_power_fx``, and the bin sum. The device-reduced ``d_power_out`` of the
+fused entry is compared with the same chain. Exact uint64 equality is required
+throughout. The packed CPU reference ``coarse_power_ratio_cpu_reference_packed``
+is the same exact chain.
+
+The float prototype ``coarse_power_ratio_cpu_reference`` is the sum of |z|^2
+over the rows of the unpacked frame. It is compared on the same frame only to
+document how closely the fixed-point definition follows Parseval's theorem,
+and its relative departure is bounded by the drift gate of the frozen
+transform.
 """
 from __future__ import annotations
 
@@ -44,8 +48,9 @@ KERNEL_SMOKE_ROWS = KERNEL_SMOKE_STREAMS * WINDOWS
 KERNEL_SMOKE_NOISE_SIGMA = 1.0
 QUANTIZER_CLIP_SIGMA = 3.0
 COMPLEX_TONE_CYCLES = 2.0
-# The frozen transform's Parseval departure is bounded at 5e-3 on the golden
-# vectors (tests/core/test_fxfft256.py); this frame sits far inside it.
+# The Parseval departure of the frozen transform is bounded at 5e-3 on the
+# golden vectors (tests/core/test_fxfft256.py). The departure on this frame is
+# far below that bound.
 PARSEVAL_RELATIVE_BOUND = 5.0e-3
 
 
@@ -63,7 +68,10 @@ def _run_kernel(
     packed_samples: np.ndarray,
     packed_weights: np.ndarray,
 ):
-    """GPU chain on one frame: rows, staged fine, fused fine, frame powers."""
+    """Run the GPU chain on one frame.
+
+    Returns the rows, staged fine powers, fused fine powers, and frame powers.
+    """
     rows = int(packed_samples.shape[0])
     streams = rows // WINDOWS
     d_in = cp.asarray(packed_samples)
@@ -149,7 +157,7 @@ def test_kernel_cpu_gpu_smoke_matches_prebuilt_dtv_weights() -> None:
         cp, kernel, packed, weights
     )
 
-    # Exact CPU chain: rows -> frozen transform -> fine powers -> bin sums.
+    # exact CPU chain of row projections, frozen transform, fine powers, and bin sums
     cpu_rows = matched_filter_row_projections_cpu_reference_packed(
         packed, weights, kernel.specs.bits
     )
@@ -172,7 +180,7 @@ def test_kernel_cpu_gpu_smoke_matches_prebuilt_dtv_weights() -> None:
     )
     np.testing.assert_array_equal(packed_powers, cpu_powers)
 
-    # Parseval proximity to the float |z|^2 sum: documented, not an identity.
+    # Parseval agreement with the float |z|^2 sum to PARSEVAL_RELATIVE_BOUND
     _, float_sums = coarse_power_ratio_cpu_reference(
         unpack_packed_complex(packed, kernel.specs.bits),
         unpack_packed_complex(weights, kernel.specs.bits),

@@ -23,7 +23,7 @@ def test_coarse_power_ratio_is_the_raw_target_reference_ratio() -> None:
 
 
 def test_normalized_coordinates_use_the_weight_norm_null_ratio() -> None:
-    # R = 2*10/20 = 1; R_null = 2*4/10 = 0.8; Q = 1.25; rho = 0.25.
+    # R = 2*10/20 = 1, R_null = 2*4/10 = 0.8, Q = R/R_null = 1.25 and rho = Q - 1 = 0.25
     excess = power_terms_to_normalized_pilot_excess(
         10,
         20,
@@ -88,7 +88,8 @@ def test_current_decision_contract_uses_power_ratio_fields() -> None:
         "coarse_local_reference_power_ratio",
         "fine_local_reference_power_ratio",
     ]
-    # The scan stores the exact terms and decides nothing on them; the
-    # float ratio it used to publish was never the deployed statistic.
+    # The scan stores the exact fine terms and makes no decision on them. No
+    # float fine diagnostic is published, since the float ratio was never the
+    # deployed statistic.
     assert contract["fine_measurement"]["terms_field"] == "fine_power_u64"
     assert "fine_diagnostic" not in contract

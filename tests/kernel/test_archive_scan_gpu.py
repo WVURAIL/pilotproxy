@@ -1,4 +1,4 @@
-"""Real HDF5 -> CUDA -> archived products, including an OS-level interrupt."""
+"""GPU archive scan from HDF5 baseband files to archived products, with an OS-level interrupt."""
 
 import json
 import os
@@ -166,14 +166,14 @@ def test_archive_gpu_scan_interrupt_resume_and_cpu_reference(tmp_path):
             )
             fine = fine_power_fx(rows, num_streams=4)
             expected_fine.append(fine)
-            # Kernel core 3.0.0: the frame powers are the all-bin sums of the
-            # fine spectrum, not the sum of |z|^2 over rows.
+            # The frame powers are the all-bin sums of the fine spectrum
+            # (kernel core 3.0.0).
             expected_power.append(fine.sum(axis=-1, dtype=np.uint64))
     for term, name in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
         np.testing.assert_array_equal(
             actual[name], np.asarray(expected_power)[:, term : term + 1]
         )
-        # ...and the stored powers are the sums of the stored fine terms.
+        # the stored powers must also be the sums of the stored fine terms
         np.testing.assert_array_equal(
             actual[name][:, 0],
             actual["fine_power_u64"][:, term, :].sum(axis=-1, dtype=np.uint64),
@@ -182,9 +182,10 @@ def test_archive_gpu_scan_interrupt_resume_and_cpu_reference(tmp_path):
     np.testing.assert_array_equal(
         actual["p_ref_sum_u64"], actual["p_ref_lower_u64"] + actual["p_ref_upper_u64"]
     )
-    # The written product is per-pilot v6: the contract validator accepts it,
-    # including the exact frame-power invariant, and every stored derived
-    # column equals its value from the fine-power sums.
+    # The written product is the per-pilot v6 product. It must pass the
+    # contract validator, which also checks the exact frame-power invariant,
+    # and each stored derived column must equal its value from the fine-power
+    # sums.
     from pilot_proxy.product_contract import (
         fine_derived_column_mismatches,
         validate_current_product_identity,

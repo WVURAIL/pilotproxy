@@ -18,7 +18,7 @@ docs/out/
 # PilotProxy CUDA kernel build artifacts (make build-kernel / test-kernel)
 cuda/*.o
 cuda/*.so*
-# the preserved kernel is machine-local; its manifest travels with it
+# the preserved kernel is machine-local, and its manifest stays with it
 cuda/*.manifest.json
 cuda/test_c_header
 cuda/test_pilotproxy_cuda
@@ -33,19 +33,19 @@ generated/
 results/
 
 # Evidence studies are committed whole. A study directory under docs/evidence/
-# is the record a dissertation chapter cites, so it must be able to carry its
-# own figures (*.png, *.pdf), arrays (*.npz, *.npy, *.h5) and any subdirectory
-# it happens to name build/, work/, generated/ or results/ -- every one of
-# which the rules above would otherwise swallow without a word. Git cannot
-# re-include a file under an excluded *directory*, so the directory itself has
-# to be re-included first, and this block has to come last so that it is the
-# final matching pattern for both.
+# is the record a dissertation chapter cites, so it must carry its own figures
+# (*.png, *.pdf), arrays (*.npz, *.npy, *.h5) and any subdirectory named
+# build/, work/, generated/ or results/. The rules above would ignore all of
+# these without a warning. Git cannot re-include a file under an excluded
+# directory, so the directory itself is re-included first. This block comes
+# last so that it is the final matching pattern for both.
 !docs/evidence/**/
 !docs/evidence/**
 
-# ...but hygiene still wins inside it. The blanket re-inclusion above is by
-# extension-blind design, so without these it would also track caches, build
-# droppings and OS metadata that happen to land under an evidence directory.
+# These rules keep caches, build leftovers and OS metadata ignored in the
+# evidence tree. The re-inclusion above ignores file extensions, so without them
+# it would also track such files when they are written under an evidence
+# directory.
 docs/evidence/**/__pycache__/
 docs/evidence/**/*.py[cod]
 docs/evidence/**/.pytest_cache/

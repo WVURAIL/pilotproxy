@@ -1,23 +1,21 @@
 #!/usr/bin/env bash
-# =============================================================================
-# setup_env.sh -- one-shot CANFAR setup for Pilot Proxy archive runs.
+# One-shot CANFAR setup for Pilot Proxy archive runs.
 #
-# Builds a clean Python venv, installs Pilot Proxy, and -- on a GPU node
-# -- installs CuPy (a pip wheel matched to the node's CUDA) and compiles/stages
-# the CUDA kernel for the visible GPU. Idempotent: re-running rebuilds the venv
-# from scratch (python -m venv --clear).
+# The script builds a clean Python venv and installs Pilot Proxy. On a GPU
+# node it also installs CuPy (a pip wheel matched to the CUDA of the node) and
+# builds and stages the CUDA kernel for the visible GPU. A rerun rebuilds the
+# venv from scratch (python -m venv --clear).
 #
 #   bash scripts/setup_env.sh
 #
-# Override defaults via environment variables:
+# Defaults are overridden with environment variables:
 #   VENV_DIR=~/envs/pilot-proxy PYTHON=python3.12 \
 #     PILOT_PROXY_DIR=~/src/pilot-proxy \
 #     bash scripts/setup_env.sh
 # Set PILOT_PROXY_SKIP_REGISTRY=1 when no remote GPU session will be launched.
 # Set PILOT_PROXY_USE_SYSTEM_PACKAGES=0 for an isolated local environment.
-# To deliberately adopt and clear a genuine pre-guard Python venv, also set:
-#   PILOT_PROXY_ADOPT_LEGACY_VENV=1
-# =============================================================================
+# Set PILOT_PROXY_ADOPT_LEGACY_VENV=1 to adopt and clear an existing Python
+# venv that predates the guard.
 set -euo pipefail
 
 VENV_DIR="${VENV_DIR:-$HOME/pilot-proxy-venv}"
@@ -60,12 +58,14 @@ for d in "${PILOT_PROXY_DIR}"; do
     fi
 done
 
-# --- venv --------------------------------------------------------------------
-# The next command clears every entry under VENV_DIR. Resolve symlinks, refuse
-# protected/foreign directories, create the target root, and durably bind a
-# sidecar to that directory identity. The sidecar survives --clear, so an
-# interrupted rebuild is safely retryable, but not after deletion/recreation.
-# Validated legacy Python venvs require the explicit adoption opt-in.
+# venv
+# python -m venv --clear below removes every entry under VENV_DIR, so the
+# guard runs first. It resolves symlinks, refuses protected and foreign
+# directories, creates the target root and durably binds a sidecar to the
+# identity of that directory. The sidecar survives --clear, so an interrupted
+# rebuild can be retried safely, and a deleted and recreated directory loses
+# its claim. An existing standard venv without a claim is adopted only with
+# PILOT_PROXY_ADOPT_LEGACY_VENV=1.
 _venv_adoption_args=()
 case "${PILOT_PROXY_ADOPT_LEGACY_VENV}" in
     0) ;;
@@ -112,7 +112,7 @@ fi
 export TMPDIR="${PILOT_PROXY_TMPDIR}"
 printf 'export TMPDIR=%q\n' "${PILOT_PROXY_TMPDIR}" >> "${VENV_DIR}/bin/activate"
 
-# --- CANFAR Harbor registry credentials --------------------------------------
+# CANFAR Harbor registry credentials
 # launch_gpu_session.py (skaha) needs a Harbor CLI secret to pull the session
 # image. Capture it once, store it chmod 600, and source it from the venv
 # activate so every future shell has it. Prompt only when interactive and the
@@ -159,7 +159,7 @@ fi
 
 python -m pip install -U pip setuptools wheel packaging
 
-# --- scientific stack + editable installs -----------------------------------
+# scientific stack and editable installs
 echo "==> installing scientific stack"
 python -m pip install -U numpy scipy h5py matplotlib pytest
 
@@ -175,15 +175,14 @@ if [[ "$(command -v datatrail || true)" != "${VIRTUAL_ENV}/bin/datatrail" ]]; th
     exit 1
 fi
 
-# --- canfar client (Science Platform / skaha; for launch_gpu_session.py) -----
+# canfar client (Science Platform skaha client used by launch_gpu_session.py)
 echo "==> installing canfar (skaha client used by launch_gpu_session.py)"
 python -m pip install canfar \
     || echo "WARNING: 'pip install canfar' failed; launch_gpu_session.py will not work until it is installed."
 
-# --- CuPy: resolve through Pilot Proxy's archive runtime ----------------------
-# The scan resolver prefers the CuPy the
-# session image ships, and on a GPU node with no image CuPy installs the
-# matching wheel.
+# CuPy, resolved through the Pilot Proxy archive runtime
+# The scan resolver prefers the CuPy shipped with the session image. On a GPU
+# node whose image has no CuPy, the matching wheel is installed.
 echo "==> CuPy"
 python - <<'PYEOF' || true
 import shutil
@@ -201,14 +200,15 @@ else:
     print("    no GPU here -- skipping (CuPy is only needed on the GPU detector node)")
 PYEOF
 
-# --- CuPy CUDA headers (so the runtime JIT can build kernels) -----------------
-# The runtime wheel ('cupy-cudaXXx' -- shipped by the image or installed by accel
-# above) provides CUDA *libraries* but not the toolkit *headers* CuPy's nvrtc needs
-# to compile its elementwise/reduction kernels on first use. cuda-pathfinder finds
-# those in the 'nvidia-cuda-*' header wheels that the '[ctk]' extra pulls in. (The
-# image's bundled nvcc builds our kernel fine but keeps no usable headers under its
-# include/, so CuPy cannot borrow them.) Probe a real JIT compile and add the header
-# wheels only when it fails -- an image that already ships headers then pays nothing.
+# CuPy CUDA headers for the runtime JIT
+# The runtime wheel ('cupy-cudaXXx', shipped by the image or installed by accel
+# above) provides the CUDA libraries. The toolkit headers that CuPy's nvrtc
+# needs to compile its elementwise and reduction kernels on first use come from
+# the 'nvidia-cuda-*' header wheels of the '[ctk]' extra, where cuda-pathfinder
+# finds them. The nvcc bundled with the image builds the Pilot Proxy kernel,
+# although its include/ has no headers that CuPy can use. A real JIT compile is
+# probed first, and the header wheels are installed only when it fails, so an
+# image that already ships the headers installs nothing extra.
 if command -v nvidia-smi >/dev/null 2>&1; then
     _cupy_jit_probe() {
         python - <<'PY' >/dev/null 2>&1
@@ -239,7 +239,7 @@ PY
     unset -f _cupy_jit_probe
 fi
 
-# --- CUDA kernel -------------------------------------------------------------
+# CUDA kernel
 if command -v nvidia-smi >/dev/null 2>&1; then
     if ! command -v nvcc >/dev/null 2>&1; then
         echo "ERROR: nvidia-smi found, but nvcc is not on PATH." >&2
@@ -252,10 +252,10 @@ if command -v nvidia-smi >/dev/null 2>&1; then
         exit 1
     fi
     echo "==> building and staging CUDA kernel for detected arch sm_${SM}"
-    # cuda/Makefile keys the build on a config stamp (arch + kernel flags), so
-    # a rerun on a different GPU type recompiles automatically -- no need to
-    # delete cuda/libpilotproxy.so first. Still drop the staged cache copy so a
-    # failed build fails loud rather than silently serving a stale kernel.
+    # cuda/Makefile keys the build on a config stamp (arch and kernel flags), so
+    # a rerun on a different GPU type recompiles without deleting
+    # cuda/libpilotproxy.so first. The staged cache copy is still removed, so a
+    # failed build stops the setup and a stale kernel is never served.
     make -C "${PILOT_PROXY_DIR}" clean-cache
     make -C "${PILOT_PROXY_DIR}" build-kernel SM="${SM}"
 else
@@ -263,7 +263,7 @@ else
     echo "    the detector needs a GPU node; a CPU-only host can still run the Python tests"
 fi
 
-# --- sanity checks -----------------------------------------------------------
+# sanity checks
 echo "==> verifying Python packages"
 python - <<'PY'
 import importlib.util

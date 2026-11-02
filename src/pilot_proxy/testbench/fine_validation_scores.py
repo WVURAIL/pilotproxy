@@ -1,10 +1,12 @@
 """Full-power score reduction for frozen fine-detector validation studies.
 
-No thresholds are fitted here. Every input frame remains represented. Exact
-fixed decisions use one arbitrary-integer rational sort per frame; converting
-the resulting powers to float is a separate ablation, not the Q16 decision.
-The fine ratio of designated maximum to bulk rank cancels a common weight-norm
-correction. Coarse ratios require the caller's explicit positive ``mu0``.
+No thresholds are fitted here, and every input frame is kept in the output.
+Each exact fixed decision uses one rational sort per frame in
+arbitrary-precision integers. The conversion of the resulting powers to float
+is a different ablation and is never used for the Q16 decision. The fine
+ratio of the designated maximum to the bulk rank cancels a common weight-norm
+correction. Coarse ratios require an explicit positive ``mu0`` from the
+caller.
 """
 from __future__ import annotations
 
@@ -43,11 +45,12 @@ class FineScoreGeometry:
 
 
 def construct_geometry(anchor):
-    """Anchor +/-2 padded bins; guard only the anchor by one native bin.
+    """Return the anchor +/-2 padded bins and a bulk with only the anchor guarded by one native bin.
 
-    The independent grid is even padded bins. An even anchor leaves 125 bulk
-    bins and an odd anchor leaves 126. Ranks are fixed by this intended bulk
-    size, never recalculated from each frame's positive-denominator subset.
+    The independent grid is the even padded bins. An even anchor leaves 125
+    bulk bins and an odd anchor leaves 126. The ranks are fixed by this
+    intended bulk size and are never recalculated from the
+    positive-denominator subset of each frame.
     """
     anchor = _integer(anchor, "anchor", 0, FINE_BINS - 1)
     designated = (anchor + np.arange(-2, 3, dtype=np.int64)) % FINE_BINS
@@ -98,8 +101,9 @@ def _float_ratios(values):
     target, lower, upper = (values[:, k].astype(np.float64) for k in range(3))
     maximum_reference = np.maximum(lower, upper)
     positive = maximum_reference > 0
-    # Scaling the three powers together preserves the ratio while avoiding
-    # uint64 sum wrap and avoidable float overflow at finite large powers.
+    # The three powers are scaled together by the larger reference. This keeps
+    # the ratio and avoids the uint64 sum wrap and float overflow at large
+    # finite powers.
     ratio = np.zeros_like(target)
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         denominator = np.divide(lower, maximum_reference, where=positive,
@@ -137,11 +141,12 @@ def _coarse(values, n, mu0, *, fixed):
 def float_scores(powers, geometry, *, coarse_powers=None, mu0=1.0):
     """Return floating fine responses [frames,4] and explicit validity.
 
-    Positive reference denominators alone define usable bulk bins, exactly as
-    in the frozen decision. Invalid ranks have NaN response. Valid zero-rank
-    cases return infinity if any usable designated power is positive, else
-    zero (the strict comparison never fires). These states are not dropped.
-    Stable ascending bin order breaks floating ties for ``rank_bin``.
+    The usable bulk bins are defined only by a positive reference
+    denominator, as in the frozen decision. An invalid rank has a NaN
+    response. A valid rank whose bulk ratio is zero returns infinity when any
+    usable designated power is positive, and zero otherwise, since the strict
+    comparison never fires. These states are kept. Floating ties for
+    ``rank_bin`` are broken by stable ascending bin order.
     """
     geometry = _geometry(geometry)
     powers = _powers(powers, fixed=False)
@@ -183,10 +188,11 @@ def fixed_scores(powers, geometry, *, coarse_powers=None, mu0=1.0):
 
     ``required_q16`` [frames,4] stores 1..2**64-1 for a finite valid boundary.
     Zero encodes either an invalid rank (valid=False, always_masked=False) or
-    logical 2**64 (valid=True, always_masked=True); flags must be preserved.
-    ``fixed_float_response`` is a separate float ablation of the same powers.
-    The exact branch sorts each usable rational bulk only once, using Python
-    arbitrary integers, including reference sums exceeding uint64 capacity.
+    logical 2**64 (valid=True, always_masked=True), so the flags must be kept
+    with it. ``fixed_float_response`` is a float ablation of the same powers
+    and is reported on its own. In the exact branch, each usable rational
+    bulk is sorted only once in Python arbitrary-precision integers, which
+    also hold reference sums above the uint64 range.
     """
     geometry = _geometry(geometry)
     powers = _powers(powers, fixed=True)
@@ -252,7 +258,7 @@ def fixed_scores(powers, geometry, *, coarse_powers=None, mu0=1.0):
 
 
 def decode_requirements(required_q16, always_masked, valid):
-    """Return logical object integers with the same shape; refuse invalid rows."""
+    """Return the logical requirements as object integers of the same shape, and refuse invalid rows."""
     encoded = np.asarray(required_q16)
     always = np.asarray(always_masked)
     usable = np.asarray(valid)

@@ -1,31 +1,43 @@
 # coding=utf-8
 """GPU gates for the decision epilogue (kernel core 2.3.0).
 
-``PilotProxy_Compute_FusedFineMask_U64`` is the deployed form: packed samples
-and per-channel bundle constants in, one mask bit per aligned frame out.
-The epilogue's mask must be bit-identical to the frozen Python reference
-(``pilot_proxy.fine_decision.fine_mask_decision``) applied to the same
-exact fine powers --- no tolerances, every frame. Gates:
+``PilotProxy_Compute_FusedFineMask_U64`` is the deployed form of the
+detector. Packed samples and the per-channel bundle constants are passed in,
+and one mask bit is returned for each aligned frame. On every frame, the mask
+of the epilogue must be bit-identical to the frozen Python reference
+``pilot_proxy.fine_decision.fine_mask_decision`` applied to the same exact
+fine powers, with no tolerance.
 
-1. reference equality on noise frames and on frames carrying an
-   injected pilot line (both mask outcomes exercised), across a batch,
-   with the fine accumulator simultaneously bit-checked against the
-   fxfft reference chain via the row-projection tap, and the optional
-   frame-power tap checked against the all-bin sum of the fine
-   accumulator (kernel core 3.0.0: ``d_power_out`` == ``fine.sum(axis=-1)``)
-   on every launch that binds it, while an unbound tap is left untouched;
-2. degenerate rules on device: empty bulk mask forces mask 0; a
-   designated set whose denominators are live fires only per reference;
-3. production form (no debug taps) emits the identical mask;
-4. last-block determinism: 20 repeated launches produce identical mask
-   and fine-power bits (exercises the completion-counter epilogue under
-   real grid scheduling, the property the CPU emulation cannot probe);
-5. rate report (printed rather than asserted): deployed mask form vs the
-   fused-powers form at 2048 streams.
+1. The mask must equal the reference on noise frames and on frames that carry
+   an injected pilot line, so that both mask outcomes are exercised across a
+   batch. In the same launch, the fine accumulator is compared bit for bit
+   with the fxfft reference chain through the row-projection tap. On every
+   launch that binds the optional frame-power tap, the tap must equal the
+   all-bin sum of the fine accumulator (``d_power_out`` equal to
+   ``fine.sum(axis=-1)``, kernel core 3.0.0). An unbound tap must be left
+   untouched.
+2. Degenerate rules are tested on the device. An empty bulk mask forces mask
+   0, and a designated set whose denominators are live fires only where the
+   reference fires.
+3. The production form, with no debug taps, must emit the same mask.
+4. Twenty repeated launches must produce the same mask and fine-power bits.
+   This exercises the completion-counter epilogue of the last block under
+   real grid scheduling, which the CPU emulation cannot probe.
+5. The rank-support entry must return the same fine powers, mask, and tap as
+   the legacy entry, and its rank-valid flag and bulk count must equal the
+   reference on each frame. The cases are an ordinary bulk, an empty bulk,
+   the rank boundary, the last usable rank, a zero target, and zero
+   references.
+6. In a library built with a delay in the second warp before its final power
+   additions, the mask must still equal the reference. This checks that the
+   epilogue waits for every power writer.
 
-The CPU-side verification (threaded emulation, pthread barrier, 2M-trial
-128/192-bit compare fuzz vs Python big ints) ran at integration time;
-this file is the on-GPU gate.
+The rate report is printed only. It compares the deployed mask form with the
+fused-powers form at 2048 streams.
+
+The CPU-side verification (threaded emulation, a pthread barrier, and a
+2M-trial fuzz of the 128-bit and 192-bit compares against Python big
+integers) was run at integration time. This file holds the gates on the GPU.
 """
 from __future__ import annotations
 
@@ -84,9 +96,12 @@ def _unpack_c(p):
 
 
 def _inject_line(packed, weights, streams, rng, anchor=ANCHOR):
-    """Overwrite one frame's samples with a quantized pilot line at the
-    anchor fine bin: x[m] proportional to w_target rotated by the
-    window-axis phase 2*pi*anchor*m/256."""
+    """Return a copy of one frame with a quantized pilot line at the anchor fine bin.
+
+    Each sample x[m] is set proportional to w_target rotated by the
+    window-axis phase 2*pi*anchor*m/256, with a random starting phase for
+    each stream.
+    """
     out = packed.copy()
     wt_re, wt_im = _unpack_c(weights[0])
     m_idx = np.arange(WINDOWS)
@@ -155,7 +170,8 @@ def _run_mask(cp, kernel, packed, weights, *, anchor, half_width, bulk,
     finally:
         kernel.destroy(handle)
     if with_taps:
-        # Frame-power tap: the all-bin sum of the fine accumulator (core 3.0.0).
+        # the frame-power tap must hold the all-bin sum of the fine
+        # accumulator (kernel core 3.0.0)
         np.testing.assert_array_equal(powers, fine.sum(axis=-1, dtype=np.uint64))
     else:
         assert (powers == UNWRITTEN_POWER).all(), "unbound frame-power tap was written"
@@ -178,7 +194,7 @@ def test_full_rate_rank_support_matches_reference_and_legacy(case, with_taps):
     packed = rng.integers(0, 256, size=(batch, streams * WINDOWS, window), dtype=np.uint8).view(np.int8)
     weights = rng.integers(0, 256, size=(TERMS, window), dtype=np.uint8).view(np.int8)
     packed[1] = _inject_line(packed[1], weights, streams, rng)
-    packed[2] = 0  # Signed complex zero: all reference denominators vanish.
+    packed[2] = 0  # signed complex zero, so every reference denominator vanishes
     bulk, rank = _bulk_and_rank()
     if case == "empty_bulk":
         bulk[:] = False
@@ -207,7 +223,7 @@ def test_full_rate_rank_support_matches_reference_and_legacy(case, with_taps):
         assert (mask[index], valid[index], counts[index]) == (ref.mask, int(ref.valid), ref.n_bulk)
     assert valid[2] == 0 and counts[2] == 0 and mask[2] == 0
     if case == "zero_target":
-        assert valid[0] == 1 and mask[0] == 0  # Zero score is a valid keep, not permanent masking.
+        assert valid[0] == 1 and mask[0] == 0  # a zero score is valid and keeps the frame
     if case == "last_usable_rank":
         assert valid[0] == 1 and counts[0] == rank + 1
 
@@ -233,7 +249,7 @@ def test_mask_matches_reference_noise_and_injected():
         bulk=bulk, rank=rank, mult=MULT_Q16, batch=batch, streams=streams,
     )
     for b in range(batch):
-        # fine accumulator still bit-exact against the fxfft chain
+        # fine accumulator bit-exact against the fxfft chain
         ref_fine = fine_power_fx(
             tap[b].astype(np.int64), num_streams=streams
         )

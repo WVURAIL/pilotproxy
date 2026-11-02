@@ -1,24 +1,25 @@
 # coding=utf-8
-"""CHORD / CHORD-pathfinder receiver-profile and runtime-bundle checks.
+"""Tests of the CHORD and CHORD Pathfinder receiver profiles and runtime bundles.
 
-These tests pin the CHORD integration parameters against independently
-computed expectations:
+The CHORD integration parameters are compared with expectations computed
+independently of the package:
 
-* channelizer grid: first Nyquist zone of a 3.2 GS/s ADC with a 16384-point
-  PFB, so 8192 coarse channels of exactly 195312.5 Hz with channel RF center
-  ``coarse_channel_index * 195312.5 Hz`` (Nyquist zone 1, upright, ascending
-  order, kotekan ``freq_id == coarse_channel_index``);
-* ATSC 14-36 pilot placement: 23 unique coarse channels 2408..3084 with
-  exact half-Hz fine offsets; channel 14's upper reference wraps the frame
-  edge and channel 21's lower reference is DC-shifted, the two adaptive
-  cases at K=64;
-* framing: 8192-sample detector blocks at K=64 give windows_per_stream =
-  128, the frozen fine-reduction transform length, and detector row counts
-  131072 (CHORD, 1024 streams) / 16384 (pathfinder, 128 streams);
-* runtime bundles: the declared ``chord_freq_id`` channel-id map populates
-  ``chord_channel_id`` / ``receiver_channel_id`` for kotekan first-frame
-  profile selection, and the CHIME profile's ``chime_freq_id`` map populates
-  ``chime_channel_id`` / ``receiver_channel_id`` (freq_id = coarse index + 1).
+* The channelizer grid is the first Nyquist zone of a 3.2 GS/s ADC with a
+  16384-point PFB. It has 8192 coarse channels of exactly 195312.5 Hz, and
+  the RF center of each is ``coarse_channel_index * 195312.5 Hz`` (Nyquist
+  zone 1, upright, ascending order, kotekan ``freq_id == coarse_channel_index``).
+* The pilots of ATSC channels 14-36 fall in 23 unique coarse channels, 2408 to
+  3084, with fine offsets that are exact multiples of 0.5 Hz. At K=64 there
+  are two adaptive cases. The upper reference of channel 14 wraps through the
+  frame edge, and the lower reference of channel 21 is shifted away from DC.
+* An 8192-sample detector block at K=64 gives windows_per_stream = 128, the
+  frozen fine-reduction transform length, and 131072 detector rows for CHORD
+  (1024 streams) or 16384 for the Pathfinder (128 streams).
+* In the runtime bundles, ``chord_channel_id`` and ``receiver_channel_id`` are
+  filled from the declared ``chord_freq_id`` channel-id map for the kotekan
+  first-frame profile selection. For the CHIME profile, ``chime_channel_id``
+  and ``receiver_channel_id`` are filled from the ``chime_freq_id`` map
+  (freq_id = coarse index + 1).
 """
 from __future__ import annotations
 
@@ -73,8 +74,8 @@ CHORD_FINE_BIN_WIDTH = CHORD_COARSE_WIDTH / CHORD_DETECTOR_WINDOW
 
 ATSC_PHYSICAL_CHANNELS = list(range(14, 37))
 
-# Independently derived:
-# chord_freq_id = round(pilot_hz / 195312.5) for ATSC physical channels 14-36.
+# chord_freq_id = round(pilot_hz / 195312.5) for ATSC physical channels 14-36,
+# computed independently of the package
 EXPECTED_CHORD_CHANNEL_IDS = [
     2408, 2439, 2469, 2500, 2531, 2562, 2592, 2623, 2654, 2684, 2715,
     2746, 2777, 2807, 2838, 2869, 2900, 2930, 2961, 2992, 3022, 3053,
@@ -103,8 +104,8 @@ def _expected_channel_and_offset(physical_channel: int) -> tuple[int, Fraction]:
     """Nearest CHORD coarse channel and exact fine offset for one pilot."""
     pilot = Fraction(int(physical_channel_to_pilot_hz(physical_channel)))
     ratio = pilot / CHORD_COARSE_WIDTH
-    # Straightforward nearest-integer; no ATSC pilot sits exactly on a
-    # half-channel boundary in this grid.
+    # Rounding to the nearest integer is unambiguous, since no ATSC pilot falls
+    # exactly on a half-channel boundary of this grid.
     assert ratio % 1 != Fraction(1, 2)
     index = int(ratio + Fraction(1, 2))
     return index, pilot - index * CHORD_COARSE_WIDTH
@@ -130,7 +131,7 @@ def test_chord_profile_channelizer_grid(profile_path, num_streams) -> None:
     assert profile.coarse_channel_center_hz(0) == 0.0
     assert profile.coarse_channel_center_hz(1536) == 300.0e6
     assert profile.coarse_channel_center_hz(7680) == 1500.0e6
-    # Explicit baseband frame: coarse-channel center at DFT DC.
+    # in the explicit baseband frame, the coarse-channel center is at DFT DC
     assert profile.frame_center_normalized(0) == 0.0
     assert profile.frame_center_normalized(1) == 0.0
     # Channel-id map declared for runtime-bundle population.
@@ -193,11 +194,11 @@ def test_chord_reference_placement_adaptive_cases() -> None:
         assert layout["baseband_frame_mode"] == "explicit_profile_frame"
         assert layout["strict_reference_offset_pass"] is True
         if channel == 14:
-            # The ch14 pilot sits 1.002 fine bins below the coarse-channel
+            # The ch14 pilot is 1.002 fine bins below the coarse-channel
             # center, so the +2 upper reference wraps through the frame edge
-            # (DC is the wrap point for a center-at-DC frame) and lands one
-            # bin above DC. The DC bin itself falls inside the upper skipped
-            # guard.
+            # and lands one bin above DC (DC is the wrap point of a
+            # center-at-DC frame). The DC bin itself falls in the upper
+            # skipped guard.
             assert layout["reference_placement_status"] == "edge_wrapped"
             assert layout["lower_reference_offset_bins"] == -2
             assert layout["upper_reference_offset_bins"] == 2
@@ -205,10 +206,10 @@ def test_chord_reference_placement_adaptive_cases() -> None:
             assert layout["upper_reference_dc_shifted"] is False
             assert layout["forbidden_tone_in_skipped_guard"] is True
         elif channel == 21:
-            # The ch21 pilot sits 1.558 fine bins above the coarse-channel
-            # center, so the requested -2 lower reference lands within half
-            # a bin of the forbidden DC bin and shifts one bin farther to
-            # -3, wrapping through the frame edge.
+            # The ch21 pilot is 1.558 fine bins above the coarse-channel
+            # center, so the requested -2 lower reference lands less than half
+            # a bin from the forbidden DC bin. It is shifted one bin farther,
+            # to -3, and wraps through the frame edge.
             assert layout["reference_placement_status"] == (
                 "edge_wrapped_and_dc_shifted"
             )
@@ -225,9 +226,9 @@ def test_chord_reference_placement_adaptive_cases() -> None:
 
 
 def test_chord_weight_tables_identical_for_both_coordinate_systems() -> None:
-    # Zone 1 (upright): post-Nyquist-zone normalization and raw
-    # input-frequency coordinates coincide, so both banks must be
-    # bit-identical and no window time reversal is requested.
+    # In zone 1 (upright), the post-Nyquist-zone normalization and the raw
+    # input-frequency coordinates coincide. Both banks must therefore be
+    # bit-identical, and no window time reversal is requested.
     profile = load_receiver_profile(CHORD_PROFILE)
     core = load_detector_core_profile(CORE_PROFILE)
     table_post, layouts = generate_weight_table_from_receiver_profile(
@@ -306,20 +307,21 @@ def test_chord_runtime_bundle_populates_chord_channel_ids(
             row["coarse_channel_index"] * float(CHORD_COARSE_WIDTH)
         )
     contract = json.loads(outputs["detector_contract"].read_text("utf-8"))
-    # Explicit-baseband-frame profile: the post-Nyquist-zone weight
-    # synthesis emits exp(-2j*pi*f*k) templates in the upright raw frame
-    # and assumes the adapter's detector-window time reversal regardless of
-    # Nyquist zone; CHORD's upright zone 1 does NOT exempt it. (A tone at
-    # the pilot frequency is only matched after the flip; see
-    # tests/core/test_chord_tone_injection.py for the signal-level proof.)
+    # For an explicit-baseband-frame profile, the post-Nyquist-zone weight
+    # synthesis emits exp(-2j*pi*f*k) templates in the upright raw frame and
+    # assumes that the adapter reverses each detector window in time. This
+    # holds in every Nyquist zone, so it also holds in CHORD's upright zone 1.
+    # A tone at the pilot frequency is matched only after the reversal (see
+    # tests/core/test_chord_tone_injection.py for the signal-level test).
     assert contract["input_preprocessing"][
         "time_reverse_detector_windows_before_kernel"
     ] is True
 
 
 def test_chime_runtime_bundle_carries_chime_freq_ids(tmp_path) -> None:
-    # The CHIME upgrade binds pilots by CHIME freq_id (800 MHz - f * 390625 Hz);
-    # the chord_freq_id map must not leak across profiles.
+    # Pilots in the CHIME upgrade are bound by CHIME freq_id
+    # (800 MHz - f * 390625 Hz), and the chord_freq_id map must not carry over
+    # to the CHIME profile.
     outputs = export_runtime_weight_bundle(
         receiver_profile_path=CHIME_PROFILE,
         detector_core_profile_path=CORE_PROFILE,

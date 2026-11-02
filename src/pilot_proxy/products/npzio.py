@@ -1,9 +1,9 @@
-"""Safe, eagerly materialized NumPy archive loading.
+"""NumPy archive loading with pickle disabled and every array copied into memory.
 
-Survey products are external inputs.  NumPy's pickle-backed object arrays can
+Survey products are external inputs. NumPy's pickle-backed object arrays can
 execute arbitrary code while loading, so the package never enables them.
-Returning ordinary arrays also ensures no ``NpzFile`` handle escapes its
-context manager.
+Each array is copied before the archive is closed, so no ``NpzFile`` handle
+reaches the caller.
 """
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ def load_npz(path: str | Path, *, required: Iterable[str] = ()) \
     path
         Archive path.
     required
-        Field names that must be present. Missing fields are reported together
-        before callers begin a scientific calculation.
+        Field names that must be present. All missing fields are named in one
+        ValueError, raised before any array is returned.
     """
     try:
         with np.load(path, allow_pickle=False) as archive:

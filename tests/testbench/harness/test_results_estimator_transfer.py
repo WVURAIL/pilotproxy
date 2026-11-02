@@ -1,4 +1,4 @@
-"""The results layer's estimator-transfer figure: reader, axis conversion, render."""
+"""Tests of the estimator-transfer release reader, pilot axis conversion, and figure render."""
 from __future__ import annotations
 
 import csv
@@ -46,7 +46,7 @@ def _write_release(root: Path, *, ota: bool) -> Path:
 
 
 def test_pilot_axis_conversion_round_trips_and_matches_the_recorded_offset():
-    # 10 log10(6 MHz / 3051.76 Hz) - 11.918 dB = +21.0 dB of pilot excess per dB of shelf SNR
+    # offset = 10 log10(6 MHz / 3051.76 Hz) - 11.918 dB = +21.0 dB, the pilot excess at 0 dB shelf SNR
     assert CAL.offset_db == pytest.approx(21.016, abs=0.01)
     x = np.array([-40.0, 0.0, 12.5])
     assert np.allclose(CAL.pilot_to_shelf(CAL.shelf_to_pilot(x)), x)

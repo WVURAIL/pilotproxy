@@ -27,15 +27,15 @@ TABLE = (CUDA_DIR / "fxfft_master_twiddle.h").read_text()
 def test_both_read_the_shared_master_table():
     assert '#include "fxfft_master_twiddle.h"' in KERNEL
     assert '#include "fxfft_master_twiddle.h"' in REF
-    # The kernel wants the initializer only; a host array in a device TU is dead
-    # weight and would warn.
+    # The kernel uses only the initializer. A host array in a device translation
+    # unit is never read and would raise a warning.
     assert "#define FX_TW_MASTER_NO_HOST_ARRAY" in KERNEL
     assert "FX_TW_MASTER_INIT" in KERNEL
 
 
 def test_twiddle_index_expression_matches_the_reference():
     """Both must fold the decimation stride into the shift by FX_MASTER_LOG2."""
-    # Match the array access itself rather than the prose in the header comments.
+    # match the array access, since the header comments give the same index in prose
     kernel_idx = re.findall(
         r"pilotproxy_fxfft_twiddle_q15\[t << \(\(unsigned\)FX_MASTER_LOG2 - stage\)\]", KERNEL
     )
@@ -45,7 +45,7 @@ def test_twiddle_index_expression_matches_the_reference():
 
 
 def test_no_hardcoded_transform_length_remains_in_the_kernel():
-    """The old form was `stage <= 8u` and `t << (8u - stage)`."""
+    """The kernel has no fixed eight-stage bound or shift (`stage <= 8u`, `t << (8u - stage)`)."""
     assert "stage <= 8u" not in KERNEL
     assert "8u - stage" not in KERNEL
     assert "bitrev8" not in KERNEL, "bit reversal must be parameterized on PILOTPROXY_FINE_LOG2"

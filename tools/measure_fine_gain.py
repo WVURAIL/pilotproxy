@@ -1,38 +1,39 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""Measured coherent-gain Monte Carlo: coarse vs fine reduction Pd curves.
+"""Measure the coherent gain of the fine reduction over the coarse reduction from Pd curves.
 
-The publication claim ("the v2 fine reduction recovers up to
-10 log10(sqrt(W)) ~ 10.5 dB of deflection sensitivity") is measured here
-rather than asserted. The Monte Carlo operates at the row-sum level ---
-the field both reductions consume --- at a configurable stream count
-(default 2048) and 128 windows, with integer row sums and the statistics
-below. The fine transform here uses floating arithmetic; this experiment
-does not measure int4 input quantization, integer weights, or fixed-transform
-representation loss in the production fine path:
+This Monte Carlo measures the publication claim that "the v2 fine reduction
+recovers up to 10 log10(sqrt(W)) ~ 10.5 dB of deflection sensitivity". It
+operates on row sums, the input to both reductions, at a configurable stream
+count (default 2048) and 128 windows. Both statistics, defined below, are
+computed from integer row sums. Since the fine transform uses floating-point
+arithmetic, this experiment does not cover int4 input quantization, integer
+weights, or fixed-transform representation loss in the production fine path.
 
   coarse:  F = 2 sum_b S_t[b] / (sum_b S_l[b] + sum_b S_u[b]), the ratio of
-           the frame powers (the all-bin sums of the fine powers below; the
-           float transform makes them 256 sum|z|^2 per term), with
-           null_power_ratio = 1: simulated weight norms are equal by
-           construction, stated in the output.
+           the frame powers, which are the all-bin sums of the fine powers
+           below. The float transform makes each frame power 256 sum|z|^2.
+           null_power_ratio = 1, since the simulated weight norms are equal
+           by construction, as stated in the output.
   fine:    fine_power_ratio[b] = 2 S_t[b] / (S_l[b] + S_u[b]) from the x2
-           zero-padded window-axis FFT, then the deployed designated-set
-           statistic max over the anchor +/- 2 window.
+           zero-padded window-axis FFT, followed by the deployed
+           designated-set statistic, the maximum over the anchor +/- 2 window.
 
-The batched reduction used for speed is verified against
+For speed, a batched reduction is used. It is verified against
 ``pilot_proxy.fine_reduction.fine_reduce`` on random trials by
-``--stage verify`` (and by ``tests/core/test_measure_fine_gain.py``); the MC
-runs only the verified-equal path.
+``--stage verify`` (and by ``tests/core/test_measure_fine_gain.py``), and the
+Monte Carlo runs only this verified path.
 
-Signal model (matches the documented zoom identity): the target-term row
-sum of stream n, window m is A e^{i(2 pi b0 m / 256 + theta_n)} + noise,
-theta_n uniform per stream (feeds add incoherently), b0 the injected fine
-bin (bin-centered, plus a half-bin case measuring the scalloping worst
-band). Per-row-sum SNR = A^2 / (2 sigma^2).
+The signal model matches the documented zoom identity. For stream n and
+window m, the target-term row sum is A e^{i(2 pi b0 m / 256 + theta_n)} +
+noise, where theta_n is uniform per stream so that feeds add incoherently,
+and b0 is the injected fine bin. In the main case the line is bin-centered,
+and a half-bin case measures the worst scalloping band. The per-row-sum SNR
+is A^2 / (2 sigma^2).
 
-Thresholds are empirical H0 quantiles at fixed Pfa per statistic --- the
-fixed-false-alarm policy the survey adopts. Stages are resumable shards:
+Thresholds are empirical H0 quantiles at a fixed Pfa for each statistic,
+following the fixed-false-alarm policy of the survey. Each stage is selected
+with --stage, and the h0 and sweep stages write resumable shards:
 
   --stage h0    --trials N --seed K        (append H0 shard)
   --stage sweep --snr-db X --trials N --seed K
@@ -63,7 +64,7 @@ PFA_LIST = (1e-2, 1e-3)
 
 
 def gen_rows(rng, batch, streams, amp=0.0, b0=0.0):
-    """Integer row sums [batch, 3, streams, W, 2]; target may carry a line."""
+    """Return integer row sums [batch, 3, streams, W, 2], with an optional line in the target term."""
     z = rng.standard_normal((batch, 3, streams, WINDOWS, 2), dtype=np.float32)
     z *= SIGMA
     if amp > 0.0:
@@ -76,14 +77,16 @@ def gen_rows(rng, batch, streams, amp=0.0, b0=0.0):
 
 
 def reduce_batch(zi):
-    """Batched deployed reductions. zi: int32 [batch, 3, streams, W, 2].
+    """Apply the deployed coarse and fine reductions to a batch of trials.
 
-    Returns (coarse F, fine window-max) per trial. Identical math to the
-    packaged float prototype (``fine_reduce``): complex128 x2-padded FFT,
-    incoherent stream sum, fine_power_ratio ratio, designated-window max.
-    The coarse F is formed from the frame powers, the all-bin sums of the
-    fine powers (the kernel core 3.0.0 definition, ``P_r = sum_b S_r[b]``),
-    which this float transform makes ``BINS`` times the row energy.
+    ``zi`` is int32 with shape [batch, 3, streams, W, 2]. Returns (coarse F,
+    fine window maximum) for each trial. The arithmetic is the same as in the
+    packaged float prototype (``fine_reduce``), with a complex128 x2-padded
+    FFT, an incoherent sum over streams, the fine_power_ratio, and the maximum
+    over the designated window. The coarse F is formed from the frame powers,
+    the all-bin sums of the fine powers (the kernel core 3.0.0 definition,
+    ``P_r = sum_b S_r[b]``). With this float transform, each frame power is
+    ``BINS`` times the row energy.
     """
     zc = zi[..., 0].astype(np.complex128) + 1j * zi[..., 1].astype(np.complex128)
     spec = np.fft.fft(zc, n=BINS, axis=-1)
@@ -96,12 +99,12 @@ def reduce_batch(zi):
 
 
 def verify(seed=0, trials=3, streams=64):
-    """Gate: the batched reduction equals the packaged pipeline.
+    """Confirm that the batched reduction equals the packaged pipeline.
 
-    The fine powers and the fine ratio must match at the product's own
-    precision (``fine_reduce`` emits float32; the batched path carries the
-    same float64 operations, so the float32 casts must be identical), and
-    the coarse F must be the ratio of the all-bin sums of those fine powers.
+    The fine powers and the fine ratio must match at the precision of the
+    product. ``fine_reduce`` emits float32, and the batched path carries the
+    same float64 operations, so the float32 casts must be identical. The
+    coarse F must be the ratio of the all-bin sums of those fine powers.
     """
     from pilot_proxy import fine_reduction
     rng = np.random.default_rng(seed)
@@ -169,11 +172,12 @@ def collect(out, pattern):
 
 
 def report_shards(out):
-    """Read one matched experiment; offset metadata, not filenames, labels H1.
+    """Read the shards of one matched experiment and label each H1 shard by its stored offset.
 
-    Historical shards predate the explicit transform/statistic fields. Their
-    documented v1 geometry is retained and identified as inferred in provenance.
-    Streams, noise scale and injected offset were always stored and are required.
+    Shards written before the explicit transform and statistic fields are read
+    with the documented v1 geometry, and their provenance records that geometry
+    as inferred. The stream count, noise scale and injected offset have been
+    stored in every shard, so they are required.
     """
     nulls, populations, sources = [], {"centered": [], "_half": []}, []
     identity = None
@@ -310,7 +314,8 @@ def report(out, make_figure=True, report_dir=None):
     np.savez(destination / "gain_report.npz",
              thresholds=str(thr), curves=str(curves), gains=str(gains),
              h0_trials=c0.size)
-    # JSON is the inspectable report; retain the NPZ fields for older consumers.
+    # gain_report.json is the readable report. The NPZ fields are kept for
+    # older consumers.
     def finite_json(value):
         if isinstance(value, dict):
             return {str(k): finite_json(v) for k, v in value.items()}
@@ -393,7 +398,7 @@ def main():
                     help="write a report separately from immutable input shards")
     ap.add_argument("--stage", choices=["h0", "sweep", "report", "verify"],
                     required=True)
-    # Resolve omitted counts by stage. The sweep needs 1000 trials at 2048
+    # Omitted counts are resolved by stage. The sweep needs 1000 trials at 2048
     # streams, while the arithmetic check needs only 3 at 64. An explicit
     # --trials value takes precedence in either stage.
     ap.add_argument("--trials", type=int, default=None)
@@ -406,9 +411,9 @@ def main():
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     if args.stage == "verify":
-        # Forward only what was actually given, so the README's
-        # "--stage verify --trials 4" is honored while a bare --stage verify
-        # keeps verify()'s own cheap defaults.
+        # Only the given options are passed on, so the README's
+        # "--stage verify --trials 4" is honored and a bare --stage verify
+        # keeps the small defaults of verify().
         given = {k: v for k, v in (("seed", args.seed), ("trials", args.trials),
                                    ("streams", args.streams)) if v is not None}
         verify(**given)

@@ -6,7 +6,7 @@ The device prototype runs one serial 256-point transform per stream, following
 ``TWIDDLE_Q15`` literals. These tests check the arithmetic independently of
 the production kernel's surrounding packing and reductions.
 
-Every comparison requires exact equality:
+Every check requires exact equality:
 
 1. device output against ``tests/data/fxfft256_golden_v1.npz``;
 2. device output against the Python reference on 4096 seeded vectors spanning
@@ -104,7 +104,7 @@ __global__ void fxfft256_kernel(const int *in, int *out, int n_vec)
 
 
 def _run_device(cp, x_int32: np.ndarray) -> np.ndarray:
-    """x: int32 [n, 128, 2] host -> int32 [n, 256, 2] host via the GPU."""
+    """Transform int32 [n, 128, 2] host input on the GPU and return int32 [n, 256, 2]."""
     n = int(x_int32.shape[0])
     mod = cp.RawModule(code=_device_source())
     kern = mod.get_function("fxfft256_kernel")

@@ -1,15 +1,16 @@
 # coding=utf-8
-"""Scan-orchestration guards.
+"""Scan orchestration guards.
 
-Covers source/plumbing and failure handling:
-  #3  cadc-datatrail source plumbing (--inventory / --source-root) + freq_id
-      enumeration, exercised offline with a fake inventory and a mocked fetch;
-  #4  a GPU/cupy preflight for pilot-proxy-detector before any staging;
-  #6  an all-units-failed / all-quarantined scan is surfaced rather than silently turned
-      into an absent/empty product fed to combine;
-  terminal-combine soft-fail: any combine integrity refusal (ValueError family)
-      preserves the per-pilot products, prints working guidance, and records
-      the skip in scan_scope.json; other exceptions still propagate.
+The tests cover the source plumbing and failure handling of chime-scan:
+
+- #3, the cadc-datatrail source plumbing (--inventory, --source-root) and
+  freq_id enumeration, run offline with a fake inventory and a mocked fetch
+- #4, a GPU and cupy preflight for pilot-proxy-detector before any staging
+- #6, an error for a scan where every unit failed or was quarantined, so the
+  scan never reaches combine as an absent or empty product
+- the terminal-combine soft fail, where any combine integrity refusal (the
+  ValueError family) keeps the per-pilot products, prints working guidance
+  and records the skip in scan_scope.json, while other exceptions propagate
 """
 from __future__ import annotations
 
@@ -53,8 +54,9 @@ def _fine_stub_detector_fn(
     projections[0, :, 0] = 2
     projections[1, :, 1] = 2
     projections[2, :, 0] = 3
-    # The frame powers are the all-bin sums of these rows' fixed-point fine
-    # spectra (per-pilot v6); the analyzer forms the spectra from the rows.
+    # The frame powers are the sums over all bins of the fixed-point fine
+    # spectra of these rows (per-pilot schema v6). The analyzer forms the
+    # spectra from the rows.
     powers = frame_powers_from_fine_u64(projections, num_streams=rows // 128)
     result = {
         "block_index": 0,
@@ -81,7 +83,7 @@ def _fine_detector_options():
     options["kernel"].supports_row_projections = lambda: True
     options["fine_products"] = "on"
     return options
-# freq_id -> coarse-channel center (MHz)
+# coarse-channel center (MHz) by freq_id
 CHAN_MHZ = {844: 470.3125, 829: 476.171875, 752: 506.171875}
 
 _HAS_CUPY = importlib.util.find_spec("cupy") is not None
@@ -96,7 +98,7 @@ def _make_inventory(inv_path, *, common_path, event, channels):
                                  "freq_id": int(ch), "size_bytes": 1}) + "\n")
 
 
-# -- #3: CADC plumbing + freq_id enumeration (offline) -----------------------
+# #3: CADC plumbing and freq_id enumeration (offline)
 
 def test_cadc_scan_enumerates_by_freq_id(tmp_path, monkeypatch):
     monkeypatch.chdir(REPO_ROOT)  # receiver-profile default path resolves here
@@ -145,8 +147,8 @@ def test_cadc_scan_enumerates_by_freq_id(tmp_path, monkeypatch):
     assert not (work / "752.npz").exists()   # listed in inventory but not selected
     assert (out / "chime_detector_outputs.npz").exists()  # combined product
     assert len(preflight_calls) == 1
-    # The injected backend always says mask=0. The canonical product instead
-    # derives the policy it declares from exact powers and stored weight norms.
+    # The injected backend always returns mask=0. The canonical product derives
+    # its declared reject policy from the exact powers and stored weight norms.
     with np.load(work / "829.npz", allow_pickle=False) as product:
         num = np.asarray(product["p_target_u64"]).reshape(-1)
         den = np.asarray(product["p_ref_sum_u64"]).reshape(-1)
@@ -181,7 +183,7 @@ def test_cadc_scan_enumerates_by_freq_id(tmp_path, monkeypatch):
     assert scope["terminal_combine"] == {"status": "combined"}
 
 
-# -- #3: explicit per-source option validation -------------------------------
+# #3: explicit per-source option validation
 
 def test_local_requires_input_dir(tmp_path):
     with pytest.raises(SystemExit, match="--input-dir"):
@@ -412,8 +414,8 @@ def test_cross_pilot_resume_refuses_fine_products_auto(tmp_path, monkeypatch):
         raise AssertionError("pipeline work started before the scope check")
 
     monkeypatch.setattr(pipeline_mod, "run", _reject_work)
-    # fine_products=auto was the coarse-only degradation; since product
-    # schema v6 it is refused before any work, and the scope is untouched.
+    # fine_products=auto asks for a coarse-only fallback, which product schema
+    # v6 does not allow. It is refused before any work and the scope is kept.
     with pytest.raises(SystemExit, match="fine products are mandatory"):
         run_chime_scan(**{**kwargs, "analyzer_options": unsupported})
     assert scope_path.read_text() == original_scope
@@ -476,7 +478,7 @@ def test_unreadable_existing_scope_is_not_overwritten(tmp_path):
     assert scope_path.read_text() == "not json"
 
 
-# -- #4: GPU preflight for the detector --------------------------------------
+# #4: GPU preflight for the detector
 
 @pytest.mark.skipif(_HAS_CUPY, reason="cupy is installed; the preflight would pass")
 def test_detector_preflight_requires_cupy(tmp_path):
@@ -484,19 +486,19 @@ def test_detector_preflight_requires_cupy(tmp_path):
     data.mkdir()
     fmt.make_synth_file(str(data / "baseband_e_844.h5"), n_time=NFFT, n_feeds=N_FEEDS,
                         f_center_mhz=470.3125, f_tone_bb=1300.0, seed=1)
-    # no injected detector_fn -> the real CUDA kernel is required -> must preflight
+    # with no injected detector_fn the real CUDA kernel is needed, so the preflight runs
     with pytest.raises(SystemExit, match="cupy"):
         run_chime_scan(input_dir=data, output_dir=tmp_path / "o", source="local",
                        analyzer="pilot-proxy-detector", select="844", verbose=False)
 
 
-# -- #6: all-units-failed/quarantined is surfaced ----------------------------
+# #6: a scan with every unit failed or quarantined is reported
 
 def test_all_units_failed_is_reported(tmp_path, monkeypatch):
     monkeypatch.chdir(REPO_ROOT)
     data = tmp_path / "data"
     data.mkdir()
-    # a file the reader cannot open -> the only unit fails -> no product written
+    # the reader cannot open this file, so the only unit fails and no product is written
     (data / "baseband_e_844.h5").write_bytes(b"not a valid hdf5 file")
     with pytest.raises(SystemExit, match="no usable product"):
         run_chime_scan(input_dir=data, output_dir=tmp_path / "o", source="local",
@@ -697,17 +699,17 @@ def test_shorter_than_nfft_unit_is_not_committed(tmp_path, monkeypatch):
     )
     out = tmp_path / "out"
 
-    # The unit must never be committed -- but it is rejected at probe time as an
-    # unreadable unit, not by the analyzer. A shorter-than-nfft file that opens
-    # cleanly and holds its full declared extent is a genuinely short
-    # acquisition, not a truncated fetch (a truncated fetch fails to open, or
-    # falls short of its declared extent, and quarantines via OSError), so it can
-    # never yield a frame however often it is re-fetched. Raising from the
-    # analyzer instead made this a run-level error: the 2026-08-23 pre-flight lost
-    # eight completed channels to one 3.9 MB stub.
+    # The unit is never committed. It is rejected at probe time as an unreadable
+    # unit and never reaches the analyzer. A file shorter than nfft that opens
+    # cleanly and holds its full declared extent is a short acquisition. A
+    # truncated fetch fails to open or falls short of its declared extent, and
+    # it is quarantined through OSError. A short acquisition cannot yield a
+    # frame however often it is fetched again. An error raised in the analyzer
+    # stops the whole run, and in the 2026-08-23 pre-flight one 3.9 MB stub cost
+    # eight completed channels this way.
     # This channel's only unit is unusable, so the scope gate refuses to publish
-    # a partial run -- with the unit accounted as quarantined rather than the run
-    # dying mid-stream. A channel with other good units keeps them and continues.
+    # a partial run. The unit is counted as quarantined and the run reaches the
+    # gate. A channel with other good units keeps them and continues.
     with pytest.raises(SystemExit, match="quarantined=1"):
         run_chime_scan(
             input_dir=data,
@@ -810,9 +812,10 @@ def test_enumerated_scope_is_persisted_before_pipeline_runs(
 
 
 def test_checkpoint_every_reaches_pipeline(tmp_path, monkeypatch):
-    # --checkpoint-every must thread CLI -> run_chime_scan -> pipeline.run, and an
-    # unset value must fall back to the engine default (50). Spy on pipeline.run and
-    # stop before the real work, so the guard needs no GPU and no processable data.
+    # --checkpoint-every is passed from the CLI through run_chime_scan to
+    # pipeline.run, and an unset value falls back to the engine default of 50.
+    # pipeline.run is replaced by a spy that stops before the real work, so the
+    # test needs no GPU and no processable data.
     monkeypatch.chdir(REPO_ROOT)
     import pilot_proxy.archive.pipeline as _dpl
     seen: dict = {}
@@ -833,7 +836,7 @@ def test_checkpoint_every_reaches_pipeline(tmp_path, monkeypatch):
     fmt.make_synth_file(str(data / "baseband_e_829.h5"), n_time=NFFT, n_feeds=N_FEEDS,
                         f_center_mhz=476.3125, f_tone_bb=1200.0, seed=1)
 
-    with pytest.raises(_Stop):                       # explicit value threads through
+    with pytest.raises(_Stop):                       # explicit value is passed through
         run_chime_scan(input_dir=data, output_dir=tmp_path / "o1", source="local",
                        analyzer="pilot-proxy-detector", select="829", checkpoint_every=7,
                        download_workers=2, max_staged_files=4,
@@ -886,7 +889,7 @@ def test_checkpoint_every_reaches_pipeline(tmp_path, monkeypatch):
     assert scope["execution_attempts"] == [first_execution, scope["execution"]]
     assert scope["execution"]["checkpoint_every"] == 9
 
-    with pytest.raises(_Stop):                       # unset -> engine default
+    with pytest.raises(_Stop):                       # unset value takes the engine default
         run_chime_scan(input_dir=data, output_dir=tmp_path / "o2", source="local",
                        analyzer="pilot-proxy-detector", select="829",
                        analyzer_options=_cpu_detector_options(), verbose=False)
@@ -958,7 +961,7 @@ def test_local_staging_must_be_outside_input_tree(tmp_path):
             verbose=False,
         )
 
-# -- terminal-combine soft-fail: messages + durable record --------------------
+# terminal-combine soft fail, with its messages and durable record
 
 def _completed_scan_kwargs(tmp_path):
     """One local channel that scans to completion, so the terminal combine runs."""
@@ -981,8 +984,9 @@ def _completed_scan_kwargs(tmp_path):
 def test_generic_combine_valueerror_soft_fails_and_records_skip(
     tmp_path, monkeypatch, capsys
 ):
-    """Untyped integrity refusals from combine's validation pass must not kill
-    the run either: ValueError is the soft-fail net, not the two typed members."""
+    """An untyped integrity refusal from the validation pass of combine also
+    soft-fails. The soft fail catches any ValueError, and the two typed errors
+    are subclasses of it."""
     monkeypatch.chdir(REPO_ROOT)
     kwargs = _completed_scan_kwargs(tmp_path)
 
@@ -995,7 +999,7 @@ def test_generic_combine_valueerror_soft_fails_and_records_skip(
     monkeypatch.setattr(combine_mod, "combine_detector_products", _raise_plain)
     result = run_chime_scan(**kwargs)
     out = kwargs["output_dir"]
-    # the scan succeeded and the per-pilot product survived ...
+    # the scan succeeded and the per-pilot product is kept
     assert (out / "_per_pilot" / "844.npz").exists()
     assert result["per_pilot_work_dir"] == out / "_per_pilot"
     assert not (out / "chime_detector_outputs.npz").exists()
@@ -1003,7 +1007,7 @@ def test_generic_combine_valueerror_soft_fails_and_records_skip(
     assert "terminal combine skipped" in printed
     assert "frame identity length" in printed          # the exception text
     assert "chime-combine --report" in printed
-    # ... and the skip outlives stdout
+    # the skip is also recorded in scan_scope.json
     scope = json.loads((out / "scan_scope.json").read_text())
     assert scope["terminal_combine"] == {
         "status": "skipped",
@@ -1016,10 +1020,11 @@ def test_generic_combine_valueerror_soft_fails_and_records_skip(
 def test_duplicate_identity_message_names_working_escape(
     tmp_path, monkeypatch, capsys
 ):
-    """The duplicate-identity guidance must describe what the error means and an
-    escape that works: (event, frame) identity, unit_scope/--report inspection,
-    and --drop -- not the disproven two-archive-scopes cause or a plain
-    chime-combine rerun that re-raises the same error."""
+    """The duplicate-identity guidance explains the error and gives a fix that
+    works. It names the (event, frame) identity, inspection with unit_scope and
+    --report, and --drop. The two-archive-scopes cause, which was ruled out, is
+    not named, and a plain chime-combine rerun, which raises the same error
+    again, is not suggested."""
     monkeypatch.chdir(REPO_ROOT)
     kwargs = _completed_scan_kwargs(tmp_path)
 
@@ -1066,15 +1071,15 @@ def test_non_valueerror_combine_failure_still_propagates(tmp_path, monkeypatch):
     assert "terminal_combine" not in scope     # a crash is not a recorded skip
 
 
-# -- --source-freq-id-regex reaches the local source ---------------------------
+# --source-freq-id-regex reaches the local source
 
 def test_local_scan_freq_id_regex_reaches_source(tmp_path, monkeypatch):
-    """The flag must populate source_freq_id_regex (what the paired
-    LocalDirectorySource reads)."""
+    """The flag sets source_freq_id_regex, the option read by the paired
+    LocalDirectorySource."""
     monkeypatch.chdir(REPO_ROOT)
     data = tmp_path / "data"
     data.mkdir()
-    # Default parser expects _<freq_id>.h5; this layout needs the custom regex.
+    # the default parser expects _<freq_id>.h5, so this layout needs the custom regex
     fmt.make_synth_file(str(data / "evt1.freq844.h5"), n_time=NFFT * 2,
                         n_feeds=N_FEEDS, f_center_mhz=CHAN_MHZ[844],
                         f_tone_bb=1300.0, seed=11)
@@ -1099,15 +1104,15 @@ def test_local_scan_set_regex_overrides_flag(tmp_path, monkeypatch):
     out = tmp_path / "out"
     run_chime_scan(output_dir=out, source="local", input_dir=data,
                    analyzer="pilot-proxy-detector", select="844",
-                   source_freq_id_regex=r"nomatch(\d+)$",  # flag must NOT win
+                   source_freq_id_regex=r"nomatch(\d+)$",  # overridden by the --set
                    analyzer_options=opts, verbose=False)
     assert (out / "_per_pilot" / "844.npz").exists()
 
 
 def test_scan_scope_records_the_storage_service_override(tmp_path, monkeypatch):
     # The scope is the provenance record of how a product was produced. A run
-    # routed straight at a replica (locator degraded) must say so, or two runs
-    # with different data paths are indistinguishable after the fact.
+    # routed straight to a replica (locator degraded) records the override, and
+    # without it two runs with different data paths cannot be told apart later.
     monkeypatch.chdir(REPO_ROOT)
     import pilot_proxy.archive.pipeline as _dpl
     from pilot_proxy.archive.sources.cadc import STORAGE_SERVICE_ENV

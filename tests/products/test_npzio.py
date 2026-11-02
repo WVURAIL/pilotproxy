@@ -33,7 +33,7 @@ def test_even_unrequested_object_metadata_is_rejected_without_unpickling(tmp_pat
 
     class Payload:
         def __reduce__(self):
-            # Saving records this callable; only an unsafe load would run it.
+            # saving records this callable, and only an unsafe load would run it
             return (eval, (f"__import__('pathlib').Path({str(marker)!r}).touch()",))
 
     np.savez(path, power=[1], metadata=np.array([Payload()], dtype=object))

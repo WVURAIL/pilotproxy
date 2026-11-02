@@ -1,17 +1,14 @@
 # coding=utf-8
-"""Transform-family gate: one master twiddle table, every size by decimation.
+"""Tests of the transform family built by decimating one master twiddle table.
 
-The frozen ``fxfft256 v1`` specification is unchanged and remains the deployed
-artifact; this suite gates the generalization that serves other transform
-lengths, and in particular the two properties the generalization rests on:
-
-1. the length-n table is an *exact* decimation of the master (identical
-   integers rather than a re-derivation), so the tie analysis and exact-rounding
-   argument established on the master are inherited by every member; and
-2. the general transform reproduces the frozen one bit-for-bit at n = 256.
-
-Together these mean adding a size introduces no new rounding decisions in the
-twiddles, and cannot perturb the deployed geometry.
+The frozen ``fxfft256 v1`` specification is the deployed artifact and is
+unchanged. The general transform serves the other lengths, and it depends on
+two properties. First, the length-n table is an exact decimation of the
+master. Its integers are taken from the master and are never recomputed, so
+the tie analysis and the exact-rounding argument made on the master hold for
+every length. Second, the general transform reproduces the frozen one bit for
+bit at n = 256. A new length therefore adds no rounding decisions to the
+twiddles and cannot change the deployed geometry.
 """
 
 from __future__ import annotations
@@ -38,7 +35,7 @@ FAMILY = (128, 256, 512, 1024, 2048)
 
 
 def _direct_half(n: int) -> list[tuple[int, int]]:
-    """Generate W_n[k] for k < n/2 from first principles, no decimation."""
+    """Return W_n[k] for k < n/2 computed directly, without decimation."""
     return [
         (
             round(32768.0 * math.cos(2.0 * math.pi * k / n)),
@@ -53,7 +50,7 @@ def test_master_hash_is_pinned():
 
 
 def test_master_has_no_rounding_ties():
-    """'nearest' must be unambiguous for every master entry."""
+    """Every master entry is more than 1e-6 from a round-to-nearest tie."""
     worst = 1.0
     for k in range(MASTER_N // 2):
         ang = 2.0 * math.pi * k / MASTER_N
@@ -63,7 +60,7 @@ def test_master_has_no_rounding_ties():
 
 
 def test_master_values_need_int32_storage():
-    """C[0] = +32768 does not fit int16; the spec stores twiddles in int32."""
+    """C[0] = +32768 does not fit in int16, so the specification stores twiddles in int32."""
     values = [v for pair in MASTER_TWIDDLE_Q15 for v in pair]
     assert max(values) == 32768
     assert min(values) == -32768
@@ -76,7 +73,7 @@ def test_decimation_is_exact(n):
 
 
 def test_decimation_reproduces_the_frozen_literal():
-    """The join between the frozen artifact and the general construction."""
+    """The decimated length-256 table equals the frozen TWIDDLE_Q15 literal."""
     assert twiddle_table(N) == TWIDDLE_Q15
 
 
@@ -93,7 +90,7 @@ def test_rejects_non_power_of_two_and_oversize():
 
 
 def test_general_transform_matches_frozen_at_256():
-    """The deployed geometry must be untouched by the generalization."""
+    """At n = 256 the general transform equals fxfft256, so the deployed geometry is unchanged."""
     rng = np.random.default_rng(20260807)
     for _ in range(64):
         x = rng.integers(-(2 ** 13), 2 ** 13, size=(3, N // 2, 2), dtype=np.int64)
@@ -108,7 +105,7 @@ def test_general_transform_matches_frozen_at_contract_edges(value):
 
 @pytest.mark.parametrize("n", FAMILY)
 def test_agrees_with_exact_dft_within_rounding_budget(n):
-    """Sanity that each member computes the transform it claims to."""
+    """Each length agrees with the floating-point DFT to a relative error below 1e-3."""
     rng = np.random.default_rng(1000 + n)
     x = rng.integers(-(2 ** 13), 2 ** 13, size=(n // 2, 2), dtype=np.int64)
     got = fxfft(x, n_out=n).astype(np.float64)
@@ -119,7 +116,10 @@ def test_agrees_with_exact_dft_within_rounding_budget(n):
 
 @pytest.mark.parametrize("n", FAMILY)
 def test_input_bound_tightens_and_admits_deployed_matched_filter_row_projections(n):
-    """The eight-stage contract is not reusable at nine stages."""
+    """The input bound admits the deployed row sums and does not grow with n.
+
+    The bound for eight stages (n = 256) is not valid at nine stages.
+    """
     limit = input_abs_max(n)
     assert limit & (limit - 1) == 0
     # deployed row sums are bounded by 128 * K <= 2**14 for K <= 128

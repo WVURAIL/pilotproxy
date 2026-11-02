@@ -66,14 +66,15 @@ REFERENCE_PLACEMENT_REASON_NOMINAL = "nominal"
 REFERENCE_PLACEMENT_REASON_EDGE_WRAPPED = "edge_reference_wrapped"
 REFERENCE_PLACEMENT_REASON_DC_SHIFTED = "dc_reference_shifted_away"
 BASEBAND_FRAME_MODE_EXPLICIT = "explicit_profile_frame"
-# ``edge_wrapped`` records a reference frequency reduced into [0, 1).
-# The K-tap projection is periodic, so this leaves the weights bit-identical.
-# What crossed the boundary is the baseband coordinate; its physical meaning
-# depends on where the receiver profile places nu = 0:
-#   channel_center_normalized = 0.0: the channel center (the forbidden DC tone);
-#   channel_center_normalized = 0.5: the channel edge.
-# The *_crosses_channel_edge fields separately report crossings of the
-# physical edges at +/-fs/2 from the channel center.
+# ``edge_wrapped`` marks a reference frequency that was reduced into [0, 1).
+# The K-tap projection is periodic in normalized frequency, so the reduced
+# frequency gives bit-identical weights. The boundary that is crossed is in
+# the baseband coordinate, and its physical meaning depends on where the
+# receiver profile places nu = 0. For channel_center_normalized = 0.0, nu = 0
+# is the channel center (the forbidden DC tone). For
+# channel_center_normalized = 0.5, nu = 0 is the channel edge.
+# The *_crosses_channel_edge fields report crossings of the physical edges
+# at +/-fs/2 from the channel center.
 FRAME_ORIGIN_DESCRIPTION_GENERIC = "the baseband-frame origin (nu = 0)"
 FRAME_ORIGIN_DESCRIPTION_CENTER = (
     "the baseband-frame origin nu = 0 (the coarse-channel center / DC under "
@@ -86,7 +87,7 @@ FRAME_ORIGIN_DESCRIPTION_EDGE = (
 
 
 def frame_origin_description(frame_center_normalized: float) -> str:
-    """Say what nu = 0 is physically for a profile's frame convention."""
+    """Describe the physical frequency at nu = 0 under a profile's frame convention."""
     center = float(frame_center_normalized) % 1.0
     if math.isclose(center, 0.0, abs_tol=1e-12) or math.isclose(
         center, 1.0, abs_tol=1e-12
@@ -400,10 +401,9 @@ def target_layout(
     core: DetectorCoreLayout | DetectorCoreProfile,
     pilot_hz_override: float | None = None,
 ) -> dict[str, Any]:
-    # A file-backed core profile must agree with the receiver profile on the
-    # deployed window length; select it with with_detector_window_samples
-    # first. A bare DetectorCoreLayout stays an explicit geometry override
-    # for what-if analysis.
+    # A file-backed core profile must have the receiver profile's window
+    # length, which is selected first with with_detector_window_samples. A bare
+    # DetectorCoreLayout is an explicit geometry override for what-if analysis.
     if isinstance(core, DetectorCoreProfile):
         core_window = int(core.detector_window_samples)
         profile_window = int(profile.detector_window_samples)
@@ -417,9 +417,9 @@ def target_layout(
             )
     channel = validate_uhf_physical_channel(physical_channel)
     nominal_pilot_hz = physical_channel_to_pilot_hz(channel)
-    # A station can run its carrier a few kHz off the ATSC nominal; the
-    # template follows the measured carrier while the manifest keeps the
-    # nominal pilot as the lookup key.
+    # A station can run its carrier a few kHz from the ATSC nominal pilot. The
+    # template is placed on the measured carrier, and the nominal pilot is
+    # kept in the manifest as the lookup key.
     pilot_hz = nominal_pilot_hz if pilot_hz_override is None else float(pilot_hz_override)
     if pilot_hz_override is not None and abs(pilot_hz - nominal_pilot_hz) > float(
         profile.coarse_channel_width_hz
@@ -485,12 +485,13 @@ def target_layout(
             f"{channel}."
         )
     min_selected_offset = min(abs(lower_offset), abs(upper_offset))
-    # Physical coarse-channel edge diagnostics. The placement above works in
-    # the periodic normalized-frequency coordinate, so a reference requested
-    # beyond +-fs/2 of the channel center simply aliases to the opposite
-    # channel edge; detection arithmetic is unaffected, but the reference then
-    # samples the channelizer's roll-off region (both channel edges fold
-    # there). These fields make that visible without changing any placement.
+    # physical coarse-channel edge diagnostics
+    # The placement above is done in the periodic normalized-frequency
+    # coordinate. A reference requested more than fs/2 from the channel center
+    # therefore aliases to the opposite channel edge. The detection arithmetic
+    # is unchanged, but the reference then samples the roll-off region of the
+    # channelizer, where both channel edges fold. The fields below report
+    # these crossings and do not change any placement.
     half_width_hz = 0.5 * float(profile.coarse_channel_width_hz)
     lower_unwrapped_hz = float(target_offset_hz) + lower_offset * fine_bin_width_hz
     upper_unwrapped_hz = float(target_offset_hz) + upper_offset * fine_bin_width_hz
@@ -631,7 +632,11 @@ def profile_requires_window_time_reversal(
     profile: ReceiverProfile,
     weight_coordinate_system: str,
 ) -> bool:
-    """Return the adapter preprocessing declared by the profile."""
+    """Return True if the profile requires time reversal of the detector windows.
+
+    Weights in raw-input coordinates never require it. Otherwise the
+    profile's time_reverse_detector_windows_before_kernel flag is returned.
+    """
     coordinate_system = normalize_weight_coordinate_system(
         weight_coordinate_system
     )
@@ -654,9 +659,9 @@ def generate_weight_table_from_receiver_profile(
         validate_uhf_physical_channel(channel)
         for channel in physical_channels
     ]
-    # The receiver profile owns the deployed window length (K); the core
-    # declares which lengths the compiled kernel family supports.
-    # DetectorCoreProfile validates the selection in __post_init__.
+    # The deployed window length K is set by the receiver profile, and the
+    # core lists the lengths supported by the compiled kernel family. The
+    # selection is validated in DetectorCoreProfile.__post_init__.
     core = replace(
         core, detector_window_samples=int(profile.detector_window_samples)
     )
@@ -710,10 +715,11 @@ def generate_weight_table_from_receiver_profile(
             detector_window_samples=int(core.detector_window_samples),
             bits_per_component=int(core.sample_bits_per_component),
         )
-        # Exact integer squared norms of the packed (post-quantization) weight
-        # terms, recorded for provenance. null_power_ratio = 2*nt/(nl+nu) is the flat-floor
-        # H0 zero-point of F; the norm-corrected positive-excess mask and the
-        # kernel rational half-threshold nt:(nl+nu) divide it out.
+        # The exact integer squared norms of the packed (quantized) weight terms
+        # are recorded for provenance. null_power_ratio = 2*nt/(nl+nu) is the
+        # zero point of F under H0 for a flat floor. It is divided out by the
+        # norm-corrected positive-excess mask and by the kernel's rational
+        # half-threshold nt:(nl+nu).
         norm_nt, norm_nl, norm_nu = weight_term_norms_sq(
             table[coarse_index],
             bits_per_component=int(core.sample_bits_per_component),
@@ -771,7 +777,10 @@ def write_weight_bank_from_receiver_profile(
     weight_coordinate_system: str = WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     pilot_overrides_hz: Mapping[int, float] | None = None,
 ) -> dict[str, Any]:
-    """Write a packed weight bank plus the adjacent manifest and return manifest."""
+    """Write the packed weight bank and its manifest, and return the manifest.
+
+    The manifest is written next to the bank as ``<output>.manifest.json``.
+    """
     validate_integration_compatibility(profile=profile, detector_core=core)
     channels = [
         validate_uhf_physical_channel(channel)

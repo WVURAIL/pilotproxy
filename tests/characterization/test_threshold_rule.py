@@ -204,8 +204,8 @@ REFERENCE_HALF = 1 << 40
 def fine_for_excess(excess):
     """Fine powers whose all-bin sums give ``excess`` (norms 1 : 2, so mu_0 = 1).
 
-    ``P_0 = round((e + 1) 2**40)``, ``P_1 = P_2 = 2**40``: the excess formed
-    from the sums is ``P_0 / 2**40 - 1``, within ``2**-41`` of ``e``.
+    With ``P_0 = round((e + 1) 2**40)`` and ``P_1 = P_2 = 2**40``, the excess formed
+    from the sums is ``P_0 / 2**40 - 1``, which differs from ``e`` by at most ``2**-41``.
     """
     excess = np.asarray(excess, dtype=np.float64)
     finite = np.isfinite(excess)
@@ -259,6 +259,8 @@ def test_no_supported_frames():
 def test_product_power_and_exact_mask_readback(tmp_path):
     f = synthetic()
     product = tmp_path / "product.npz"
+    # The excess is read from the frame powers, which are the all-bin sums of the
+    # fine powers (kernel core 3.0.0). The stored v5 column holds decoy row-domain data.
     np.savez(product, normalized_pilot_excess=np.c_[f.excess, f.excess] + .5,
              fine_power_u64=fine_for_excess(f.excess), target_norm_sq=np.array([1]),
              reference_norm_sum_sq=np.array([2]))

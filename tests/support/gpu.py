@@ -81,9 +81,11 @@ def _nvidia_smi_summary() -> str:
 
 
 def _cuda_driver_summary() -> str:
-    # Intentionally separate from the CuPy runtime gate. On WSL and mixed
-    # toolkit installs, NVML/driver visibility can succeed while the CUDA
-    # runtime library selected by CuPy fails to initialize.
+    # The driver API is called directly through libcuda, independent of the
+    # CuPy runtime check. On WSL and mixed toolkit installs, NVML and the
+    # driver can see the GPU while the CUDA runtime library selected by CuPy
+    # fails to initialize. The skip reason then reports the driver result next
+    # to the CuPy result.
     try:
         lib = ctypes.CDLL("libcuda.so.1")
         version = ctypes.c_int()

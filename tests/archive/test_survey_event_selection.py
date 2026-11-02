@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 """
-Which events a CHIME survey agrees to look at.
+Selection of the events that a CHIME survey probes.
 
-Two things on `cadc.py:568-570` shape every inventory this tool publishes, and
-neither had a test:
+Two lines of survey() in cadc.py shape every inventory this tool publishes:
 
-  * the outrigger membership filter. On the live archive it removes 6,154 of
-    16,523 enumerated events -- 37% -- so a regression would quietly add ~6,000
-    outrigger events to a CHIME-only inventory, where every downstream gate
-    would read them as archive drift rather than as a bug.
-  * `sorted(...)`. Inventory row order is independently guaranteed by the view
-    query (`survey_state.py` ORDER BY event_key, ordinal), so asserting row
-    order proves nothing about this line. What `sorted` actually pins is WHICH
-    events a bounded `--max-events` run picks, and therefore whether a resume
-    boundary is reproducible.
+  * The outrigger membership filter removes 6154 of the 16523 enumerated
+    events on the live archive (37%). A regression would add about 6000
+    outrigger events to a CHIME-only inventory with no warning, and every
+    downstream gate would read them as archive drift instead of as a bug.
+  * `sorted(...)` sets which events a bounded `--max-events` run picks, and
+    so makes a resume boundary reproducible. The row order of the inventory
+    is set instead by the view query in `survey_state.py` (ORDER BY
+    event_key, ordinal), so a test of row order says nothing about this line.
 
-These drive the REAL survey() and assert on what it did, deliberately not on a
-re-implementation of the predicate -- a copied predicate drifts with the code
-it is supposed to protect.
+The tests drive the real survey() and check what it did. They do not
+reimplement the predicate, since a copied predicate drifts with the code it is
+meant to protect.
 
-Offline: enumeration and every probe are faked; nothing is contacted.
+Enumeration and every probe are faked, so nothing is contacted.
 """
 from __future__ import annotations
 
@@ -47,7 +45,7 @@ MEMBERSHIP = {
 
 @contextlib.contextmanager
 def fake_archive(membership):
-    """Fake enumeration and every probe; record which events were probed."""
+    """Fake enumeration and every probe, and record the events that were probed."""
     probed = []
     orig_enum = cadc_datatrail._enumerate_events
     orig_cp = cadc_datatrail.DATATRAIL.common_path
@@ -115,7 +113,7 @@ def test_the_outrigger_pattern_matches_the_labels_the_archive_really_uses():
 
 def test_max_events_takes_the_lowest_keys_whatever_order_enumeration_yields(
         tmp_path):
-    # the cache hands events back in an arbitrary (here: reversed) order; a
+    # the cache returns events in an arbitrary order, reversed here, and a
     # bounded run must still take a deterministic prefix, or two resumes of the
     # same command survey different subsets of the archive
     reversed_membership = dict(reversed(list(MEMBERSHIP.items())))

@@ -1,3 +1,3 @@
-# Upstream datatrail-cli includes the changes the archive survey ran with; that
-# survey's exact environment is recorded in docs/runtime_freezes/.
+# Upstream datatrail-cli has the changes the archive survey ran with. The exact
+# environment of that survey is recorded in docs/runtime_freezes/.
 datatrail-cli==1.0.2

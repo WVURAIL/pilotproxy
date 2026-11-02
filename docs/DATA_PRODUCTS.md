@@ -10,18 +10,18 @@ formats where those formats apply.
 Unless stated otherwise, `mask = 1` means that the frame is rejected and
 `valid = 1` means that the reference denominator is nonzero.
 
-The current per-pilot schema and its explicit active/diagnostic/candidate
-decision contract are defined in `PRODUCT_SCHEMA.md`. Its fine-reduction
+The per-pilot schema and its decision contract, with active, diagnostic, and
+candidate roles, are defined in `PRODUCT_SCHEMA.md`. Its fine-reduction
 products (`fine_power_u64`, the exact `uint64` target, lower, and upper
 terms per fine bin from the frozen `fxfft256`, plus the fine scalars
 `fine_status`, `fine_num_bins`, `fine_pad_factor`, `fine_guard_fine_bins`,
-`fine_p_fa`, `fine_designated_bins`, and `fine_census_excluded_bins`) live
+`fine_p_fa`, `fine_designated_bins`, and `fine_census_excluded_bins`) are stored
 only in the authoritative per-pilot `<freq_id>.npz` files. The null-bulk
-calibration and the detection list are not stored; they are recomputed
-offline from `fine_power_u64`. A `chime-run` output also stores the fine
-powers of its frame powers in `chime_detector_outputs.npz` (below); a
-`chime-scan` combine does not copy them, and analyses of fine detections read
-the per-pilot products directly.
+calibration and the detection list are not stored and are recomputed offline
+from `fine_power_u64`. A `chime-run` output also stores the fine powers behind
+its frame powers in `chime_detector_outputs.npz` (below). A `chime-scan`
+combine does not copy them, so analyses of fine detections read the per-pilot
+products directly.
 
 ## JSON Files
 
@@ -39,14 +39,14 @@ use:
 The staged `chime-run` path also records fields such as `input_dir`,
 `output_dir`, `weight_coordinate`, and file-level `provenance`. The combined
 `chime-scan` path instead records `source = chime-scan`,
-`freq_id_by_pilot`, and `detector_provenance_by_pilot`. Consumers should use
-the schema and named fields rather than assume that the two producers have
-byte-identical JSON.
+`freq_id_by_pilot`, and `detector_provenance_by_pilot`. Consumers should read
+the schema and the named fields and should never assume that the two producers
+write byte-identical JSON.
 
 ### `stats.json`
 
-This file records the detector geometry and run statistics. Shared fields
-include:
+This file records the detector geometry and run statistics. Both workflows
+record:
 
 - `schema_version = pilotproxy_chime_stats_v1`;
 - `detector_contract`;
@@ -59,8 +59,8 @@ include:
 `chime-run` also records `detector_rows_per_frame`, `kernel_specs`,
 `weight_coordinate`, and `null_power_ratio_by_channel`. A `chime-scan` combine records
 `combine_alignment`, `rational_overflow_count_by_pilot`, and any cross-build
-provenance notes. The combined scan keeps `null_power_ratio` in
-`chime_detector_outputs.npz` rather than copying it into `stats.json`.
+provenance notes. The combined scan stores `null_power_ratio` in
+`chime_detector_outputs.npz` and does not copy it into `stats.json`.
 
 The `detector_contract` states the coordinate convention through:
 
@@ -83,34 +83,35 @@ as the other.
 
 ### `product_validation.json`
 
-`pilot-proxy validate-products --output-json ...` writes this report; it is not
-created merely by running the detector. Its principal fields are:
+`pilot-proxy validate-products --output-json ...` writes this report, and
+running the detector alone does not create it. Its principal fields are:
 
 - `valid`;
 - `num_errors`;
 - `errors`;
 - `detector_contract_revision`: 2 for a current run. A run written before
-  kernel core 3.0.0 carries revision 1 (row-domain frame powers, no fine
-  powers to recompute them from); it is validated as a record and the report
-  adds a `record_note`. The CHIME plots and `injection_recovery` refuse such a
-  run rather than analyse it under the current definition.
+  kernel core 3.0.0 carries revision 1 (row-domain frame powers, with no fine
+  powers to recompute them from). Such a run is validated as a record, and the
+  report adds a `record_note`. The CHIME plots and `injection_recovery` refuse
+  such a run instead of analyzing it under the current definition.
 
 ### `.pilotproxy-combine-generation.json`
 
-`chime-scan`/`chime-combine` publishes this hidden generation manifest last.
-It contains a unique generation ID and SHA-256 digest for every canonical file
-in that combined output set. A failed publication that is rolled back also
+`chime-scan` and `chime-combine` publish this hidden generation manifest last.
+It contains a unique generation ID and a SHA-256 digest for every canonical
+file in the combined output set. A failed publication that is rolled back also
 advances the generation ID. `validate-products` reads the identity before and
-after validation, checks the file digests, and refuses a run if publication
+after validation, checks the file digests, and refuses a run if a publication
 overlapped its reads. The hidden `.pilotproxy-combine-publish.json` journal is
-present only while a transaction needs completion or recovery and also makes
-validation fail closed. A kernel-backed exclusive publish lock serializes
-writers across recovery, journal preparation, and canonical replacement; a
-second writer cannot replace or remove the active writer's journal.
+present only while a transaction needs completion or recovery, and its
+presence also makes validation fail closed. A kernel-backed exclusive publish
+lock serializes writers over recovery, journal preparation, and canonical
+replacement, so a second writer cannot replace or remove the journal of the
+active writer.
 
-Direct `chime-run` outputs predate and do not require the combine-generation
-manifest; in the absence of both combine metadata files they retain their
-existing validation behavior.
+Direct `chime-run` outputs do not use the combine-generation manifest. When
+neither combine metadata file is present, they are validated without the
+generation check.
 
 ## Detector NPZ
 
@@ -149,22 +150,23 @@ valid && (p_target * reference_norm_sum_sq > target_norm_sq * p_ref_sum)
 This is the integer form of `F > null_power_ratio`. The frame powers are
 `P_r = sum_f S_r[f]` over the exact `fxfft256`
 fine powers (`METHOD_SPEC.md`). A `chime-run` output stores those fine powers
-in `fine_power_u64`, so every frame power can be re-formed from them: the
-writer and `validate-products` require `p_target_u64`, `p_ref_lower_u64` and
-`p_ref_upper_u64` to equal `fine_power_u64[..., r, :].sum()` exactly and
+in `fine_power_u64`, so every frame power can be re-formed from them. The
+writer and `validate-products` require `p_target_u64`, `p_ref_lower_u64`, and
+`p_ref_upper_u64` to equal `fine_power_u64[..., r, :].sum()` exactly, and
 `p_ref_sum_u64` to equal their reference sum. A `chime-scan` combine stores
-the reference split but leaves the fine powers in its per-pilot products (a
-combined copy would hold `num_frames x num_pilots x 768` words). Outputs of
-detector contract revision 1 (detector cores before 3.0.0) carry row-domain
-powers `sum_m |z|^2` in the frame-power fields and neither the
-split nor the fine powers; `chime-run` outputs identify them by
-`kernel_version` and `coarse_power_ratio_definition` in `stats.json`, and
+the reference split but leaves the fine powers in its per-pilot products, since
+a merged copy would hold `num_frames x num_pilots x 768` words.
+
+Outputs of detector contract revision 1 (detector cores before 3.0.0) carry
+row-domain powers `sum_m |z|^2` in the frame-power fields, with neither the
+split nor the fine powers. For `chime-run` outputs, they are recognized by
+`kernel_version` and `coarse_power_ratio_definition` in `stats.json`, and for
 `chime-scan` combines by the per-pilot product schema (v5 or v6). Because
 `normalized_coarse_power_ratio_db` is referenced to `null_power_ratio`, the
-null and the positive-excess boundary both sit at exactly 0 dB. The current
-product contract requires the exact powers, all norm-related arrays, schema
-identity, and decision contract. Products that do not meet it are not accepted;
-regenerate them from authoritative inputs.
+null and the positive-excess boundary both lie at exactly 0 dB. The product
+contract requires the exact powers, all norm-related arrays, the schema
+identity, and the decision contract. Products that do not meet it are refused
+and must be regenerated from authoritative inputs.
 
 For `chime-scan`, `num_frames` is the event/frame intersection retained by the
 combine. The source per-pilot products can contain additional frames that were
@@ -189,8 +191,8 @@ mask used by the plotting functions.
 | `frame_index` | `(num_frames,)` | `int64` | frame | Contiguous positional frame index |
 | `relative_time_s` | `(num_frames,)` | `float64` | s | `frame_index*nfft/sample_rate_hz` |
 
-`relative_time_s` is accumulated data time. It does not restore gaps between
-separate archive events and should not be interpreted as wall-clock time.
+`relative_time_s` is accumulated data time. The gaps between archive events
+are not restored, so it must not be read as wall-clock time.
 
 ## Integrated Spectra NPZ
 
@@ -198,13 +200,14 @@ separate archive events and should not be interpreted as wall-clock time.
 
 The `chime-scan` combine writes a reporting stack of the integrated spectra in
 the per-pilot products. The analyzer uses a rectangular-window FFT, sums
-`|FFT|^2` over input streams, and accumulates over frames. `before` includes
-valid frames; `after` includes valid frames with `reject_mask = 0`. Therefore
-`before - after` is the accumulated spectrum of the rejected frames.
+`|FFT|^2` over input streams, and accumulates over frames. `before` is
+accumulated over valid frames, and `after` over valid frames with
+`reject_mask = 0`. Therefore, `before - after` is the accumulated spectrum of
+the rejected frames.
 
 | Array | Shape | Dtype | Units | Meaning |
 |---|---:|---|---|---|
-| `schema_version` | scalar | `str` | — | `pilotproxy_chime_integrated_spectra_v1` |
+| `schema_version` | scalar | `str` | none | `pilotproxy_chime_integrated_spectra_v1` |
 | `physical_channel` | `(num_pilots,)` | `int32` | channel | ATSC physical channel |
 | `pilot_frequency_hz` | `(num_pilots,)` | `float64` | Hz | ATSC pilot RF frequency |
 | `chime_frequency_hz` | `(num_pilots,)` | `float64` | Hz | CHIME coarse-channel center |
@@ -221,12 +224,12 @@ Bin `k` maps to baseband frequency as:
 ((k + nfft//2) % nfft - nfft//2) * sample_rate_hz / nfft
 ```
 
-The authoritative copy remains in each `_per_pilot/<freq_id>.npz`; see
-`PER_PILOT_PRODUCT_FIELDS.md`. Integrated spectra are accumulated before terminal
-event intersection, so they represent each pilot's full processed frame set.
-The canonical frame arrays can represent a smaller all-channel intersection.
-This distinction is recorded by the per-pilot products and
-`stats.json.combine_alignment`.
+The authoritative copy is kept in each `_per_pilot/<freq_id>.npz` (see
+`PER_PILOT_PRODUCT_FIELDS.md`). Integrated spectra are accumulated before the
+terminal event intersection, so they represent the full processed frame set of
+each pilot, while the canonical frame arrays can represent a smaller
+all-channel intersection. This distinction is recorded by the per-pilot
+products and `stats.json.combine_alignment`.
 
 ## Reductions NPZ
 
@@ -234,7 +237,7 @@ This distinction is recorded by the per-pilot products and
 
 This file groups the canonical frame arrays into approximately 10 s of
 contiguous data time. The grouping uses `frame_index`, the analysis frame length,
-and the sample rate recorded by the products; it does not use the per-file
+and the sample rate recorded by the products, and it ignores the per-file
 absolute-time axis.
 
 All arrays below have a leading dimension of `num_chunks`. Arrays that also
@@ -248,9 +251,9 @@ vary by pilot have shape `(num_chunks, num_pilots)`.
 - `normalized_coarse_power_ratio_db_median`, `normalized_coarse_power_ratio_db_p95`, `normalized_coarse_power_ratio_db_max`;
 - `estimated_data_shelf_snr_db_median`, `estimated_data_shelf_snr_db_p95`, `estimated_data_shelf_snr_db_max`.
 
-`cleaned_power_mean` is the mean over valid frames with `mask = 0`; it is NaN
-when a chunk contains no such frame. The term “cleaned” is a product-field name,
-not a claim that all interference has been removed.
+`cleaned_power_mean` is the mean over valid frames with `mask = 0`, and it is
+NaN when a chunk contains no such frame. "cleaned" is only the name of the
+product field, and it makes no claim that all interference has been removed.
 
 ## Frame Identity NPZ
 
@@ -262,10 +265,10 @@ canonical stack:
 | Array | Shape | Dtype | Meaning |
 |---|---:|---|---|
 | `frame_event_key` | `(num_frames,)` | `str` | Source event identity with the per-channel `freq_id` token removed |
-| `frame_in_unit` | `(num_frames,)` | `int64` | Frame position within the source file |
+| `frame_in_unit` | `(num_frames,)` | `int64` | Frame position in the source file |
 
 The event key, per-unit index, and frame-within-unit identity are mandatory.
-Products without those tags are rejected rather than positionally aligned.
+Products without those tags are rejected and are never aligned by position.
 
 ## Tables
 

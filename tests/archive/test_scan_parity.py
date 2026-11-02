@@ -1,18 +1,20 @@
 # coding=utf-8
 """End-to-end parity for the `chime-scan` path.
 
-``run_chime_scan`` drives the archive engine (local source -> per-pilot fan-out
--> ``pipeline.run``) and then combines. This checks its canonical detector
-products match a single ``run_chime_analysis`` pass over the same two channels.
-GPU-free: the detector / stub kernel / weights are injected via ``analyzer_options``
-(the same hooks the runner exposes), so no CUDA is needed.
+``run_chime_scan`` drives the archive engine (the local source, the per-pilot
+fan-out and ``pipeline.run``) and then combines the products. This test checks
+that its canonical detector products match a single ``run_chime_analysis`` pass
+over the same two channels. The detector, stub kernel and weights are injected
+through ``analyzer_options``, the hooks the runner exposes, so no GPU or CUDA
+is needed.
 
-Files are named ``*_<freq_id>.h5`` so the local source maps each file to
-its CHIME coarse channel (its default ``_(\\d+)\\.h5$`` regex), exactly like a real
-CADC baseband file; the analyzer derives the ATSC channel label from the freq-attr
-center. ``--select`` is therefore the freq_id list, while the weights and the
-runner reference stay keyed on ATSC channel (one pilot per ATSC channel, so the
-combine's ATSC ordering is a well-defined bijection with the selected freq_ids).
+Files are named ``*_<freq_id>.h5`` so the local source maps each file to its
+CHIME coarse channel with its default ``_(\\d+)\\.h5$`` regex, as for a real
+CADC baseband file. The analyzer derives the ATSC channel label from the center
+frequency in the file's freq attribute. ``--select`` is therefore the freq_id
+list, and the weights and the runner reference stay keyed on ATSC channel. With
+one pilot per ATSC channel, the ATSC ordering of combine maps one to one onto
+the selected freq_ids.
 """
 from __future__ import annotations
 
@@ -39,16 +41,16 @@ K = 128
 N_FRAMES = 2
 N_FILES = 2
 N_FEEDS = 4
-CHANNELS = {14: 470.3125, 15: 476.3125}  # ATSC channel -> coarse-channel center (MHz)
-# what those centers are as CHIME freq_id (the on-disk / inventory namespace)
+CHANNELS = {14: 470.3125, 15: 476.3125}  # coarse-channel center (MHz) by ATSC channel
+# the same centers as CHIME freq_id, the namespace of the files and inventory
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
 
 
 def _assert_npz_equal(ref_path, got_path):
     a = np.load(ref_path)
     b = np.load(got_path)
-    # chime-run stores the fine powers of its frame powers; a combine leaves
-    # them in the per-pilot products (checked against the runner below).
+    # chime-run stores the fine powers of its frame powers. A combine leaves
+    # them in the per-pilot products, so they are excluded from this check.
     only_runner = {"fine_power_u64"} if ref_path.name == "chime_detector_outputs.npz" else set()
     assert set(a.files) - only_runner == set(b.files), set(a.files) ^ set(b.files)
     for key in b.files:
@@ -100,8 +102,8 @@ def test_chime_scan_matches_runner(tmp_path):
         weights_by_channel=weights_by_channel,
     )
 
-    # Candidate: chime-scan fan-out and combine with the CPU reference.
-    # --select is the freq_id list; the analyzer derives the ATSC label per file.
+    # candidate: chime-scan fan-out and combine with the CPU reference detector
+    # --select is the freq_id list, and the analyzer derives the ATSC label per file
     scan_dir = tmp_path / "scan"
     freq_id_select = ",".join(str(f) for f in sorted(FREQ_IDS.values()))
     run_chime_scan(

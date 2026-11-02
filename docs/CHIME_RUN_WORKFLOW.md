@@ -1,9 +1,9 @@
 # CHIME Staged-Data Workflow (`chime-run`)
 
-> **Scope:** `chime-run` processes an already-staged local HDF5 directory in
-> one process; use it for staged data and regression comparisons. For
-> archive-scale CADC/CANFAR work, use `pilot-proxy chime-scan` and
-> `docs/CANFAR_RUNBOOK.md`.
+The purpose of `chime-run` is to process an already-staged local HDF5
+directory in one process, for staged data and regression comparisons. For
+archive-scale CADC and CANFAR work, use `pilot-proxy chime-scan` and
+`docs/CANFAR_RUNBOOK.md`.
 
 The adapter connects segmented CHIME HDF5 baseband data to the
 fixed-point detector. It does not change the CUDA kernel contract:
@@ -27,9 +27,10 @@ mask  = valid && (p_target * reference_norm_sum_sq > target_norm_sq * p_ref_sum)
 ```
 
 This comparison is the integer form of `F > null_power_ratio`, where
-`null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq`. The value `null_power_ratio` is the flat-floor
-reference implied by the quantized weight norms; it is not assumed to be one.
-See `docs/METHOD_SPEC.md` for the statistic and its calibration.
+`null_power_ratio = 2*target_norm_sq/reference_norm_sum_sq`. Here,
+`null_power_ratio` is the flat-floor reference implied by the quantized weight
+norms, and it is never assumed to be one. The statistic and its calibration are
+given in `docs/METHOD_SPEC.md`.
 
 `reference_offset_bins` measures the target-to-reference separation in detector
 fine bins. `skipped_guard_bins` counts the fine bins between them. Therefore:
@@ -52,11 +53,11 @@ CHIME HDF5 segments
 
 The helper script `scripts/run_chime_local_detector.sh` reads
 `PILOT_PROXY_CHIME_INPUT_DIR` and otherwise uses
-`$HOME/dataset/canfar_pilots_10s` as a fallback. The `pilot-proxy chime-run` command itself
-does not read that variable; it always requires `--input-dir`.
+`$HOME/dataset/canfar_pilots_10s` as a fallback. The `pilot-proxy chime-run`
+command does not read that variable and always requires `--input-dir`.
 
 ```text
-$PILOT_PROXY_CHIME_INPUT_DIR    # e.g. <staged-dir>
+$PILOT_PROXY_CHIME_INPUT_DIR    # for example <staged-dir>
 ```
 
 The staged dataset carries 23 DTV pilot channels in directories `ch0844`
@@ -73,10 +74,10 @@ frequency/channel: one CHIME coarse channel per directory
 encoding: CHIME native offset-binary complex int4 packed in uint8
 ```
 
-The adapter treats the CHIME `freq_id` and `chNNNN` label as data-product
-identifiers. In the current receiver profile, `ch0844` corresponds to
-`coarse_channel_index = 843`: the CHIME label is one-based and the PilotProxy
-profile index is zero-based. The receiver profile is frame-verified
+The adapter treats the CHIME `freq_id` and the `chNNNN` label as data-product
+identifiers. In the receiver profile, `ch0844` corresponds to
+`coarse_channel_index = 843`, since the CHIME label is one-based and the
+PilotProxy profile index is zero-based. The receiver profile is frame-verified
 (`profile_status` in the file), but this coordinate relation must still agree
 with the metadata of the dataset being processed.
 
@@ -85,21 +86,20 @@ two's-complement packed complex int4 representation. `chime-run` concatenates
 files in deterministic sorted segment order, ignores absolute telescope time,
 and reports the resulting position as `frame_index`.
 
-The software profile and the commands below use a 16,384-sample analysis frame.
-This value is the profile for the planned CHIME engine-upgrade frame and should
-not be presented as a measurement of the currently deployed correlator. A
-12,288-sample current-frame value has been discussed but remains provisional
-until it is checked against an authoritative CHIME data product or upgrade
-document. In all cases, record the frame length used for the run and require it
-to be divisible by `K = 128`.
+The software profile and the commands below use an analysis frame of 16384
+samples. This value is the profile for the frame of the planned CHIME engine
+upgrade, and it is not a measurement of the correlator deployed today. A
+current-frame value of 12288 samples has been discussed, but it remains
+provisional until it is checked against an authoritative CHIME data product or
+upgrade document. In all cases, record the frame length used for the run, and
+require it to be divisible by `K = 128`.
 
 ## Weight Coordinate Convention
 
-The CHIME receiver profile declares Nyquist zone 2, which mirrors each coarse
-channel's spectrum. The runner reverses
-each detector window before the CUDA kernel, which places the samples in the
-detector frequency coordinate. It must therefore use weights defined in that
-same coordinate:
+The CHIME receiver profile declares Nyquist zone 2, which mirrors the spectrum
+of each coarse channel. Before the CUDA kernel, the runner reverses each
+detector window to place the samples in the detector frequency coordinate.
+Thus, the runner must use weights defined in that same coordinate:
 
 ```text
 weight_coordinate_system = post_nyquist_zone_normalization
@@ -147,7 +147,7 @@ PYTHONPATH=src python -m pilot_proxy.cli chime-inspect \
   --dataset-path baseband
 ```
 
-Check the proposed 16,384-sample upgrade layout:
+Check the proposed 16384-sample upgrade layout:
 
 ```bash
 PYTHONPATH=src python -m pilot_proxy.cli check-layout \
@@ -193,9 +193,9 @@ tables/
 figures/
 ```
 
-The archive-scale `chime-scan` path additionally writes authoritative per-pilot
-products and `chime_integrated_spectra.npz`; see `docs/PER_PILOT_PRODUCT_FIELDS.md` and
-`docs/DATA_PRODUCTS.md`.
+The archive-scale `chime-scan` path also writes authoritative per-pilot
+products and `chime_integrated_spectra.npz` (see
+`docs/PER_PILOT_PRODUCT_FIELDS.md` and `docs/DATA_PRODUCTS.md`).
 
 Generated metadata can contain absolute paths for the receiver profile, stream
 map, weight bank, kernel library, input manifest, and output directory. Those
@@ -209,17 +209,17 @@ CANFAR, and review systems.
 `pilotproxy_detector_contract_v2`. The contract records the `K = 128`
 geometry, the positive-excess rule, the `uint64` accumulator, and the
 all-row-sum statistic, whose frame powers are the all-bin sums of the exact
-`fxfft256` fine powers (kernel core 3.0.0; runs made before it record contract
-revision 1 and the row-domain powers).
+`fxfft256` fine powers (kernel core 3.0.0). Runs made before kernel core 3.0.0
+record contract revision 1 and the row-domain powers.
 
-The frame arrays have shape `(num_frames, num_pilots)`. Before/after baseband
-summaries exclude invalid frames, and the after-mask value averages only frames
-with `mask = 0`; rejected frames are not replaced with zeros.
+The frame arrays have shape `(num_frames, num_pilots)`. In the before and after
+baseband summaries, invalid frames are excluded, and the after-mask value
+averages only frames with `mask = 0`. Rejected frames are never replaced with zeros.
 
 `chime_detector_outputs.npz` also stores the reference split
 (`p_ref_lower_u64`, `p_ref_upper_u64`) and the fine powers `fine_power_u64`,
 shape `(num_frames, num_pilots, 3, 256)`, whose all-bin sums are the frame
-powers; the runner refuses a detector result whose powers are not those sums,
+powers. The runner refuses a detector result whose powers are not those sums,
 and `validate-products` checks the identity exactly (`DATA_PRODUCTS.md`). The
 fine powers take 6 KiB per frame and pilot before compression.
 
@@ -289,12 +289,11 @@ upper_reference_requested_relative_to_target_hz
 ```
 
 `run_config.json` and `stats.json` copy a compact
-`reference_placement_summary`, including the channels with adaptive placement,
+`reference_placement_summary`, which lists the channels with adaptive placement,
 DC shifts, edge wraps, or a forbidden tone in the skipped guard. In the
 shipped DC-centered bank, DTV 14 is the only adaptive case.
 
-The SNR-shelf table uses explicit diagnostic names rather than
-positive-excess aliases:
+The SNR-shelf table uses these explicit diagnostic names:
 
 ```text
 num_detector_valid_frames
@@ -307,12 +306,12 @@ mask_fraction_total
 `estimated_data_shelf_snr_db` values. That estimate is formed from
 `normalized_pilot_excess = F/null_power_ratio - 1`, so the count and
 `finite_data_shelf_snr_fraction_of_valid_frames` describe how often that
-diagnostic is defined. They are not the schema's rejection-decision fields,
-even when they coincide with the current positive-excess rule.
-`mask_fraction_total` is the table's direct mean of the stored binary mask over
-all frames. Use `reject_mask` in authoritative
-per-pilot products and `mask_summary_by_pilot.csv` when the valid-frame
-denominator must be explicit.
+diagnostic is defined. They are diagnostics and are never used as the
+rejection-decision fields of the schema, even when they coincide with the
+positive-excess rule. `mask_fraction_total` is the direct mean of the stored
+binary mask over all frames. When the valid-frame denominator must be explicit,
+use `reject_mask` in the authoritative per-pilot products and
+`mask_summary_by_pilot.csv`.
 
 ## Injection recovery
 
@@ -333,17 +332,18 @@ datasets, attributes, and filenames. Therefore the output can be read by
 
 The plotting code uses Computer Modern mathtext by default. Set
 `PILOT_PROXY_USE_TEX=1` for full TeX rendering. The default output is a 300 dpi
-PNG; `PILOT_PROXY_FIGURE_FORMATS=png,pdf` adds a vector PDF copy. JPEG output is
-not implemented.
+PNG, and `PILOT_PROXY_FIGURE_FORMATS=png,pdf` adds a vector PDF copy. JPEG
+output is not implemented.
 
 The SNR-shelf figure uses an `[-90, 0]` dB overview and an
 `[-90, -25]` dB detail panel. Each channel histogram is normalized over its
 finite shelf-SNR samples and by bin width. Frames with `F <= 1` therefore do not
-enter the histogram and must be counted separately.
+enter the histogram and must be counted on their own.
 
 The spectrograms place relative data time and frame index on the horizontal
 axes, with CHIME coarse-channel frequency and DTV physical channel on the
-vertical axes. The local-reference power ratio survival and level-spectrogram figures include a
-second panel without DTV 30. The 10 s local plots include a 10 s tick, and the
-mask colorbar is discrete at `M = 0` and `M = 1`. These are reporting choices;
-the NPZ products remain the numerical record.
+vertical axes. The survival and level-spectrogram figures of the
+local-reference power ratio have a second panel without DTV 30. The 10 s local
+plots have a 10 s tick, and the mask colorbar is discrete at `M = 0` and
+`M = 1`. These are reporting choices, and the NPZ products remain the
+numerical record.

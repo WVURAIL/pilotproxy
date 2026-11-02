@@ -1,12 +1,11 @@
 """CA against OS at a fixed ideal false-alarm rate on the synthetic bench.
 
-This is part 4 of the cfar-choice-2026-09-29 study.
-
 The ideal statistic of each fine bin is T = (X / 4096) / (Y / 8192), with X ~ noncentral chi2(4096, lambda),
 Y ~ chi2(8192), and independent bins. This is the ideal F(4096, 8192) law of ch05 for the bulk. For D, the
 independence is the same assumption the fine-score plates make. The noncentrality is lambda = 4096 (s g_f + c_f),
-where s is the pilot SNR (the pilot power over the noise power of one bin, so E[T] = 1 + s at the pilot's bin), g_f
-is the pilot's response at padded bin f, and c_f is the SNR of a contaminating bulk bin. X is drawn exactly as
+where s is the pilot SNR (the pilot power over the noise power of one bin, so E[T] = (1 + s) * 8192/8190 at the
+pilot bin without contamination), g_f is the pilot's response at padded bin f, and c_f is the SNR of a
+contaminating bulk bin. X is drawn exactly as
 (N + sqrt(lambda))^2 + chi2(4095), so every case shares one noise draw (common random numbers).
 
 The geometry has 256 padded bins with a pad factor of 2 (128 natural bins). D is the anchor +/- 2. The bulk is every
@@ -31,9 +30,12 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from numbers import Integral
 from pathlib import Path
 
 import numpy as np
+
+from pilot_proxy.json_utils import json_safe
 
 L, NB, HW = 128, 256, 2
 PFA = 1e-3
@@ -42,6 +44,9 @@ DETS = ("CA",) + tuple(f"OS{r}" for r in RANKS)
 SNR_DB = np.arange(-20.0, 30.01, 0.5)
 LEVELS_DB = (10.0, 20.0, 30.0)
 CONTAM_OFFSETS = {"even": (40, -60, 86), "odd": (41, -61, 87)}    # padded-bin offsets of the contaminated bulk bins
+THRESHOLD_FRAMES, THRESHOLD_CHUNK = 4_000_000, 200_000
+FRAMES_PER_POINT, CLEAN_BATCHES = 40_000, 10
+CLEAN_SNR_DB = np.arange(-14.0, -4.99, 0.05)
 
 
 def geometry(parity: str):
@@ -63,6 +68,8 @@ def geometry(parity: str):
 
 def scores(T, nD, nB):
     """Z for every detector, T of shape (frames, nD + nB)."""
+    if T.ndim != 2 or T.shape[1] != nD + nB:
+        raise ValueError(f"T must have shape (frames, {nD + nB}) for the declared geometry")
     dmax = T[:, :nD].max(axis=1)
     bulk = T[:, nD:]
     out = {"CA": dmax / bulk.mean(axis=1)}
@@ -83,11 +90,16 @@ class Noise:
 
 
 def thresholds(geo, frames=4_000_000, chunk=200_000, seed=1):
+    for name, value in (("frames", frames), ("chunk", chunk)):
+        if isinstance(value, bool) or not isinstance(value, Integral) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    frames, chunk = int(frames), int(chunk)
     rng = np.random.default_rng(seed)
     nbins = geo["nD"] + geo["nB"]
     z = {k: [] for k in DETS}
-    for _ in range(frames // chunk):
-        T = (rng.chisquare(4096, (chunk, nbins)) / 4096.0) / (rng.chisquare(8192, (chunk, nbins)) / 8192.0)
+    for start in range(0, frames, chunk):
+        count = min(chunk, frames - start)
+        T = (rng.chisquare(4096, (count, nbins)) / 4096.0) / (rng.chisquare(8192, (count, nbins)) / 8192.0)
         for k, v in scores(T, geo["nD"], geo["nB"]).items():
             z[k].append(v)
     out = {}
@@ -121,13 +133,17 @@ def run(output_dir):
     OUT.mkdir(parents=True, exist_ok=False)
     (OUT / "REFERENCE.md").write_text('Ideal independent-bin reference only. The simulated or quadrature threshold is not an operational eta_Pfa calibration.\n', encoding="utf-8")
     t0 = time.time()
-    result = {"pfa": PFA, "ranks": RANKS, "snr_db": SNR_DB.tolist(), "levels_db": LEVELS_DB, "parities": {}}
+    result = {"pfa": PFA, "ranks": RANKS, "snr_db": SNR_DB.tolist(), "levels_db": LEVELS_DB,
+              "sampling": {"threshold_frames": THRESHOLD_FRAMES, "threshold_chunk": THRESHOLD_CHUNK,
+                           "threshold_seeds": {"even": 11, "odd": 12},
+                           "curve_seeds": {"even": 111, "odd": 112}, "clean_loss_seed": 99},
+              "parities": {}}
     for parity, seed in (("even", 11), ("odd", 12)):
         geo = geometry(parity)
-        thr = thresholds(geo, seed=seed)
+        thr = thresholds(geo, frames=THRESHOLD_FRAMES, chunk=THRESHOLD_CHUNK, seed=seed)
         eta = {k: thr[k]["eta"] for k in DETS}
         rng = np.random.default_rng(seed + 100)
-        n = 40_000
+        n = FRAMES_PER_POINT
         noise = Noise(n, geo["nD"] + geo["nB"], rng)
         cases = [(0, 0.0)] + [(k, lv) for lv in LEVELS_DB for k in (1, 2, 3)]
         pr = {"anchor": geo["anchor"], "bulk_size": geo["nB"], "thresholds": thr,
@@ -153,11 +169,11 @@ def run(output_dir):
     # clean-noise loss at |B| = 125, fine grid and more frames, common random numbers, 10 batches for its error
     geo = geometry("even")
     eta = {k: result["parities"]["even"]["thresholds"][k]["eta"] for k in DETS}
-    fine = np.arange(-14.0, -4.99, 0.05)
+    fine = CLEAN_SNR_DB
     batches = []
     rng = np.random.default_rng(99)
-    for b in range(10):
-        noise = Noise(40_000, geo["nD"] + geo["nB"], rng)
+    for b in range(CLEAN_BATCHES):
+        noise = Noise(FRAMES_PER_POINT, geo["nD"] + geo["nB"], rng)
         pd = {d: [] for d in DETS}
         for sdb in fine:
             z = scores(noise.T(lam_vector(geo, 10 ** (sdb / 10.0), 0, 0.0)), geo["nD"], geo["nB"])
@@ -172,10 +188,15 @@ def run(output_dir):
     for q in ("pd50", "pd90"):
         v = np.array([bt["CA"][q] for bt in batches])
         loss[f"CA_{q}_snr_db"] = dict(mean=float(v.mean()), se=float(v.std(ddof=1) / np.sqrt(v.size)))
-    result["clean_loss_125"] = dict(frames=400_000, grid_db=[float(fine[0]), float(fine[-1]), 0.05], **loss)
+    result["clean_loss_125"] = dict(frames=CLEAN_BATCHES * FRAMES_PER_POINT,
+                                   batches=CLEAN_BATCHES, frames_per_batch=FRAMES_PER_POINT,
+                                   grid_db=[float(fine[0]), float(fine[-1]), float(fine[1] - fine[0])], **loss)
     result["seconds"] = round(time.time() - t0, 1)
-    (OUT / "bench.json").write_text(json.dumps(result, indent=1) + "\n")
-    print(json.dumps(result["clean_loss_125"], indent=1))
+    # A grid that never reaches the target has no SNR estimate. Publish null
+    # for that missing result rather than a nonstandard JSON NaN token.
+    result = json_safe(result)
+    (OUT / "bench.json").write_text(json.dumps(result, indent=1, allow_nan=False) + "\n")
+    print(json.dumps(result["clean_loss_125"], indent=1, allow_nan=False))
 
     return result
 

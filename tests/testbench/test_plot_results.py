@@ -22,8 +22,7 @@ from pilot_proxy.testbench.plot_results import (
     _conditioning_record,
     _control_expected_points,
     _excess_to_shelf_db,
-    _normalized_coarse_power_ratio_db_to_estimated_data_shelf_snr_db,
-    _estimated_data_shelf_snr_db_to_normalized_coarse_power_ratio_db,
+    _pilot_to_shelf,
     _reference_transfer_db,
     _plot_calibrations,
     _plot_control_expected,
@@ -99,13 +98,24 @@ def test_y_axis_upper_keeps_saturation_visible(
     assert _y_axis_upper(x_max, plotted_y) == expected
 
 
-def test_snr_shelf_power_ratio_axis_transform_round_trips() -> None:
-    snr_values = [-60.0, -42.0, -26.0, 0.0]
-
-    power_ratio_values = _estimated_data_shelf_snr_db_to_normalized_coarse_power_ratio_db(snr_values)
-    recovered = _normalized_coarse_power_ratio_db_to_estimated_data_shelf_snr_db(power_ratio_values)
-
-    assert list(recovered) == pytest.approx(snr_values)
+@pytest.mark.parametrize(
+    ("capture_efficiency", "pilot_values"),
+    [(1.0, [-60.0, -42.0, 0.0]), (0.1, [-70.0, -52.0, -10.0])],
+)
+def test_shelf_and_pilot_coordinates_use_explicit_calibration(
+    capture_efficiency: float, pilot_values: list[float]
+) -> None:
+    calibration = _Calibration(
+        pilot_below_data_db=10.0,
+        bin_enbw_hz=1_000.0,
+        dtv_bandwidth_hz=10_000.0,
+        pilot_capture_efficiency=capture_efficiency,
+    )
+    # The bandwidth ratio adds 10 dB, the pilot fraction removes 10 dB,
+    # and retaining one tenth of the pilot removes another 10 dB.
+    shelf_values = [-60.0, -42.0, 0.0]
+    np.testing.assert_allclose(_shelf_to_pilot(shelf_values, calibration), pilot_values)
+    np.testing.assert_allclose(_pilot_to_shelf(pilot_values, calibration), shelf_values)
 
 
 def test_reference_transfer_includes_reference_contamination() -> None:

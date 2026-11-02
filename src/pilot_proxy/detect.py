@@ -252,13 +252,13 @@ def detect_packed_detector_input(
         handle = kernel.create_raw(rows, d_in.data.ptr)
     else:
         handle = kernel.create_raw_batch(rows, batch, d_in.data.ptr)
-    d_matched_filter_row_projections = cp.zeros(
-        batch * REFERENCE_WEIGHT_TERMS * rows * 2, dtype=cp.int32
-    )
-    d_fine_powers_u64 = cp.zeros(
-        batch * REFERENCE_WEIGHT_TERMS * FINE_BINS, dtype=cp.uint64
-    )
     try:
+        d_matched_filter_row_projections = cp.zeros(
+            batch * REFERENCE_WEIGHT_TERMS * rows * 2, dtype=cp.int32
+        )
+        d_fine_powers_u64 = cp.zeros(
+            batch * REFERENCE_WEIGHT_TERMS * FINE_BINS, dtype=cp.uint64
+        )
         kernel.compute_row_projections_i32(
             handle, weights.ctypes.data, d_matched_filter_row_projections.data.ptr
         )
@@ -399,8 +399,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help=(
-            "Frame size per input stream for result metadata. If omitted, "
-            "detect assumes one input stream and derives frame size from rows."
+            "Frame size per input stream; must equal 128 times kernel K for "
+            "the frozen fine transform. If omitted, derive it from rows and "
+            "--num-input-streams."
         ),
     )
     parser.add_argument(
@@ -538,6 +539,17 @@ def _resolve_layout_metadata(
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    for name in (
+        "pilot_below_data_db",
+        "bin_enbw_hz",
+        "dtv_bandwidth_hz",
+        "pilot_capture_efficiency",
+    ):
+        value = getattr(args, name)
+        positive_required = name != "pilot_below_data_db"
+        if not math.isfinite(value) or (positive_required and value <= 0.0):
+            requirement = "positive and finite" if positive_required else "finite"
+            raise SystemExit(f"--{name.replace('_', '-')} must be {requirement}.")
     resolved_input_path = _resolve_detector_input_path(args.input_detector_matrix)
     if resolved_input_path != args.input_detector_matrix:
         print(f"Using detector input {resolved_input_path}")
@@ -547,7 +559,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(resolved_input_path),
         float(args.pilot_frequency_tolerance_hz),
     )
-    packed, batch, rows = _load_detector_input(resolved_input_path)
+    packed, _, rows = _load_detector_input(resolved_input_path)
     kernel = PilotProxyKernel(args.lib_path)
     weights_bank = DetectorWeightBank(
         explicit_path=args.weights_path,
@@ -584,6 +596,12 @@ def main(argv: list[str] | None = None) -> int:
         frame_size_samples=args.frame_size_samples,
         num_input_streams=int(args.num_input_streams),
     )
+    if layout["windows_per_stream"] != FINE_WINDOWS_PER_STREAM:
+        raise SystemExit(
+            f"detect requires {FINE_WINDOWS_PER_STREAM} windows per input stream "
+            "for the frozen fine transform. Set --num-input-streams and "
+            "--frame-size-samples to match the packed input."
+        )
     detection = detect_packed_detector_input(
         packed=packed,
         weights=weights,

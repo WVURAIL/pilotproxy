@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -864,15 +865,13 @@ def _fine_calibration_mask_words(
     if any(not isinstance(word, str) for word in value):
         _add_error(errors, field, "every mask word must be a hex string")
         return None
-    try:
-        words = [int(word, 16) for word in value]
-    except ValueError as exc:
-        _add_error(errors, field, f"bad hex: {exc}")
+    if any(re.fullmatch(r"0[xX][0-9a-fA-F]{1,16}", word) is None for word in value):
+        _add_error(
+            errors, field,
+            "words must be uint64 hex strings with a 0x/0X prefix and 1 to 16 hex digits",
+        )
         return None
-    if any(not 0 <= word < (1 << 64) for word in words):
-        _add_error(errors, field, "words must fit in uint64")
-        return None
-    return words
+    return [int(word, 16) for word in value]
 
 
 def _validate_fine_calibration(
@@ -1356,9 +1355,15 @@ def _validate_bundle_coordinate_systems(
                 "missing time_reverse_detector_windows_before_kernel",
             )
             continue
-        time_reverse_values[label] = bool(
-            preprocessing["time_reverse_detector_windows_before_kernel"]
-        )
+        time_reverse = preprocessing["time_reverse_detector_windows_before_kernel"]
+        if not isinstance(time_reverse, bool):
+            _add_error(
+                errors,
+                f"{label}.input_preprocessing.time_reverse",
+                "time_reverse_detector_windows_before_kernel must be boolean",
+            )
+            continue
+        time_reverse_values[label] = time_reverse
     if len(set(time_reverse_values.values())) > 1:
         _add_error(
             errors,

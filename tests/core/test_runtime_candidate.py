@@ -82,22 +82,7 @@ def case(tmp_path):
     return case
 
 
-def test_candidate_is_exactly_bound_but_not_a_deployment_configuration(case):
-    report = build_archive_candidate(case["plan_path"], case["output"])
-    assert report["candidate_configuration_complete"]
-    assert not report["deployment_configuration_complete"]
-    assert not report["activation_authorized"] and not report["science_certification"]
-    assert report["kotekan_parameters"] is None
-    assert report["selection_granularity"] == "detector_frame"
-    assert report["permanent_mask_channels"] == [14]
-    assert not report["control_channel_37_bound"]
-    bundle = case["output"] / "bundle"
-    assert validate_runtime_weight_bundle(bundle_dir=bundle)["valid"]
-    p = json.loads((bundle / "pilot_profiles.json").read_text())
-    fine = p["profiles"][1]["fine_calibration"]
-    assert fine["cfar_multiplier_q16"] == 65536
-    assert fine["provenance"]["null_quantile"] is None
-    assert fine["provenance"]["threshold_selection"]["qualification"] == "archive_review_only"
+def policy_plan(case, bundle):
     evidence = case["plan"]["decisions"]
     plan = {"schema_version": op.PLAN_SCHEMA, "receiver_profile": ref(case["receiver"]),
             "receiver_channel_id_namespace": "chime_freq_id", "decisions": evidence,
@@ -107,6 +92,27 @@ def test_candidate_is_exactly_bound_but_not_a_deployment_configuration(case):
                          "capabilities": sorted(op.REQUIRED_CAPABILITIES), "evidence": [evidence]}}
     policy_path = case["output"] / "policy_plan.json"
     write(policy_path, plan)
+    return policy_path
+
+
+def test_candidate_is_exactly_bound_but_not_a_deployment_configuration(case):
+    report = build_archive_candidate(case["plan_path"], case["output"])
+    assert report["candidate_configuration_complete"]
+    assert not report["deployment_configuration_complete"]
+    assert not report["activation_authorized"] and not report["science_certification"]
+    assert report["kotekan_parameters"] is None
+    assert report["selection_granularity"] == "detector_frame"
+    assert report["permanent_mask_channels"] == [14]
+    assert report["unmasked_channels"] == []
+    assert not report["control_channel_37_bound"]
+    bundle = case["output"] / "bundle"
+    assert validate_runtime_weight_bundle(bundle_dir=bundle)["valid"]
+    p = json.loads((bundle / "pilot_profiles.json").read_text())
+    fine = p["profiles"][1]["fine_calibration"]
+    assert fine["cfar_multiplier_q16"] == 65536
+    assert fine["provenance"]["null_quantile"] is None
+    assert fine["provenance"]["threshold_selection"]["qualification"] == "archive_review_only"
+    policy_path = policy_plan(case, bundle)
     policy = op.analyze_policy(policy_path)
     assert policy["candidate_configuration_complete"] and policy["pending_freq_ids"] == []
     assert policy["review_only_candidate_freq_ids"] == [614]
@@ -114,6 +120,32 @@ def test_candidate_is_exactly_bound_but_not_a_deployment_configuration(case):
     assert not policy["deployment_configuration_complete"] and policy["kotekan_parameters"] is None
     with pytest.raises(ValueError, match="archive review candidate"):
         op.write_policy(policy_path, case["output"] / "policy", require_complete=True)
+
+
+@pytest.mark.parametrize("reason,kind,permanent,unmasked", [
+    ("synthetic permanent-mask example", "reject_all", [14], []),
+    ("DTV without a matching pilot", "pass_all", [], [14]),
+    ("pilot not seen", "pass_all", [], [14]),
+])
+def test_candidate_mask_report_matches_compiled_policy(case, reason, kind, permanent, unmasked):
+    path = Path(case["plan"]["decisions"]["path"])
+    decisions = json.loads(path.read_text())
+    decisions["channels"][0]["reason"] = reason
+    case["plan"]["decisions"] = write(path, decisions)
+    write(case["plan_path"], case["plan"])
+    report = build_archive_candidate(case["plan_path"], case["output"])
+    policy = op.analyze_policy(policy_plan(case, case["output"] / "bundle"))
+    channels = {row["physical_channel"]: row for row in policy["channels"]}
+    assert channels[14]["threshold"] == {"kind": kind}
+    assert report["permanent_mask_channels"] == permanent
+    assert report["unmasked_channels"] == unmasked
+    for report_field, policy_field in (("permanent_mask_channels", "permanent_mask_freq_ids"),
+                                       ("unmasked_channels", "unmasked_freq_ids")):
+        frequencies = sorted(channels[ch]["frequency_ids"][0] for ch in report[report_field])
+        assert frequencies == policy[policy_field]
+    assert channels[29]["threshold"] == {"kind": "finite", "eta_q16": "65536"}
+    assert report["profiles"][0]["word_q16"] == 65536
+    assert policy["required_threshold_bindings"][0]["eta_q16"] == "65536"
 
 
 @pytest.mark.parametrize("field,value,match", [

@@ -327,6 +327,59 @@ def _calibrated_fine_block(anchor: int = 62) -> tuple[dict, object]:
     )
 
 
+@pytest.mark.parametrize("document", ["pilot_profiles", "weights_manifest"])
+@pytest.mark.parametrize("value", [0, 0.0, "", [], None])
+def test_bundle_requires_boolean_preprocessing_metadata(tmp_path, document, value):
+    output_dir, outputs = _export_reference_bundle(tmp_path)
+    payload = json.loads(outputs[document].read_text("utf-8"))
+    payload["input_preprocessing"]["time_reverse_detector_windows_before_kernel"] = value
+    outputs[document].write_text(json.dumps(payload), encoding="utf-8")
+    _refresh_sha256sum(outputs, document)
+
+    report = validate_runtime_weight_bundle(bundle_dir=output_dir)
+
+    assert not report["valid"]
+    assert any(error["check"] == f"{document}.input_preprocessing.time_reverse"
+               and "boolean" in error["message"] for error in report["errors"])
+
+
+@pytest.mark.parametrize("encoding", ["bare", "leading_space", "trailing_space", "plus", "underscore", "wide"])
+def test_bundle_rejects_mask_word_encodings_the_runtime_cannot_read(tmp_path, encoding):
+    output_dir, outputs = _export_reference_bundle(tmp_path)
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    block, _bulk = _calibrated_fine_block()
+    word = block["bulk_mask_words_hex"][0]
+    block["bulk_mask_words_hex"][0] = {
+        "bare": word[2:], "leading_space": " " + word, "trailing_space": word + " ",
+        "plus": "+" + word, "underscore": "0x_" + word[2:], "wide": "0x0" + word[2:],
+    }[encoding]
+    profiles["profiles"][0]["fine_calibration"] = block
+    _rewrite_profiles(outputs, profiles)
+    _refresh_sha256sum(outputs, "pilot_profiles")
+
+    report = validate_runtime_weight_bundle(bundle_dir=output_dir)
+
+    assert not report["valid"]
+    assert any(error["check"] == "pilot_profiles.fine_calibration[0].bulk_mask_words_hex"
+               for error in report["errors"])
+
+
+@pytest.mark.parametrize("uppercase", [False, True])
+def test_bundle_accepts_runtime_hex_case_and_short_words(tmp_path, uppercase):
+    output_dir, outputs = _export_reference_bundle(tmp_path)
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    block, _bulk = _calibrated_fine_block()
+    block["bulk_mask_words_hex"][3] = "0x1"
+    block["bulk_mask_words_hex"] = [hex(int(word, 16)) for word in block["bulk_mask_words_hex"]]
+    if uppercase:
+        block["bulk_mask_words_hex"] = [word.upper() for word in block["bulk_mask_words_hex"]]
+    profiles["profiles"][0]["fine_calibration"] = block
+    _rewrite_profiles(outputs, profiles)
+    _refresh_sha256sum(outputs, "pilot_profiles")
+
+    assert validate_runtime_weight_bundle(bundle_dir=output_dir)["valid"]
+
+
 def test_exported_bundle_carries_pending_fine_calibration(tmp_path) -> None:
     output_dir, outputs = _export_reference_bundle(tmp_path)
     profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))

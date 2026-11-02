@@ -44,21 +44,6 @@ def _encode_offset_binary(real: np.ndarray, imag: np.ndarray | int = 0) -> np.nd
     return packed.astype(np.uint8, copy=False)
 
 
-def _tone_streams(
-    *,
-    frequency_hz: float,
-    sample_rate_hz: float,
-    num_samples: int,
-    phases: np.ndarray,
-) -> np.ndarray:
-    n = np.arange(int(num_samples), dtype=np.float64)
-    tone = np.exp(2j * np.pi * float(frequency_hz) * n / float(sample_rate_hz))
-    return np.asarray(
-        [np.exp(1j * phase) * tone for phase in phases],
-        dtype=np.complex64,
-    )
-
-
 def test_chime_runner_parser_does_not_expose_detector_window_samples() -> None:
     parser = build_parser()
 

@@ -300,8 +300,8 @@ def _write_histogram_summary(
         writer.writeheader()
         for index, channel in enumerate(physical_channel):
             values = np.asarray(estimated_data_shelf_snr_db[:, index], dtype=np.float64)
-            finite = values[np.isfinite(values)]
             detector_valid = np.asarray(valid[:, index]) != 0
+            finite = _finite_values(values, detector_valid)
             detector_valid_count = int(np.sum(detector_valid))
             positive_count = int(finite.size)
             writer.writerow(

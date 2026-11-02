@@ -5,16 +5,15 @@ threshold rule (`tools/threshold_rule.py`, `decisions.json`) into the channel
 operating policy that kotekan reads. Each ATSC channel from 14 to 36 receives
 one assignment at its receiver frequency ID:
 
-- deployed (outcome `useful`): a finite threshold at the decided Q16 word
-  (`deployed_word`, which is the knee or the loosest word below it that meets
-  the tolerance).
-- not deployed (outcome `not useful`): the reject-all limit of the same
-  threshold family, which permanently masks that frequency. It is encoded as
-  `threshold.kind: reject_all`. The word `eta_q16: 0` cannot encode it,
-  because the frozen detector uses a strict comparison, zero scores would not
-  fire at zero, and zero is not a legal runtime multiplier. The row keeps the
-  reason given by the rule.
-- not deployed and not masked: a not-useful decision whose reason is
+- **deployed** (outcome `useful`): a finite threshold at the decided Q16 word
+  (`deployed_word`: the supported word with the greatest retained fraction
+  among those meeting the bias tolerance);
+- **not deployed** (outcome `not useful`): the **reject-all limit of the same
+  threshold family**, which permanently masks that frequency. It is encoded as
+  `threshold.kind: reject_all`, never as `eta_q16: 0`: the frozen detector
+  uses a strict comparison, zero scores would not fire at zero, and zero is
+  not a legal runtime multiplier. The row keeps the rule's reason.
+- **not deployed and not masked**: a not-useful decision whose reason is
   `DTV without a matching pilot` (channel 19). The detector has no pilot to act
   on there and would never fire, so the channel is `threshold.kind: pass_all`,
   listed under `unmasked_freq_ids`, and absent from both consumer lists. Its

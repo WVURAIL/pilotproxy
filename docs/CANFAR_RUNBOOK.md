@@ -1,13 +1,15 @@
 # CANFAR bounded-run guide
 
-This guide gives the remote CANFAR GPU-session workflow for CHIME DTV pilot
-runs, the alternative to the local workstation path in
-[`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md). The parameter register, gates,
-and run record are in
-[`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md),
-[`VALIDATION_GATES.md`](VALIDATION_GATES.md), and the run ledger, and this
-guide changes none of them. The schema v5 archive products of record were made
-with detector core 2.3.0. A build of the current sources is core 4 and writes
+This is the remote CANFAR GPU-session workflow for CHIME DTV pilot runs, the
+alternative to the local workstation path in
+[`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md). The checked-in
+[receiver profile](../configs/receiver_profiles/chime_dtv_fengine.json),
+[detector core profile](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json),
+[weight manifest](../weights/chime_dtv_weights_k128.bin.manifest.json),
+[product schema](PRODUCT_SCHEMA.md), [validation gates](VALIDATION_GATES.md),
+and run ledger define the run contract; this guide changes none of them.
+The schema-v5 archive products of record were made with
+detector core 2.3.0. A build of the current sources is core 4 and writes
 schema v6 (see [`PRODUCT_SCHEMA.md`](PRODUCT_SCHEMA.md)), so a run made with it
 is a new cohort (checklist item 7).
 

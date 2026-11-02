@@ -61,104 +61,15 @@ in unwrapped bins about the nominal bin. A month with fewer than
 ``min_peak_cohort`` detected frames uses all its frames instead and is flagged
 (``peak_cohort = 'all_selected'``).
 
-Inheritance and persistence are iterated to a fixed point. An ambiguous month
-takes the state of the nearest definite months on each side when those agree.
-Between disagreeing states, the ambiguous months form a *transition zone*. A
-run of equal definite state over consecutive populated months that is shorter
-than ``persistence_months`` is an excursion, and its months are flagged,
-relabeled ambiguous, and resolved again. The two passes are repeated until
-nothing changes. Each pass only removes definite labels, so the loop
-terminates. A leading or trailing ambiguous run has one populated neighbor and
-inherits its state (``one_sided_ambiguous = 'inherit'``, the vacuous-agreement
-reading). With ``'separate'``, such a run becomes its own ``ambiguous-only``
-era when it is long enough to persist.
-
-Transition-zone months belong to no era and lie in the boundary interval. The
-boundary uncertainty is the number of calendar months strictly between the
-last month of the old state and the first month of the new state. It is
-reported with its unpopulated (gap) and populated-ambiguous parts.
-
-Station changes are tested only on definite proxy-high months
-(``station_check_states``), since a proxy-low month has no pilot and its peak
-location is noise. The running era location is the median of the accepted
-months' locations. A month shifted by at least ``station_shift_bins`` opens a
-station change only when the next tested month is also shifted from the same
-running location and lies less than ``station_shift_bins`` from the new
-location. Otherwise, the month is a station excursion. The zone of a station
-change is the untested populated months between the last tested month of the
-old location and the first of the new.
-
-An instrument change is a change of ``unit_input_map_sha256`` (design section
-6). A month's instrument state is the set of map values its acquisitions
-carry. A map *enters* when it is present in a month and absent from the
-previous populated month. A map that enters and stays present for
-``persistence_months`` consecutive populated months opens an instrument change
-at the month it enters. A map that enters and does not stay that long is an
-instrument excursion, and a map that only leaves is not a change. The software
-tag is recorded as a count only (``software_tags``, ``software_tag_changes``).
-
-Eras are the maximal runs of populated months that lie in no zone, cut at
-every boundary. An era's evidence is the kinds of boundary that opened it,
-joined with ``'+'`` when kinds coincide, and ``'archive start'`` for the first
-era. An era's frames are every masked frame whose UTC month lies in
-``[first_month, last_month]``. A frame without a recorded sample interval (NaN
-time) follows the ``unit_time`` month of its acquisition.
-
-For the stale-latest test, the current era's last populated month is compared
-with ``campaign_last_month``, the last populated month over the whole campaign
-(:func:`campaign_last_populated_month`). The era is stale when it ends more
-than ``stale_grace_months`` months before that month, and the lag is reported
-as ``stale_lag_months``. The policy value is 1 because the snapshot month is
-partial. When the caller cannot supply the campaign month, the channel's own
-last month is used and ``stale_reference`` records this.
-
-A channel is indeterminate when the ambiguous months are a majority of the
-populated months (``indeterminate_fraction``), when no definite state
-persists, or when the current era is ambiguous-only. This status is reported
-and never resolved by hand.
-
-For sensitivity, the same segmentation is repeated under each
-``units_sensitivity`` gate and each ``threshold_sensitivity_db`` pair, with no
-PELT change-point search, and any move of the current era's first or last
-month is recorded.
-
-The era table, ``tables/eras.csv``, has one row per era with the columns of
-``ERA_COLUMNS`` in order: ``channel, freq_id, era, n_eras, first_month,
-last_month, state, evidence, record_agreement, boundary_uncertainty_months,
-boundary_gap_months, boundary_ambiguous_months, units, frames,
-frames_without_time, populated_months, months_spanned, coverage,
-level_median_db, peak_offset_bins, peak_drift_bins_per_month, peak_range_bins,
-peak_months, is_current, stale_latest, fallback, boundary_source,
-config_version, config_digest``. ``state`` is ``proxy-high``, ``proxy-low``, or
-``ambiguous-only``, and ``coverage = populated_months / months_spanned``.
-``peak_offset_bins`` is the median monthly location of the era's definite
-proxy-high months, in fine bins from the nominal bin and in fine-array
-direction. This location is a feature of the record and is not used as the
-anchor, which is defined in the following section of chapter 8. Months are
-written ``YYYY-MM``.
-
-The channel table, ``tables/eras_channels.csv``, has one row per channel with
-the columns of ``CHANNEL_COLUMNS`` in order: ``channel, freq_id, n_eras,
-current_era, current_first_month, current_last_month, current_state,
-current_evidence, current_boundary_uncertainty_months, current_units,
-current_frames, stale_latest, stale_lag_months, stale_reference,
-campaign_last_month, fallback, indeterminate, populated_months,
-ambiguous_months, ambiguous_fraction, transition_zone_months,
-state_excursions, station_excursions, unmatched_station_records,
-instrument_change_months, instrument_excursions,
-unconfirmed_instrument_change_last_month, current_peak_drift_bins_per_month,
-current_peak_range_bins, software_tags, software_tag_changes, frames_selected,
-frames_without_time, peak_cohort_fallback_months, sensitivity_units,
-sensitivity_units_moves, sensitivity_thresholds, sensitivity_thresholds_moves,
-boundary_source, rule_current_era, config_version, config_digest``. List
-columns are joined with ``;``. The sensitivity columns give
-``value:first..last`` for each setting and the settings that move the
-current era. The per-channel JSON holds the same fields and the record
-of every month.
+``write_era_json`` writes each channel's eras, monthly records, sensitivity
+results, and configuration digest. ``channel_row`` supplies the era summary
+in the characterization ledger. Months are ``YYYY-MM``. Era coverage is
+``populated_months / months_spanned``; ``peak_offset_bins`` is the median
+monthly location of the era's definite proxy-high months, measured from the
+nominal bin in fine-array direction. It describes the recorded peak location.
 """
 from __future__ import annotations
 
-import csv
 import dataclasses
 import hashlib
 import json
@@ -189,29 +100,6 @@ EVIDENCE_POWER = "power transition"
 
 PREDECLARED_RULE = "section 8.1 rule"
 SOURCE_AUTHOR = "author-dated"
-
-ERA_COLUMNS = (
-    "channel", "freq_id", "era", "n_eras", "first_month", "last_month", "state", "evidence",
-    "record_agreement", "boundary_uncertainty_months", "boundary_gap_months", "boundary_ambiguous_months",
-    "units", "frames", "frames_without_time", "populated_months", "months_spanned", "coverage",
-    "level_median_db", "peak_offset_bins", "peak_drift_bins_per_month", "peak_range_bins", "peak_months",
-    "is_current", "stale_latest", "fallback", "boundary_source",
-    "config_version", "config_digest",
-)
-CHANNEL_COLUMNS = (
-    "channel", "freq_id", "n_eras", "current_era", "current_first_month", "current_last_month",
-    "current_state", "current_evidence", "current_boundary_uncertainty_months", "current_units",
-    "current_frames", "stale_latest", "stale_lag_months", "stale_reference", "campaign_last_month", "fallback",
-    "indeterminate",
-    "populated_months", "ambiguous_months", "ambiguous_fraction", "transition_zone_months",
-    "state_excursions", "station_excursions", "unmatched_station_records", "instrument_change_months",
-    "instrument_excursions", "unconfirmed_instrument_change_last_month",
-    "current_peak_drift_bins_per_month", "current_peak_range_bins", "software_tags", "software_tag_changes", "frames_selected", "frames_without_time",
-    "peak_cohort_fallback_months", "sensitivity_units", "sensitivity_units_moves",
-    "sensitivity_thresholds", "sensitivity_thresholds_moves", "boundary_source", "rule_current_era",
-    "config_version", "config_digest",
-)
-
 
 # configuration
 @dataclass(frozen=True)
@@ -969,27 +857,6 @@ def _labels(months) -> str:
     return ";".join(blocks.month_label(m) for m in months)
 
 
-def era_rows(table: EraTable) -> list[dict]:
-    rows = []
-    for era in table.eras:
-        rows.append({
-            "channel": table.channel, "freq_id": table.freq_id, "era": era.index + 1, "n_eras": len(table.eras),
-            "first_month": era.first_label, "last_month": era.last_label, "state": era.state,
-            "evidence": era.evidence, "record_agreement": era.record_agreement,
-            "boundary_uncertainty_months": era.boundary_uncertainty_months,
-            "boundary_gap_months": era.boundary_gap_months, "boundary_ambiguous_months": era.boundary_ambiguous_months,
-            "units": era.units, "frames": era.frames, "frames_without_time": era.frames_without_time,
-            "populated_months": era.populated_months, "months_spanned": era.months_spanned,
-            "coverage": float(era.coverage), "level_median_db": float(era.level_median_db),
-            "peak_offset_bins": float(era.peak_offset_bins), "peak_drift_bins_per_month": float(era.peak_drift_bins_per_month),
-            "peak_range_bins": float(era.peak_range_bins), "peak_months": era.peak_months,
-            "is_current": era.index == table.current_index,
-            "stale_latest": table.stale_latest, "fallback": table.fallback, "boundary_source": table.boundary_source,
-            "config_version": table.config.version, "config_digest": table.config.digest,
-        })
-    return rows
-
-
 def channel_row(table: EraTable) -> dict:
     current = table.current_era
     by_parameter = {}
@@ -1031,24 +898,6 @@ def channel_row(table: EraTable) -> dict:
         "boundary_source": table.boundary_source, "rule_current_era": table.rule_current_era or _span_label(current),
         "config_version": table.config.version, "config_digest": table.config.digest,
     }
-
-
-def _write_csv(rows: Sequence[dict], path: Path | str, columns: Sequence[str]) -> Path:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(columns), lineterminator="\n")
-        writer.writeheader()
-        for row in rows:
-            out = {}
-            for name in columns:
-                value = row.get(name, "")
-                if isinstance(value, float):
-                    out[name] = "" if not math.isfinite(value) else repr(value)
-                else:
-                    out[name] = value
-            writer.writerow(out)
-    return path
 
 
 def _finite_or_none(value: float):

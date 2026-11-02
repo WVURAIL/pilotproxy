@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+from numbers import Real
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 import zlib
@@ -25,10 +26,8 @@ from pilot_proxy.dtv_units import (
     PILOT_BELOW_DATA_DB,
     PILOT_CAPTURE_EFFICIENCY,
     UNIT_NORMALIZED_POWER_RATIO,
-    coarse_power_ratio_to_db,
     data_shelf_snr_db_to_pilot_excess_db,
     pilot_excess_db_to_data_shelf_snr_db,
-    pilot_excess_db_to_normalized_power_ratio_threshold,
 )
 from pilot_proxy.detector_contract import weight_term_norms_sq
 from pilot_proxy.detector_geometry import frequency_axis_nyquist_zone
@@ -267,6 +266,24 @@ def _metadata_calibrations(paths: Sequence[Path]) -> list[dict[str, float]]:
             }
         )
     return values
+
+
+def _fixed_point_backend_label(paths: Sequence[Path]) -> str:
+    documents = {
+        path.resolve().parent: metadata
+        for path, metadata in _metadata_documents(paths)
+    }
+    backends = {
+        documents.get(path.resolve().parent, {}).get("testbench", {}).get("detector_backend")
+        for path in paths
+    }
+    if backends == {"cuda"}:
+        return "GPU fixed-point"
+    if backends == {"cpu-reference"}:
+        return "CPU fixed-point"
+    if backends == {"cuda", "cpu-reference"}:
+        return "CPU/GPU fixed-point"
+    return "Fixed-point (backend unspecified)"
 
 
 def _calibration_from_inputs(
@@ -700,6 +717,17 @@ def _clean_packed_terms(
     num_inputs = int(layout["num_input_streams"])
     bits = int(quantization["bits_per_component"])
     clip_sigma = float(quantization["clip_sigma"])
+    explicit_scale = None
+    if quantization.get("scale_policy") == "explicit":
+        explicit_scale = quantization.get("explicit_scale")
+        if (
+            isinstance(explicit_scale, bool)
+            or not isinstance(explicit_scale, Real)
+            or not math.isfinite(explicit_scale)
+            or explicit_scale <= 0
+        ):
+            raise ValueError("Recorded explicit quantization scale must be positive and finite.")
+        explicit_scale = float(explicit_scale)
     iq_sample_rate_hz = float(audit["sample_rate_hz"])
     required = _required_iq_samples(
         iq_sample_rate_hz=iq_sample_rate_hz,
@@ -748,7 +776,7 @@ def _clean_packed_terms(
     if bool(geometry.get("reference_archive_phase", False)):
         channel_streams = apply_reference_archive_phase_convention(channel_streams)
     feed_streams = np.repeat(channel_streams[np.newaxis, :, :], num_inputs, axis=0)
-    scale = estimate_complex_scale(
+    scale = explicit_scale if explicit_scale is not None else estimate_complex_scale(
         feed_streams,
         bits_per_component=bits,
         clip_sigma=clip_sigma,
@@ -885,25 +913,6 @@ def _conditioned_transfer_from_clean_terms(
         input_iq=clean.input_iq,
         weights_path=clean.weights_path,
     )
-
-
-def _estimated_data_shelf_snr_db_to_normalized_coarse_power_ratio_db(values) -> np.ndarray:
-    """Map shelf-SNR coordinates to normalized ratio coordinates."""
-    snr = np.asarray(values, dtype=np.float64)
-    pnr = data_shelf_snr_db_to_pilot_excess_db(snr)
-    raw = pilot_excess_db_to_normalized_power_ratio_threshold(pnr)
-    return np.asarray(coarse_power_ratio_to_db(raw), dtype=np.float64)
-
-
-def _normalized_coarse_power_ratio_db_to_estimated_data_shelf_snr_db(values) -> np.ndarray:
-    """Map normalized ratio coordinates back to shelf-SNR coordinates."""
-    level = np.asarray(values, dtype=np.float64)
-    raw = DB_LINEAR_BASE ** (level / DB_POWER_FACTOR)
-    excess = np.maximum(
-        raw - UNIT_NORMALIZED_POWER_RATIO, np.finfo(np.float64).tiny
-    )
-    pnr = DB_POWER_FACTOR * np.log10(excess)
-    return np.asarray(pilot_excess_db_to_data_shelf_snr_db(pnr), dtype=np.float64)
 
 
 def _shelf_to_pilot(values, calibration: _Calibration) -> np.ndarray:
@@ -1489,8 +1498,8 @@ def _parity_text(curves: dict[tuple[str, float], list[dict[str, float]]]) -> str
         return None
     maximum = max(differences)
     if maximum == 0.0:
-        return "Packed CPU and GPU agree exactly"
-    return rf"Packed CPU/GPU max $|\Delta Q|={maximum:.3g}$"
+        return "Packed CPU reference agrees exactly"
+    return rf"Packed CPU reference max $|\Delta Q|={maximum:.3g}$"
 
 
 def _y_axis_upper(x_max: float, plotted_y: Iterable[float]) -> float:
@@ -1546,6 +1555,7 @@ def plot_summary(
         )
 
     summary_paths = _as_paths(input_csv)
+    fixed_point_label = _fixed_point_backend_label(summary_paths)
     rows = _read_summary_rows(summary_paths)
     trial_paths = (
         _default_trial_paths(summary_paths)
@@ -1626,6 +1636,7 @@ def plot_summary(
     )
     for offset in _frequency_offsets(rows):
         for spec in CURVE_SPECS:
+            label = fixed_point_label if spec.prefix == "gpu" else spec.label
             points = _curve_points(
                 rows,
                 trial_rows,
@@ -1649,7 +1660,7 @@ def plot_summary(
                     marker=spec.marker,
                     markersize=MARKER_SIZE,
                     linewidth=RESULT_LINE_WIDTH,
-                    label=_curve_label(spec.label, offset, smooth_window),
+                    label=_curve_label(label, offset, smooth_window),
                 )[0]
                 if spec.prefix != "cpu_packed":
                     _plot_intervals(
@@ -1667,7 +1678,7 @@ def plot_summary(
                     [y_floor] * len(points),
                     marker="v",
                     facecolors="none",
-                    label=_curve_label(spec.label, offset, smooth_window),
+                    label=_curve_label(label, offset, smooth_window),
                 )
 
     if not curves:
@@ -1680,12 +1691,12 @@ def plot_summary(
     if parity:
         ax.text(
             0.98,
-            0.02,
+            0.98,
             parity,
             transform=ax.transAxes,
             fontsize="small",
             ha="right",
-            va="bottom",
+            va="top",
         )
     ax.set_title(title)
     if radio:

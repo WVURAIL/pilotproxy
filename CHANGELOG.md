@@ -3,6 +3,39 @@
 All notable changes to PilotProxy are recorded here. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+- **Breaking threshold-model change:** selection now maximizes retention under
+  both an upper first-order bias criterion and a checked finite-power limit.
+  It uses RFIsher schema-v3 tables and the declared model normalization
+  `a = power_scale*x**2` in mK^2. This replaces the knee, stack-amplitude ratio,
+  temporal-gain and recent-year selection rules. Observing-time cost is
+  `1 / kappa`; the earlier duty factor and 20-year cutoff are removed.
+- `tools/threshold_rule.py` requires `--power-limits`, a JSON mapping of channel
+  numbers to checked positive additive powers in mK^2. It removes
+  `--policy-budget`, `--finite-budget` and `--calendar-factor`, and writes
+  `pilotproxy-power-decisions-v3`. Update readers for the new fields; the old
+  knee, gain and recent-year diagnostics are absent. Channel 37 remains a
+  background control and is excluded from operating-word selection.
+- The Python threshold API requires `power_scale=` for `bias_over_sigma` and
+  `decide`, and `power_limit=` for `decide`. The old strength/gain helpers and
+  `decide_guarded` are removed. Score-cache construction now takes
+  `--metadata`, `--output` and optional `--current-word`, and writes
+  `pilotproxy-score-cache-v2`; it no longer derives a knee or accepts the
+  earlier working/export manifests. Use the recorded source revision when
+  reproducing the older model and its decisions.
+- Remove obsolete confidence-band, capture-transfer, mask-frontier,
+  transmitter-census and power-era study code. The commands
+  `analyze-transmitter-census`, `characterize power-eras` and
+  `characterize era-boundaries` are removed. Dated evidence and configured
+  receiver-state intervals remain available.
+- Fix numerical edge cases, input and schema validation, CLI failures,
+  report publication and retry behavior. Add regression coverage for archive,
+  receiver, runtime and statistical workflows. Inventory compatibility now
+  uses explicit legacy cases and the retained v5 inventory, removing the
+  obsolete July-inventory dependency. CUDA arithmetic and shipped weights
+  are unchanged.
+
 ## 1.1.0, October 24, 2026
 
 - Detector core 4.0.0 renames the native interface: the Python class to

@@ -28,9 +28,6 @@ READY = "ready"            # implemented and validated for production use
 EXPERIMENTAL = "experimental"  # works, but not yet trusted for science
 STUB = "stub"             # interface only, with TODOs, and raises if run
 
-_STATUS_ORDER = {READY: 0, EXPERIMENTAL: 1, STUB: 2}
-
-
 # Semantic types for the items that a Reader yields to an Analyzer. They
 # describe the in-memory stream at the boundary between reader and analyzer,
 # and are unrelated to file names and stored product schemas. A new kind must
@@ -81,11 +78,6 @@ class PluginInfo:
     # Empty declarations are invalid for an executable reader/analyzer pair.
     stream_kind: str = ""
     accepts_stream_kinds: tuple[str, ...] = ()
-
-    @property
-    def status_rank(self) -> int:
-        return _STATUS_ORDER.get(self.status, 99)
-
 
 @dataclass(frozen=True)
 class StreamCompatibility:

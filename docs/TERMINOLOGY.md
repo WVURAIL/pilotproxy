@@ -17,11 +17,7 @@ to the equations below, and serialized names that differ are listed.
 | Threshold `eta` | Dimensionless limit on `w` | `eta_q16 / 65536` |
 | Retention `kappa` | Equal-event probability kept | `threshold_rule.sweep` |
 | Shelf proxy `x` | Signed retained mean excess times `C_shelf`, floored after averaging | Sweep `x`; uncertainty in `se` |
-| Amplitude ratio `gamma` | Calibrated redundant-stack amplitude / archive shelf proxy | `STACK_AMPLITUDE_RATIO` |
-| Effective temporal gain `G` | Assumed `G_int / mean_rho` in two stationary families | `temporal_gain`, `minimum_family_gain` |
-| Forecast strength `a` | `(gamma x_hi)^2 N G` | `threshold_rule.strength` |
 | Bias ratio `r` | `a abs(R_DV)` | `bias_over_sigma` |
-| Calendar cost | `calendar_factor / kappa`, factor 1 by default | `decide`, `decide_guarded` |
 
 ## Power ratios and the F distribution
 
@@ -65,33 +61,20 @@ schema of a report before it uses those fields. Clean-IQ metadata uses
 `pilotproxy_atsc_clean_iq_v1`, and frozen records may carry
 `fstat_atsc_clean_iq_v1`.
 
-## Averaging and coherence
+## Averaging and uncertainty
 
 The frame proxy keeps negative excesses. The floor at zero is applied to the
 retained mean only, and individual frames are never floored. The value
 `x_hi = x + 2 se` is a working upper end, and its simultaneous confidence is not
-certified (see [RETAINED_PROXY_CONFIDENCE_BAND.md](RETAINED_PROXY_CONFIDENCE_BAND.md)).
+certified.
 
-`gamma` covers both the spatial phase cancellation of calibrated redundant
-stacking and the transfer from the archive to the short captures. It therefore
-differs from the fraction of RFI that is intrinsically coherent. `G` is an
-assumed budget. It is neither a measured lifetime nor a universal lower bound,
-and its minimum over the model families does not qualify a cross-day threshold.
 
 ## Names retained by existing files and callers
 
 | Name in files and callers | Meaning or replacement |
 |---|---|
-| `coherent_fraction.json`, `coherent_fraction*` keys | Stack-to-proxy amplitude ratio `gamma` |
-| Removed `COHERENT_FRACTION*` Python imports | Use `STACK_AMPLITUDE_RATIO*` |
-| `coherent_gain.json`, `coherent_gain_by_band` | Assumed effective temporal gain |
-| Removed `coherent_gain()`, `admissible_min_gain()` | Use `temporal_gain()`, `minimum_family_gain()` |
-| Removed `strength(..., c=...)` keyword | Use `strength(..., stack_amplitude_ratio=...)` for `gamma` |
-| `deployed*` decision fields | Assigned conditional thresholds. The name does not mean installed hardware |
-| `finite_budget` decision field | Total nominal-strength cap, with the transfer allowances added |
-| `coherence_limit_s` | Full-era effective-gain-time diagnostic. It is neither a physical phase lifetime nor a joint guard limit |
+| `deployed*` decision fields | Assigned conditional thresholds; not installed hardware |
 | `fine_score_z63` | Rank-63 fine score for the declared export geometry |
-| Cache knee rule v1 | Authentication of the saved cache; current decisions use v2 |
 
 Schema-v5 archives are read through their stored fine spectra, because the
 row-domain powers stored in v5 differ from the frame powers. Other frozen
@@ -103,3 +86,22 @@ denotes the physical damping length. The `_Pres` row stores a residual bias
 projection and must be removed before the fitted Fisher block is inverted. Frozen
 matrices that label the variance derivative `sigma_NL` keep their recorded
 schema.
+
+## Power and threshold units
+
+The shelf proxy x is dimensionless. The simple model assigns temperature
+Tsys*x and distributes its squared amplitude uniformly over the supported
+forecast modes. The channel table supplies power_scale in
+a = power_scale*x**2, with a in mK^2. This is a model convention, not a
+measured sky calibration. RFIsher schema-v3 response_dv is per mK^2.
+
+The selected word maximizes retention subject to both the upper first-order
+bias ratio being at most one and the upper additive power being no greater
+than power_limit. That required per-channel limit comes from a finite-model
+check; it has no default and must not be copied from an unchecked linear
+one-sigma tolerance. The CLI accepts the limits as a JSON object through
+--power-limits, mapping channel numbers to positive powers in mK^2.
+
+These are conditional, in-sample selections. The conversion's range and
+uncertainty and an independent evaluation of the frozen configuration are
+needed before reporting a physical operating result.

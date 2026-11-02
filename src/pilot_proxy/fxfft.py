@@ -370,12 +370,11 @@ def fxfft256_scalar(x_in) -> list[tuple[int, int]]:
     ``x_in`` is a sequence of 128 ``(re, im)`` integer pairs. Returns a list
     of 256 ``(re, im)`` pairs, bit-identical to :func:`fxfft256`.
     """
-    xs = [(int(r), int(i)) for r, i in x_in]
-    if len(xs) != N_IN:
+    a = np.asarray(x_in)
+    if a.shape != (N_IN, 2):
         raise ValueError("fxfft256_scalar expects 128 (re, im) pairs.")
-    for r, i in xs:
-        if abs(r) > INPUT_ABS_MAX or abs(i) > INPUT_ABS_MAX:
-            raise OverflowError("input exceeds the |.| <= 2**20 contract.")
+    a = _validate_input(a)
+    xs = [(int(r), int(i)) for r, i in a]
     padded = xs + [(0, 0)] * (N - N_IN)
     x = [padded[_BITREV[j]] for j in range(N)]
     for s in range(1, 9):
@@ -407,6 +406,9 @@ def fine_power_fx(
     the kernel, as in ``fine_reduction``. Returns uint64 ``S[terms, 256]``,
     the sum over streams of ``|X|**2``. These exact integers are the
     numerators and denominators of the deployed fine statistic.
+    Raises ``OverflowError`` if a stream sum cannot fit uint64. The FFT's
+    input bound is wider than the deployed projection bound, so valid
+    individual transforms do not guarantee that their power sum fits.
     """
     if int(windows_per_stream) != N_IN:
         raise ValueError("fxfft256 is frozen at 128 windows per stream.")
@@ -420,6 +422,14 @@ def fine_power_fx(
     z = arr.reshape(terms, streams, N_IN, 2)
     X = fxfft256(z).astype(np.int64)
     mag = X[..., 0] * X[..., 0] + X[..., 1] * X[..., 1]
+    uint64_max = (1 << 64) - 1
+    if streams and int(mag.max(initial=0)) > uint64_max // streams:
+        # Deployed inputs satisfy the cheap bound. For wider reference
+        # inputs, check actual sums with Python integers before narrowing.
+        exact = mag.sum(axis=1, dtype=object)
+        if any(value > uint64_max for value in exact.flat):
+            raise OverflowError("fine power exceeds uint64")
+        return np.asarray(exact, dtype=np.uint64)
     return mag.sum(axis=1, dtype=np.uint64)
 
 

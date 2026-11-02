@@ -1764,30 +1764,57 @@ def _load_shards(
                 float(meta_snr), float(snr_db), abs_tol=1e-12
             ):
                 continue
-            trial_index = np.asarray(archive["trial_index"], dtype=np.int64)
+            trial_index = np.asarray(archive["trial_index"])
+            if trial_index.ndim != 1 or trial_index.dtype.kind not in "iu":
+                raise RuntimeError(f"invalid trial coordinates in {path}")
+            if np.any(trial_index < 0):
+                raise RuntimeError(f"invalid trial coordinates in {path}")
+
+            def trial_column(name: str, dtype: Any = None) -> np.ndarray:
+                values = np.asarray(archive[name])
+                if values.shape != trial_index.shape:
+                    raise RuntimeError(
+                        f"trial column {name} in {path} has shape {values.shape}; "
+                        f"expected {trial_index.shape}"
+                    )
+                if np.iscomplexobj(values):
+                    raise RuntimeError(f"trial column {name} in {path} must be real")
+                if name in (
+                    "cpu_q16_mask", "gpu_q16_mask", "gpu_fine_mismatch",
+                    "gpu_mask_mismatch",
+                ) and (
+                    values.dtype.kind not in "iu"
+                    or np.any(values < -1) or np.any(values > 1)
+                ):
+                    raise RuntimeError(
+                        f"trial column {name} in {path} must contain integer "
+                        "status values in [-1, 1]"
+                    )
+                return np.asarray(values, dtype=dtype)
+
             base_seed = int(meta["base_seed"])
             keys = [(base_seed, int(index)) for index in trial_index]
-            duplicate = [key for key in keys if key in seen]
-            if duplicate:
-                raise RuntimeError(
-                    f"overlapping trial coordinates in {path}: first {duplicate[0]}"
-                )
-            seen.update(keys)
+            for key in keys:
+                if key in seen:
+                    raise RuntimeError(
+                        f"overlapping trial coordinates in {path}: first {key}"
+                    )
+                seen.add(key)
             trial_keys.extend(keys)
             for stage in FLOAT_RESPONSE_STAGES:
                 ratio_lists[stage].append(
-                    np.asarray(archive[f"ratio__{stage}"], dtype=np.float64)
+                    trial_column(f"ratio__{stage}", np.float64)
                 )
             for key in exact_lists:
-                exact_lists[key].append(np.asarray(archive[f"fixed__{key}"]))
-            clips.append(np.asarray(archive["clip_fraction"], dtype=np.float64))
-            cpu_masks.append(np.asarray(archive["cpu_q16_mask"], dtype=np.int8))
-            gpu_masks.append(np.asarray(archive["gpu_q16_mask"], dtype=np.int8))
+                exact_lists[key].append(trial_column(f"fixed__{key}"))
+            clips.append(trial_column("clip_fraction", np.float64))
+            cpu_masks.append(trial_column("cpu_q16_mask", np.int8))
+            gpu_masks.append(trial_column("gpu_q16_mask", np.int8))
             gpu_fine_mismatch.append(
-                np.asarray(archive["gpu_fine_mismatch"], dtype=np.int8)
+                trial_column("gpu_fine_mismatch", np.int8)
             )
             gpu_mask_mismatch.append(
-                np.asarray(archive["gpu_mask_mismatch"], dtype=np.int8)
+                trial_column("gpu_mask_mismatch", np.int8)
             )
             if meta.get("gpu_execution_form"):
                 gpu_execution_forms.add(str(meta["gpu_execution_form"]))
@@ -1997,12 +2024,20 @@ def _write_report_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
 
 
 def _empirical_ks_distance(a: Sequence[float], b: Sequence[float]) -> float | None:
+    if np.iscomplexobj(a) or np.iscomplexobj(b):
+        return None
     left = np.asarray(a, dtype=np.float64)
     right = np.asarray(b, dtype=np.float64)
-    left = np.sort(left[np.isfinite(left)])
-    right = np.sort(right[np.isfinite(right)])
-    if left.size == 0 or right.size == 0:
+    if any(
+        values.ndim != 1 or values.size == 0
+        or np.any(np.isnan(values)) or np.any(values < 0)
+        for values in (left, right)
+    ):
         return None
+    # Positive infinity is the valid response of a positive designated power
+    # divided by a zero rank power. It remains part of the empirical CDF.
+    left = np.sort(left)
+    right = np.sort(right)
     support = np.sort(np.concatenate((left, right)))
     cdf_left = np.searchsorted(left, support, side="right") / left.size
     cdf_right = np.searchsorted(right, support, side="right") / right.size
@@ -2010,21 +2045,23 @@ def _empirical_ks_distance(a: Sequence[float], b: Sequence[float]) -> float | No
 
 
 def _ks_comparison(a: Sequence[float], b: Sequence[float]) -> dict[str, Any]:
-    left = np.asarray(a, dtype=np.float64)
-    right = np.asarray(b, dtype=np.float64)
-    n_left = int(np.count_nonzero(np.isfinite(left)))
-    n_right = int(np.count_nonzero(np.isfinite(right)))
+    left = np.asarray(a)
+    right = np.asarray(b)
+    n_left = int(left.size)
+    n_right = int(right.size)
     distance = _empirical_ks_distance(left, right)
     critical = (
         None
-        if n_left == 0 or n_right == 0
+        if distance is None
         else float(1.36 * math.sqrt((n_left + n_right) / (n_left * n_right)))
     )
     return {
         "distance": distance,
         "critical_value": critical,
-        "finite_full_frame_trials": n_left,
-        "finite_primary_trials": n_right,
+        "full_frame_trials": n_left,
+        "primary_trials": n_right,
+        "finite_full_frame_trials": int(np.count_nonzero(np.isfinite(left))),
+        "finite_primary_trials": int(np.count_nonzero(np.isfinite(right))),
         "passes_declared_rule": bool(
             distance is not None and critical is not None and distance <= critical
         ),
@@ -2082,6 +2119,18 @@ def _build_report(
                 offset_fine_bins=offset,
                 snr_db=None,
             )
+            if null["n"] == 0:
+                raise RuntimeError(
+                    f"no null shards for channel {channel}, offset {offset}"
+                )
+            if (
+                null["n"] != int(cal_row["fixed_q16"]["null_trials"])
+                or set(null["paths"]) != set(cal_row["null_shards"])
+            ):
+                raise RuntimeError(
+                    f"null population differs from calibration for {key}; "
+                    "rerun --stage calibrate"
+                )
             by_snr: dict[float, dict[str, Any]] = {}
             for snr in sorted(args.snr_db):
                 data = _load_shards(
@@ -2182,6 +2231,7 @@ def _build_report(
                         },
                     }
                 audit_point_complete: list[bool] = []
+                audit_data_all = [audit_null]
                 for audit_snr in audit_design["snr_db"]:
                     audit_data = _load_shards(
                         args.output_dir,
@@ -2191,6 +2241,8 @@ def _build_report(
                         offset_fine_bins=offset,
                         snr_db=float(audit_snr),
                     )
+                    if audit_data["n"]:
+                        audit_data_all.append(audit_data)
                     primary = by_snr.get(float(audit_snr))
                     point: dict[str, Any] = {
                         "full_frame_trials": int(audit_data["n"]),
@@ -2242,18 +2294,16 @@ def _build_report(
                         audit_data["n"] >= required_audit_trials
                         and primary is not None
                     )
-                audit_data_all = [audit_null]
-                for audit_snr in audit_design["snr_db"]:
-                    loaded = _load_shards(
-                        args.output_dir,
-                        purpose="audit_h1",
-                        config_sha256=str(config["config_sha256"]),
-                        physical_channel=channel,
-                        offset_fine_bins=offset,
-                        snr_db=float(audit_snr),
+                audit_report["full_frame_gpu_coverage_complete"] = bool(
+                    all(
+                        data["n"] > 0
+                        and data["gpu_full_frame_trials"] == data["n"]
+                        and np.all(data["gpu_q16_mask"] >= 0)
+                        and np.all(data["gpu_fine_mismatch"] >= 0)
+                        and np.all(data["gpu_mask_mismatch"] >= 0)
+                        for data in audit_data_all
                     )
-                    if loaded["n"]:
-                        audit_data_all.append(loaded)
+                )
                 audit_report["gpu_execution_forms"] = sorted(
                     {
                         form
@@ -2332,6 +2382,7 @@ def _build_report(
                     and audit_point_complete
                     and all(audit_point_complete)
                     and audit_report["gpu_execution_forms"]
+                    and audit_report["full_frame_gpu_coverage_complete"]
                     and audit_report["gpu_fine_power_mismatches"] == 0
                     and audit_report["gpu_q16_decision_mismatches"] == 0
                     and audit_report["comparison_acceptance"]["passes"]
@@ -2364,7 +2415,22 @@ def _build_report(
                 }
             bootstrap: dict[str, Any] = {}
             common_snrs = sorted(by_snr)
-            if common_snrs and null["n"] > 0:
+            common_h1_keys = (
+                set.intersection(
+                    *(set(by_snr[snr]["trial_keys"]) for snr in common_snrs)
+                )
+                if common_snrs else set()
+            )
+            if common_snrs and not common_h1_keys:
+                bootstrap = {
+                    str(target): {
+                        "status": "unavailable",
+                        "reason": "no common H1 trial identities span the SNR grid",
+                        "paired_h1_trials_per_snr": 0,
+                    }
+                    for target in DEFAULT_BOOTSTRAP_TARGETS
+                }
+            if common_h1_keys:
                 for target in DEFAULT_BOOTSTRAP_TARGETS:
                     bootstrap[str(target)] = paired_crossing_bootstrap(
                         snr_db=common_snrs,
@@ -2413,6 +2479,7 @@ def _build_report(
                 and bool(fixed_cross.get(str(target), {}).get("bracketed"))
                 for target in DEFAULT_BOOTSTRAP_TARGETS
             )
+            pfa_numerator, pfa_denominator = float(args.p_fa).as_integer_ratio()
             planned_snr_grid_complete = set(common_snrs) == {
                 float(snr) for snr in args.snr_db
             }
@@ -2484,6 +2551,7 @@ def _build_report(
                     {int(base_seed) for base_seed, _ in null["trial_keys"]}
                 ),
                 "h1_snrs_present_db": common_snrs,
+                "paired_h1_trials_per_snr": len(common_h1_keys),
                 "planned_snr_grid_complete": bool(planned_snr_grid_complete),
                 "h1_base_seeds_by_snr": {
                     str(snr): sorted(
@@ -2579,13 +2647,24 @@ def _build_report(
                             for snr in common_snrs
                         )
                     ),
+                    "at_least_1000_paired_h1_trials_per_snr": bool(
+                        len(common_h1_keys) >= 1000
+                    ),
                     "requested_pfa_resolved_by_null_count": bool(
-                        int(null["n"]) * float(args.p_fa) >= 1.0
+                        int(null["n"]) * pfa_numerator >= pfa_denominator
                     ),
                     "both_primary_curves_bracket_all_targets": bool(
                         precision_targets_bracketed
                     ),
                     "negative_power_clip_acceptance": negative_clip_pass,
+                    "primary_gpu_parity": bool(
+                        all(
+                            not np.any(data["gpu_fine_mismatch"] > 0)
+                            and not np.any(data["gpu_mask_mismatch"] > 0)
+                            and data["gpu_pool_fine_mismatches"] == 0
+                            for data in all_data
+                        )
+                    ),
                     "stratified_full_frame_audit": audit_requirement_satisfied,
                 },
                 "claim_status": "preliminary_or_code_validation",

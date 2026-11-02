@@ -1,37 +1,20 @@
-"""Assign conditional channel thresholds from the detector and the RFIsher table.
+"""Select maximum retention within the linear criterion and checked finite limit.
 
-For each exact Q16 keep word, the current era's equal-event distribution is
-swept. ``kappa`` is the retained probability, with unsupported frames kept in
-the original denominator. ``x`` is the signed mean pilot excess times the shelf
-conversion, floored at zero only after averaging, and ``se`` is its
-event-clustered standard error. The upper end is ``x + 2 se``.
-
-The forecast strength is ``a = (gamma x_hi)**2 N G``. Here, ``gamma`` is the
-measured, calibrated redundant-stack amplitude divided by the archive shelf
-proxy. It covers the spatial phase cancellation of calibrated redundant
-stacking and the transfer from the archive to the short captures. ``G`` is an
-effective temporal gain chosen from two stationary correlation families.
-Since the cross-day coherence has not been measured, ``G`` is assumed, and
-these assumptions make every assigned word conditional.
-
-The knee is tested first, then the loosest passing word below it. Both the
-full-era and last-year curves must meet the channel's nominal-strength budget.
-The budget defaults to 1, and a smaller value allows for finite-amplitude or
-transfer checks. The ideal calendar cost is ``1 / kappa`` with a 20-year
-limit. ``calendar_factor=LEGACY_CALENDAR_FACTOR`` reproduces the duty scenario
-of the frozen records. The last-year window keeps the full-era knee and event
-weights.
-
-The serialized ``deployed*`` keys name assigned candidates and do not describe
-telescope operation. The ``coherent_fraction`` and ``coherent_gain`` data
-filenames and JSON keys keep their spelling for reproducibility (see
-docs/TERMINOLOGY.md).
+The signed pilot-to-shelf proxy and clustered sampling error are measured from
+the selected population. The simple model assigns temperature Tsys*x and
+distributes its squared amplitude uniformly over the supported forecast modes.
+Thus a = power_scale*x**2, in mK^2. The channel table supplies power_scale;
+it is a model normalization, not an empirical sky calibration.
+A required power_limit caps the residual at the checked finite-model limit.
+Threshold selection must be evaluated on independent data before reporting
+out-of-sample performance; the two-standard-error margin is not a simultaneous
+confidence guarantee over a searched threshold grid.
 """
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
-from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 
@@ -40,143 +23,114 @@ import numpy as np
 from pilot_proxy.config.project import default_project
 from pilot_proxy.product_contract import pilot_excess_from_fine_powers
 
-from . import knee as knee_rule
-
 Q16 = 65536
 _TEMPLATE = default_project().interference
-FINE_BIN_HZ = 390625 / 128                 # 3051.76 Hz, the bin the marker excess is read in
-# Marker excess to band power. The marker is marker_to_band_db below the band's total power.
+FINE_BIN_HZ = 390625 / 128
 SHELF = 10 ** (_TEMPLATE.marker.marker_to_band_db / 10) * FINE_BIN_HZ / _TEMPLATE.band_width_hz
-FRAME_SAMPLES = 16384                      # samples per frame
-FRAME_SECONDS = FRAME_SAMPLES / 390625     # 41.94 ms
-# The stack-to-proxy amplitude ratio was measured in the matched captures. Its data file
-# keeps the name coherent_fraction.json and does not measure intrinsic coherence.
-# Both measurements are CHIME-derived and are withheld from the code-only cut
-# (CHIME_DERIVED.md). The module still imports without them, but the rule then
-# refuses to price a band.
-
-
-def _measurement(name: str) -> dict | None:
-    path = resources.files("pilot_proxy.characterization").joinpath(f"data/{name}")
-    return json.loads(path.read_text()) if path.is_file() else None
-
-
-def _require(data: dict | None, name: str) -> dict:
-    if data is None:
-        raise FileNotFoundError(f"data/{name} is withheld from this copy (CHIME_DERIVED.md); "
-                                "the threshold rule needs it")
-    return data
-
-
-_STACK_RATIO_RECORD = _measurement("coherent_fraction.json")
-STACK_AMPLITUDE_RATIO_BY_BAND = {int(k): float(v) for k, v in (_STACK_RATIO_RECORD or {"by_band": {}})["by_band"].items()}
-STACK_AMPLITUDE_RATIO = float(_STACK_RATIO_RECORD["value"]) if _STACK_RATIO_RECORD else float("nan")
-STACK_AMPLITUDE_RATIO_SCALE = _STACK_RATIO_RECORD["scale"] if _STACK_RATIO_RECORD else None
-# G is a model-family budget for the unmeasured temporal transfer. The finite-dump
-# cross-moment in gamma is accounted for by G_int / mean_rho. This budget is not a
-# universal lower bound, and it does not measure the long-time cross-day product.
-_GAIN = _measurement("coherent_gain.json")
-GAIN_FRAMES = int(_GAIN["frames"]) if _GAIN else None
+FRAME_SAMPLES = 16384
 GUARD_STANDARD_ERRORS = 2.0
-MAX_CALENDAR_YEARS = 20.0                  # assumed facility lifetime
-ON_SKY_DUTY = 0.152                        # duty scenario of the frozen records, used only in LEGACY_CALENDAR_FACTOR
-LEGACY_CALENDAR_FACTOR = 8760 / (ON_SKY_DUTY * 8766)
-CALENDAR_YEARS_PER_RETAINED_YEAR = 1.0       # ideal year of the Overview, where masking alone costs 1 / kappa
-LAST_YEAR_DAYS = 365.25                    # the last-year guard's window: one full seasonal cycle
-TABLE_SCHEMA = "rfisher-channel-table-v2"
+TABLE_SCHEMA = "rfisher-channel-table-v3"
 
-
-def load_table(path=None) -> dict:
-    """The science tolerance table (the packaged copy unless ``path`` is given)."""
-    if path is None:
-        text = resources.files("pilot_proxy.characterization").joinpath("data/tolerance_table.json").read_text()
-    else:
-        text = Path(path).read_text()
-    table = json.loads(text)
-    if table.get("schema") != TABLE_SCHEMA:
-        raise ValueError(f"not a {TABLE_SCHEMA} table")
+def load_table(path=None):
+    source = resources.files("pilot_proxy.characterization").joinpath("data/tolerance_table.json") if path is None else Path(path)
+    table = json.loads(source.read_text())
+    if (table.get("schema") != TABLE_SCHEMA
+            or table.get("inputs", {}).get("residual") != "flat-additive-power-v1"
+            or table["inputs"].get("power_units") != "mK^2"):
+        raise ValueError("expected a unit-additive-power table in mK^2 (schema v3)")
     return table
 
+def power_scale(table, channel):
+    row = next(row for row in table["channels"] if row["channel"] == channel)
+    norm = row.get("normalization", {})
+    if norm.get("model") != "flat-temperature-variance-v1":
+        raise ValueError("table lacks the simple temperature-variance normalization")
+    value = float(norm["power_scale"])
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError("power_scale must be finite and positive")
+    return value
 
-def response(table: dict, channel: int) -> float:
-    """The band's response: bias / sigma of the combined distance per unit strength."""
-    row = next(r for r in table["channels"] if r["channel"] == channel)
-    return abs(row["response_dv"])
 
+def response(table, channel):
+    return abs(next(row["response_dv"] for row in table["channels"] if row["channel"] == channel))
 
 @dataclass
 class ChannelFrames:
-    """One band's current-era frames, as the rule needs them."""
     channel: int
-    required: np.ndarray       # uint64 Q16 word each frame needs to be kept
-    weight: np.ndarray         # probability mass of each frame
-    supported: np.ndarray      # frame has a usable score
-    event: np.ndarray          # event index of each frame
-    excess: np.ndarray         # marker excess Q - 1 of each frame
-    knee_word: int
-    current_word: int
+    required: np.ndarray
+    weight: np.ndarray
+    supported: np.ndarray
+    event: np.ndarray
+    excess: np.ndarray
+    current_word: int = 1
     current_keep: np.ndarray | None = None
-    time: np.ndarray | None = None           # frame time, s (the last-year guard)
+    time: np.ndarray | None = None
 
+def validate_frames(f):
+    n = len(f.required)
+    if f.required.dtype != np.dtype("uint64") or f.required.ndim != 1:
+        raise ValueError("required words must be a uint64 vector")
+    if any(np.shape(x) != (n,) for x in (f.weight, f.supported, f.event, f.excess)):
+        raise ValueError("frame arrays must have matching shapes")
+    if f.supported.dtype != np.dtype("bool") or f.event.dtype.kind not in "iu" or np.any(f.event < 0):
+        raise ValueError("invalid support or event IDs")
+    if not np.isfinite(f.weight).all() or np.any(f.weight <= 0):
+        raise ValueError("weights must be finite and positive")
+    if not np.isfinite(f.excess[f.supported]).all():
+        raise ValueError("supported frames must have finite excess")
+    # Compact IDs prevent untrusted/noncontiguous event numbers from huge allocations.
+    _, f.event = np.unique(f.event, return_inverse=True)
 
-def load_frames(channel: int, scores_dir) -> ChannelFrames:
-    """Read one channel's score cache and the marker excess of its archive product.
-
-    ``ch<N>.json`` and ``ch<N>.npz`` are read from the score cache, the marker
-    excess is read from the archive product they name, and the keep rule must
-    reproduce the accepted mask at the current word.
-
-    The excess is computed by ``product_contract.pilot_excess_from_fine_powers``
-    from the frame powers ``P_r = sum_f fine_power_u64[:, r, f]`` (kernel core
-    3.0.0), for v5 and v6 products alike. The stored row-domain
-    ``normalized_pilot_excess`` of a v5 product is not read. The product file is
-    unchanged, so the cache's identity binding (path and size) still holds."""
+def load_frames(channel, scores_dir):
+    from .score_cache import sha
     scores_dir = Path(scores_dir)
     meta = json.loads((scores_dir / f"ch{channel}.json").read_text())
     product = meta["original_product_identity"]
-    if Path(product["path"]).stat().st_size != product["bytes"]:
-        raise ValueError(f"channel {channel}: {product['path']} is not the product the scores were built on")
-    with np.load(scores_dir / f"ch{channel}.npz", allow_pickle=False) as z:
+    score_path = scores_dir / f"ch{channel}.npz"
+    if sha(score_path) != meta["npz_sha256"]:
+        raise ValueError("score cache differs from its metadata")
+    product_path = (scores_dir / product["path"]).resolve()
+    if product_path.stat().st_size != product["bytes"] or sha(product_path) != product["sha256"]:
+        raise ValueError("source product differs from its metadata")
+    with np.load(score_path, allow_pickle=False) as z:
         rows = z["source_row_index"]
-        frames = ChannelFrames(channel=channel, required=z["required_q16"], weight=z["probability_weight"],
-                               supported=z["supported"], event=z["frame_event_index"], excess=np.empty(0),
-                               knee_word=int(meta["knee_threshold"]["eta_q16"]),
-                               current_word=int(meta["current_threshold"]["eta_q16"]),
-                               current_keep=z["current_keep"],
-                               time=z["frame_time"] if "frame_time" in z.files else None)
-    with np.load(product["path"], allow_pickle=False) as p:
-        frames.excess = pilot_excess_from_fine_powers(p, rows)
-    if not np.array_equal(keep(frames, frames.current_word), frames.current_keep):
-        raise ValueError(f"channel {channel}: the keep rule does not reproduce the accepted mask")
-    # The cache records the knee of rule v1. The decision uses the knee of the current rule (v2, the stronger
-    # bend), read from the same frames after rule v1 is checked to reproduce the recorded word.
-    events = [str(int(e)) for e in frames.event]
-    words = [int(w) for w in frames.required]
-    valid = [bool(v) for v in frames.supported]
-    v1 = knee_rule.propose(words, events, valid=valid, rule=knee_rule.RULE_ID_V1)
-    if int(v1["knee_word_q16"]) != frames.knee_word:
-        raise ValueError(f"channel {channel}: knee rule v1 does not reproduce the cache's knee")
-    frames.knee_word = int(knee_rule.propose(words, events, valid=valid)["knee_word_q16"])
-    return frames
+        f = ChannelFrames(channel, z["required_q16"], z["probability_weight"],
+                          z["supported"], z["frame_event_index"], np.empty(len(rows)),
+                          int(meta["current_threshold"]["eta_q16"]), z["current_keep"],
+                          z["frame_time"] if "frame_time" in z.files else None)
+    with np.load(product_path, allow_pickle=False) as z:
+        f.excess = pilot_excess_from_fine_powers(z, rows)
+    validate_frames(f)
+    if not np.array_equal(keep(f, f.current_word), f.current_keep):
+        raise ValueError("the keep rule does not reproduce the accepted mask")
+    return f
 
-
-def last_year(frames: ChannelFrames) -> ChannelFrames:
-    """The frames of the era's last ``LAST_YEAR_DAYS`` (one full seasonal cycle). Frames keep their era
-    weights, so kappa is relative to the subset. The knee is the full era's, and none is computed here."""
-    if frames.time is None:
-        raise ValueError(f"channel {frames.channel}: the cache lacks frame_time")
-    sel = frames.time >= frames.time.max() - LAST_YEAR_DAYS * 86400
-    return ChannelFrames(channel=frames.channel, required=frames.required[sel], weight=frames.weight[sel],
-                         supported=frames.supported[sel], event=frames.event[sel], excess=frames.excess[sel],
-                         knee_word=frames.knee_word, current_word=frames.current_word, time=frames.time[sel])
-
-
-def keep(frames: ChannelFrames, word: int) -> np.ndarray:
+def keep(frames, word):
+    if isinstance(word, bool) or not isinstance(word, (int, np.integer)) or not 1 <= word < 2**64:
+        raise ValueError("threshold must be a positive uint64 word")
     return frames.supported & (frames.required <= np.uint64(word))
+
+def _binary_integers(values):
+    """Represent finite binary floating-point values on one exact integer scale."""
+    ratios = [float(value).as_integer_ratio() for value in values]
+    scale = max(denominator for _, denominator in ratios)
+    return [numerator * (scale // denominator) for numerator, denominator in ratios], scale
+
+
+def _sqrt_ratio(numerator, denominator):
+    """Return sqrt(numerator) / denominator without floating-point intermediates outside range."""
+    if numerator == 0:
+        return 0.0
+    root_shift = (numerator.bit_length() - 1) // 2
+    denominator_shift = denominator.bit_length() - 1
+    root = math.sqrt(numerator / (1 << (2 * root_shift)))
+    scaled_denominator = denominator / (1 << denominator_shift)
+    return math.ldexp(root / scaled_denominator, root_shift - denominator_shift)
 
 
 def sweep(frames: ChannelFrames, shelf: float = SHELF) -> dict:
     """kappa, x and its event-clustered standard error at every distinct supported word."""
+    validate_frames(frames)
     idx = np.flatnonzero(frames.supported)
     idx = idx[np.argsort(frames.required[idx], kind="stable")]
     words = frames.required[idx]
@@ -184,13 +138,17 @@ def sweep(frames: ChannelFrames, shelf: float = SHELF) -> dict:
         return dict(word=np.empty(0, dtype=np.uint64),
                     **{key: np.empty(0, dtype=float) for key in ("kappa", "x", "se", "mean_excess")},
                     kept_frames=np.empty(0, dtype=np.int64), kept_events=np.empty(0, dtype=np.int64))
-    w, q, e = frames.weight[idx], frames.excess[idx], frames.event[idx]
-    total = frames.weight.sum()
-    A = np.zeros(int(frames.event.max()) + 1)   # per-event sum of w q over kept frames
-    B = np.zeros_like(A)                         # per-event sum of w over kept frames
-    saa = sab = sbb = 0.0
-    W = Q = 0.0
-    events = 0
+    # Binary floating-point inputs have exact integer numerators over powers
+    # of two. Common scales cancel from retention and the cluster equation.
+    # Integer moments therefore avoid both cancellation and prefix rebuilds.
+    weights, _ = _binary_integers(frames.weight)
+    total = sum(weights)
+    w = [weights[i] for i in idx]
+    q, excess_scale = _binary_integers(frames.excess[idx])
+    e = frames.event[idx]
+    A = [0] * (int(frames.event.max()) + 1)  # per-event sum of integer w*q
+    B = [0] * len(A)                         # per-event sum of integer w
+    saa = sab = sbb = W = Q = events = 0
     last = np.r_[np.flatnonzero(np.diff(words)), len(words) - 1]
     out = {k: np.empty(len(last)) for k in ("kappa", "mean", "se")}
     kept_frames = np.empty(len(last), dtype=np.int64)
@@ -204,19 +162,23 @@ def sweep(frames: ChannelFrames, shelf: float = SHELF) -> dict:
         saa -= a * a
         sab -= a * b
         sbb -= b * b
-        a += w[i] * q[i]
+        delta = w[i] * q[i]
+        a += delta
         b += w[i]
         A[ei], B[ei] = a, b
         saa += a * a
         sab += a * b
         sbb += b * b
         W += w[i]
-        Q += w[i] * q[i]
+        Q += delta
         if i == last[j]:
-            m = Q / W
+            # sum_e (A_e - (Q/W) B_e)^2 / W^2, before removing
+            # the common excess scale. Every term remains exact here.
+            numerator = saa * W * W - 2 * Q * W * sab + Q * Q * sbb
+            error = _sqrt_ratio(numerator, W * W * excess_scale)
             out["kappa"][j] = W / total
-            out["mean"][j] = m
-            out["se"][j] = np.sqrt(max(saa - 2 * m * sab + m * m * sbb, 0.0)) / W
+            out["mean"][j] = Q / (W * excess_scale)
+            out["se"][j] = error
             kept_frames[j] = i + 1
             kept_events[j] = events
             j += 1
@@ -224,152 +186,33 @@ def sweep(frames: ChannelFrames, shelf: float = SHELF) -> dict:
                 se=shelf * out["se"], mean_excess=out["mean"], kept_frames=kept_frames, kept_events=kept_events)
 
 
-def gain_of(tau, model: str):
-    """Return G(tau), the sum of rho(d) over every lag d, with tau in frame intervals.
+def bias_over_sigma(s, R, *, power_scale, guard=GUARD_STANDARD_ERRORS):
+    if not np.isfinite(power_scale) or power_scale <= 0:
+        raise ValueError("power_scale must be a finite positive mK^2 model coefficient")
+    if not np.isfinite(R) or R < 0 or not np.isfinite(guard) or guard < 0:
+        raise ValueError("response and sampling margin must be finite and nonnegative")
+    return (s["x"]**2 * power_scale * R,
+            np.maximum(s["x"] + guard * s["se"], 0)**2 * power_scale * R)
 
-    G is the residual's power in a long average divided by that of a white
-    residual. For the exponential rho = exp(-d / tau), G = coth(1 / 2 tau),
-    which is about 2 tau. For the triangular rho = max(1 - d / tau, 0), G is
-    the exact lag sum, which is about tau."""
-    tau = np.asarray(tau, dtype=float)
-    if model == "exp":
-        return 1 / np.tanh(1 / (2 * tau))
-    m = np.ceil(tau) - 1                                       # lags 1..m have d < tau
-    return 1 + 2 * m - m * (m + 1) / tau
-
-
-@lru_cache
-def minimum_family_gain(frames: int) -> float:
-    """Return the least G(tau) / rho_bar_n(tau) over the coherence time tau for an n-frame dump.
-
-    The lower value of an exponential and a triangular frame-to-frame
-    correlation is taken, with G(tau) the lag sum of ``gain_of``. The result is
-    6.75 for 4 frames, 15.23 for 11, and 40.00 for 33, and the triangular
-    correlation sets each of these values."""
-    d = np.arange(1, frames)[:, None]
-    tau = np.geomspace(0.05, 1e4, 20001)                      # in frame intervals
-    best = np.inf
-    for model, rho in (("exp", np.exp(-d / tau)), ("tri", np.clip(1 - d / tau, 0, None))):
-        rbar = (2 * (frames - d) * rho).sum(axis=0) / (frames * (frames - 1))
-        ok = rbar > 0
-        best = min(best, float(np.min(gain_of(tau[ok], model) / rbar[ok])))
-    return best
-
-
-def temporal_gain(channel: int) -> float:
-    """Return the assumed G_int / mean_rho budget, the same model-family value for each band."""
-    _require(_GAIN, "coherent_gain.json")
-    return minimum_family_gain(GAIN_FRAMES)
-
-
-def strength(x, gain: float, stack_amplitude_ratio: float = STACK_AMPLITUDE_RATIO):
-    """Return the residual strength a = (gamma x)^2 N G, with gamma given by ``stack_amplitude_ratio``."""
-    if stack_amplitude_ratio is STACK_AMPLITUDE_RATIO:
-        _require(_STACK_RATIO_RECORD, "coherent_fraction.json")
-    return (stack_amplitude_ratio * np.asarray(x)) ** 2 * FRAME_SAMPLES * gain
-
-
-def bias_over_sigma(s: dict, R: float, gain: float,
-                    guard: float = GUARD_STANDARD_ERRORS) -> tuple[np.ndarray, np.ndarray]:
-    """(r, r_hi): bias / sigma at the measured power and at its upper end."""
-    return strength(s["x"], gain) * R, strength(np.maximum(s["x"] + guard * s["se"], 0.0), gain) * R
-
-
-def _at(s: dict, word: int) -> int | None:
-    """Index of the largest swept word not above ``word`` (None if none)."""
-    i = int(np.searchsorted(s["word"], np.uint64(word), side="right")) - 1
-    return i if i >= 0 else None
-
-
-def _point(s: dict, word: int, R: float, gain: float,
-           calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
-    """Read the supplied sweep at ``word``.
-
-    ``coherence_limit_s`` is the effective-gain-time diagnostic
-    ``FRAME_SECONDS * gain / r_hi`` for this sweep alone. It does not give a
-    physical phase lifetime or a joint limit over several sweeps.
-    """
-    i = _at(s, word)
-    if i is None:
-        return dict(word=int(word), eta=word / Q16, kappa=0.0, time_years=float("inf"), x=None, se=None, a=None,
-                    r=None, r_hi=None, kept_frames=0, kept_events=0, coherence_limit_s=None)
-    r, r_hi = (float(v[i]) for v in bias_over_sigma(s, R, gain))
-    kappa = float(s["kappa"][i])
-    return dict(word=int(word), eta=word / Q16, kappa=kappa,
-                time_years=calendar_factor / kappa if kappa > 0 else float("inf"),
-                x=float(s["x"][i]), se=float(s["se"][i]), a=float(strength(s["x"][i], gain)),
-                r=r, r_hi=r_hi, kept_frames=int(s["kept_frames"][i]), kept_events=int(s["kept_events"][i]),
-                coherence_limit_s=FRAME_SECONDS * gain / r_hi if r_hi > 0 else float("inf"))
-
-
-def decide(s: dict, knee_word: int, R: float, *, gain: float, max_years: float = MAX_CALENDAR_YEARS,
-           exclude: str | None = None, budget: float = 1.0,
-           calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
-    """Assign a candidate at the knee or the loosest passing word below it.
-
-    ``gain`` is the assumed effective temporal gain G, and ``budget`` caps the
-    nominal-proxy bias ratio. ``calendar_factor / kappa`` is the time cost.
-    """
-    if not np.isfinite(calendar_factor) or calendar_factor <= 0:
-        raise ValueError("calendar_factor must be finite and positive")
-    if not np.isfinite(budget) or not 0 < budget <= 1:
-        raise ValueError("budget must be finite and in (0, 1]")
-    r, r_hi = bias_over_sigma(s, R, gain)
-
-    def usable(p):
-        return p is not None and p["r_hi"] is not None and p["r_hi"] <= budget and p["time_years"] <= max_years
-
-    knee = _point(s, knee_word, R, gain, calendar_factor)
-    below = None
-    if usable(knee):
-        deployed, at = knee, "knee"
-    else:
-        idx = np.flatnonzero((s["word"] <= np.uint64(knee_word)) & (r_hi <= budget) & (s["kappa"] > 0))
-        if len(idx):
-            below = _point(s, int(s["word"][int(idx[-1])]), R, gain, calendar_factor)
-        deployed, at = (below, "below the knee") if usable(below) else (None, None)
-    reason = None if deployed else ("out of time" if below is not None else "above tolerance")
-    if exclude:
-        deployed, at, reason = None, None, exclude
-    return dict(knee=knee, below_knee=below, outcome="useful" if deployed else "not useful", reason=reason,
-                deployed=deployed, deployed_at=at, deployed_word=deployed["word"] if deployed else None)
-
-
-GUARD_FAILED = "fails the tolerance on its last year"
-
-
-def decide_guarded(full: dict, knee_word: int, last: dict, R: float, *, gain: float,
-                   max_years: float = MAX_CALENDAR_YEARS, exclude: str | None = None, budget: float = 1.0,
-                   calendar_factor: float = CALENDAR_YEARS_PER_RETAINED_YEAR) -> dict:
-    """Run ``decide`` on the full era with the last-year guard (sweep ``last``).
-
-    The result adds ``full_era_word``, ``last_year_r_hi``, and ``guard_acted``.
-    ``last_year_r_hi`` is evaluated at the original ``full_era_word``, before
-    any tightening. A deployed point, with its legacy ``coherence_limit_s``
-    diagnostic, is read on ``full`` at the final word. The joint
-    effective-gain-time limit is
-    ``FRAME_SECONDS * gain / max(r_hi_full, r_hi_last)``, with both ratios
-    evaluated at that final word, and it is not stored in ``coherence_limit_s``.
-    """
-    d = decide(full, knee_word, R, gain=gain, max_years=max_years, exclude=exclude, budget=budget,
-               calendar_factor=calendar_factor)
-    out = dict(d, full_era_word=d["deployed_word"], last_year_r_hi=None, guard_acted=False)
-    if d["deployed"] is None:
-        return out
-    word = d["deployed_word"]
-    out["last_year_r_hi"] = _point(last, word, R, gain, calendar_factor)["r_hi"]
-    if out["last_year_r_hi"] is not None and out["last_year_r_hi"] <= budget:
-        return out
-    # Both curves are constant between the full era's swept words (the last year's words are among them).
-    _, r_hi = bias_over_sigma(full, R, gain)
-    _, r_hi_last = bias_over_sigma(last, R, gain)
-    at_last = np.searchsorted(last["word"], full["word"], side="right") - 1
-    last_ok = np.zeros(len(full["word"]), dtype=bool)
-    supported = at_last >= 0
-    last_ok[supported] = r_hi_last[at_last[supported]] <= budget
-    idx = np.flatnonzero((full["word"] <= np.uint64(word)) & (r_hi <= budget) & last_ok & (full["kappa"] > 0))
-    moved = _point(full, int(full["word"][idx[-1]]), R, gain, calendar_factor) if len(idx) else None
-    out["guard_acted"] = True
-    if moved is None or moved["time_years"] > max_years:
-        return dict(out, outcome="not useful", reason=GUARD_FAILED, deployed=None, deployed_at=None, deployed_word=None)
-    return dict(out, deployed=moved, deployed_word=moved["word"], deployed_at="below the knee")
+def decide(s, R, *, power_scale, power_limit, exclude=None):
+    """Maximize retention subject to the linear criterion and checked power range."""
+    if not np.isfinite(power_limit) or power_limit <= 0:
+        raise ValueError("power_limit must be a finite positive checked bound in mK^2")
+    measured, upper = bias_over_sigma(s, R, power_scale=power_scale)
+    upper_power = np.maximum(s["x"] + GUARD_STANDARD_ERRORS * s["se"], 0)**2 * power_scale
+    valid = (np.isfinite(upper) & (upper <= 1) & (upper_power <= power_limit) & (s["kappa"] > 0)
+             & (s["kept_events"] >= 2) & (s["word"] >= 1))
+    ix = np.flatnonzero(valid)
+    point = None
+    if len(ix) and exclude is None:
+        i = int(ix[np.argmax(s["kappa"][ix])])
+        point = dict(word=int(s["word"][i]), eta=float(s["word"][i]) / Q16,
+                     kappa=float(s["kappa"][i]), time_years=1 / float(s["kappa"][i]),
+                     x=float(s["x"][i]), se=float(s["se"][i]),
+                     a=float(s["x"][i]**2 * power_scale), a_hi=float(upper_power[i]),
+                     r=float(measured[i]), r_hi=float(upper[i]),
+                     kept_frames=int(s["kept_frames"][i]), kept_events=int(s["kept_events"][i]))
+    return dict(outcome="useful" if point else "not useful", power_limit=float(power_limit),
+                reason=None if point else (exclude or "no supported threshold meets tolerance"),
+                deployed=point, deployed_word=point["word"] if point else None,
+                deployed_at="maximum retention" if point else None)

@@ -9,6 +9,7 @@ import math
 import operator
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from pilot_proxy.detector_geometry import (
     normalize_nyquist_zone,
     nyquist_zone_is_mirrored,
 )
+from pilot_proxy.detector_reference import packed_dtype_for_component_bits
 from pilot_proxy.dtv_units import (
     DTV_BANDWIDTH_HZ,
     EFFECTIVE_BIN_BW_HZ,
@@ -348,15 +350,19 @@ class ReceiverProfile:
                 f"{self.frequency_order!r}."
             )
         object.__setattr__(self, "frequency_order", frequency_order)
-        if self.bits_per_component <= 0:
-            raise ValueError("quantization.bits_per_component must be positive.")
+        packed_dtype_for_component_bits(self.bits_per_component)
+        object.__setattr__(self, "bits_per_component", operator.index(self.bits_per_component))
         if self.quantization_scale_mode_default not in SUPPORTED_QUANTIZATION_SCALE_MODES:
             raise ValueError(
                 "quantization.scale_mode_default must be one of "
                 f"{sorted(SUPPORTED_QUANTIZATION_SCALE_MODES)}."
             )
-        if self.clip_sigma_default <= 0.0:
-            raise ValueError("quantization.clip_sigma_default must be positive.")
+        if isinstance(self.clip_sigma_default, (bool, np.bool_)) or not isinstance(self.clip_sigma_default, Real):
+            raise ValueError("quantization.clip_sigma_default must be a positive finite number.")
+        clip_sigma = float(self.clip_sigma_default)
+        if not math.isfinite(clip_sigma) or clip_sigma <= 0.0:
+            raise ValueError("quantization.clip_sigma_default must be a positive finite number.")
+        object.__setattr__(self, "clip_sigma_default", clip_sigma)
         if self.compatible_detector_core_id != DETECTOR_CORE_ID_PILOT_PROXY_CUDA_LOCAL_REFERENCE_POWER_RATIO:
             raise ValueError(
                 "detector_adapter.compatible_detector_core_id must be "

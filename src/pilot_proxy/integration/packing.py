@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import operator
 from dataclasses import dataclass
+from numbers import Real
 from typing import Any, Sequence
 
 import numpy as np
@@ -21,7 +22,10 @@ from pilot_proxy.detector_geometry import (
     flatten_feed_channel_streams,
     stream_time_block_to_detector_matrix,
 )
-from pilot_proxy.detector_reference import quantize_complex_numpy
+from pilot_proxy.detector_reference import (
+    packed_dtype_for_component_bits,
+    quantize_complex_numpy,
+)
 
 from .schemas import (
     COMBINE_MODE_COMBINED_STREAMS,
@@ -74,7 +78,16 @@ def estimate_complex_scale(
     degenerate synthetic inputs, the standard deviation of the imaginary
     components, and then of the magnitudes, is used instead.
     """
+    packed_dtype_for_component_bits(bits_per_component)
+    bits_per_component = operator.index(bits_per_component)
+    if isinstance(clip_sigma, (bool, np.bool_)) or not isinstance(clip_sigma, Real):
+        raise ValueError("clip_sigma must be a positive finite number.")
+    clip_sigma = float(clip_sigma)
+    if not np.isfinite(clip_sigma) or clip_sigma <= 0.0:
+        raise ValueError("clip_sigma must be a positive finite number.")
     arr = np.asarray(values)
+    if arr.size == 0 or not np.all(np.isfinite(arr)):
+        raise ValueError("quantization samples must be non-empty and finite.")
     sigma = float(np.std(arr.real))
     if not np.isfinite(sigma) or sigma <= 0.0:
         sigma = float(np.std(arr.imag))
@@ -82,8 +95,14 @@ def estimate_complex_scale(
         sigma = float(np.std(np.abs(arr)))
     if not np.isfinite(sigma) or sigma <= 0.0:
         raise ValueError("could not estimate a positive quantization scale.")
-    max_int = (1 << (int(bits_per_component) - 1)) - 1
-    return float(max_int) / (float(clip_sigma) * sigma)
+    max_int = (1 << (bits_per_component - 1)) - 1
+    denominator = clip_sigma * sigma
+    if not np.isfinite(denominator) or denominator <= 0.0:
+        raise ValueError("could not estimate a positive finite quantization scale.")
+    scale = float(max_int) / denominator
+    if not np.isfinite(scale) or scale <= 0.0:
+        raise ValueError("could not estimate a positive finite quantization scale.")
+    return scale
 
 
 def _clip_fraction(
@@ -239,6 +258,8 @@ def pack_channelized_streams_for_detector(
     num_blocks = _positive_integer(num_blocks, "num_blocks")
     if block_step_samples is not None:
         block_step_samples = _positive_integer(block_step_samples, "block_step_samples")
+    packed_dtype_for_component_bits(bits_per_component)
+    bits_per_component = operator.index(bits_per_component)
     arr = np.asarray(feed_channel_streams)
     if arr.ndim != 3:
         raise ValueError(
@@ -251,16 +272,11 @@ def pack_channelized_streams_for_detector(
             "feed_channel_streams does not contain one full frame: "
             f"{total_samples} < {int(frame_size_samples)}."
         )
-    if int(num_blocks) <= 0:
-        raise ValueError("num_blocks must be positive.")
     step = (
         int(frame_size_samples) * DEFAULT_BLOCK_STEP_MULTIPLIER
         if block_step_samples is None
         else int(block_step_samples)
     )
-    if step <= 0:
-        raise ValueError("block_step_samples must be positive.")
-
     layout = DetectorFrameLayout(
         frame_size_samples=int(frame_size_samples),
         detector_window_samples=int(detector_window_samples),
@@ -272,8 +288,8 @@ def pack_channelized_streams_for_detector(
     scales = _resolve_scale_by_stream(
         flattened,
         mode=quantization_scale_mode,
-        bits_per_component=int(bits_per_component),
-        clip_sigma=float(clip_sigma),
+        bits_per_component=bits_per_component,
+        clip_sigma=clip_sigma,
         scale=scale,
         scale_by_stream=scale_by_stream,
     )

@@ -252,6 +252,38 @@ def test_stream_map_json_roundtrip() -> None:
     assert stream_map.streams[-1]["polarization_label"] == "Y"
 
 
+@pytest.mark.parametrize("from_dict", [False, True])
+@pytest.mark.parametrize("count", [
+    True, np.bool_(True), 1.9, 1.0, "1", None, 0, -1,
+    float("nan"), float("inf"),
+])
+def test_stream_map_refuses_coerced_or_nonpositive_counts(count, from_dict):
+    fields = dict(
+        schema_version="pilotproxy_stream_map_v1",
+        receiver_profile_id="reference_800mhz_pfb",
+        stream_unit="input_stream",
+        num_streams=count,
+        streams=[{"stream_index": 0}],
+    )
+    with pytest.raises(ValueError, match="num_streams"):
+        if from_dict:
+            InputStreamMap.from_dict(fields)
+        else:
+            InputStreamMap(**fields)
+
+
+def test_stream_map_preserves_exact_integer_counts_and_infers_missing_count():
+    fields = dict(
+        receiver_profile_id="reference_800mhz_pfb",
+        streams=[{"stream_index": 0}, {"stream_index": 1}],
+    )
+    inferred = InputStreamMap.from_dict(fields)
+    explicit = InputStreamMap.from_dict(dict(fields, num_streams=np.int64(2)))
+    assert explicit.to_dict() == inferred.to_dict()
+    assert type(explicit.num_streams) is int
+    assert explicit.num_streams == 2
+
+
 @pytest.mark.parametrize(
     "indices",
     ([0, 0], [-1, 0], [0, 2], [False, 1]),

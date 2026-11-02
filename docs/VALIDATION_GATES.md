@@ -13,11 +13,14 @@ schema-v5 products. The current code binds detector core 4 and writes schema v6
 build.
 
 Gate evidence must match one clean source revision, its package-source digest,
-and the exact detector library that will run, which is the preserved SM89
-artifact on the local path or the node-built SM90 artifact on the CANFAR path. A
-source change after a gate invalidates that gate, and so does a rebuild of the
-library. The scientific and product pins are in
-[`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md), the local
+and the exact detector library that will run: the preserved SM89 artifact on
+the local path, or the node-built SM90 artifact on the CANFAR path. A source
+change after a gate invalidates that gate, and so does rebuilding the library.
+The run contract comes from the checked-in
+[receiver profile](../configs/receiver_profiles/chime_dtv_fengine.json),
+[detector core profile](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json),
+[weight manifest](../weights/chime_dtv_weights_k128.bin.manifest.json), and
+[product schema](PRODUCT_SCHEMA.md). The local
 production command is in [`LOCAL_PROCESSING.md`](LOCAL_PROCESSING.md), the
 CANFAR production commands are in [`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md), and
 the actual values are recorded in the run ledger of the launched path.

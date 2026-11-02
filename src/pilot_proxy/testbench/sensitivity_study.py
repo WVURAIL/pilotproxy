@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import operator
 from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Any, Iterable, Mapping, Sequence
@@ -35,6 +36,7 @@ from pilot_proxy.fine_reduction import (
     WEIGHT_TERM_REF_UPPER,
     WEIGHT_TERM_TARGET,
 )
+from pilot_proxy.testbench.binomial import wilson_interval
 
 SENSITIVITY_STUDY_SCHEMA = "pilotproxy_current_geometry_sensitivity_v1"
 FINE_BINS = 256
@@ -367,13 +369,20 @@ def order_statistic_threshold(
     p = float(p_fa)
     if not 0.0 < p < 0.5:
         raise ValueError("p_fa must be in (0, 0.5).")
-    values = np.asarray(null_response_ratios, dtype=np.float64)
-    values = values[np.isfinite(values)]
-    if values.size == 0:
-        raise ValueError("null calibration has no finite response ratios.")
-    values.sort()
-    # smallest zero-based order index whose empirical CDF is >= 1 - Pfa
-    index = min(values.size - 1, max(0, math.ceil((1.0 - p) * values.size) - 1))
+    raw = np.asarray(null_response_ratios)
+    if np.iscomplexobj(raw):
+        raise ValueError("null calibration requires real response ratios.")
+    values = np.asarray(raw, dtype=np.float64)
+    if values.ndim != 1 or values.size == 0:
+        raise ValueError("null calibration requires a nonempty 1D population.")
+    if not np.all(np.isfinite(values)) or np.any(values < 0.0):
+        raise ValueError("null calibration requires finite nonnegative response ratios.")
+    values = np.sort(values)
+    # Count permitted exceedances using the supplied probability exactly.
+    # Floating subtraction in (1-Pfa)*N can round across an order boundary.
+    numerator, denominator = p.as_integer_ratio()
+    allowed_exceedances = values.size * numerator // denominator
+    index = values.size - allowed_exceedances - 1
     threshold = float(values[index])
     exceed = int(np.count_nonzero(values > threshold))
     return {
@@ -384,7 +393,7 @@ def order_statistic_threshold(
         "empirical_p_fa": float(exceed / values.size),
         "requested_p_fa": p,
         "minimum_resolvable_nonzero_p_fa": float(1.0 / values.size),
-        "requested_p_fa_resolved": bool(values.size * p >= 1.0),
+        "requested_p_fa_resolved": bool(allowed_exceedances >= 1),
         "selection": "observed_order_statistic_strict_greater_than",
     }
 
@@ -394,7 +403,8 @@ def q16_ceil_multiplier(value: float) -> int:
     threshold = float(value)
     if not math.isfinite(threshold) or threshold <= 0.0:
         raise ValueError("threshold multiplier must be positive and finite.")
-    q16 = int(math.ceil(threshold * Q16_ONE))
+    numerator, denominator = threshold.as_integer_ratio()
+    q16 = (numerator * Q16_ONE + denominator - 1) // denominator
     if not 0 < q16 < (1 << 64):
         raise OverflowError("Q16 threshold does not fit uint64.")
     return q16
@@ -406,7 +416,14 @@ def exact_q16_decision(
     multiplier_q16: int,
 ) -> int:
     """Apply the deployed strict Q16 threshold test with arbitrary-precision ints."""
-    q16 = int(multiplier_q16)
+    if isinstance(multiplier_q16, (bool, np.bool_)):
+        raise TypeError("multiplier_q16 must be an exact integer.")
+    try:
+        q16 = operator.index(multiplier_q16)
+    except TypeError as exc:
+        raise TypeError("multiplier_q16 must be an exact integer.") from exc
+    if not 0 < q16 < (1 << 64):
+        raise ValueError("multiplier_q16 must be in [1, 2**64 - 1].")
     if not components.valid:
         return 0
     left = (
@@ -422,35 +439,28 @@ def exact_q16_decision(
     return int(left > right)
 
 
-def wilson_interval(
-    successes: int,
-    trials: int,
-    *,
-    z: float = 1.959963984540054,
-) -> tuple[float, float]:
-    """Return the Wilson score interval for successes in trials (95% for the default z)."""
-    n = int(trials)
-    if n <= 0:
-        return float("nan"), float("nan")
-    k = int(successes)
-    p = k / n
-    z2 = float(z) ** 2
-    denominator = 1.0 + z2 / n
-    center = (p + z2 / (2.0 * n)) / denominator
-    radius = float(z) * math.sqrt((p * (1.0 - p) + z2 / (4.0 * n)) / n)
-    radius /= denominator
-    return max(0.0, center - radius), min(1.0, center + radius)
-
-
 def monotone_detection_rates(rates: Sequence[float]) -> np.ndarray:
-    """Return the running maximum of the detection rates, which removes only downward fluctuations."""
+    """Pool only downward empirical fluctuations for crossing interpolation."""
+    if np.iscomplexobj(rates):
+        raise ValueError("rates must contain real probabilities.")
     values = np.asarray(rates, dtype=np.float64)
     if values.ndim != 1:
         raise ValueError("rates must be one-dimensional.")
+    if not np.all(np.isfinite(values)) or np.any((values < 0.0) | (values > 1.0)):
+        raise ValueError("rates must contain finite probabilities in [0, 1].")
     # A cumulative maximum is simple and conservative about the first observed
     # crossing. The raw rates and Wilson intervals stay in the report, and this
     # adjusted sequence is used only to locate a bracket.
     return np.maximum.accumulate(values)
+
+
+def _linear_interpolation(lo: float, hi: float, fraction: float) -> float:
+    """Interpolate ordered finite endpoints without overflowing their span."""
+    if lo < 0.0 < hi:
+        return (1.0 - fraction) * lo + fraction * hi
+    if fraction <= 0.5:
+        return lo + (hi - lo) * fraction
+    return hi - (hi - lo) * (1.0 - fraction)
 
 
 def crossing_bracket(
@@ -466,10 +476,16 @@ def crossing_bracket(
     No extrapolation is performed. When a target is not bracketed, the result
     has ``bracketed`` set to False and the crossing estimate is ``None``.
     """
+    if np.iscomplexobj(snr_db):
+        raise ValueError("snr_db must contain real values.")
+    if np.iscomplexobj(rates):
+        raise ValueError("rates must contain real probabilities.")
     x = np.asarray(snr_db, dtype=np.float64)
     y_raw = np.asarray(rates, dtype=np.float64)
     if x.ndim != 1 or y_raw.shape != x.shape or x.size == 0:
         raise ValueError("snr_db and rates must be non-empty equal 1D arrays.")
+    if not np.all(np.isfinite(x)) or np.unique(x).size != x.size:
+        raise ValueError("snr_db must contain finite, unique values.")
     order = np.argsort(x)
     x = x[order]
     y_raw = y_raw[order]
@@ -481,11 +497,7 @@ def crossing_bracket(
         if y[index - 1] < t <= y[index]:
             lo_x, hi_x = float(x[index - 1]), float(x[index])
             lo_y, hi_y = float(y[index - 1]), float(y[index])
-            estimate = (
-                lo_x
-                if hi_y == lo_y
-                else lo_x + (hi_x - lo_x) * (t - lo_y) / (hi_y - lo_y)
-            )
+            estimate = _linear_interpolation(lo_x, hi_x, (t - lo_y) / (hi_y - lo_y))
             return {
                 "bracketed": True,
                 "target_probability": t,
@@ -515,12 +527,25 @@ def crossing_bracket(
 
 
 def _percentile_interval(values: Sequence[float]) -> tuple[float | None, float | None]:
+    if np.iscomplexobj(values):
+        raise ValueError("bootstrap samples must be real.")
     finite = np.asarray(values, dtype=np.float64)
-    finite = finite[np.isfinite(finite)]
+    if finite.ndim != 1 or not np.all(np.isfinite(finite)):
+        raise ValueError("bootstrap samples must be a finite one-dimensional array.")
     if finite.size == 0:
         return None, None
-    lo, hi = np.quantile(finite, (0.025, 0.975))
-    return float(lo), float(hi)
+    ordered = np.sort(finite)
+    bounds = []
+    for probability in (0.025, 0.975):
+        position = (ordered.size - 1) * probability
+        lower = math.floor(position)
+        upper = math.ceil(position)
+        bounds.append(
+            _linear_interpolation(
+                float(ordered[lower]), float(ordered[upper]), position - lower
+            )
+        )
+    return bounds[0], bounds[1]
 
 
 def paired_crossing_bootstrap(
@@ -547,18 +572,48 @@ def paired_crossing_bootstrap(
     ``target_pd``. The valid count is reported, so a sparse sweep cannot
     acquire an interval by extrapolation.
     """
-    x = [float(value) for value in snr_db]
+    try:
+        count = operator.index(replicates)
+    except TypeError as exc:
+        raise ValueError("replicates must be a positive integer.") from exc
+    if isinstance(replicates, (bool, np.bool_)) or count <= 0:
+        raise ValueError("replicates must be a positive integer.")
+    try:
+        bootstrap_seed = operator.index(seed)
+    except TypeError as exc:
+        raise ValueError("seed must be a nonnegative integer.") from exc
+    if isinstance(seed, (bool, np.bool_)) or bootstrap_seed < 0:
+        raise ValueError("seed must be a nonnegative integer.")
+    target = float(target_pd)
+    if not 0.0 < target < 1.0:
+        raise ValueError("target_pd must be in (0, 1).")
+    if np.iscomplexobj(snr_db):
+        raise ValueError("snr_db must contain real values.")
+    grid = np.asarray(snr_db, dtype=np.float64)
+    if grid.ndim != 1 or grid.size == 0:
+        raise ValueError("snr_db must be a non-empty one-dimensional array.")
+    if not np.all(np.isfinite(grid)) or np.unique(grid).size != grid.size:
+        raise ValueError("snr_db must contain finite, unique values.")
+    x = grid.tolist()
+    if np.iscomplexobj(float_null_ratios) or np.iscomplexobj(fixed_null_ratios):
+        raise ValueError("paired null ratios must be real.")
     float_null = np.asarray(float_null_ratios, dtype=np.float64)
     fixed_null = np.asarray(fixed_null_ratios, dtype=np.float64)
     if float_null.shape != fixed_null.shape or float_null.ndim != 1:
         raise ValueError("paired null stage arrays must have identical 1D shape.")
     if float_null.size == 0:
         raise ValueError("paired bootstrap requires null trials.")
+    # Validate the complete null population before drawing subsets. Invalid
+    # rows must not disappear independently from either calibrated stage.
+    order_statistic_threshold(float_null, p_fa=p_fa)
+    order_statistic_threshold(fixed_null, p_fa=p_fa)
     null_keys = list(null_trial_keys)
     if len(null_keys) != float_null.size:
         raise ValueError("null trial identities disagree with paired null arrays.")
     if len(set(null_keys)) != len(null_keys):
         raise ValueError("duplicate null trial identities are not allowed.")
+    if any(np.iscomplexobj(float_h1_ratios_by_snr[s]) for s in x):
+        raise ValueError("paired H1 float ratios must be real.")
     float_h1 = {
         s: np.asarray(float_h1_ratios_by_snr[s], dtype=np.float64) for s in x
     }
@@ -583,13 +638,12 @@ def paired_crossing_bootstrap(
         indices = np.asarray([lookup[key] for key in common_order], dtype=np.int64)
         float_h1[s] = float_h1[s][indices]
         fixed_h1[s] = [fixed_h1[s][int(index)] for index in indices]
-    sizes = {float_h1[s].size for s in x}
-    shared_h1_size = next(iter(sizes)) if len(sizes) == 1 else None
-    rng = np.random.default_rng(int(seed))
+    shared_h1_size = len(common_order)
+    rng = np.random.default_rng(bootstrap_seed)
     float_crossings: list[float] = []
     fixed_crossings: list[float] = []
     losses: list[float] = []
-    for _ in range(int(replicates)):
+    for _ in range(count):
         null_index = rng.integers(0, float_null.size, size=float_null.size)
         float_threshold = order_statistic_threshold(
             float_null[null_index], p_fa=float(p_fa)
@@ -600,24 +654,10 @@ def paired_crossing_bootstrap(
         fixed_q16 = q16_ceil_multiplier(float(fixed_threshold))
         float_rates: list[float] = []
         fixed_rates: list[float] = []
-        shared_index = (
-            None
-            if shared_h1_size is None
-            else rng.integers(0, shared_h1_size, size=shared_h1_size)
-        )
+        shared_index = rng.integers(0, shared_h1_size, size=shared_h1_size)
         for s in x:
-            n = float_h1[s].size
-            if n == 0:
-                float_rates.append(float("nan"))
-                fixed_rates.append(float("nan"))
-                continue
-            index = (
-                shared_index
-                if shared_index is not None
-                else rng.integers(0, n, size=n)
-            )
             float_rates.append(
-                float(np.mean(float_h1[s][index] > float(float_threshold)))
+                float(np.mean(float_h1[s][shared_index] > float(float_threshold)))
             )
             fixed_rates.append(
                 float(
@@ -626,48 +666,51 @@ def paired_crossing_bootstrap(
                             exact_q16_decision(
                                 fixed_h1[s][int(i)], multiplier_q16=fixed_q16
                             )
-                            for i in index
+                            for i in shared_index
                         ]
                     )
                 )
             )
-        if not np.all(np.isfinite(float_rates)) or not np.all(
-            np.isfinite(fixed_rates)
-        ):
-            continue
-        float_cross = crossing_bracket(x, float_rates, target=float(target_pd))
-        fixed_cross = crossing_bracket(x, fixed_rates, target=float(target_pd))
+        float_cross = crossing_bracket(x, float_rates, target=target)
+        fixed_cross = crossing_bracket(x, fixed_rates, target=target)
         if not float_cross["bracketed"] or not fixed_cross["bracketed"]:
             continue
         f = float(float_cross["estimate_db"])
         q = float(fixed_cross["estimate_db"])
+        loss = q - f
+        if not math.isfinite(loss):
+            raise OverflowError("fixed-minus-float crossing loss exceeds float64 range.")
         float_crossings.append(f)
         fixed_crossings.append(q)
-        losses.append(q - f)
+        losses.append(loss)
 
     float_lo, float_hi = _percentile_interval(float_crossings)
     fixed_lo, fixed_hi = _percentile_interval(fixed_crossings)
     loss_lo, loss_hi = _percentile_interval(losses)
     valid = len(losses)
+
+    def median(samples: Sequence[float]) -> float | None:
+        if not samples:
+            return None
+        ordered = sorted(samples)
+        middle = len(ordered) // 2
+        if len(ordered) % 2:
+            return ordered[middle]
+        return _linear_interpolation(ordered[middle - 1], ordered[middle], 0.5)
+
     return {
-        "target_probability": float(target_pd),
-        "bootstrap_seed": int(seed),
-        "requested_replicates": int(replicates),
+        "target_probability": target,
+        "bootstrap_seed": bootstrap_seed,
+        "requested_replicates": count,
         "valid_bracketed_replicates": valid,
-        "valid_fraction": float(valid / int(replicates)) if replicates else 0.0,
-        "float_crossing_median_db": (
-            None if not float_crossings else float(np.median(float_crossings))
-        ),
+        "valid_fraction": float(valid / count),
+        "float_crossing_median_db": median(float_crossings),
         "float_crossing_bootstrap95_lo_db": float_lo,
         "float_crossing_bootstrap95_hi_db": float_hi,
-        "fixed_q16_crossing_median_db": (
-            None if not fixed_crossings else float(np.median(fixed_crossings))
-        ),
+        "fixed_q16_crossing_median_db": median(fixed_crossings),
         "fixed_q16_crossing_bootstrap95_lo_db": fixed_lo,
         "fixed_q16_crossing_bootstrap95_hi_db": fixed_hi,
-        "fixed_minus_float_sensitivity_loss_median_db": (
-            None if not losses else float(np.median(losses))
-        ),
+        "fixed_minus_float_sensitivity_loss_median_db": median(losses),
         "fixed_minus_float_sensitivity_loss_bootstrap95_lo_db": loss_lo,
         "fixed_minus_float_sensitivity_loss_bootstrap95_hi_db": loss_hi,
         "interpretation": (
@@ -676,16 +719,15 @@ def paired_crossing_bootstrap(
         ),
         "uncertainty_scope": (
             "Paired nonparametric resampling of both null calibration trials "
-            "and H1 trials, conditional on the simulated signal/noise model."
+            "and H1 trials, conditional on the simulated signal/noise model "
+            "and on both sampled curves bracketing the target probability."
         ),
         "null_pairing_mode": "explicit_trial_identities",
         "paired_null_trials": int(float_null.size),
         "h1_pairing_mode": (
             "intersection_of_explicit_trial_identities_across_all_snrs"
         ),
-        "paired_h1_trials_per_snr": (
-            None if shared_h1_size is None else int(shared_h1_size)
-        ),
+        "paired_h1_trials_per_snr": shared_h1_size,
     }
 
 

@@ -41,11 +41,9 @@ def synthetic_decisions():
     """Return threshold-rule rows for one channel of each outcome and for the control band."""
     return {"inputs": {"note": "synthetic example; no score cache or tolerance table was read"}, "channels": [
         {"channel": 14, "outcome": "not useful", "reason": "above tolerance", "deployed_at": None,
-         "deployed_word": None, "knee_word": 70000},
-        {"channel": 29, "outcome": "useful", "reason": None, "deployed_at": "knee", "deployed_word": WORD,
-         "knee_word": WORD},
-        {"channel": 37, "outcome": "useful", "reason": None, "deployed_at": "knee", "deployed_word": 72850,
-         "knee_word": 72850},
+         "deployed_word": None},
+        {"channel": 29, "outcome": "useful", "reason": None, "deployed_at": "maximum retention", "deployed_word": WORD},
+        {"channel": 37, "outcome": "useful", "reason": None, "deployed_at": "maximum retention", "deployed_word": 72850},
     ]}
 
 

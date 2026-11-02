@@ -1,9 +1,9 @@
 """Export small coarse-frame fields against a characterization release's era and health records.
 
-The eras are not refitted, and no hardware is accessed. The fine member is
-decoded only to form the frame powers, and no fine value or PSD is exported.
-The histogram keeps every finite Q of the timed, health-selected frames, and a
-Q at or below zero is kept and flagged.
+No era refitting or hardware access. Fine powers are decoded to derive the
+frame sums and health gate; PSD payloads are not read. Histograms retain every
+finite Q on timed health-selected frames, including zero if present. Fine and
+PSD arrays are not exported.
 
 With ``--control-product``, one control band is exported instead. A control
 band has role ``control`` in the frequency plan of the project profile and is
@@ -338,7 +338,7 @@ def run_control(product,output,profile=None):
         "channels":[{"channel":record["channel"],"freq_id":record["freq_id"],"role":"control","npz":f"ch{record['channel']:02d}.npz","metadata":f"ch{record['channel']:02d}.json","counts":record["counts"]}],
         "files":{path.name:sha(path) for path in output.iterdir() if path.is_file()},
         "era_denominator_note":"The period count includes acquisition-month assignments of untimed frames. Histogram eligibility requires actual finite frame time; both counts are retained.",
-        "fine_and_psd_payloads_decoded":False}
+        "fine_power_payload_decoded":True,"psd_payloads_decoded":False}
     write_json(output/"manifest.json",manifest)
     return manifest
 
@@ -371,7 +371,7 @@ def run(products,release,output):
         "extraction_plan_sha256":sha(output/"extraction-plan.json"),"totals":totals,"channels":[{"channel":record["channel"],"freq_id":record["freq_id"],"npz":f"ch{record['channel']:02d}.npz","metadata":f"ch{record['channel']:02d}.json","counts":record["counts"]} for record in records],
         "files":{path.name:sha(path) for path in output.iterdir() if path.is_file()},
         "era_denominator_note":"Saved era counts include acquisition-month assignments of untimed frames. Histogram eligibility requires actual finite frame time; both counts are retained.",
-        "fine_and_psd_payloads_decoded":False}
+        "fine_power_payload_decoded":True,"psd_payloads_decoded":False}
     write_json(output/"manifest.json",manifest)
     return manifest
 

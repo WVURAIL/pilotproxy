@@ -84,6 +84,39 @@ def test_fine_reduce_parseval_and_identity() -> None:
     )
 
 
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.bool_, object])
+def test_fine_reduce_refuses_noninteger_real_imaginary_pairs(dtype) -> None:
+    rows = np.full((3, 16, 2), 0.5, dtype=dtype)
+    with pytest.raises(TypeError, match="integer.*complex"):
+        fine_reduce(rows, num_streams=2, windows_per_stream=8)
+
+
+@pytest.mark.parametrize("complex_input", [False, True])
+def test_fine_reduce_preserves_analytical_energy_for_both_input_forms(complex_input) -> None:
+    streams, windows = 2, 8
+    if complex_input:
+        amplitudes = ((0.5, 0.25), (0.25, -0.5), (-0.75, 0.25))
+        rows = np.empty((3, streams * windows), dtype=np.complex128)
+        for term, (real, imag) in enumerate(amplitudes):
+            rows[term] = complex(real, imag)
+    else:
+        amplitudes = ((3, -2), (-1, 2), (2, 0))
+        rows = np.empty((3, streams * windows, 2), dtype=np.int32)
+        for term, amplitude in enumerate(amplitudes):
+            rows[term] = amplitude
+    expected_energy = np.asarray([
+        streams * windows * (real * real + imag * imag)
+        for real, imag in amplitudes
+    ])
+    result = fine_reduce(rows, num_streams=streams, windows_per_stream=windows)
+    np.testing.assert_array_equal(result.coarse_power_by_term, expected_energy)
+    np.testing.assert_allclose(
+        result.fine_power.sum(axis=1, dtype=np.float64),
+        2 * windows * expected_energy,
+        rtol=1e-7,
+    )
+
+
 def test_synthetic_tone_lands_in_correct_padded_bin() -> None:
     # A pure envelope tone at unpadded bin q must peak at padded bin
     # q * FINE_PAD_FACTOR in the target spectrum, coherently across streams.

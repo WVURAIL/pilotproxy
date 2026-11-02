@@ -15,6 +15,21 @@ of products made before the snapshot, refer to that repository unless the commit
 in this one. Readers who need them, such as the dissertation committee, can be given
 access on request.
 
+Set `PILOT_PROXY_PROVENANCE_REPOSITORY` to a local checkout or bare clone of that
+history for the archived exporter and transfer-reproduction tests. These tests
+execute the hash-verified historical sources; separate tests check that current
+readers and exporters refuse incompatible inputs or changed publication sources.
+`GIT_ALTERNATE_OBJECT_DIRECTORIES` can expose preserved object directories to the
+source-hash and cited-path checks without importing private refs into this
+repository.
+
+Inventory compatibility uses explicit legacy rows and the retained v5 inventory
+(`PILOT_PROXY_ARCHIVE_BUNDLE`). The latter constructs legacy cases from retained
+rows and checks recovered filenames against the recorded names. Collection-path
+tests use the same inventory to check bare, prefixed, and mixed replica paths.
+The retired July inventories are no longer test dependencies; their historical
+row and event counts are outside these checks.
+
 ## What differs from the snapshot
 
 - A manuscript draft, its working notes and an archive listing were not meant for
@@ -22,8 +37,8 @@ access on request.
 - Real CHIME/FRB event numbers used as examples in tests, docs and one docstring are
   replaced with made-up ones of the same length and order.
 - Workstation paths in docs and tests are environment variables
-  (`PILOT_PROXY_ARCHIVE_BUNDLE`, `PILOT_PROXY_JULY_INVENTORIES`) or examples, and
-  the tests that need those inputs skip without them.
+  (such as `PILOT_PROXY_ARCHIVE_BUNDLE`) or examples; the
+  tests that need those inputs skip without them.
 - Package versions in this repository start at 1.0.0, and products stamp the
   repository `WVURAIL/pilotproxy`. Detector core and schema versions continue the
   development repository's.

@@ -495,11 +495,14 @@ raise the bounded prefetch depth.
 The following documents give the complete selection rules, local and
 CADC/CANFAR sequences, order constraint, and post-processing commands:
 
-- [docs/RERUN_PARAMETER_REGISTER.md](../docs/RERUN_PARAMETER_REGISTER.md) for the frozen scientific and product settings;
-- [docs/VALIDATION_GATES.md](../docs/VALIDATION_GATES.md) for the mandatory local launch gates;
-- [docs/LOCAL_PROCESSING.md](../docs/LOCAL_PROCESSING.md) for the measured local workstation profile and the sole production command;
-- [INTEGRATION.md](../INTEGRATION.md) for the standalone archive integration contract; and
-- [docs/CANFAR_RUNBOOK.md](../docs/CANFAR_RUNBOOK.md) for the alternate bounded remote workflow.
+- **Runtime settings:** [receiver profile](../configs/receiver_profiles/chime_dtv_fengine.json),
+  [detector core profile](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json),
+  [weight manifest](../weights/chime_dtv_weights_k128.bin.manifest.json), and
+  [product schema](PRODUCT_SCHEMA.md).
+- **[docs/VALIDATION_GATES.md](../docs/VALIDATION_GATES.md)** --- mandatory local launch gates.
+- **[docs/LOCAL_PROCESSING.md](../docs/LOCAL_PROCESSING.md)** --- measured local workstation profile and sole production command.
+- **[INTEGRATION.md](../INTEGRATION.md)** --- standalone archive integration contract.
+- **[docs/CANFAR_RUNBOOK.md](../docs/CANFAR_RUNBOOK.md)** --- alternate bounded remote workflow.
 
 ---
 

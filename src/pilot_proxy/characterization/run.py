@@ -20,6 +20,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -80,6 +81,10 @@ def _jsonable(value: Any) -> Any:
 
 
 def _month_index(label: str) -> int:
+    if (not isinstance(label, str)
+            or re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", label) is None
+            or label.startswith("0000-")):
+        raise ValueError("campaign-last-month must be a calendar month in YYYY-MM format")
     y, m = (int(x) for x in label.split("-"))
     return y * 12 + m - 1
 
@@ -127,6 +132,7 @@ def characterize_archive(products_dir: Path | str, out_dir: Path | str, *, proje
                          bands: Sequence[int] | None = None, campaign_last_month: str | None = None,
                          era_config: eras.EraConfig | None = None, generated: str | None = None) -> dict:
     """Write the release of every screened band's product (``bands`` restricts it)."""
+    campaign_last = _month_index(campaign_last_month) if campaign_last_month is not None else None
     project = load_project(project_dir)
     _require_default_layers(project)
     products_dir, out = Path(products_dir), Path(out_dir) / "characterization"
@@ -138,8 +144,8 @@ def characterize_archive(products_dir: Path | str, out_dir: Path | str, *, proje
         all_bands = {p.geometry.physical_channel: p for p in opened if p.geometry.physical_channel in screened}
         config = era_config or eras.DEFAULT_CONFIG
         # the campaign snapshot is the last populated month over every product present, whatever subset runs
-        campaign_last = (_month_index(campaign_last_month) if campaign_last_month
-                         else eras.campaign_last_populated_month(list(all_bands.values()), config))
+        if campaign_last is None:
+            campaign_last = eras.campaign_last_populated_month(list(all_bands.values()), config)
         by_band = {c: all_bands[c] for c in bands} if bands else all_bands
         overrides = project.eras.overrides_spec()
         results = [release_band(p, out, campaign_last_month=campaign_last, era_config=config, era_spec=overrides.get(c))

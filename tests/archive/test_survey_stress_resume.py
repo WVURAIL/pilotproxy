@@ -932,9 +932,9 @@ _BAD_ROWS = [
                          ids=[c[0] for c in _BAD_ROWS])
 def test_parse_row_rejects_a_legacy_or_partial_row_with_its_location(
         case_id, text, fragment):
-    # This guard must reject the July 2026 datatrawl inventories, which carry
-    # no "name". It keeps a drifted survey from reaching a scan that would
-    # process the wrong files with no warning.
+    # Reject malformed or partial rows before a scan can process the wrong
+    # files. Complete, identified schema-1 rows have separate compatibility
+    # coverage in test_publication_trust.py.
     with pytest.raises(SystemExit) as excinfo:
         inv.parse_row(text, "/inv/inventory.jsonl", 42)
     message = str(excinfo.value)

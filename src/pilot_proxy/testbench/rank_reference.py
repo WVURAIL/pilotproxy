@@ -48,13 +48,14 @@ Run with --out DIR using this module.
 from __future__ import annotations
 
 import argparse
-import json
 import time
 from pathlib import Path
 
 import numpy as np
 from scipy.optimize import brentq
 from scipy.stats import f as fdist, ncf
+
+from pilot_proxy.json_utils import write_json_strict
 
 L = 128
 G1 = float((np.sin(np.pi * 0.5) / (L * np.sin(np.pi * 0.5 / L))) ** 2)
@@ -85,7 +86,6 @@ def build_table():
     return tab
 
 
-TAB = None
 F5 = None      # the clean-null prod_D F on XG, filled in run (interpolation error below 1e-6 in the CDF)
 
 
@@ -162,14 +162,15 @@ def run_size(n, tab, seed):
     return dets, cases, snr, etas, pooled, direct_batches
 
 
-def summarise(n, dets, cases, snr, etas, pooled, direct_batches):
+def summarise(n, dets, cases, snr, etas, pooled, direct_batches, *, tab):
     """Reduce the batches of bulk size n to losses against clean CA, with a table-versus-direct check."""
     base = np.array(snr[0]["CA"], dtype=float)
     assert np.all(np.isfinite(base))
+    batches = base.size
     eta_pooled = {d: float(np.mean(etas[d])) for d in dets}
     out = {"bulk_size": n, "detectors": [str(d) for d in dets], "eta_mean": {str(d): eta_pooled[d] for d in dets},
-           "eta_se": {str(d): float(np.std(etas[d], ddof=1) / np.sqrt(NBATCH)) for d in dets},
-           "ca_clean_snr_pd90_db": dict(mean=float(base.mean()), se=float(base.std(ddof=1) / np.sqrt(NBATCH))),
+           "eta_se": {str(d): float(np.std(etas[d], ddof=1) / np.sqrt(batches)) for d in dets},
+           "ca_clean_snr_pd90_db": dict(mean=float(base.mean()), se=float(base.std(ddof=1) / np.sqrt(batches))),
            "cases": {}}
     for c in cases:
         rows = {}
@@ -177,11 +178,13 @@ def summarise(n, dets, cases, snr, etas, pooled, direct_batches):
             v = snr[c][d]
             if all(x is not None for x in v):
                 diff = np.array(v, dtype=float) - base
-                rows[str(d)] = dict(loss_db=float(diff.mean()), se_db=float(diff.std(ddof=1) / np.sqrt(NBATCH)),
-                                    method="table, 20 batches", direct_batches=direct_batches[c][d])
+                direct_count = direct_batches[c][d]
+                method = "table" if direct_count == 0 else "direct" if direct_count == batches else "table and direct"
+                rows[str(d)] = dict(loss_db=float(diff.mean()), se_db=float(diff.std(ddof=1) / np.sqrt(batches)),
+                                    method=f"{method}, {batches} batches", direct_batches=direct_count)
             else:
                 ref = np.concatenate(pooled[c][d]).astype(np.float64)
-                if ref.size != NBATCH * NF:
+                if ref.size != batches * NF:
                     raise RuntimeError(f"references for the direct solve are incomplete: {c} {d}")
                 s = snr_direct(eta_pooled[d], ref)
                 rows[str(d)] = dict(loss_db=float(s - base.mean()), se_db=None, method="direct, pooled",
@@ -192,7 +195,7 @@ def summarise(n, dets, cases, snr, etas, pooled, direct_batches):
     for d in ("CA", 63):
         ref = np.concatenate(pooled[0][d][:2])
         e, ex = eta_for(ref), eta_for(ref, exact=True)
-        chk[str(d)] = dict(eta_interp=e, eta_exact=ex, table=snr_table(e, ref, TAB),
+        chk[str(d)] = dict(eta_interp=e, eta_exact=ex, table=snr_table(e, ref, tab),
                            direct=snr_direct(ex, ref, lo=-10.0, hi=-7.0))
     out["table_vs_direct_check"] = chk
     return out
@@ -200,25 +203,26 @@ def summarise(n, dets, cases, snr, etas, pooled, direct_batches):
 
 def run(output_dir):
     """Run the recorded model and its fixed seeds. The output location is the only input."""
-    global TAB, F5
+    global F5
     OUT = Path(output_dir)
     OUT.mkdir(parents=True, exist_ok=False)
     (OUT / "REFERENCE.md").write_text('Ideal independent-bin reference only. The simulated or quadrature threshold is not an operational eta_Pfa calibration.\n', encoding="utf-8")
     t_all = time.time()
-    TAB = build_table()
+    tab = build_table()
     F5 = dprod(XG, 0.0)
     result = {"model": "ideal i.i.d. F(4096, 8192); D gains (0, g1, 1, g1, 0); Pfa 1e-3 per detector on the clean null; "
                        "Pd 0.9; contaminated bins noncentral F at +20 dB",
               "g1": G1, "pfa": PFA, "pd": PD, "level_db": LEVEL_DB, "ks": KS, "batches": NBATCH, "frames_per_batch": NF,
-              "x_grid": [float(XG[0]), float(XG[-1]), 1e-4], "snr_grid_db": [float(SG[0]), float(SG[-1]), 0.002],
+              "x_grid": [float(XG[0]), float(XG[-1]), float(np.round(XG[1] - XG[0], 10))],
+              "snr_grid_db": [float(SG[0]), float(SG[-1]), float(np.round(SG[1] - SG[0], 6))],
               "sizes": {}}
     for n, seed in zip(SIZES, (20260929_125, 20260929_126)):
-        dets, cases, snr, etas, pooled, direct_batches = run_size(n, TAB, seed)
-        result["sizes"][str(n)] = summarise(n, dets, cases, snr, etas, pooled, direct_batches)
+        dets, cases, snr, etas, pooled, direct_batches = run_size(n, tab, seed)
+        result["sizes"][str(n)] = summarise(n, dets, cases, snr, etas, pooled, direct_batches, tab=tab)
         del pooled
-        (OUT / "rank_bench.json").write_text(json.dumps(result, indent=1) + "\n")
+        write_json_strict(OUT / "rank_bench.json", result, indent=1)
     result["seconds"] = round(time.time() - t_all, 1)
-    (OUT / "rank_bench.json").write_text(json.dumps(result, indent=1) + "\n")
+    write_json_strict(OUT / "rank_bench.json", result, indent=1)
     r = result["sizes"]["125"]["cases"]["clean"]
     print({k: round(r[k]["loss_db"], 4) for k in ("1", "2", "3", "8", "34", "63", "94", "113", "125")}, flush=True)
     return result

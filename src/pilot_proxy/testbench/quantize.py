@@ -29,6 +29,7 @@ from pilot_proxy.reference_channelizer import (  # noqa: E402
     channelize_real_blocks_to_reference_channels,
     complex_envelope_to_real_adc_blocks,
     nearest_reference_channel_index,
+    normalize_reference_channel_indices,
     reference_channel_frequencies_hz,
     sinc_hamming_pfb_response,
 )
@@ -274,6 +275,10 @@ def main(argv: list[str] | None = None) -> int:
         base_channels = [
             nearest_reference_channel_index(float(args.dtv_pilot_mhz) * HZ_PER_MHZ, spec)
         ]
+    try:
+        normalize_reference_channel_indices(base_channels, spec)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     if args.channel_half_width:
         expanded: list[int] = []
         for idx in base_channels:

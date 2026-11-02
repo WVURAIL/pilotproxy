@@ -1,11 +1,11 @@
 # coding=utf-8
-"""Tests that a study's identity is unchanged by the files the study writes.
+"""Keep a study's identity stable as it creates output files.
 
-``_study_config`` hashes the configuration, and ``_write_or_validate_config``
-requires later stages to use the same digest. The prepare stage creates the
+``_build_config`` hashes the configuration, and ``_write_or_validate_config``
+requires later stages to use the same digest. The prepare stage creates an
 output directory, so untracked files must not change that identity. Modified
-tracked sources are still part of the identity, so that shards produced by
-different code are never pooled as one study.
+tracked sources still belong in it: shards produced by different code must
+not be pooled as one unchanged study.
 """
 from __future__ import annotations
 

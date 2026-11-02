@@ -1,17 +1,4 @@
-"""Rescore one channel's score cache with a given anchor, marker half-width h, and
-marker guard band g, the fine geometry options of the detector v2 calibration.
-
-The frames, events, and weights of the cache are kept, and the words, rank support,
-knee, and candidates are recomputed from the cache's original product. The rank is
-the median of the resulting bulk (``scores.candidate_rho_values``). At the cache's
-own geometry, the recomputed words and support reproduce the cache. Every cache
-records the knee of knee rule v1, and under that rule the recomputed knee and
-candidates also reproduce the cache. The output is written to a new directory, and
-nothing of record is changed.
-
-    python -m pilot_proxy.detectors.narrowband_marker.rescore CACHE.json OUT_DIR
-        [--anchor-bin A] [--designated-half-width H] [--marker-guard-bins G] [--knee-rule ID]
-"""
+"""Recompute exact score words for another detector geometry, preserving the population and reference threshold."""
 from __future__ import annotations
 
 import argparse
@@ -20,9 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pilot_proxy.characterization import knee
 from pilot_proxy.characterization.score_cache import (
-    candidate_cache,
     require,
     sha,
     write_json,
@@ -39,8 +24,10 @@ def score_rows(terms, anchor_bin, bulk, designated_half_width, rho):
     n = len(terms)
     words = np.zeros(n, np.uint64)
     always = np.zeros(n, bool)
-    denominator = terms[:, 1, :].astype(np.int64) + terms[:, 2, :].astype(np.int64)
-    support = (denominator[:, bulk_idx] > 0).sum(1)
+    # Nonnegative reference powers have a positive sum when either is nonzero.
+    # Test support without overflowing the uint64 powers or a signed cast.
+    reference_present = (terms[:, 1, :] != 0) | (terms[:, 2, :] != 0)
+    support = reference_present[:, bulk_idx].sum(1)
     for i in range(n):
         if support[i] < rho:
             always[i] = True
@@ -54,23 +41,16 @@ def score_rows(terms, anchor_bin, bulk, designated_half_width, rho):
     return words, support >= rho, always
 
 
-def rescore(cache_json, output, *, anchor_bin=None, designated_half_width=2, marker_guard_bins=0,
-            knee_rule=knee.RULE_ID_V1):
-    """Write ``ch<N>.json`` and ``ch<N>.npz`` for one cache rescored on a fine geometry.
-
-    ``anchor_bin`` None keeps the cache's anchor. The source product is the cache's
-    original product, whose frame powers are read and never changed. By default the
-    recorded knee is that of rule v1, as in every cache. The threshold rule checks this
-    knee and then decides with its own current rule. Returns the summary of the old and
-    new geometry, knee, and supported frames.
-    """
+def rescore(cache_json, output, *, anchor_bin=None, designated_half_width=2, marker_guard_bins=0):
+    """Write a new authenticated score cache without selecting an operating threshold."""
     cache_json = Path(cache_json)
     output = Path(output)
     meta = json.loads(cache_json.read_text())
     cache_npz = cache_json.with_suffix('.npz')
     require(sha(cache_npz) == meta['npz_sha256'], 'Cache npz differs from its metadata')
     channel = meta['channel']
-    require(not (output / f'ch{channel}.json').exists(), 'Rescored cache already exists')
+    require(not any((output / f'ch{channel}{suffix}').exists() for suffix in ('.json', '.npz')),
+            'Rescored cache already exists')
     with np.load(cache_npz, allow_pickle=False) as z:
         old = {key: z[key] for key in z.files}
     old_geometry = meta['score_geometry']
@@ -84,17 +64,13 @@ def rescore(cache_json, output, *, anchor_bin=None, designated_half_width=2, mar
                                  designated_half_width=designated_half_width, marker_guard_bins=marker_guard_bins)
         rho = scores.candidate_rho_values(int(bulk.sum()))[0]
         words, rank, always = score_rows(product.fine_terms(rows), anchor, bulk, designated_half_width, rho)
-    inverse = old['frame_event_index']
     computed = np.ones(len(rows), bool)
-    proposal = knee.propose(words, [str(int(event)) for event in inverse], valid=list(rank & computed),
-                            always_masked=list(always), rule=knee_rule)
-    knee_word = int(proposal['knee_word_q16'])
-    reference, candidates, arrays, encoding = candidate_cache(words, rank, always, inverse, knee_word, knee_word)
-    for key, value in old.items():
-        arrays.setdefault(key, value)
-    arrays['score_computed'] = computed
-    arrays['current_keep'] = arrays['supported'] & (words <= np.uint64(knee_word))
-    current = next(row for row in candidates if 'current_assignment' in row['roles'])
+    current_word = int(meta["current_threshold"]["eta_q16"])
+    arrays = dict(old)
+    arrays.pop("rank_supported", None)
+    arrays.pop("always_masked", None)
+    arrays.update(required_q16=words, supported=rank & ~always, score_computed=computed,
+                  current_keep=(rank & ~always) & (words <= current_word))
     output.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(output / f'ch{channel}.npz', **arrays)
     geometry = dict(old_geometry)
@@ -102,27 +78,20 @@ def rescore(cache_json, output, *, anchor_bin=None, designated_half_width=2, mar
                     designated_bins=list(anchors.designated_set(anchor, designated_half_width)),
                     bulk_bins=[int(b) for b in np.flatnonzero(bulk)], rho_one_based=int(rho),
                     cfar_rank_zero_based=int(rho) - 1, intended_bulk_size=int(bulk.sum()))
-    if marker_guard_bins:
-        geometry['marker_guard_bins'] = marker_guard_bins
+    geometry['marker_guard_bins'] = marker_guard_bins
     value = dict(meta)
     value.pop('accepted_exact_replay', None)
     value.update(score_geometry=geometry,
                  score_geometry_source=f'rescored on h={designated_half_width}, g={marker_guard_bins}, anchor {anchor}',
-                 knee_threshold={'kind': 'finite', 'eta_q16': str(knee_word)},
-                 current_threshold={'kind': 'finite', 'eta_q16': str(knee_word)}, current_candidate_id=current['id'],
-                 weight_numerator_encoding=encoding,
-                 weight_denominator_decimal=str(arrays['weight_denominator_decimal'].item()),
-                 reference=reference, candidates=candidates, current_exact_mask_unchanged=False,
-                 current_assignment_unchanged=False, npz_sha256=sha(output / f'ch{channel}.npz'),
+                 current_exact_mask_unchanged=False, current_assignment_unchanged=True,
+                 npz_sha256=sha(output / f'ch{channel}.npz'),
                  rescore={'previous_cache': {'json': str(cache_json), 'json_sha256': sha(cache_json),
                                              'npz': str(cache_npz), 'npz_sha256': meta['npz_sha256']},
-                          'knee_rule': knee_rule, 'source_sha256': sha(__file__),
-                          'current_word': 'the knee of the rescored words'})
+                          'source_sha256': sha(__file__), 'current_word': current_word})
     write_json(output / f'ch{channel}.json', value)
     return {'channel': channel, 'anchor_bin': anchor, 'designated_half_width': designated_half_width,
             'marker_guard_bins': marker_guard_bins, 'bulk_size': int(bulk.sum()), 'rho': int(rho),
             'previous_bulk_size': len(old_geometry['bulk_bins']), 'previous_rho': old_geometry.get('rho_one_based'),
-            'knee_word': knee_word, 'previous_knee_word': int(meta['knee_threshold']['eta_q16']),
             'supported_frames': int((rank & ~always).sum()), 'frames': len(rows)}
 
 
@@ -133,11 +102,10 @@ def main(argv=None) -> int:
     parser.add_argument("--anchor-bin", type=int, default=None)
     parser.add_argument("--designated-half-width", type=int, default=2)
     parser.add_argument("--marker-guard-bins", type=int, default=0)
-    parser.add_argument("--knee-rule", default=knee.RULE_ID_V1)
     args = parser.parse_args(argv)
     print(json.dumps(rescore(args.cache, args.output, anchor_bin=args.anchor_bin,
                              designated_half_width=args.designated_half_width,
-                             marker_guard_bins=args.marker_guard_bins, knee_rule=args.knee_rule)))
+                             marker_guard_bins=args.marker_guard_bins)))
     return 0
 
 

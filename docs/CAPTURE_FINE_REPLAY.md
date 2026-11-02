@@ -173,11 +173,10 @@ not make the same block a new observation. The supplied trial name is kept as
 `declared_trial_id`, and the independent-unit identity is kept as supplied
 provenance.
 
-When the saved products agree, the declaration produces `population_CH*.json`.
-Invalid rows are written to it, and the population validator refuses them.
-When product parity fails, the diagnostic scores remain, but no population file
-is emitted. Invalid or mismatching rows must never be edited out to claim
-qualification.
+When saved products agree, the declaration produces `population_CH*.json`.
+Invalid rows retain a false `valid` flag and a null `required_multiplier_q16`.
+When product parity fails, diagnostic scores remain but no population file
+is emitted. Do not edit out invalid or mismatching rows to claim qualification.
 
 Calibration and evaluation must use the same score profile, the same fixed
 packing and input state, and the same producer. Use one fixed clock reference

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 import runpy
 import subprocess
+import sys
 
 import pytest
 
@@ -11,6 +14,12 @@ import pytest
 FREEZER = runpy.run_path(
     str(Path(__file__).resolve().parents[2] / "tools" / "freeze_estimator_transfer.py")
 )
+PUBLICATION_SOURCE_SHA256 = {
+    "src/pilot_proxy/testbench/plot_results.py":
+        "845f2653feb4511810bcbe1e11dcf40ce473e68d1c53e31b41f8e6304f98a98a",
+    "tools/freeze_estimator_transfer.py":
+        "c6c1631d38043dd50f61ec36a315c451c9dc26a8c055cd392a8dab21eaa1fd00",
+}
 
 
 def test_digital_layout_matches_completed_sweep(tmp_path: Path) -> None:
@@ -405,26 +414,50 @@ def test_fit_metrics_distinguish_fitted_line_residuals() -> None:
 
 
 def _has_tag(name: str) -> bool:
+    repository = os.environ.get(
+        "PILOT_PROXY_PROVENANCE_REPOSITORY", str(Path(__file__).resolve().parents[2])
+    )
     try:
-        return subprocess.run(["git", "-C", str(Path(__file__).resolve().parents[2]), "rev-parse", "--verify",
+        return subprocess.run(["git", "-C", repository, "rev-parse", "--verify",
                                "--quiet", f"refs/tags/{name}"], capture_output=True).returncode == 0
     except OSError:
         return False
 
 
-@pytest.mark.skipif(not _has_tag(FREEZER["PUBLICATION_EXPORT_ARCHIVE_TAG"]),
-                    reason="needs the archive tags of the provenance repository (PROVENANCE.md)")
-def test_provenance_separates_run_and_export_states(tmp_path: Path) -> None:
-    function_globals = FREEZER["_source_provenance"].__globals__
-    original_state = function_globals["_repository_export_state"]
-    function_globals["_repository_export_state"] = lambda: {
-        "repository_revision": "f" * 40,
-        "repository_dirty": True,
-    }
-    try:
-        value = FREEZER["_source_provenance"]("digital_synthetic", tmp_path)
-    finally:
-        function_globals["_repository_export_state"] = original_state
+@pytest.fixture
+def publication_source(tmp_path: Path) -> Path:
+    tag = FREEZER["PUBLICATION_EXPORT_ARCHIVE_TAG"]
+    if not _has_tag(tag):
+        pytest.skip("set PILOT_PROXY_PROVENANCE_REPOSITORY to the archive-tag repository (PROVENANCE.md)")
+    repository = os.environ.get(
+        "PILOT_PROXY_PROVENANCE_REPOSITORY", str(Path(__file__).resolve().parents[2])
+    )
+    checkout = tmp_path / "publication-source"
+    subprocess.run(["git", "clone", "--shared", "--no-checkout", repository, str(checkout)],
+                   check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(checkout), "checkout", "--detach", f"refs/tags/{tag}"],
+                   check=True, capture_output=True)
+    for relative_path, expected in PUBLICATION_SOURCE_SHA256.items():
+        assert hashlib.sha256((checkout / relative_path).read_bytes()).hexdigest() == expected
+    return checkout
+
+
+def test_provenance_separates_run_and_export_states(tmp_path: Path, publication_source: Path) -> None:
+    # A fresh interpreter imports the tagged plotter with the tagged exporter.
+    script = """
+import json, runpy, sys
+from pathlib import Path
+freezer = runpy.run_path(sys.argv[1])
+freezer['_source_provenance'].__globals__['_repository_export_state'] = lambda: {
+    'repository_revision': 'f' * 40, 'repository_dirty': True,
+}
+print(json.dumps(freezer['_source_provenance']('digital_synthetic', Path(sys.argv[2]))))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(publication_source / "tools/freeze_estimator_transfer.py"),
+         str(tmp_path)], cwd=publication_source, check=True, capture_output=True, text=True,
+    )
+    value = json.loads(result.stdout)
     run = value["run_worktree"]
     export = value["publication_export"]
 
@@ -447,9 +480,46 @@ def test_provenance_separates_run_and_export_states(tmp_path: Path) -> None:
     assert export["repository_revision"] == "f" * 40
     assert export["repository_dirty"] is True
     for source in export["source_files"].values():
+        assert source["sha256"] == PUBLICATION_SOURCE_SHA256[source["path"]]
         assert source["archival_tag"] == FREEZER[
             "PUBLICATION_EXPORT_ARCHIVE_TAG"
         ]
         assert len(source["archival_tag_object"]) == 40
         assert len(source["archival_commit"]) == 40
         assert len(source["archival_blob"]) == 40
+
+
+def test_current_exporter_accepts_unchanged_publication_source(
+    publication_source: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    function_globals = FREEZER["_source_provenance"].__globals__
+    monkeypatch.setitem(function_globals, "PROJECT_ROOT", publication_source)
+
+    value = FREEZER["_source_provenance"]("digital_synthetic", publication_source)
+    export = value["publication_export"]
+
+    assert value["schema_version"] == FREEZER["PROVENANCE_SCHEMA"]
+    assert value["experiment"] == "digital_synthetic"
+    assert export["repository_dirty"] is False
+    assert set(export["source_files"]) == {"publication_plot_source", "freezer"}
+    assert {
+        source["path"]: source["sha256"]
+        for source in export["source_files"].values()
+    } == PUBLICATION_SOURCE_SHA256
+    for source in export["source_files"].values():
+        assert source["archival_tag"] == FREEZER["PUBLICATION_EXPORT_ARCHIVE_TAG"]
+        assert source["archival_commit"] == export["repository_revision"]
+        assert len(source["archival_tag_object"]) == 40
+        assert len(source["archival_blob"]) == 40
+
+
+@pytest.mark.parametrize("relative_path", PUBLICATION_SOURCE_SHA256)
+def test_current_exporter_refuses_changed_publication_source(
+    publication_source: Path, relative_path: str, monkeypatch
+) -> None:
+    source = publication_source / relative_path
+    source.write_bytes(source.read_bytes() + b"\n# Changed source must not inherit the archived identity.\n")
+    function_globals = FREEZER["_source_provenance"].__globals__
+    monkeypatch.setitem(function_globals, "PROJECT_ROOT", publication_source)
+    with pytest.raises(ValueError, match="Publication source differs"):
+        FREEZER["_source_provenance"]("digital_synthetic", publication_source)

@@ -55,6 +55,38 @@ def test_multiple_segment_files_concatenate_in_sorted_file_order(tmp_path) -> No
     np.testing.assert_array_equal(block[1, 0], [22, 23, 40, 41])
 
 
+@pytest.mark.parametrize("fields", [("real", "imag"), ("RE", "IM"), ("r", "i")])
+@pytest.mark.parametrize("stream_first", [False, True])
+def test_structured_complex_window_preserves_values_across_segments(
+        tmp_path, fields, stream_first) -> None:
+    real_name, imag_name = fields
+    values = np.asarray([
+        [1.5 - 2j, -3 + 4.25j],
+        [5 + 6j, 7.5 - 8j],
+        [-9.25 + 10j, 11 - 12.5j],
+        [13 - 14j, -15.5 + 16j],
+    ], dtype=np.complex64)
+    for index, segment in enumerate((values[:2], values[2:]), 1):
+        raw = np.empty(segment.shape,
+                       dtype=[(imag_name, "<f4"), (real_name, "<f4")])
+        raw[real_name] = segment.real
+        raw[imag_name] = segment.imag
+        path = tmp_path / "ch0844" / f"{index:03d}.h5"
+        _write_segment(path, raw.T if stream_first else raw)
+        if stream_first:
+            with h5py.File(path, "r+") as h5:
+                h5["baseband"].attrs["axis"] = np.asarray(
+                    ["input", "time"], dtype=object)
+
+    dataset = discover_chime_pilot_datasets(tmp_path, dataset_path=None)[14]
+    assert dataset.sample_encoding == "structured_complex"
+    block = read_complex_window(dataset, start_sample=1, stop_sample=3)
+
+    assert block.shape == (2, 1, 2)
+    assert np.issubdtype(block.dtype, np.complexfloating)
+    np.testing.assert_array_equal(block[:, 0, :], values[1:3].T)
+
+
 def test_absolute_time_is_not_required_for_frame_chunks(tmp_path) -> None:
     _write_segment(tmp_path / "ch0844" / "001.h5", np.zeros((10, 2), dtype=np.uint8))
     dataset = discover_chime_pilot_datasets(tmp_path, dataset_path=None)[14]

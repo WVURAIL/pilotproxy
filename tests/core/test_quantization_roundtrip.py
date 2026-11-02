@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import warnings
 
 from pilot_proxy.detector_reference import (
     matched_filter_row_projections_cpu_reference_packed,
@@ -111,6 +112,28 @@ def test_packed_dtype_invalid_bits_raises() -> None:
             np.zeros(TEST_MATRIX_SHAPE, dtype=np.int8),
             INVALID_COMPONENT_BITS,
         )
+
+
+@pytest.mark.parametrize("bits", [4.5, 4.0, "4", True, np.bool_(True), None])
+def test_packed_dtype_requires_an_exact_integer_bit_depth(bits) -> None:
+    with pytest.raises(TypeError, match="bit"):
+        packed_dtype_for_component_bits(bits)
+
+
+@pytest.mark.parametrize("integer", [np.uint8, np.uint32, np.uint64, np.int64])
+@pytest.mark.parametrize("depth,dtype,encoded", [
+    (4, np.int8, [18, -36]), (8, np.int16, [258, -516]),
+])
+def test_numpy_integer_bit_depths_preserve_packed_sample_values(integer, depth, dtype, encoded):
+    samples = np.asarray([[1 + 2j, -3 - 4j]])
+    expected = np.asarray([encoded], dtype=dtype)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        packed = quantize_complex_numpy(samples, integer(depth), 1)
+        unpacked = unpack_packed_complex(expected, integer(depth))
+    assert packed.dtype == dtype
+    np.testing.assert_array_equal(packed, expected)
+    np.testing.assert_array_equal(unpacked, samples)
 
 
 def test_exact_row_projection_reference_matches_direct_complex_dot() -> None:

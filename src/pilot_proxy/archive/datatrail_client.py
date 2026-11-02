@@ -286,11 +286,11 @@ class Datatrail:
     def children(self, scope: str, dataset: str) -> List[str]:
         """Return the child dataset names one level under (scope, dataset), unchanged.
 
-        `events_in_dataset_checked` takes event IDs from this list. Recon's
-        --expand writes the list unfiltered, since non-event products such as
-        timestamped acquisitions and calibration containers have no event ID.
-        Their names are the handles passed to `datatrail ps`. Like the other
-        listing methods, this returns [] on an error, and [] means unknown.
+        Non-event products (timestamped acquisitions, calibration containers)
+        have no event ID to extract; their names are the handles resolved with
+        `datatrail ps`. This convenience wrapper returns [] for both an empty
+        container and a failed listing. Recon's --expand and event extraction
+        use children_checked() to preserve that distinction.
         """
         return self.children_checked(scope, dataset)[0]
 

@@ -1,15 +1,17 @@
 # Local archive processing
 
-This document gives the executable procedure for streaming the frozen CHIME
-inventory from CADC and processing it on a local WSL workstation. The shell
-blocks use `$WORK` for the workspace root and `$WORK/pilotproxy` for the
-checkout, so set `WORK` to your own root. The scientific and product pins are
-in [`RERUN_PARAMETER_REGISTER.md`](RERUN_PARAMETER_REGISTER.md), the mandatory
-gates are in [`VALIDATION_GATES.md`](VALIDATION_GATES.md), and the actual
-launch values go in a run ledger.
-[`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md) documents the CANFAR path, which is
-qualified on its own. Neither file overrides the other, and the operator
-launches exactly one path.
+This is the executable procedure for streaming the frozen CHIME inventory
+from CADC and processing it on a local WSL workstation. The shell blocks use
+`$WORK` for the workspace root and `$WORK/pilotproxy` for the checkout; set
+`WORK` to your own root. Scientific and product settings come from the checked-in
+[receiver profile](../configs/receiver_profiles/chime_dtv_fengine.json),
+[detector core profile](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json),
+[weight manifest](../weights/chime_dtv_weights_k128.bin.manifest.json), and
+[product schema](PRODUCT_SCHEMA.md). Mandatory gates are in
+[`VALIDATION_GATES.md`](VALIDATION_GATES.md), and actual launch values go in a run ledger.
+[`CANFAR_RUNBOOK.md`](CANFAR_RUNBOOK.md) documents the separately qualified
+CANFAR path and cannot override this file; neither file overrides the other,
+and the operator launches exactly one path.
 
 The run is archive estimation and sufficient-statistic reprocessing. The
 coarse positive-excess flag is kept as a bootstrap diagnostic. The fine rank

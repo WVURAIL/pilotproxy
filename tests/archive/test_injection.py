@@ -136,7 +136,7 @@ def test_resolve_baseband_frequency_paths() -> None:
     from_pilot = resolve_baseband_frequency_hz(
         center, pilot_frequency_hz=pilot, sample_rate_hz=fmt.FS
     )
-    assert from_channel == pytest.approx(pilot - center)
+    assert from_channel == pytest.approx(center - pilot)
     assert from_channel == from_pilot
 
     with pytest.raises(ValueError, match="outside"):

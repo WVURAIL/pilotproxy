@@ -9,8 +9,7 @@ its papers reproduce from them.
 Their public release needs CHIME collaboration clearance under its publication policy.
 Until that clearance is given, a public copy of this repository must be the code-only
 cut described at the end of this page. Material that is not CHIME data (the synthetic
-GNU Radio benches, the LimeSDR lab runs, the designed weight banks, the public
-FCC/ISED transmitter census and RFIsher's forecast tolerance table) is not listed.
+GNU Radio benches, the LimeSDR lab runs, the designed weight banks, RFIsher's forecast tolerance table) is not listed.
 
 ## Data files
 
@@ -24,12 +23,10 @@ FCC/ISED transmitter census and RFIsher's forecast tolerance table) is not liste
 | `data/provenance/dissertation_summary_v1.json`, `_v2.json`, `_v3.json` | Curated per-channel and per-epoch values of the archive trawl (mask fractions, retained frames, status) |
 | `projects/chime_atsc/eras/author_eras_2026-09-23.json` | Era boundaries per channel, dated from the archive's monthly spectrograms |
 | `projects/chime_atsc/eras/transmitter_off.json` | Transmitter on/off months per channel, read from the archive's pilot series, with the external record found for each |
-| `projects/chime_atsc/eras/power_eras_2026-10-04.json` | Power-era proposals per channel (current-era months) from `characterization/power_eras.py` |
+| `projects/chime_atsc/eras/power_eras_2026-10-04.json` | Historical power-era proposals per channel (current-era months) |
 | `projects/chime_atsc/eras/on_off_2026-10-14/` (3 files) | On/off era list: monthly pilot levels per channel (`monthly_levels.json`), their Bayesian Blocks (`blocks.json`) and the on/off eras (`eras.json`) |
 | `projects/chime_atsc/eras/line_identity_2026-10-17/` (4 files) | The era list the paper uses: the same levels and blocks with the pilot line's monthly offsets (`monthly_lines.json`) and the eras cut by on/off steps and by the line's identity (`eras.json`) |
-| `src/pilot_proxy/characterization/data/coherent_fraction.json` | Coherent fraction of the DTV shelf, per band and its median, measured from the 2026 matched capture |
-| `src/pilot_proxy/characterization/data/coherent_gain.json` | Coherence-gain rule and the frame count of the capture dumps that measured the coherent fraction |
-| `tests/data/threshold_decisions_2026-10-12.json` | Threshold decisions per channel: deployed word or reason not deployed, shelf, exclusions and the coherent-fraction inputs; a test golden for the deployment compiler |
+| `tests/data/threshold_decisions_2026-10-12.json` | Threshold decisions per channel: deployed word or reason not deployed, shelf, exclusions and historical conversion inputs; a test golden for the deployment compiler |
 
 ## Inline quotes
 
@@ -37,19 +34,16 @@ These files are code or documentation, but they quote CHIME-derived numbers inli
 They stay in both cuts. Review them before any public release:
 
 - `docs/ARCHIVE_HEALTH_REPAIR.md`, `docs/CANFAR_RUNBOOK.md` and
-  `docs/RERUN_PARAMETER_REGISTER.md`: archive inventory accounting (units, events,
+  the archived inventory records: archive accounting (units, events,
   exclusions, frame counts).
 - `docs/DESIGN_DECISIONS.md`: archive measurements behind design choices (for example
   the coarse flag's false-alarm rate on quiet frames).
-- `docs/START_HERE.md`: the exclusion of channel 33 and the containment allowance of
-  channel 19.
 - `docs/PER_PILOT_PRODUCT_FIELDS.md`: railed-sample counts measured on real CHIME baseband
   (freq_id 506).
-- Test goldens written inline: the knees of record (`tests/characterization/test_knee.py`),
-  the era starts and outages (`test_era_boundaries.py`), the verified off dates
-  (`test_transmitter_off.py`), the era literals (`tests/config/test_profile_literals.py`)
-  and the coherent-fraction range (`test_threshold_rule.py`). The tests that need the
-  withheld files skip in the code-only cut, but their source still holds these values.
+- Test goldens written inline: verified off dates
+  (test_transmitter_off.py) and era literals (tests/config/test_profile_literals.py).
+  Tests that need the withheld files skip in the code-only cut, but their source
+  still holds these values.
 
 ## Code-only cut
 
@@ -73,7 +67,5 @@ projects/chime_atsc/eras/transmitter_off.json
 projects/chime_atsc/eras/power_eras_2026-10-04.json
 projects/chime_atsc/eras/on_off_2026-10-14/
 projects/chime_atsc/eras/line_identity_2026-10-17/
-src/pilot_proxy/characterization/data/coherent_fraction.json
-src/pilot_proxy/characterization/data/coherent_gain.json
 tests/data/threshold_decisions_2026-10-12.json
 ```

@@ -15,12 +15,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import re
 from pathlib import Path
 
 from pilot_proxy.fine_decision import (
-    ALWAYS_MASKED_Q16,
     FINE_DECISION_VERSION,
     unpack_bulk_mask,
 )
@@ -57,14 +55,6 @@ def _digest(value, name):
         f"{name} must be a lowercase SHA256 digest",
     )
     return value
-
-
-def _probability(value, name):
-    _require(
-        type(value) in (int, float) and math.isfinite(value) and 0 < value < 1,
-        f"{name} must be a finite probability strictly between zero and one",
-    )
-    return float(value)
 
 
 def sha256(path):
@@ -177,75 +167,6 @@ def validate_score_profile(profile):
         "Runtime designated/guard bins cannot appear in the reference mask",
     )
     return population
-
-
-def _load_population(path, profile, profile_sha, role):
-    data = _read(path)
-    _require(
-        data.get("schema_version") == POPULATION_SCHEMA,
-        "Unknown score population schema",
-    )
-    _require(data.get("role") == role, f"Expected {role} population")
-    _require(
-        data.get("profile_sha256") == profile_sha
-        and data.get("profile_id") == profile["profile_id"],
-        "Score/profile identity mismatch",
-    )
-    _require(
-        data.get("score_encoding") == SCORE_ENCODING,
-        "Population score encoding mismatch",
-    )
-    _text(data.get("population_id"), "population_id")
-    law = data.get("null_law")
-    _require(isinstance(law, dict), "Missing null_law identity")
-    _text(law.get("id"), "null_law.id")
-    _require(
-        law.get("kind")
-        in ("synthetic_model", "operational_background", "verified_signal_free"),
-        "Unknown null_law kind",
-    )
-    _text(law.get("description"), "null_law.description")
-    _digest(law.get("evidence_sha256"), "null_law.evidence_sha256")
-    sampling = data.get("sampling")
-    _require(
-        isinstance(sampling, dict)
-        and sampling.get("assumption") == "independent_identically_distributed",
-        "This tool requires a justified IID sampling contract; it cannot count correlated frames as IID",
-    )
-    _text(sampling.get("independence_rationale"), "independence_rationale")
-    _digest(sampling.get("design_sha256"), "sampling.design_sha256")
-    rows = data.get("scores")
-    _require(isinstance(rows, list) and rows, "Scores must be a nonempty list")
-    values, trial_ids, independent_ids = [], [], []
-    population = validate_score_profile(profile)
-    for row in rows:
-        _require(isinstance(row, dict), "Score rows must be objects")
-        trial_ids.append(_text(row.get("trial_id"), "trial_id"))
-        independent_ids.append(
-            _text(row.get("independent_unit_id"), "independent_unit_id")
-        )
-        _require(
-            row.get("valid") is True,
-            "Invalid score/support: no rows may be dropped or replaced",
-        )
-        n_bulk = _integer(row.get("n_bulk"), "n_bulk", 0, population)
-        _require(n_bulk > profile["cfar_rank"], "Score declares invalid rank support")
-        encoded = row.get("required_multiplier_q16")
-        _require(
-            isinstance(encoded, str) and re.fullmatch(r"[1-9][0-9]*", encoded),
-            "Q16 requirements must be exact unsigned decimal strings, not floats or JSON numbers",
-        )
-        value = int(encoded)
-        _require(
-            value <= ALWAYS_MASKED_Q16, "Q16 requirement exceeds the logical sentinel"
-        )
-        values.append(value)
-    _require(len(set(trial_ids)) == len(rows), "Repeated trial identity")
-    _require(
-        len(set(independent_ids)) == len(rows),
-        "Repeated independent unit: correlated frames cannot inflate n",
-    )
-    return data, values, set(trial_ids), set(independent_ids)
 
 
 def _write_json(path, value):

@@ -678,13 +678,9 @@ def report_json(report: ArchiveAcceptanceReport) -> str:
     """Return every field of the report as JSON with sorted keys (``dataclasses.asdict``)."""
     import dataclasses
 
-    def enc(o):
-        if dataclasses.is_dataclass(o):
-            return dataclasses.asdict(o)
-        if isinstance(o, (set, frozenset, tuple)):
-            return list(o)
-        return str(o)
-    return json.dumps(dataclasses.asdict(report), indent=1, sort_keys=True, default=enc) + "\n"
+    # asdict expands nested records; JSON handles their tuples. Paths are the
+    # only report fields that still require conversion.
+    return json.dumps(dataclasses.asdict(report), indent=1, sort_keys=True, default=str) + "\n"
 
 
 def main(argv: Sequence[str] | None = None) -> int:

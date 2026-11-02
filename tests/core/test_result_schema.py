@@ -1,6 +1,7 @@
 # coding=utf-8
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from pilot_proxy.result_schema import (
@@ -75,6 +76,79 @@ def test_fixed_point_contract_describes_selected_supported_window(window) -> Non
     assert contract["supported_detector_window_samples"] == [64, 128]
     assert contract["packed_complex_bits"] == 8
     assert contract["sample_bits_per_component"] == 4
+
+
+@pytest.mark.parametrize("field", [
+    "detector_window_samples", "reference_offset_bins",
+])
+def test_fixed_point_contract_refuses_noninteger_geometry(field):
+    settings = dict(detector_window_samples=128, reference_offset_bins=2)
+    value = settings[field]
+    for invalid in (value + 0.5, float(value), str(value), True, np.bool_(True)):
+        with pytest.raises(ValueError, match=field + " must be an integer"):
+            fixed_point_contract(**dict(settings, **{field: invalid}))
+
+
+@pytest.mark.parametrize("field", [
+    "frame_size_samples", "num_input_streams", "detector_window_samples",
+    "num_selected_channels",
+])
+def test_result_layout_refuses_noninteger_dimensions(field):
+    settings = dict(frame_size_samples=16384, num_input_streams=2,
+                    detector_window_samples=128, num_selected_channels=3)
+    value = settings[field]
+    for invalid in (value + 0.5, float(value), str(value), True, np.bool_(True)):
+        with pytest.raises(ValueError, match=field + " must be an integer"):
+            result_layout(**dict(settings, **{field: invalid}))
+
+
+@pytest.mark.parametrize("field", [
+    "frame_size_samples", "num_input_streams", "detector_window_samples",
+    "num_selected_channels", "reference_offset_bins",
+])
+def test_result_schema_does_not_coerce_dimensions_before_validation(field):
+    settings = dict(
+        frame_size_samples=16384, num_input_streams=2,
+        detector_window_samples=128, num_selected_channels=3,
+        reference_offset_bins=2, dtv_bandwidth_hz=DTV_BANDWIDTH_HZ,
+        bin_enbw_hz=BIN_ENBW_HZ, pilot_below_data_db=PILOT_BELOW_DATA_DB,
+        pilot_capture_efficiency=PILOT_CAPTURE_EFFICIENCY, threshold=None,
+    )
+    value = settings[field]
+    for invalid in (value + 0.5, float(value), str(value), True, np.bool_(True)):
+        with pytest.raises(ValueError, match=field + " must be an integer"):
+            result_schema_object(**dict(settings, **{field: invalid}))
+
+
+def test_result_layout_preserves_generic_windows_and_numpy_integer_counts():
+    # Layout arithmetic supports positive windows beyond the compiled 64/128.
+    layout = result_layout(
+        frame_size_samples=np.int64(96), num_input_streams=np.int32(2),
+        detector_window_samples=np.int64(32), num_selected_channels=np.int32(3),
+    )
+    assert layout["windows_per_stream"] == 3
+    assert layout["detector_rows_per_frame"] == 18
+    for field in ("frame_size_samples", "num_input_streams",
+                  "detector_window_samples", "num_selected_channels"):
+        assert type(layout[field]) is int
+    assert fixed_point_contract(detector_window_samples=np.int64(64),
+                                reference_offset_bins=np.int32(2)) == (
+        fixed_point_contract(detector_window_samples=64, reference_offset_bins=2))
+
+
+@pytest.mark.parametrize("settings, message", [
+    ({"num_input_streams": 0}, "positive"),
+    ({"frame_size_samples": -128}, "positive"),
+    ({"num_selected_channels": 0}, "positive"),
+    ({"detector_window_samples": 0}, "positive"),
+    ({"frame_size_samples": 129}, "multiple"),
+])
+def test_result_layout_retains_positive_and_divisible_dimension_contracts(
+        settings, message):
+    defaults = dict(frame_size_samples=16384, num_input_streams=2,
+                    detector_window_samples=128, num_selected_channels=1)
+    with pytest.raises(ValueError, match=message):
+        result_layout(**(defaults | settings))
 
 
 def test_statistic_contract_defines_frame_powers_as_fine_power_sums() -> None:

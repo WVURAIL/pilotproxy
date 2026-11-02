@@ -29,13 +29,10 @@ from pilot_proxy.chime.baseband_reader import baseband_filename
 NFFT, N_FEEDS = 16384, 2048
 BYTES_PER_FRAME = NFFT * N_FEEDS
 
-# real-data inputs read from the environment, and the tests that need them
-# skip when the paths do not exist
+# Bundle checks skip when the configured input is unavailable.
 FROZEN_BUNDLE = Path(os.environ.get("PILOT_PROXY_ARCHIVE_BUNDLE", "archive_inputs/chime-pilots-v5"))
-JULY_REFERENCES = Path(os.environ.get("PILOT_PROXY_JULY_INVENTORIES", "Datatrawl-Inventories"))
 
-# a schema-1 ("July") pilots row in its original shape, with no "name", a
-# float "n_frames", and insertion-ordered keys
+# Schema 1 omits "name" and stores "n_frames" as a float.
 SCHEMA1_ROW = {
     "scope": "chime.event.baseband.raw", "event": "100050005",
     "freq_id": 506, "size_bytes": 91311880,
@@ -74,10 +71,12 @@ def _fake_ps(monkeypatch, uris):
                         lambda cmd, **kw: _Proc(0, payload, ""))
 
 
-# legacy-schema migration
-# On the real references, none of the 161872 rows of the July chime-pilots
-# inventory has a "name", and the narrow adapter restores it. The July
-# chime-controls inventory carries "name", and all 32614 of its rows parse.
+# ==========================================================================
+# 1. Legacy-schema compatibility
+#
+# The adapter restores missing filenames only for identified baseband rows.
+# Named rows retain the current schema's canonical-path requirement.
+# ==========================================================================
 def test_parse_row_restores_only_identified_schema1_baseband_rows():
     parsed = parse_row(json.dumps(SCHEMA1_ROW), "inventory.jsonl", 1)
     assert parsed["name"] == baseband_filename(SCHEMA1_ROW["event"], 506)
@@ -95,12 +94,11 @@ def test_parse_row_restores_only_identified_schema1_baseband_rows():
 
 
 def test_schema1_row_carries_everything_the_upgrade_needs():
-    """The migration is a pure function of the row and needs no archive access.
+    """Derive schema-2 fields from the row without archive access.
 
-    The ``name`` is recovered from (event, freq_id) through the one naming
-    definition, and the schema-2 ``n_frames_estimate`` is recovered from
-    ``size_bytes`` and the instrument geometry. Nothing else is needed, so the
-    lack of a shipped migration is a packaging gap and loses no data.
+    ``name`` follows the baseband naming convention for (event, freq_id).
+    ``n_frames_estimate`` follows from ``size_bytes`` and the instrument
+    geometry. Both preserve the archive object identified by the legacy row.
     """
     upgraded = dict(SCHEMA1_ROW)
     upgraded.pop("n_frames")
@@ -132,34 +130,37 @@ def test_low_estimate_rule_survives_the_n_frames_semantics_change(size):
     assert (size // BYTES_PER_FRAME < 1) == (size / BYTES_PER_FRAME < 1.0)
 
 
-def test_completed_legacy_inventory_remains_readable():
-    parse_row(json.dumps(SCHEMA1_ROW), "inventory.jsonl", 1)
-
-
-@pytest.mark.skipif(not JULY_REFERENCES.is_dir(),
-                    reason="July reference inventories not on this host")
-@pytest.mark.parametrize("name,expect_readable", [
-    ("chime-pilots", True),     # narrow schema-1 filename adapter
-    ("chime-controls", True),   # already carries "name"
+@pytest.mark.parametrize("scope", [
+    "chime.event.baseband.raw", "chime.scheduled.baseband.raw",
 ])
-def test_july_reference_readability_is_exactly_as_measured(
-        name, expect_readable):
-    """Pin the measured readability of each real inventory so it cannot drift."""
-    path = JULY_REFERENCES / name / "inventory.jsonl"
-    accepted = rejected = 0
-    with path.open() as handle:
-        for number, line in enumerate(handle, 1):
-            if not line.strip():
-                continue
-            try:
-                parse_row(line, str(path), number)
-                accepted += 1
-            except SystemExit:
-                rejected += 1
-    total = accepted + rejected
-    assert total > 0
-    assert (rejected == 0) is expect_readable, (
-        f"{name}: {accepted} accepted / {rejected} rejected of {total}")
+@pytest.mark.parametrize("trailing_slash", [False, True])
+def test_legacy_row_preserves_identity_and_normalizes_its_path(
+        scope, trailing_slash):
+    """Exercise the legacy format without requiring a historical export."""
+    common = ("cadc:CHIMEFRB/data/chime/baseband/raw/2020/07/15/"
+              "astro_100050005")
+    row = dict(SCHEMA1_ROW, scope=scope,
+               common_path=common + ("/" if trailing_slash else ""))
+    text = json.dumps(row)
+    parsed = parse_row(text, "legacy-fixture.jsonl", 1)
+
+    assert parsed["name"] == "baseband_100050005_506.h5"
+    assert parsed["common_path"] == common
+    assert parsed["scope"] == scope
+    assert parsed["inventory_compatibility"] == "chime_baseband_schema1_filename"
+    assert parsed["n_frames_legacy_estimate"] == 2.7213
+    assert "n_frames_estimate" not in parsed
+    assert all(parsed[key] == value for key, value in row.items()
+               if key != "common_path")
+
+
+def test_named_row_requires_a_canonical_path_even_with_legacy_fields():
+    """A supplied filename must not enable legacy path normalization."""
+    row = dict(SCHEMA1_ROW, name="baseband_100050005_506.h5")
+    assert parse_row(json.dumps(row), "named-fixture.jsonl", 1) == row
+    row["common_path"] += "/"
+    with pytest.raises(SystemExit, match="common_path.*canonical"):
+        parse_row(json.dumps(row), "named-fixture.jsonl", 1)
 
 
 # determinism of the durable views
@@ -365,6 +366,36 @@ def _unit_keys(path: Path) -> set:
             row = json.loads(line)
             keys.add((row["scope"], row["event"], row["name"]))
     return keys
+
+
+@requires_bundle
+def test_retained_inventory_preserves_identity_through_legacy_conversion():
+    """Use retained filenames as the oracle for constructed legacy rows.
+
+    Removing ``name`` and optionally adding a slash constructs compatibility
+    cases whose identity and metadata must match the retained source rows.
+    """
+    path = FROZEN_BUNDLE / "inventory.source.jsonl"
+    checked = 0
+    scopes = set()
+    with path.open() as handle:
+        for number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            assert parse_row(line, str(path), number) == row
+            expected = dict(
+                row, inventory_compatibility="chime_baseband_schema1_filename",
+                n_frames_legacy_estimate=row["n_frames"])
+            for suffix in ("", "/"):
+                legacy = dict(row, common_path=row["common_path"] + suffix)
+                del legacy["name"]
+                assert parse_row(json.dumps(legacy), "constructed-legacy.jsonl",
+                                 number) == expected, (number, suffix)
+            scopes.add(row["scope"])
+            checked += 1
+    assert checked == 170377
+    assert scopes == {"chime.event.baseband.raw", "chime.scheduled.baseband.raw"}
 
 
 @requires_bundle

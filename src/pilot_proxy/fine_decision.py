@@ -64,10 +64,8 @@ sensitivity to contamination in the upper background tail is reduced.
 
 This module and the kernel fix the arithmetic, and the bundle supplies
 the rank and the multiplier. The rank in use is the bulk median.
-characterization.threshold_rule selects the channel's knee, or the
-loosest word below it that meets the science and time limits.
-runtime_calibration proposes commissioning thresholds independently, from
-declared calibration populations.
+characterization.threshold_rule selects the supported word with the greatest
+retained fraction among those meeting the bias tolerance.
 """
 from __future__ import annotations
 

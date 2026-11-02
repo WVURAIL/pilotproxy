@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
-from pathlib import Path
 
 from . import wvu_palette as wvu
 
@@ -17,11 +17,7 @@ def _command_available(command: str) -> bool:
     )
     if not command_text or has_path_separator:
         return False
-    return any(
-        (Path(directory) / command_text).exists()
-        for directory in os.environ.get("PATH", "").split(os.pathsep)
-        if directory
-    )
+    return shutil.which(command_text) is not None
 
 
 def _latex_package_available(package: str) -> bool:

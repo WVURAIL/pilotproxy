@@ -33,7 +33,7 @@ import json
 import math
 from dataclasses import dataclass, field
 from functools import cached_property
-from numbers import Real
+from numbers import Integral, Real
 from pathlib import Path
 from typing import Iterator, Mapping
 
@@ -619,19 +619,28 @@ class Product:
     ``product_contract.FINE_DERIVED_FRAME_COLUMNS``) is taken from the view,
     which forms it from the fine-power sums. For a v5 product, these columns
     replace the stored row-domain values.
+
+    ``require_health`` remains an accepted keyword for older callers. The
+    health gate is always applied by ``selected``; the keyword does not
+    disable it or force an eager read of the frame data.
     """
 
     def __init__(self, path: Path | str, *, require_health: bool = False):
         self.path = Path(path)
-        self.require_health = require_health
         self._z = np.load(self.path, allow_pickle=False)
-        token = str(np.asarray(self._z["schema_version"]).item()) if "schema_version" in self._z.files else ""
-        if token not in READABLE_SCHEMA_TOKENS.values():
-            raise ValueError(
-                f"{self.path.name}: schema {token!r}, expected "
-                f"{PRODUCT_SCHEMA_TOKEN!r} or {V5_SCHEMA_TOKEN!r}"
-            )
-        self.schema_token = token
+        if not isinstance(self._z, np.lib.npyio.NpzFile):
+            raise ValueError(f"{self.path.name}: expected an NPZ product archive")
+        try:
+            token = str(np.asarray(self._z["schema_version"]).item()) if "schema_version" in self._z.files else ""
+            if token not in READABLE_SCHEMA_TOKENS.values():
+                raise ValueError(
+                    f"{self.path.name}: schema {token!r}, expected "
+                    f"{PRODUCT_SCHEMA_TOKEN!r} or {V5_SCHEMA_TOKEN!r}"
+                )
+            self.schema_token = token
+        except BaseException:
+            self._z.close()
+            raise
 
     # raw access
     @property
@@ -805,6 +814,8 @@ class Product:
         it is a compressed zip member and cannot be sliced on disk. Only the
         decode is chunked, so each float64 copy holds at most ``chunk`` rows.
         """
+        if isinstance(chunk, bool) or not isinstance(chunk, Integral) or chunk <= 0:
+            raise ValueError("chunk must be a positive integer")
         codes = np.asarray(self._z["psd_frame_db_i16"])
         reference = self.frame_column("psd_db_reference").astype(np.float64)
         invalid = int(self.scalar("psd_db_invalid_code"))

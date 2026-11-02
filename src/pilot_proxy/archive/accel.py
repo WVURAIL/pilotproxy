@@ -5,7 +5,6 @@ usually supply that build already, so the package leaves its GPU extra empty
 and resolves CuPy at runtime:
 
 * ``import_cupy()`` returns the environment's CuPy, or None when absent.
-* ``get_array_module(g)`` selects NumPy or, when g is true, CuPy.
 * ``detect_cuda_major()`` returns the CUDA major version of the environment,
   or None when it cannot be found.
 * ``ensure_cupy(install)`` can install the matching ``cupy-cuda<major>x`` wheel
@@ -165,23 +164,4 @@ def ensure_cupy(install: bool = False, quiet: bool = False):
         raise RuntimeError(
             f"installed {pkg} but cupy is still not importable; the wheel may not "
             f"match this image's CUDA module. Check `nvidia-smi` and install by hand.")
-    return cp
-
-
-def get_array_module(use_gpu: bool):
-    """Return NumPy, or the image's CuPy when use_gpu is true.
-
-    A scan calls this, and a missing or broken CuPy exits with the setup step.
-    """
-    import numpy as np
-    if not use_gpu:
-        return np
-    try:
-        cp = import_cupy()
-    except RuntimeError as exc:
-        raise SystemExit(f"--gpu was requested but {exc}") from exc
-    if cp is None:
-        raise SystemExit(
-            "--gpu was requested but cupy is not importable. Run setup_env.sh "
-            "first, or drop --gpu to run on CPU.")
     return cp

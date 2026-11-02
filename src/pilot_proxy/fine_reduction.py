@@ -229,9 +229,9 @@ def frame_powers_from_fine_u64(
     summed over streams. This is the CPU reference for the host sum of
     PilotProxy_Compute_FinePowers_U64 and the fused entry's d_power_out.
 
-    The deployed per-bin bound keeps the 256-bin sum below 2**64. The
-    uint64 sum of each term is compared with its Python integer sum, since
-    NumPy uint64 addition wraps on overflow with no error.
+    The deployed per-bin bound keeps the 256-bin sum below 2**64. Check
+    the total with Python integers before conversion, because NumPy's
+    uint64 addition would otherwise wrap on overflow.
     """
     from pilot_proxy.fxfft import fine_power_fx
 
@@ -284,6 +284,10 @@ def fine_reduce(
     p2 = fine_bin_count(windows, pad_factor)
 
     arr = xp.asarray(matched_filter_row_projections)
+    if arr.dtype.kind not in "iuc":
+        raise TypeError(
+            "row projections must be an integer re/im array or a complex array."
+        )
     integer_input = arr.dtype.kind != "c"
     norm = _as_complex_rows(arr, terms, xp)
     if integer_input:

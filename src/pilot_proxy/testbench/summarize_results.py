@@ -8,6 +8,7 @@ import argparse
 import csv
 import json
 import math
+import operator
 from pathlib import Path
 from typing import Any
 
@@ -175,6 +176,12 @@ def summarize_result_json(
     histograms: str = HISTOGRAM_MODE_AUTO,
 ) -> dict[str, Any]:
     """Write generic summary CSV/JSON and optional histograms for a result file."""
+    try:
+        bins = operator.index(bins)
+    except TypeError as exc:
+        raise ValueError("bins must be a positive integer.") from exc
+    if bins <= 0:
+        raise ValueError("bins must be a positive integer.")
     if histograms not in HISTOGRAM_MODES:
         raise ValueError(
             "histograms must be one of " + ", ".join(HISTOGRAM_MODES)
@@ -221,8 +228,9 @@ def summarize_result_json(
             xlabel="Estimated DTV shelf SNR [dB]",
             bins=int(bins),
         )
-    else:
+    if not wrote_power_ratio:
         _remove_discontinued_histogram(power_ratio_histogram)
+    if not wrote_snr:
         _remove_discontinued_histogram(snr_histogram)
 
     summary = {

@@ -20,6 +20,7 @@ import types
 import pytest
 
 from pilot_proxy.archive import datatrail_client as dt
+from pilot_proxy.archive.sources.cadc_inventory import parse_row
 
 
 class _Proc:
@@ -242,11 +243,48 @@ def test_sibling_directories_sharing_a_character_prefix(monkeypatch):
 
 
 def test_restoration_never_changes_an_all_prefixed_replica_set(monkeypatch):
-    """The July-era guarantee: when every URI carries the prefix, the patch is
-    a no-op, so no previously recorded common_path can move."""
+    """Collection restoration leaves already qualified replica sets unchanged."""
     uris = [_D2020 + f"baseband_100200200_{i}.h5" for i in (0, 156, 1023)]
     assert _resolve(monkeypatch, uris) == _resolve(monkeypatch, uris,
                                                    unpatched=True)
+
+
+@pytest.mark.parametrize("scope", [
+    "chime.event.baseband.raw", "chime.scheduled.baseband.raw",
+])
+@pytest.mark.parametrize("trailing_slash", [False, True])
+def test_legacy_inventory_and_replica_resolution_agree(
+        monkeypatch, scope, trailing_slash):
+    """Legacy rows and either replica form identify the same archive files."""
+    common = ("cadc:CHIMEFRB/data/chime/baseband/raw/2020/07/15/"
+              "astro_100200200")
+    names = ["baseband_100200200_0.h5", "baseband_100200200_506.h5"]
+    recorded = common + ("/" if trailing_slash else "")
+    rows = [{
+        "scope": scope, "event": "100200200", "freq_id": freq,
+        "size_bytes": 91311880, "common_path": recorded,
+        "obs_date": "2020-07-15", "datasets": ["fixture"],
+        "freq_mhz": mhz, "n_frames": 2.7213,
+    } for freq, mhz in [(0, 800.0), (506, 602.3438)]]
+    parsed = [parse_row(json.dumps(row), "legacy-fixture.jsonl", number)
+              for number, row in enumerate(rows, 1)]
+    assert [row["name"] for row in parsed] == names
+    assert [row["common_path"] for row in parsed] == [common, common]
+
+    qualified = [recorded.rstrip("/") + "/" + name for name in names]
+    bare = [uri.removeprefix("cadc:CHIMEFRB/") for uri in qualified]
+    for uris in (qualified, bare):
+        payload = _ps_payload({"file_replica_locations": {"minoc": uris}})
+
+        def reply(args):
+            assert args == ["ps", scope, "100200200"]
+            return 0, payload, ""
+
+        _install_fake_cli(monkeypatch, reply)
+        resolved = dt.DATATRAIL.files(scope, "100200200", retries=0)
+        assert resolved == (common, names, True)
+        assert resolved == (parsed[0]["common_path"],
+                            [row["name"] for row in parsed], True)
 
 
 # =====================================================================

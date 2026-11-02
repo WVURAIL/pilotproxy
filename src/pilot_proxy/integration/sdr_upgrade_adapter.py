@@ -143,9 +143,8 @@ def frame_power_sums(projections: np.ndarray) -> np.ndarray:
     each term go through the frozen fxfft256 and the fine powers are summed
     over all 256 bins, ``P_r = sum_f S_r[f]``.
     """
-    return frame_powers_from_fine_u64(
-        np.asarray(projections, dtype=np.int64), num_streams=1
-    )
+    # Let the fixed-point boundary validate type and range before any cast.
+    return frame_powers_from_fine_u64(projections, num_streams=1)
 
 
 def frame_ratio(powers: np.ndarray) -> tuple[float, str]:

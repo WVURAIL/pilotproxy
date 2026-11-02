@@ -1255,6 +1255,23 @@ def proportion_summary(successes: int, total: int) -> dict[str, Any]:
     }
 
 
+def _histogram_range(
+    values: np.ndarray, bins: int, *, constant_width: float | None = None
+) -> tuple[float, float]:
+    """Keep distinct bin edges when the finite data span only a few ULPs."""
+
+    if values.size == 0:
+        return (0.0, 1.0)
+    lo, hi = float(np.min(values)), float(np.max(values))
+    if lo == hi and constant_width is not None:
+        return (lo - constant_width, hi + constant_width)
+    edges = np.linspace(lo, hi, bins + 1)
+    if np.any(edges[:-1] >= edges[1:]):
+        width = max(abs(lo) * 1.0e-6, abs(hi) * 1.0e-6, 1.0e-12)
+        return (lo - width, hi + width)
+    return (lo, hi)
+
+
 def distribution_summary(values: np.ndarray, *, histogram_bins: int = 64) -> dict[str, Any]:
     """Finite-sample descriptive distribution with a machine-readable histogram."""
 
@@ -1275,11 +1292,7 @@ def distribution_summary(values: np.ndarray, *, histogram_bins: int = 64) -> dic
         return out
     probabilities = np.asarray([0.0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1.0])
     quantiles = np.quantile(finite, probabilities)
-    if np.all(finite == finite[0]):
-        width = max(abs(float(finite[0])) * 1.0e-6, 1.0e-12)
-        hist_range = (float(finite[0] - width), float(finite[0] + width))
-    else:
-        hist_range = (float(np.min(finite)), float(np.max(finite)))
+    hist_range = _histogram_range(finite, int(histogram_bins))
     counts, edges = np.histogram(finite, bins=int(histogram_bins), range=hist_range)
     out.update(
         mean=float(np.mean(finite)),
@@ -3161,7 +3174,10 @@ def _pdf_metadata(title: str) -> dict[str, str | None]:
 
 
 def _month_codes(times: np.ndarray) -> tuple[np.ndarray, np.ndarray, list[str]]:
-    datetimes = np.asarray(times * 1.0e9, dtype="datetime64[ns]")
+    seconds = np.asarray(times, dtype=np.float64)
+    finite_time = np.isfinite(seconds)
+    datetimes = np.full(seconds.shape, np.datetime64("NaT", "ns"))
+    datetimes[finite_time] = np.asarray(seconds[finite_time] * 1.0e9, dtype="datetime64[ns]")
     months = datetimes.astype("datetime64[M]")
     finite = ~np.isnat(months)
     if not np.any(finite):
@@ -3203,7 +3219,7 @@ def _plot_product_diagnostics(
         n_frames = health.include.size
         fid = int(_scalar(product, "freq_id"))
         channel = int(_scalar(product, "physical_channel"))
-        reject = _binary_frame_vector(product, "reject_mask", n_frames)
+        reject = _binary_frame_vector(product, "reject_mask", n_frames, stored=True)
         mu0 = null_power_ratio_of(product)
         coarse = np.asarray(
             _frame_vector(product, "coarse_power_ratio", n_frames),
@@ -3216,8 +3232,9 @@ def _plot_product_diagnostics(
         times = frame_utc_seconds(product)
         fine = fine_power_ratio_of(product)
         include = health.include
+        if not np.any(include & np.isfinite(times)):
+            raise ArchiveHealthError("no health-included frames have finite UTC times for a heatmap")
         channel_dir = figure_root / f"channel_{channel:02d}_fid_{fid:04d}"
-        channel_dir.mkdir(parents=True, exist_ok=True)
 
         # Precompute the three dissertation diagnostics once, then render both
         # stand-alone publication assets and a one-page per-channel atlas.
@@ -3272,11 +3289,14 @@ def _plot_product_diagnostics(
                 monthly[month] = np.mean(fine[select], axis=0)
         freq = np.asarray(fine_diag.fine_frequency_hz)
         freq_order = np.argsort(freq)
+        half_bin = 0.5 * (freq[freq_order][1] - freq[freq_order][0])
         display = 10.0 * np.log10(np.maximum(monthly[:, freq_order], 1.0e-12)).T
         finite_display = display[np.isfinite(display)]
         vmin, vmax = np.percentile(finite_display, [1.0, 99.0])
         if not vmax > vmin:
             vmax = vmin + 1.0
+
+        channel_dir.mkdir(parents=True, exist_ok=True)
 
         percent = r"\%" if dissertation_style else "%"
 
@@ -3284,7 +3304,9 @@ def _plot_product_diagnostics(
             for axis, (values, label, line) in zip(axes, panels):
                 finite_values = np.asarray(values, dtype=np.float64)
                 finite_values = finite_values[np.isfinite(finite_values)]
-                axis.hist(finite_values, bins=80, color=wvu.MEASURED, alpha=0.82)
+                axis.hist(finite_values, bins=80,
+                          range=_histogram_range(finite_values, 80, constant_width=0.5),
+                          color=wvu.MEASURED, alpha=0.82)
                 if line is not None:
                     axis.axvline(line, color=wvu.MODEL, linewidth=1.1)
                 axis.set_xlabel(label)
@@ -3340,7 +3362,8 @@ def _plot_product_diagnostics(
                 interpolation="nearest",
                 vmin=float(vmin),
                 vmax=float(vmax),
-                extent=(0, months.size, freq[freq_order][0], freq[freq_order][-1]),
+                extent=(0, months.size, freq[freq_order][0] - half_bin,
+                        freq[freq_order][-1] + half_bin),
                 cmap=wvu.sequential_cmap(),
             )
             anchor_hz = float(freq[fine_diag.predicted_anchor_bin])

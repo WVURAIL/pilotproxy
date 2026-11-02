@@ -19,6 +19,7 @@ from pilot_proxy.product_contract import (
     pilot_excess_from_fine_powers,
 )
 from pilot_proxy.products.npzio import load_npz
+from pilot_proxy.products import reader
 from pilot_proxy.products.reader import (
     FRAME_POWER_DEFINITION_V5,
     FRAME_POWER_DEFINITION_V6,
@@ -144,3 +145,85 @@ def test_the_view_refuses_what_the_contract_does_not_admit(tmp_path):
     del values["p_target_u64"]
     with pytest.raises(ProductContractError):
         open_product(values)
+
+
+@pytest.mark.parametrize("schema", [None, "unsupported_product", [V5_SCHEMA_TOKEN] * 2])
+def test_constructor_closes_an_archive_when_schema_validation_fails(
+        tmp_path, monkeypatch, schema):
+    path = tmp_path / "invalid.npz"
+    np.savez(path, **({} if schema is None else {"schema_version": schema}))
+    opened = []
+    original_load = np.load
+
+    def track_load(*args, **kwargs):
+        archive = original_load(*args, **kwargs)
+        opened.append(archive)
+        return archive
+
+    monkeypatch.setattr(reader.np, "load", track_load)
+    # Keep the traceback alive: garbage collection must not be the close path.
+    with pytest.raises(ValueError) as error:
+        Product(path)
+    assert error.traceback is not None
+    assert len(opened) == 1
+    assert opened[0].zip is None
+    assert opened[0].fid is None
+
+
+def test_constructor_refuses_a_plain_array_with_an_npz_suffix(tmp_path):
+    path = tmp_path / "not-an-archive.npz"
+    with path.open("wb") as handle:
+        np.save(handle, np.ones(3))
+    with pytest.raises(ValueError, match="expected an NPZ product archive"):
+        Product(path)
+
+
+def test_context_manager_closes_the_product_when_processing_raises(tmp_path):
+    path = _write_product(tmp_path / "552.npz", 33, frames=3, revision=6)
+    with pytest.raises(RuntimeError, match="downstream failure"):
+        with Product(path) as product:
+            archive = product.archive
+            assert archive.zip is not None
+            raise RuntimeError("downstream failure")
+    assert archive.zip is None
+    assert archive.fid is None
+
+
+def test_health_keyword_cannot_disable_the_population_gate(tmp_path):
+    path = _write_product(tmp_path / "552.npz", 33, frames=3, revision=6)
+    values = dict(load_npz(path))
+    values["baseband_power_linear"] = np.array([[4.0], [np.nan], [5.0]])
+    np.savez(path, **values)
+    selected = []
+    for setting in (False, True):
+        with Product(path, require_health=setting) as product:
+            assert product.valid.tolist() == [True, True, True]
+            assert not product.health.include[1]
+            selected.append(product.selected)
+    np.testing.assert_array_equal(selected[0], [True, False, True])
+    np.testing.assert_array_equal(selected[0], selected[1])
+
+
+def test_psd_rows_decodes_reference_scaling_invalid_codes_and_partial_chunk(tmp_path):
+    path = _write_product(tmp_path / "552.npz", 33, frames=5, revision=6)
+    values = dict(load_npz(path))
+    codes = np.tile(np.array([-1000, 0, 1000, -32768], dtype=np.int16), (5, 4096))
+    values.update(psd_frame_db_i16=codes,
+                  psd_db_reference=np.arange(1, 6, dtype=np.float64)[:, None],
+                  psd_db_invalid_code=np.int16(-32768))
+    np.savez(path, **values)
+    with Product(path) as product:
+        chunks = list(product.psd_rows(chunk=np.int64(2)))
+    assert [(part.start, part.stop) for part, _ in chunks] == [(0, 2), (2, 4), (4, 5)]
+    powers = np.concatenate([power for _, power in chunks])
+    expected = np.arange(1, 6)[:, None] * np.tile([0.1, 1.0, 10.0, np.nan], (5, 4096))
+    np.testing.assert_allclose(powers, expected, rtol=1e-15, equal_nan=True)
+
+
+@pytest.mark.parametrize("chunk", [0, -1, 1.5, True, np.bool_(True), "2"])
+def test_psd_rows_refuses_invalid_chunk_sizes_before_reading_spectra(tmp_path, chunk):
+    path = _write_product(tmp_path / "552.npz", 33, frames=3, revision=6)
+    with Product(path) as product:
+        # This product has no PSD member: the argument must be checked first.
+        with pytest.raises(ValueError, match="chunk must be a positive integer"):
+            list(product.psd_rows(chunk=chunk))

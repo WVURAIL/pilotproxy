@@ -10,7 +10,7 @@ from scipy.signal import freqz
 
 from pilot_proxy.integration.sdr_upgrade_adapter import (
     DigitalAdapterConfig, FRAME_SAMPLES, INPUT_RATE_HZ, OUTPUT_RATE_HZ,
-    K, L, adapt_record, digital_resample, projector_weights,
+    K, L, adapt_record, digital_resample, frame_power_sums, projector_weights,
     resampler_coefficients,
 )
 
@@ -71,6 +71,30 @@ def test_frame_powers_are_the_all_bin_sums_of_the_fixed_point_fine_powers():
     assert result["coarse_ratio"][0] == 2.0 * expected[0] / (expected[1] + expected[2])
     assert result["metadata"]["schema"] == "sdr-upgrade-digital-adapter-v2"
     assert "fxfft256_v1" in result["metadata"]["ratio_definition"]
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.complex128, np.bool_, object])
+def test_frame_power_sums_refuses_noninteger_projections(dtype):
+    rows = np.full((3, L, 2), 0.75 if dtype == np.float64 else 1, dtype=dtype)
+    with pytest.raises(TypeError, match="input must be an integer array"):
+        frame_power_sums(rows)
+
+
+def test_frame_power_sums_refuses_unsigned_wraparound_before_conversion():
+    rows = np.zeros((3, L, 2), dtype=np.uint64)
+    rows[0, 0, 0] = (1 << 64) - 1
+    with pytest.raises(OverflowError, match="input exceeds"):
+        frame_power_sums(rows)
+
+
+@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.uint64])
+def test_frame_power_sums_preserves_integer_impulse_power(dtype):
+    # An impulse has the same amplitude in all 256 transform bins.
+    rows = np.zeros((3, L, 2), dtype=dtype)
+    rows[:, 0, 0] = [1, 2, 3]
+    powers = frame_power_sums(rows)
+    assert powers.dtype == np.uint64
+    assert powers.tolist() == [256, 1024, 2304]
 
 
 def test_resampler_matches_direct_convolution_and_time_origin():

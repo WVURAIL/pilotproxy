@@ -42,8 +42,14 @@ def _write_point(point_dir, amplitude: float, *, seed: int,
            + RNG_NOISE * rng.standard_normal((N_FRAMES, 1)))
     power_ratio = MU0 * (1.0 + rho)
     valid = np.ones((N_FRAMES, 1), dtype=np.uint8)
-    detector = {
+    identity = {
         "physical_channel": np.asarray([14], dtype=np.int32),
+        "pilot_frequency_hz": np.asarray([470309441.0]),
+        "chime_frequency_hz": np.asarray([470312500.0]),
+        "frame_index": np.arange(N_FRAMES),
+    }
+    detector = {
+        **identity,
         "coarse_power_ratio": power_ratio,
         "normalized_pilot_excess": rho,
         "valid": valid,
@@ -62,6 +68,7 @@ def _write_point(point_dir, amplitude: float, *, seed: int,
         point_dir / CHIME_SPECTROGRAM_CACHE_FILENAME,
         baseband_power_linear=power, valid=valid,
         mask=detector["mask"],
+        **identity,
     )
     manifest = {
         "schema_version": "pilotproxy_injection_manifest_v1",

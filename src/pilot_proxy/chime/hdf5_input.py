@@ -70,7 +70,7 @@ def _walk(path: Path, filename_pattern: str) -> list[Path]:
     root = Path(path)
     if not root.exists():
         raise FileNotFoundError(f"CHIME input directory does not exist: {root}")
-    return sorted(root.rglob(filename_pattern))
+    return sorted(path for path in root.rglob(filename_pattern) if path.is_file())
 
 
 def _axis_labels(attrs: Any) -> tuple[str, ...]:
@@ -96,12 +96,27 @@ def _find_dataset_path(h5: h5py.File, requested: str | None) -> str:
 
     def visitor(name: str, obj: Any) -> None:
         if isinstance(obj, h5py.Dataset) and obj.ndim >= 2:
-            candidates.append((int(np.prod(obj.shape)), name))
+            time_axis, stream_axis, complex_axis = _infer_axes(obj)
+            if (
+                obj.ndim - int(complex_axis is not None) == 2
+                and time_axis != stream_axis
+                and 0 <= time_axis < obj.ndim
+                and 0 <= stream_axis < obj.ndim
+                and complex_axis not in (time_axis, stream_axis)
+            ):
+                candidates.append((int(np.prod(obj.shape)), name))
 
     h5.visititems(visitor)
     if not candidates:
         raise ValueError(f"no array-like HDF5 dataset found in {h5.filename}")
-    return max(candidates)[1]
+    largest = max(size for size, _ in candidates)
+    paths = [name for size, name in candidates if size == largest]
+    if len(paths) != 1:
+        raise ValueError(
+            f"ambiguous HDF5 dataset candidates {paths!r} in {h5.filename}; "
+            "specify dataset_path explicitly"
+        )
+    return paths[0]
 
 
 def _infer_axes(obj: h5py.Dataset) -> tuple[int, int, int | None]:

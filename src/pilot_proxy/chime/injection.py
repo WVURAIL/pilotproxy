@@ -25,13 +25,17 @@ from __future__ import annotations
 import argparse
 import filecmp
 import json
+import operator
+import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
 
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
+from pilot_proxy.config.instrument import load_instrument, nyquist_sign
 
 BASEBAND_DATASET = "baseband"
 COMPONENT_MIN = -8
@@ -64,9 +68,10 @@ def resolve_baseband_frequency_hz(
 ) -> float:
     """Resolve the injected tone's baseband frequency from one specification.
 
-    Exactly one of ``baseband_frequency_hz`` (relative to the file's channel
-    center), ``pilot_frequency_hz`` (absolute RF), or ``physical_channel``
-    (ATSC channel, nominal pilot) must be given.
+    Exactly one of ``baseband_frequency_hz`` (raw temporal frequency),
+    ``pilot_frequency_hz`` (absolute RF), or ``physical_channel`` (ATSC channel,
+    nominal pilot) must be given. CHIME's even Nyquist zone mirrors the native
+    frequency axis, so an RF offset below center becomes a positive raw tone.
     """
     provided = [
         value
@@ -81,9 +86,12 @@ def resolve_baseband_frequency_hz(
     if physical_channel is not None:
         pilot_frequency_hz = float(physical_channel_to_pilot_hz(physical_channel))
     if pilot_frequency_hz is not None:
-        baseband_frequency_hz = float(pilot_frequency_hz) - float(center_hz)
+        sign = nyquist_sign(load_instrument("chime").nyquist_zone)
+        baseband_frequency_hz = sign * (float(pilot_frequency_hz) - float(center_hz))
     if baseband_frequency_hz is None:
         raise RuntimeError("tone frequency resolution produced no baseband frequency")
+    if not np.isfinite(baseband_frequency_hz):
+        raise ValueError("baseband_frequency_hz must be finite")
     limit = MAX_ABS_NORMALIZED_FREQUENCY * float(sample_rate_hz)
     if abs(baseband_frequency_hz) > limit:
         raise ValueError(
@@ -107,6 +115,35 @@ def _encode_components(real: np.ndarray, imag: np.ndarray) -> np.ndarray:
     )
 
 
+def _validate_native_baseband(source_path: Path) -> None:
+    """Require sample storage that is contained in the copied native file."""
+    import h5py
+
+    with h5py.File(source_path, "r") as handle:
+        link = handle.get(BASEBAND_DATASET, getlink=True)
+        if not isinstance(link, h5py.HardLink):
+            raise ValueError("baseband must be a dataset stored in the source file")
+        data = handle[BASEBAND_DATASET]
+        if not isinstance(data, h5py.Dataset):
+            raise ValueError("baseband must be a dataset")
+        if data.ndim != 2 or any(size == 0 for size in data.shape):
+            raise ValueError("baseband must have nonempty [time, feed] dimensions")
+        if data.dtype != np.dtype(np.uint8):
+            raise ValueError("baseband must use native offset-binary uint8 samples")
+        if data.is_virtual or data.external:
+            raise ValueError("baseband sample storage must be contained in the source file")
+
+
+def _phase_seed(value: int) -> int:
+    try:
+        seed = operator.index(value)
+    except TypeError as exc:
+        raise ValueError("phase_seed must be a nonnegative integer") from exc
+    if isinstance(value, (bool, np.bool_)) or seed < 0:
+        raise ValueError("phase_seed must be a nonnegative integer")
+    return seed
+
+
 def inject_tone_into_baseband_file(
     source_path: Path,
     output_path: Path,
@@ -121,19 +158,51 @@ def inject_tone_into_baseband_file(
     independent seeded phase per feed (the detector combines feed powers
     incoherently, so inter-feed phase is irrelevant to recovered F; random
     phases avoid asserting a geometry the analysis never uses). Returns the
-    per-file manifest entry, including the exact clip count.
+    per-file manifest entry, including the exact clip count. An existing
+    destination is replaced only after the new copy passes verification.
     """
-    import h5py
-
     fmt = _format_module()
     source_path = Path(source_path)
     output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    if float(amplitude_lsb) < 0:
-        raise ValueError("amplitude_lsb must be >= 0")
-
-    shutil.copy2(source_path, output_path)
+    if not np.isfinite(amplitude_lsb) or float(amplitude_lsb) < 0:
+        raise ValueError("amplitude_lsb must be finite and >= 0")
+    if not np.isfinite(baseband_frequency_hz):
+        raise ValueError("baseband_frequency_hz must be finite")
+    if output_path.exists() and output_path.samefile(source_path):
+        raise ValueError("source and output must not refer to the same file")
     center_hz = fmt.channel_center_hz(str(source_path))
+    _validate_native_baseband(source_path)
+    baseband_frequency_hz = resolve_baseband_frequency_hz(
+        center_hz, baseband_frequency_hz=baseband_frequency_hz,
+        sample_rate_hz=float(fmt.FS),
+    )
+    seed = _phase_seed(phase_seed)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".injection-", dir=output_path.parent) as temporary:
+        staged = Path(temporary) / output_path.name
+        entry = _inject_tone_copy(
+            source_path, staged, baseband_frequency_hz=baseband_frequency_hz,
+            amplitude_lsb=amplitude_lsb, phase_seed=seed, center_hz=center_hz,
+        )
+        os.replace(staged, output_path)
+    entry["output"] = str(output_path)
+    return entry
+
+
+def _inject_tone_copy(
+    source_path: Path,
+    output_path: Path,
+    *,
+    baseband_frequency_hz: float,
+    amplitude_lsb: float,
+    phase_seed: int,
+    center_hz: float,
+) -> dict[str, Any]:
+    """Write and verify an injection copy before publication."""
+    import h5py
+
+    fmt = _format_module()
+    shutil.copy2(source_path, output_path)
 
     if float(amplitude_lsb) == 0.0:
         identical = filecmp.cmp(str(source_path), str(output_path), shallow=False)
@@ -180,8 +249,10 @@ def inject_tone_into_baseband_file(
         tone_im = float(amplitude_lsb) * np.sin(angle)
         # Round the SUM (integer + tone), the physical quantizer model; for
         # a = 0 this reduces to the original integers exactly.
-        new_re = np.round(real + tone_re).astype(np.int64)
-        new_im = np.round(imag + tone_im).astype(np.int64)
+        # Saturate in the floating-point domain before converting to integers;
+        # a finite tone can exceed the range of int64.
+        new_re = np.round(real + tone_re)
+        new_im = np.round(imag + tone_im)
         clipped = (
             (new_re < COMPONENT_MIN)
             | (new_re > COMPONENT_MAX)
@@ -211,6 +282,18 @@ def inject_tone_into_baseband_file(
     }
 
 
+def _metadata_equal(left, right) -> bool:
+    """Compare metadata values without treating unchanged NaNs as corruption."""
+    left, right = np.asarray(left), np.asarray(right)
+    if left.shape != right.shape or left.dtype != right.dtype:
+        return False
+    if left.dtype.names:
+        return all(_metadata_equal(left[name], right[name]) for name in left.dtype.names)
+    if left.dtype.kind == "c":
+        return _metadata_equal(left.real, right.real) and _metadata_equal(left.imag, right.imag)
+    return bool(np.array_equal(left, right, equal_nan=left.dtype.kind == "f"))
+
+
 def verify_injection_preserves_siblings(source_path: Path, output_path: Path) -> None:
     """Assert every dataset/attribute except ``baseband`` is unchanged."""
     import h5py
@@ -237,12 +320,12 @@ def verify_injection_preserves_siblings(source_path: Path, output_path: Path) ->
     for name, array in src_data.items():
         if name == BASEBAND_DATASET:
             continue
-        if not np.array_equal(array, dst_data[name]):
+        if not _metadata_equal(array, dst_data[name]):
             raise RuntimeError(f"injected file changed sibling dataset {name!r}")
     for name, mapping in src_attrs.items():
         theirs = dst_attrs.get(name, {})
         if set(mapping) != set(theirs) or any(
-            not np.array_equal(np.asarray(mapping[key]), np.asarray(theirs[key]))
+            not _metadata_equal(mapping[key], theirs[key])
             for key in mapping
         ):
             raise RuntimeError(f"injected file changed attributes on {name!r}")
@@ -258,36 +341,72 @@ def inject_directory(
     pilot_frequency_hz: float | None = None,
     physical_channel: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Inject every file, preserving names; write the manifest sidecar."""
+    """Stage every injection, then replace files and publish the manifest.
+
+    A staging failure preserves an earlier run. A publication failure may
+    leave a partial set of files, but the old manifest is removed before any
+    replacement so it cannot describe a mixture of old and new injections.
+    """
     fmt = _format_module()
     output_dir = Path(output_dir)
+    seed = _phase_seed(phase_seed)
+    sources = sorted(Path(path) for path in input_paths)
+    if not sources:
+        raise ValueError("at least one source file is required")
+    names = [source.name for source in sources]
+    if len(set(names)) != len(names):
+        raise ValueError("duplicate source basenames would overwrite an injected file")
+    if INJECTION_MANIFEST_FILENAME in names:
+        raise ValueError("a source name conflicts with the injection manifest")
+    source_ids = {(stat.st_dev, stat.st_ino) for stat in (source.stat() for source in sources)}
+    for name in names:
+        destination = output_dir / name
+        if destination.exists():
+            stat = destination.stat()
+            if (stat.st_dev, stat.st_ino) in source_ids:
+                raise ValueError("an injection output refers to a source file")
+            if destination.is_dir():
+                raise ValueError(f"injection output is a directory: {destination}")
+    manifest_path = output_dir / INJECTION_MANIFEST_FILENAME
+    if manifest_path.exists():
+        stat = manifest_path.stat()
+        if (stat.st_dev, stat.st_ino) in source_ids:
+            raise ValueError("the injection manifest refers to a source file")
+    if manifest_path.is_dir():
+        raise ValueError(f"injection manifest path is a directory: {manifest_path}")
     output_dir.mkdir(parents=True, exist_ok=True)
     entries: list[dict[str, Any]] = []
-    for index, source in enumerate(sorted(Path(p) for p in input_paths)):
-        center_hz = fmt.channel_center_hz(str(source))
-        f_bb = resolve_baseband_frequency_hz(
-            center_hz,
-            baseband_frequency_hz=baseband_frequency_hz,
-            pilot_frequency_hz=pilot_frequency_hz,
-            physical_channel=physical_channel,
-            sample_rate_hz=float(fmt.FS),
-        )
-        entries.append(
-            inject_tone_into_baseband_file(
+    with tempfile.TemporaryDirectory(prefix=".injection-", dir=output_dir) as temporary:
+        staged_dir = Path(temporary)
+        for index, source in enumerate(sources):
+            center_hz = fmt.channel_center_hz(str(source))
+            f_bb = resolve_baseband_frequency_hz(
+                center_hz,
+                baseband_frequency_hz=baseband_frequency_hz,
+                pilot_frequency_hz=pilot_frequency_hz,
+                physical_channel=physical_channel,
+                sample_rate_hz=float(fmt.FS),
+            )
+            entry = inject_tone_into_baseband_file(
                 source,
-                output_dir / source.name,
+                staged_dir / source.name,
                 baseband_frequency_hz=f_bb,
                 amplitude_lsb=amplitude_lsb,
                 # Distinct per-file phases without per-file arguments.
-                phase_seed=int(phase_seed) + index,
+                phase_seed=seed + index,
             )
+            entry["output"] = str(output_dir / source.name)
+            entries.append(entry)
+        staged_manifest = staged_dir / INJECTION_MANIFEST_FILENAME
+        staged_manifest.write_text(
+            json.dumps({"schema_version": "pilotproxy_injection_manifest_v1", "files": entries},
+                       indent=2, allow_nan=False),
+            encoding="utf-8",
         )
-    manifest_path = output_dir / INJECTION_MANIFEST_FILENAME
-    manifest_path.write_text(
-        json.dumps({"schema_version": "pilotproxy_injection_manifest_v1", "files": entries},
-                   indent=2),
-        encoding="utf-8",
-    )
+        manifest_path.unlink(missing_ok=True)
+        for name in names:
+            os.replace(staged_dir / name, output_dir / name)
+        os.replace(staged_manifest, manifest_path)
     return entries
 
 
@@ -315,7 +434,7 @@ def build_parser() -> argparse.ArgumentParser:
                         ))
     frequency = parser.add_mutually_exclusive_group(required=True)
     frequency.add_argument("--baseband-frequency-hz", type=float,
-                           help="Tone frequency relative to each file's channel center.")
+                           help="Raw temporal tone frequency; positive is below RF center in CHIME's mirrored band.")
     frequency.add_argument("--pilot-frequency-hz", type=float,
                            help="Absolute RF pilot frequency; converted per file.")
     frequency.add_argument("--physical-channel", type=int,

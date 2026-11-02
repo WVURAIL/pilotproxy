@@ -113,8 +113,12 @@ def clean_axes(ax, *, grid: str | None = "both"):
 
 
 def panel_label(ax, label: str, *, x: float = -0.08, y: float = 1.035) -> None:
-    ax.text(x, y, rf"\textbf{{({label})}}", transform=ax.transAxes,
-            ha="left", va="bottom", fontsize=9.0, color=INK)
+    if matplotlib.rcParams["text.usetex"]:
+        text, font = rf"\textbf{{({label})}}", {}
+    else:
+        text, font = f"({label})", {"fontweight": "bold"}
+    ax.text(x, y, text, transform=ax.transAxes,
+            ha="left", va="bottom", fontsize=9.0, color=INK, **font)
 
 
 def save(fig, path: Path, *, title: str) -> Path:

@@ -43,21 +43,6 @@ def _ctx(*, reader=None, freq_ids=None, workers=2):
     )
 
 
-def _patch_archive(monkeypatch, *, size=10):
-    monkeypatch.setattr(
-        cadc, "_enumerate_events",
-        lambda *args, **kwargs: {(SCOPE, EVENT): ["dataset"]},
-    )
-    monkeypatch.setattr(
-        cadc.DATATRAIL, "common_path",
-        lambda scope, event, **kwargs: (COMMON, True),
-    )
-    monkeypatch.setattr(
-        cadc.CadcDatatrailSource, "_cadc_size",
-        lambda self, uri, *args, **kwargs: (size, None),
-    )
-
-
 def test_active_survey_exclusively_owns_output_and_manifest(
         monkeypatch, tmp_path):
     entered = threading.Event()

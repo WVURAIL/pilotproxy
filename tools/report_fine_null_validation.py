@@ -13,6 +13,7 @@ import hashlib
 import json
 from numbers import Integral, Real
 from pathlib import Path
+import shutil
 import sys
 
 import numpy as np
@@ -47,10 +48,15 @@ def threshold_value(value, *, exact):
         if not 1 <= int(value) <= MAX_Q16:
             raise ValueError('Q16 calibration threshold is outside the deployable uint64 range')
         return int(value)
-    if (isinstance(value, (bool, np.bool_)) or not isinstance(value, Real)
-            or not np.isfinite(value) or value < 0):
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, Real):
         raise ValueError('Floating calibration threshold must be finite nonnegative')
-    return float(value)
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise ValueError('Floating calibration threshold must be finite nonnegative') from exc
+    if not np.isfinite(result) or result < 0:
+        raise ValueError('Floating calibration threshold must be finite nonnegative')
+    return result
 
 
 def count_outcomes(samples, valid, threshold, *, always=None):
@@ -227,15 +233,28 @@ def run(out):
     inventory, raw_bindings = independent_inventory(out, plan, ids, calibration)
     bindings.update(raw_bindings)
     target = out / 'reports/null_validation'
-    if target.exists():
+    if target.exists() or target.is_symlink():
         raise ValueError('Refusing to overwrite an independent null report')
     target.mkdir(parents=True)
+    try:
+        report = _write_report(out, plan, geometry, bindings, calibration, inventory, target)
+    except BaseException:
+        # This invocation created the directory exclusively. A failed write
+        # must not leave an incomplete report that blocks the next attempt.
+        shutil.rmtree(target)
+        raise
+    print(json.dumps({k: report[k] for k in ('scope', 'trials_per_policy', 'primary_policy_rows',
+                                            'passed_primary_rows', 'all_primary_gates_passed')}), flush=True)
+    return report
+
+
+def _write_report(out, plan, geometry, bindings, calibration, inventory, target):
+    gate = plan['false_alarm_gate']
     sources = {str(Path(__file__).resolve()): sha(__file__)}
     for module in tuple(sys.modules.values()):
         name = getattr(module, '__file__', None)
         if name and Path(name).suffix == '.py' and Path(name).resolve().is_relative_to(ROOT):
             sources[str(Path(name).resolve())] = sha(name)
-    import shutil
     snapshots = {}
     for name, digest in sources.items():
         path = target / 'source_snapshots' / Path(name).relative_to(ROOT)
@@ -342,8 +361,6 @@ def run(out):
     write_json(target / 'report.json', report)
     with (target / 'report.sha256').open('x') as stream:
         stream.write(sha(target / 'report.json')+'\n')
-    print(json.dumps({k: report[k] for k in ('scope', 'trials_per_policy', 'primary_policy_rows',
-                                            'passed_primary_rows', 'all_primary_gates_passed')}), flush=True)
     return report
 
 

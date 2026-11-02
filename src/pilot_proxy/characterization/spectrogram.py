@@ -1,7 +1,7 @@
 """Summarize the marker-region spectrum of each band by UTC month.
 
 Use the histogram export's ``histogram_eligible`` frames: health-selected
-frames with finite times and finite positive Q, from any era or no era.
+frames with finite times and finite Q, from any era or no era.
 Their stored PSDs sum power over feeds and encode it in 0.01 dB steps relative
 to each frame's median positive fine-bin power across the coarse channel.
 
@@ -84,7 +84,8 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
     corrected_raw = read_manifest(eras_release_manifest)
     RELEASE_SHA256 = sha(corrected_raw)
     corrected_release = json.loads(corrected_raw)["files"]
-    histogram_release = json.loads(read_manifest(frames_release_manifest))["files"]
+    histogram_raw = read_manifest(frames_release_manifest)
+    histogram_release = json.loads(histogram_raw)["files"]
     ledgers = {}
     for path in sorted((Path(release) / "archive" / "ledger" / "channels").glob("ch*_fid*.json")):
         raw = path.read_bytes()
@@ -95,6 +96,15 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
         ledgers[int(ledger["channel"])] = ledger
     if tuple(sorted(ledgers)) != CHANNELS:
         raise ValueError("the release's ledgers do not cover the screened bands")
+    # Keep the authenticated bytes so publication cannot copy a later edit.
+    era_records = {}
+    for ch in CHANNELS:
+        relative = f"archive/channels/ch{ch}/eras.json"
+        raw = (ERAS / f"ch{ch}/eras.json").read_bytes()
+        expected = corrected_release[relative]
+        if sha(raw) != expected["sha256"] or len(raw) != expected["bytes"]:
+            raise ValueError(f"eras differ from the corrected release: channel {ch}")
+        era_records[ch] = raw
     reduced, provenance = {}, {}
     for ch in CHANNELS:
         ledger = ledgers[ch]
@@ -147,8 +157,11 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
             "chime_frequency_hz": center, "pilot_frequency_hz": pilot,
         }
         print(f"channel {ch}: {eligible.sum()} frames", flush=True)
-    first = min(int(m.min()) for m, *_ in reduced.values())
-    last = max(int(m.max()) for m, *_ in reduced.values())
+    populated = [m for m, *_ in reduced.values() if m.size]
+    if not populated:
+        raise ValueError("the screened bands have no eligible frames for a monthly spectrum")
+    first = min(int(m.min()) for m in populated)
+    last = max(int(m.max()) for m in populated)
     months = np.arange(first, last + 1, dtype=np.int32)
     psd = np.full((len(CHANNELS), months.size, 2 * HALF + 1), np.nan, dtype=np.float32)
     frames = np.zeros((len(CHANNELS), months.size), dtype=np.int32)
@@ -176,9 +189,7 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
         "array_sha256": {name: sha(npy_bytes(arrays[name])) for name in ARRAYS}}}
     for ch in CHANNELS:
         relative = f"archive/channels/ch{ch}/eras.json"
-        raw = (ERAS / f"ch{ch}/eras.json").read_bytes()
-        if sha(raw) != corrected_release[relative]["sha256"] or len(raw) != corrected_release[relative]["bytes"]:
-            raise ValueError(f"eras differ from the corrected release: channel {ch}")
+        raw = era_records[ch]
         target = DATA / f"eras/ch{ch}_eras.json.gz"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(gzip.compress(raw, compresslevel=9, mtime=0))
@@ -194,7 +205,7 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
             "script_sha256": sha(Path(__file__).read_bytes()),
             "products_dir": str(PRODUCTS),
             "frame_export_dir": str(FRAMES),
-            "frame_selection": "histogram_eligible of the histogram release export: health selected, finite frame time, finite positive Q, any era or none",
+            "frame_selection": "histogram_eligible of the histogram release export: health selected, finite frame time, finite Q, any era or none",
             "month_key": "frame_month of the export, year * 12 + month - 1, UTC",
             "statistic": "per-bin median over the month's frames of psd_frame_db_i16 * 0.01; invalid code -32768 excluded",
             "psd_reference": "each frame's own median positive fine bin across the whole coarse channel, feeds summed (pilot_proxy.archive.detector._append_psd_frame)",
@@ -204,6 +215,8 @@ def reduce_products(*, products: Path, frames: Path, frames_release_manifest: Pa
         "eras_source": {"release_manifest_sha256": RELEASE_SHA256,
                         "tree": str(ERAS),
                         "cause_field": "eras[].evidence: what cut the start of each saved era"},
+        "frames_source": {"release_manifest_sha256": sha(histogram_raw),
+                          "tree": str(FRAMES)},
         "channels": {str(ch): provenance[ch] for ch in CHANNELS},
         "stored": stored,
     }

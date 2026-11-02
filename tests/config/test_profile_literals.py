@@ -264,15 +264,6 @@ LITERALS = {
     "rfisher_min_retained_frames": (
         "RFIsher src/rfisher/selection_policy.py selection.minimum_retained_frames",
         "pinned", 30, lambda: P.register.value("selection.minimum_retained_frames")),
-    "mask_frontier_min_retained_frames": (
-        "pilot-proxy src/pilot_proxy/testbench/mask_frontier.py:53 MIN_RETAINED_FRAMES",
-        "pinned", 30, lambda: P.register.value("selection.minimum_retained_frames")),
-    "mask_frontier_floor_percentile": (
-        "pilot-proxy src/pilot_proxy/testbench/mask_frontier.py:54 FLOOR_PERCENTILE",
-        "pinned", 90.0, lambda: P.register.value("floor.upper_percentile")),
-    "mask_frontier_floor_min_frames": (
-        "pilot-proxy src/pilot_proxy/testbench/mask_frontier.py:55 FLOOR_MIN_FRAMES",
-        "pinned", 30, lambda: P.register.value("floor.minimum_null_frames")),
     "rfisher_floor_percentile": (
         "RFIsher src/rfisher_results/archive/nulls.py:99 FLOOR_PERCENTILE",
         "pinned", 90.0, lambda: P.register.value("floor.upper_percentile")),
@@ -523,7 +514,6 @@ def test_pinned_code_rows_are_found():
     names = {key for key, _, _ in _pinned_code_rows()}
     assert {"detector_window", "fine_bins", "reference_bandwidth", "hdf5_coarse_width",
             "quantize_default_pilot_hz", "audit_freq_table",
-            "mask_frontier_floor_percentile",
             "loader_default_nfft"} <= names
 
 

@@ -111,6 +111,14 @@ def _q16(value):
     return word
 
 
+def _threshold_kind(decision):
+    """The consumer action for one television-channel decision."""
+    kind = OUTCOMES[decision["outcome"]]
+    if kind == "reject_all" and decision["reason"] in UNMASKED_REASONS:
+        return "pass_all"
+    return kind
+
+
 def _decisions(path):
     """The threshold rule's per-channel decisions, checked: useful carries its word, not useful its reason."""
     # the rule may write a non-finite diagnostic (a time at zero retention); the fields read here are checked below
@@ -264,10 +272,11 @@ def analyze_policy(plan_path):
         freq, mapping = _frequency_mapping(channel, bound, project, offset, receiver)
         row = {"physical_channel": channel, "frequency_ids": [freq], "outcome": decision["outcome"],
                "frequency_mapping": [mapping]}
-        if OUTCOMES[decision["outcome"]] == "reject_all" and decision["reason"] in UNMASKED_REASONS:
+        kind = _threshold_kind(decision)
+        if kind == "pass_all":
             row.update(threshold={"kind": "pass_all"}, reason=decision["reason"])
             unmasked.append(freq)
-        elif OUTCOMES[decision["outcome"]] == "reject_all":
+        elif kind == "reject_all":
             row.update(threshold={"kind": "reject_all"}, reason=decision["reason"])
             permanent.append(freq)
         else:

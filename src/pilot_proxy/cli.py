@@ -458,23 +458,6 @@ def _cmd_analyze_injection_recovery(args: argparse.Namespace) -> None:
     raise SystemExit(recovery_main(argv))
 
 
-def _cmd_analyze_transmitter_census(args: argparse.Namespace) -> None:
-    from pilot_proxy.testbench.transmitter_census import main as census_main
-
-    argv: list[str] = ["--census", str(args.census),
-                       "--output-dir", str(args.output_dir),
-                       "--association", str(args.association)]
-    if args.lines is not None:
-        argv += ["--lines", str(args.lines)]
-    if args.lines_from_run is not None:
-        argv += ["--lines-from-run", str(args.lines_from_run)]
-    if args.min_prominence_db is not None:
-        argv += ["--min-prominence-db", str(args.min_prominence_db)]
-    if args.min_channel_lines is not None:
-        argv += ["--min-channel-lines", str(args.min_channel_lines)]
-    if args.snr_threshold_db is not None:
-        argv += ["--snr-threshold-db", str(args.snr_threshold_db)]
-    census_main(argv)
 
 
 def _cmd_chime_plot(args: argparse.Namespace) -> None:
@@ -719,8 +702,6 @@ CHARACTERIZE_STEPS = {
     "archive": "pilot_proxy.characterization.run",
     "histogram-frames": "pilot_proxy.characterization.histogram_frames",
     "fine-histogram-frames": "pilot_proxy.detectors.narrowband_marker.fine_histogram_frames",
-    "power-eras": "pilot_proxy.characterization.power_era_review",
-    "era-boundaries": "pilot_proxy.characterization.era_boundaries",
     "score-cache": "pilot_proxy.characterization.score_cache",
     "spectrogram": "pilot_proxy.characterization.spectrogram",
 }
@@ -1622,32 +1603,6 @@ def build_parser() -> argparse.ArgumentParser:
     recovery.add_argument("--output-dir", type=Path, required=True)
     recovery.set_defaults(func=_cmd_analyze_injection_recovery)
 
-    census_cmd = _add_command(
-        "analyze-transmitter-census",
-        "Case-study analysis over a detected-carrier line list (or one "
-        "extracted directly from a scan's per-pilot high-resolution spectra "
-        "with --lines-from-run) and the FCC/ISED transmitter census: "
-        "carrier-offset dispersion by service class "
-        "(association table, class-split and spread-vs-composition figures, "
-        "Spearman rank correlation with bootstrap CI).",
-    )
-    census_cmd.add_argument("--census", type=Path, required=True,
-                            help="Census CSV: rf_channel, callsign, "
-                                 "service_class, erp_kw, distance_km.")
-    census_cmd.add_argument("--lines", type=Path, default=None,
-                            help="Line CSV: rf_channel, offset_hz, snr_db.")
-    census_cmd.add_argument("--lines-from-run", type=Path, default=None,
-                            help="Scan work dir (_per_pilot/): extract lines "
-                                 "from the products' integrated spectra.")
-    census_cmd.add_argument("--output-dir", type=Path, required=True)
-    census_cmd.add_argument("--association",
-                            choices=["ranked", "dominant_secondary"],
-                            default="ranked")
-    census_cmd.add_argument("--snr-threshold-db", type=float, default=None)
-    census_cmd.add_argument("--min-prominence-db", type=float, default=None)
-    census_cmd.add_argument("--min-channel-lines", type=int, default=None)
-    census_cmd.set_defaults(func=_cmd_analyze_transmitter_census)
-
     chime_plot = _add_command(
         "chime-plot",
         "Regenerate the diagnostic figures for a completed CHIME run "
@@ -1832,7 +1787,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name, summary, steps, pass_step in (
         ("characterize", "Archive characterization: the release the frame exports are keyed to (archive), "
-                         "the frame exports and spectrograms, the power eras and the score cache.",
+                         "the frame exports, spectrograms and the score cache.",
          CHARACTERIZE_STEPS, False),
         ("products", "Per-pilot product checks: the archive cohort acceptance gate (check-archive).",
          PRODUCTS_STEPS, False),

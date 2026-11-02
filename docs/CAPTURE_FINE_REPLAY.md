@@ -164,7 +164,8 @@ not make the same block a new observation. The supplied trial name remains
 `declared_trial_id`; the independent-unit identity remains supplied provenance.
 
 When saved products agree, the declaration produces `population_CH*.json`.
-Invalid rows are included; the population validator will refuse them. When product parity fails, diagnostic scores remain but no population file
+Invalid rows retain a false `valid` flag and a null `required_multiplier_q16`.
+When product parity fails, diagnostic scores remain but no population file
 is emitted. Do not edit out invalid or mismatching rows to claim qualification.
 
 Calibration and evaluation must use the same score profile, fixed packing/input

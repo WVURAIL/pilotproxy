@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -12,8 +13,9 @@ import h5py
 
 def _walk(path: Path, filename_pattern: str | None = None) -> list[Path]:
     if filename_pattern is not None:
-        return sorted(path.rglob(filename_pattern))
-    return sorted(path.rglob("*.h5")) + sorted(path.rglob("*.hdf5"))
+        return sorted(candidate for candidate in path.rglob(filename_pattern) if candidate.is_file())
+    return [candidate for pattern in ("*.h5", "*.hdf5")
+            for candidate in sorted(path.rglob(pattern)) if candidate.is_file()]
 
 
 def _print_attrs(prefix: str, attrs: Any) -> None:
@@ -45,13 +47,17 @@ def inspect_file(path: Path, *, dataset_path: str | None = None) -> None:
         h5.visititems(visitor)
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", type=Path)
     parser.add_argument("--max-files", type=int, default=10)
     parser.add_argument("--dataset-path", default=None)
     parser.add_argument("--filename-pattern", default=None)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if not args.input_dir.is_dir():
+        parser.error("input_dir must be an existing directory")
+    if args.max_files < 0:
+        parser.error("--max-files must be non-negative")
 
     files = _walk(args.input_dir, args.filename_pattern)
     print(f"Found {len(files)} HDF5 files under {args.input_dir}")

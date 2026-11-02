@@ -16,13 +16,16 @@ never read.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import shutil
 import sys
+import tempfile
 
 import numpy as np
 
@@ -61,11 +64,38 @@ def read_json(path):
     return json.loads(Path(path).read_text())
 
 
-def write_json(path, data):
+@contextmanager
+def _exclusive_output(path):
+    """Publish a complete file without replacing an existing output."""
+    if path.exists() or path.is_symlink():
+        raise FileExistsError(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x") as stream:
-        json.dump(data, stream, indent=2, sort_keys=True, allow_nan=False)
-        stream.write("\n")
+    with tempfile.TemporaryDirectory(dir=path.parent, prefix=f".{path.name}.") as directory:
+        temporary = Path(directory) / path.name
+        with temporary.open("xb") as stream:
+            yield stream
+        # A same-filesystem hard link makes publication exclusive, including
+        # a competing writer that appears after the initial path check.
+        os.link(temporary, path)
+
+
+def write_json(path, data):
+    payload = (json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+    with _exclusive_output(path) as stream:
+        stream.write(payload)
+
+
+def _write_marked_report(path, data):
+    marker = path.with_suffix(".sha256")
+    if marker.exists() or marker.is_symlink():
+        raise FileExistsError(marker)
+    write_json(path, data)
+    try:
+        with _exclusive_output(marker) as stream:
+            stream.write((sha(path) + "\n").encode())
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
 
 
 def rehash(out, mapping):
@@ -95,20 +125,26 @@ def bind_sources(out):
             raise ValueError("Reducer runtime differs from its first frozen reduction")
         rehash(out, saved["snapshots_sha256"])
     else:
-        snapshots = {}
-        for name, digest in sources.items():
-            relative = Path("reduction/source_snapshots") / Path(name).relative_to(ROOT)
-            target = out / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target.exists():
-                raise ValueError("Refusing to overwrite a reduction source snapshot")
-            shutil.copyfile(name, target)
-            if sha(target) != digest:
-                raise ValueError("Source changed while snapshotting")
-            snapshots[str(relative)] = digest
-        saved = {"schema": "literal-fine-reducer-source-v1", "frozen_utc": utc(),
-                 "source_sha256": sources, "snapshots_sha256": snapshots, "runtime": runtime}
-        write_json(path, saved)
+        snapshot_root = out / "reduction/source_snapshots"
+        if snapshot_root.exists() or snapshot_root.is_symlink():
+            raise ValueError("Refusing to overwrite reduction source snapshots without a binding")
+        snapshot_root.mkdir(parents=True)
+        try:
+            snapshots = {}
+            for name, digest in sources.items():
+                relative = Path("reduction/source_snapshots") / Path(name).relative_to(ROOT)
+                target = out / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(name, target)
+                if sha(target) != digest:
+                    raise ValueError("Source changed while snapshotting")
+                snapshots[str(relative)] = digest
+            saved = {"schema": "literal-fine-reducer-source-v1", "frozen_utc": utc(),
+                     "source_sha256": sources, "snapshots_sha256": snapshots, "runtime": runtime}
+            write_json(path, saved)
+        except BaseException:
+            shutil.rmtree(snapshot_root, ignore_errors=True)
+            raise
     return saved, {str(path.relative_to(out)): sha(path), **saved["snapshots_sha256"]}
 
 
@@ -349,12 +385,23 @@ def reduce_powers(float_fine, fixed_fine, anchors, mu0):
 
 
 def save_scores(path, data, metadata):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("xb") as stream:
-        np.savez(stream, **data, meta_json=np.asarray(json.dumps(metadata, sort_keys=True)))
-    receipt = {"schema": SCORE_SCHEMA, "metadata": metadata, "sha256": sha(path), "completed_utc": utc()}
-    write_json(path.with_suffix(".json"), receipt)
-    return {str(path): sha(path), str(path.with_suffix(".json")): sha(path.with_suffix(".json"))}
+    receipt_path = path.with_suffix(".json")
+    if receipt_path.exists() or receipt_path.is_symlink():
+        raise FileExistsError(receipt_path)
+    serialized = json.dumps(metadata, sort_keys=True, allow_nan=False)
+    with _exclusive_output(path) as stream:
+        np.savez(stream, **data, meta_json=np.asarray(serialized))
+    receipt_written = False
+    try:
+        receipt = {"schema": SCORE_SCHEMA, "metadata": metadata, "sha256": sha(path), "completed_utc": utc()}
+        write_json(receipt_path, receipt)
+        receipt_written = True
+        return {str(path): receipt["sha256"], str(receipt_path): sha(receipt_path)}
+    except BaseException:
+        path.unlink(missing_ok=True)
+        if receipt_written:
+            receipt_path.unlink(missing_ok=True)
+        raise
 
 
 def score_stage(out, phase):
@@ -367,58 +414,63 @@ def score_stage(out, phase):
     if target.exists():
         raise ValueError("Refusing to overwrite a derived score stage")
     target.mkdir(parents=True)
-    outputs = {}
-    if phase == "null_calibration":
-        pieces = {c: [] for c in plan["channels"]}
-        for path, metadata in inventory:
-            raw = read_raw(path, metadata, len(plan["channels"]))
-            for column, channel in enumerate(plan["channels"]):
+    try:
+        outputs = {}
+        if phase == "null_calibration":
+            pieces = {c: [] for c in plan["channels"]}
+            for path, metadata in inventory:
+                raw = read_raw(path, metadata, len(plan["channels"]))
+                for column, channel in enumerate(plan["channels"]):
+                    g = geometries[channel]
+                    pieces[channel].append(reduce_powers(raw["float_fine"][:, column], raw["fixed_fine"][:, column],
+                        g["anchors"], g["mu0"]))
+            cells = [(c, None, pieces[c]) for c in plan["channels"]]
+        else:
+            cells = []
+            for channel in plan["channels"]:
                 g = geometries[channel]
-                pieces[channel].append(reduce_powers(raw["float_fine"][:, column], raw["fixed_fine"][:, column],
-                    g["anchors"], g["mu0"]))
-        cells = [(c, None, pieces[c]) for c in plan["channels"]]
-    else:
-        cells = []
-        for channel in plan["channels"]:
-            g = geometries[channel]
-            for case in range(7):
-                pieces = []
-                for path, metadata in inventory:
-                    if (metadata["channel"], metadata["case_index"]) != (channel, case):
-                        continue
-                    raw = read_raw(path, metadata, len(plan["discovery_snr_db"]))
-                    shape = raw["fixed_fine"].shape[:2]
-                    flat = lambda a: a.reshape((-1, *a.shape[2:]))
-                    reduced = reduce_powers(flat(raw["float_fine"]), flat(raw["fixed_fine"]),
-                        [g["anchors"][case], g["anchors"][7]], g["mu0"])
-                    pieces.append({k: v.reshape((*shape, *v.shape[1:])) for k, v in reduced.items()})
-                cells.append((channel, case, pieces))
-    for channel, case, pieces in cells:
-        merged = {k: np.concatenate([p[k] for p in pieces]) for k in pieces[0]}
-        expected = plan["counts"][phase]
-        if any(len(v) != expected for v in merged.values()):
-            raise ValueError("Derived coverage count differs")
-        anchors = geometries[channel]["anchors"] if case is None else [geometries[channel]["anchors"][case], geometries[channel]["anchors"][7]]
-        metadata = {"schema": SCORE_SCHEMA, "plan_sha256": bindings["plan.json"], "phase": phase,
-                    "channel": channel, "case_index": case, "anchors": anchors,
-                    "ranks": [construct_geometry(a).ranks.tolist() for a in anchors],
-                    "float_stages": list(FLOAT_STAGES), "trials": expected,
-                    "snr_db": None if case is None else plan["discovery_snr_db"],
-                    "scope": plan["scope"], "mu0_packed_weights": geometries[channel]["mu0"],
-                    "coordinate_system": plan["coordinate_system"],
-                    "coarse_scope": "Floating normalized frame-power ratios; frame powers are the all-bin sums of the fine powers (kernel core 3.0.0); the raw shards' coarse members are not read; not an exact coarse decision replay."}
-        path = target / (f"ch{channel}.npz" if case is None else f"ch{channel}_case{case}.npz")
-        outputs.update({str(Path(p).relative_to(out)): d for p, d in save_scores(path, merged, metadata).items()})
-    rehash(out, bindings)
-    rehash(out, source["source_sha256"])
-    manifest = {"schema": SCORE_SCHEMA, "plan_sha256": bindings["plan.json"], "phase": phase,
-                "scope": plan["scope"], "completed_utc": utc(), "coverage_complete": True,
-                "channels": plan["channels"], "trials": plan["counts"][phase],
-                "cells": len(cells), "inputs_sha256": bindings, "outputs_sha256": outputs,
-                "source_sha256": source["source_sha256"], "physical_certification": False}
-    manifest["coordinate_system"] = plan["coordinate_system"]
-    write_json(target / "manifest.json", manifest)
-    return manifest
+                for case in range(7):
+                    pieces = []
+                    for path, metadata in inventory:
+                        if (metadata["channel"], metadata["case_index"]) != (channel, case):
+                            continue
+                        raw = read_raw(path, metadata, len(plan["discovery_snr_db"]))
+                        shape = raw["fixed_fine"].shape[:2]
+                        flat = lambda a: a.reshape((-1, *a.shape[2:]))
+                        reduced = reduce_powers(flat(raw["float_fine"]), flat(raw["fixed_fine"]),
+                            [g["anchors"][case], g["anchors"][7]], g["mu0"])
+                        pieces.append({k: v.reshape((*shape, *v.shape[1:])) for k, v in reduced.items()})
+                    cells.append((channel, case, pieces))
+        for channel, case, pieces in cells:
+            merged = {k: np.concatenate([p[k] for p in pieces]) for k in pieces[0]}
+            expected = plan["counts"][phase]
+            if any(len(v) != expected for v in merged.values()):
+                raise ValueError("Derived coverage count differs")
+            anchors = geometries[channel]["anchors"] if case is None else [geometries[channel]["anchors"][case], geometries[channel]["anchors"][7]]
+            metadata = {"schema": SCORE_SCHEMA, "plan_sha256": bindings["plan.json"], "phase": phase,
+                        "channel": channel, "case_index": case, "anchors": anchors,
+                        "ranks": [construct_geometry(a).ranks.tolist() for a in anchors],
+                        "float_stages": list(FLOAT_STAGES), "trials": expected,
+                        "snr_db": None if case is None else plan["discovery_snr_db"],
+                        "scope": plan["scope"], "mu0_packed_weights": geometries[channel]["mu0"],
+                        "coordinate_system": plan["coordinate_system"],
+                        "coarse_scope": "Floating normalized frame-power ratios; frame powers are the all-bin sums of the fine powers (kernel core 3.0.0); the raw shards' coarse members are not read; not an exact coarse decision replay."}
+            path = target / (f"ch{channel}.npz" if case is None else f"ch{channel}_case{case}.npz")
+            outputs.update({str(Path(p).relative_to(out)): d for p, d in save_scores(path, merged, metadata).items()})
+        rehash(out, bindings)
+        rehash(out, source["source_sha256"])
+        manifest = {"schema": SCORE_SCHEMA, "plan_sha256": bindings["plan.json"], "phase": phase,
+                    "scope": plan["scope"], "completed_utc": utc(), "coverage_complete": True,
+                    "channels": plan["channels"], "trials": plan["counts"][phase],
+                    "cells": len(cells), "inputs_sha256": bindings, "outputs_sha256": outputs,
+                    "source_sha256": source["source_sha256"], "physical_certification": False}
+        manifest["coordinate_system"] = plan["coordinate_system"]
+        write_json(target / "manifest.json", manifest)
+        return manifest
+
+    except BaseException:
+        shutil.rmtree(target, ignore_errors=True)
+        raise
 
 
 def load_score_manifest(out, plan, phase):
@@ -549,11 +601,10 @@ def calibrate(out):
               "independent_null_validation": False, "higher_rule": "ceil((1-pfa)*(n-1)); strict response greater than threshold"}
     rehash(out, bindings)
     rehash(out, source["source_sha256"])
-    write_json(out / ("calibration-refused.json" if refusals else "calibration.json"), report)
     if refusals:
+        write_json(out / "calibration-refused.json", report)
         raise ValueError(f"Calibration refused for {len(refusals)} curves; see calibration-refused.json")
-    with (out / "calibration.sha256").open("x") as stream:
-        stream.write(sha(out / "calibration.json") + "\n")
+    _write_marked_report(out / "calibration.json", report)
     return report
 
 
@@ -608,7 +659,8 @@ def freeze_grid(out):
             key = f"ch{channel}/case{case}"
             values, metadata = load_scores(out / "scores/discovery" / f"ch{channel}_case{case}.npz")
             if (metadata["channel"] != channel or metadata["case_index"] != case
-                    or metadata["phase"] != "discovery" or metadata["plan_sha256"] != bindings["plan.json"]):
+                    or metadata["phase"] != "discovery" or metadata["plan_sha256"] != bindings["plan.json"]
+                    or metadata["snr_db"] != plan["discovery_snr_db"]):
                 raise ValueError("Discovery score cell identity differs")
             n, ns = plan["counts"]["discovery"], len(plan["discovery_snr_db"])
             if (values["fine_float"].shape != (n, ns, 2, 6, 4)
@@ -653,11 +705,10 @@ def freeze_grid(out):
               "evaluation_outcomes_used": False, "physical_certification": False}
     rehash(out, bindings)
     rehash(out, source["source_sha256"])
-    write_json(out / ("evaluation-grid-refused.json" if refusals else "evaluation-grid.json"), report)
     if refusals:
+        write_json(out / "evaluation-grid-refused.json", report)
         raise ValueError(f"Grid refused for {len(refusals)} cells; see evaluation-grid-refused.json")
-    with (out / "evaluation-grid.sha256").open("x") as stream:
-        stream.write(sha(out / "evaluation-grid.json") + "\n")
+    _write_marked_report(out / "evaluation-grid.json", report)
     return report
 
 

@@ -13,6 +13,7 @@ from pilot_proxy.detector_geometry import (
     apply_nyquist_zone_to_detector_matrix,
     stream_time_block_to_detector_matrix,
 )
+from pilot_proxy.detector_reference import packed_dtype_for_component_bits
 from pilot_proxy.integration.packing import pack_channelized_streams_for_detector
 from pilot_proxy.integration.schemas import (
     COMBINE_MODE_COMBINED_STREAMS,
@@ -182,6 +183,13 @@ def pack_chime_block_for_detector(
     clip_sigma: float = 3.0,
 ) -> PackedChimeBlock:
     """Pack one normalized CHIME data block into detector frame rows."""
+    packed_dtype_for_component_bits(bits_per_component)
+    native_int4 = sample_encoding in {
+        CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
+        PACKED_TWOS_COMPLEMENT_COMPLEX_INT4,
+    }
+    if native_int4 and bits_per_component != DEFAULT_BITS_PER_COMPONENT:
+        raise ValueError("native CHIME int4 samples require a 4-bit component depth.")
     arr = np.asarray(block)
     if arr.ndim != 3 or arr.shape[1] != 1:
         raise ValueError(
@@ -203,10 +211,7 @@ def pack_chime_block_for_detector(
         combine_mode=COMBINE_MODE_COMBINED_STREAMS,
     )
 
-    if sample_encoding in {
-        CHIME_NATIVE_OFFSET_BINARY_COMPLEX_INT4,
-        PACKED_TWOS_COMPLEMENT_COMPLEX_INT4,
-    }:
+    if native_int4:
         packed = _pack_native_quantized_block(
             arr,
             frame_size_samples=int(frame_size_samples),
@@ -245,9 +250,9 @@ def pack_chime_block_for_detector(
         detector_window_samples=int(detector_window_samples),
         nyquist_zone=nyquist_zone,
         quantization_scale_mode=mode,
-        clip_sigma=float(clip_sigma),
+        clip_sigma=clip_sigma,
         combine_mode=COMBINE_MODE_COMBINED_STREAMS,
-        bits_per_component=int(bits_per_component),
+        bits_per_component=bits_per_component,
         num_blocks=int(frames_in_chunk),
         scale=scale,
         scale_by_stream=scale_by_stream,

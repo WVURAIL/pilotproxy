@@ -751,6 +751,13 @@ def _validate_detector(
     num_pilots = int(np.asarray(detector["physical_channel"]).size)
     frame_pilot_shape = (num_frames, num_pilots)
 
+    shape_error_count = len(errors)
+    for name, expected in [("frame_index", (num_frames,)),
+                           ("physical_channel", (num_pilots,))]:
+        _check_shape(
+            actual=tuple(np.asarray(detector[name]).shape), expected=expected,
+            check=f"detector.{name}.shape", errors=errors,
+        )
     for name in [
         "p_target_u64",
         "p_ref_sum_u64",
@@ -777,6 +784,9 @@ def _validate_detector(
             check=f"detector.{name}.shape",
             errors=errors,
         )
+
+    if len(errors) != shape_error_count:
+        return None
 
     mask = np.asarray(detector["mask"])
     valid = np.asarray(detector["valid"])
@@ -812,30 +822,36 @@ def _validate_detector(
                 + ", ".join(missing_norms),
             )
         else:
-            target_norm = np.asarray(detector["target_norm_sq"]).reshape(-1)
-            reference_norm = np.asarray(
-                detector["reference_norm_sum_sq"]
-            ).reshape(-1)
-            p_target_object = p_target.astype(object)
-            p_ref_object = p_ref_sum.astype(object)
-            target_norm_object = target_norm.astype(object)[np.newaxis, :]
-            reference_norm_object = reference_norm.astype(object)[np.newaxis, :]
-            expected_mask = (
-                (valid != 0)
-                & (p_ref_sum != 0)
-                & np.asarray(
-                    p_target_object * reference_norm_object
-                    > target_norm_object * p_ref_object,
-                    dtype=bool,
+            target_norm = np.asarray(detector["target_norm_sq"])
+            reference_norm = np.asarray(detector["reference_norm_sum_sq"])
+            norm_error_count = len(errors)
+            for name, values in [("target_norm_sq", target_norm),
+                                 ("reference_norm_sum_sq", reference_norm)]:
+                _check_shape(
+                    actual=tuple(values.shape), expected=(num_pilots,),
+                    check=f"detector.{name}.shape", errors=errors,
                 )
-            )
-            if np.any((mask != 0) != expected_mask):
-                _add_error(
-                    errors,
-                    "detector.mask.normalized_positive_excess_rule",
-                    "mask does not match valid && (p_target * "
-                    "reference_norm_sum_sq > target_norm_sq * p_ref_sum)",
+            if len(errors) == norm_error_count:
+                p_target_object = p_target.astype(object)
+                p_ref_object = p_ref_sum.astype(object)
+                target_norm_object = target_norm.astype(object)[np.newaxis, :]
+                reference_norm_object = reference_norm.astype(object)[np.newaxis, :]
+                expected_mask = (
+                    (valid != 0)
+                    & (p_ref_sum != 0)
+                    & np.asarray(
+                        p_target_object * reference_norm_object
+                        > target_norm_object * p_ref_object,
+                        dtype=bool,
+                    )
                 )
+                if np.any((mask != 0) != expected_mask):
+                    _add_error(
+                        errors,
+                        "detector.mask.normalized_positive_excess_rule",
+                        "mask does not match valid && (p_target * "
+                        "reference_norm_sum_sq > target_norm_sq * p_ref_sum)",
+                    )
 
     if stats:
         for key, expected in [
@@ -953,7 +969,8 @@ def _validate_reductions(
 
     num_chunks = int(np.asarray(reductions["chunk_index"]).size)
     num_pilots = int(shape[1])
-    for name in ["chunk_start_frame", "chunk_stop_frame"]:
+    shape_error_count = len(errors)
+    for name in ["chunk_index", "chunk_start_frame", "chunk_stop_frame"]:
         _check_shape(
             actual=tuple(np.asarray(reductions[name]).shape),
             expected=(num_chunks,),
@@ -976,6 +993,9 @@ def _validate_reductions(
             check=f"reductions.{name}.shape",
             errors=errors,
         )
+
+    if len(errors) != shape_error_count:
+        return
 
     valid = np.asarray(detector["valid"]) != 0
     mask = np.asarray(detector["mask"]) != 0

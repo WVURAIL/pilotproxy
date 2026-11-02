@@ -358,8 +358,8 @@ def _calibration_scale_for_dataset(
     )
     return estimate_complex_scale(
         block,
-        bits_per_component=int(bits_per_component),
-        clip_sigma=float(clip_sigma),
+        bits_per_component=bits_per_component,
+        clip_sigma=clip_sigma,
     )
 
 
@@ -763,6 +763,42 @@ def run_chime_analysis(
     weights_by_channel: Mapping[int, np.ndarray] | None = None,
 ) -> dict[str, Path]:
     """Run the CHIME adapter without loading all samples into memory."""
+    # Validate before creating output directories or opening inputs. Native
+    # int4 data bypass scale estimation, but these settings still describe
+    # the run and the conversion from pilot excess to data-shelf SNR.
+    for name, value, domain in (
+        ("pilot_below_data_db", pilot_below_data_db, "finite"),
+        ("bin_enbw_hz", bin_enbw_hz, "positive"),
+        ("dtv_bandwidth_hz", dtv_bandwidth_hz, "positive"),
+        ("pilot_capture_efficiency", pilot_capture_efficiency, "positive"),
+        ("calibration_seconds", calibration_seconds, "nonnegative"),
+    ):
+        message = f"{name} must be finite"
+        if domain != "finite":
+            message += f" and {domain}"
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(message) from exc
+        if (not np.isfinite(number)
+                or (domain == "positive" and number <= 0)
+                or (domain == "nonnegative" and number < 0)):
+            raise ValueError(message)
+    for name, value in (
+        ("frame_size_samples", frame_size_samples),
+        ("detector_window_samples", detector_window_samples),
+        ("frames_per_chunk", frames_per_chunk),
+        ("max_frames", max_frames),
+    ):
+        if name == "max_frames" and value is None:
+            continue
+        message = f"{name} must be a positive integer"
+        try:
+            count = operator.index(value)
+        except TypeError as exc:
+            raise ValueError(message) from exc
+        if isinstance(value, (bool, np.bool_)) or count <= 0:
+            raise ValueError(message)
     run_dir = Path(output_dir)
     ensure_run_dirs(run_dir)
 
@@ -1057,6 +1093,11 @@ def run_chime_analysis(
         "detector_window_samples": int(detector_window_samples),
         "frames_per_chunk": int(frames_per_chunk),
         "max_frames": None if max_frames is None else int(max_frames),
+        "pilot_below_data_db": float(pilot_below_data_db),
+        "bin_enbw_hz": float(bin_enbw_hz),
+        "dtv_bandwidth_hz": float(dtv_bandwidth_hz),
+        "pilot_capture_efficiency": float(pilot_capture_efficiency),
+        "calibration_seconds": float(calibration_seconds),
         "absolute_time_used": False,
         "weight_coordinate": weight_coordinate,
         "mask_policy": normalized_positive_excess_policy(),

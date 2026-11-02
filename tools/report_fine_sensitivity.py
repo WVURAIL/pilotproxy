@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 from importlib.metadata import version as package_version
@@ -165,6 +166,9 @@ def resampling(null_ids, h1_ids, *, replicates, seed):
         raise ValueError("Unique disjoint null/H1 trial IDs are required")
     if type(replicates) is not int or replicates < 1:
         raise ValueError("Positive integer bootstrap count is required")
+    if (isinstance(seed, (bool, np.bool_)) or not isinstance(seed, (int, np.integer))
+            or not 0 <= int(seed) < SENTINEL):
+        raise ValueError("Bootstrap seed must be an integer in the recorded uint64 range")
     rng = np.random.Generator(np.random.PCG64(seed))
     n0, n1 = len(null_ids), len(h1_ids)
     null_counts, h1_counts = np.empty((replicates, n0), np.uint16), np.empty((replicates, n1), np.uint16)
@@ -178,13 +182,27 @@ def resampling(null_ids, h1_ids, *, replicates, seed):
             "null_ids": null_ids, "h1_ids": h1_ids, "seed": np.asarray(seed, dtype=np.uint64)}
 
 
+def _multiplicities(counts, trials):
+    """Validate ordinary resampling counts before sorting or weighting trials."""
+    counts = np.asarray(counts)
+    if (counts.ndim != 2 or counts.shape[0] == 0 or trials == 0
+            or counts.shape[1] != trials or counts.dtype.kind not in "iu"
+            or np.any(counts < 0) or np.any(counts > trials)
+            or not np.all(counts.sum(axis=1, dtype=np.uint64) == trials)):
+        raise ValueError("Bootstrap multiplicities must be nonnegative integers summing to the trial count")
+    return counts
+
+
 def weighted_thresholds(samples, counts, *, pfa, exact=False):
     """Exact higher threshold on each resampled multiset; no float Q16 cast."""
     from fractions import Fraction
+    if np.iscomplexobj(samples):
+        raise ValueError("Null scalar responses must be real")
     values = np.asarray(samples, dtype=object if exact else float)
+    if values.ndim != 1:
+        raise ValueError("Bootstrap null samples must be a vector")
     n = len(values)
-    if values.shape != (counts.shape[1],) or not np.all(np.sum(counts, axis=1) == n):
-        raise ValueError("Bootstrap null multiplicity denominator differs")
+    counts = _multiplicities(counts, n)
     if exact:
         if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, (int, np.integer)) or not 1 <= int(v) <= SENTINEL for v in values):
             raise ValueError("Exact requirements need decoded logical integer boundaries")
@@ -196,7 +214,7 @@ def weighted_thresholds(samples, counts, *, pfa, exact=False):
     q = 1 - probability
     index = (q.numerator * (n - 1) + q.denominator - 1) // q.denominator
     order = np.argsort(values, kind="stable")
-    cumulative = np.cumsum(counts[:, order], axis=1, dtype=np.uint32)
+    cumulative = np.cumsum(counts[:, order], axis=1, dtype=np.uint64)
     positions = np.argmax(cumulative > index, axis=1)
     thresholds = values[order[positions]]
     available = thresholds < SENTINEL if exact else np.ones(len(thresholds), dtype=bool)
@@ -205,21 +223,40 @@ def weighted_thresholds(samples, counts, *, pfa, exact=False):
 
 def bootstrap_rates(samples, thresholds, available, counts, *, exact=False, batch=32):
     """Paired H1 proportions [replicate,SNR], preserving ties and sentinels."""
+    if np.iscomplexobj(samples):
+        raise ValueError("H1 responses must be real")
     samples = np.asarray(samples, dtype=object if exact else float)
-    if samples.ndim != 2 or samples.shape[1] != counts.shape[1]:
+    if samples.ndim != 2 or samples.shape[0] == 0:
         raise ValueError("Paired H1 sample shape differs")
     n = samples.shape[1]
-    if not np.all(counts.sum(axis=1) == n) or len(thresholds) != len(counts):
-        raise ValueError("Bootstrap H1 multiplicity denominator differs")
+    counts = _multiplicities(counts, n)
+    available = np.asarray(available)
+    if available.shape != (len(counts),) or available.dtype.kind != "b":
+        raise ValueError("Bootstrap availability must be one boolean per resample")
+    if np.iscomplexobj(thresholds):
+        raise ValueError("Bootstrap thresholds must be real")
+    thresholds = np.asarray(thresholds, dtype=object if exact else float)
+    if thresholds.shape != (len(counts),):
+        raise ValueError("Bootstrap threshold shape differs")
+    if (isinstance(batch, (bool, np.bool_)) or not isinstance(batch, (int, np.integer))
+            or batch < 1):
+        raise ValueError("Bootstrap batch must be a positive integer")
     if exact:
-        if any(not isinstance(v, (int, np.integer)) or not 1 <= int(v) <= SENTINEL for v in samples.flat):
+        if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, (int, np.integer))
+               or not 1 <= int(v) <= SENTINEL for v in samples.flat):
             raise ValueError("Invalid decoded H1 requirements")
+        if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, (int, np.integer))
+               or not 1 <= int(v) <= SENTINEL or (ok and int(v) == SENTINEL)
+               for v, ok in zip(thresholds, available)):
+            raise ValueError("Invalid exact bootstrap threshold")
         always = samples == SENTINEL
         encoded = np.asarray(np.where(always, 0, samples), dtype=np.uint64)
         threshold_values = np.asarray([int(v) if ok else 0 for v, ok in zip(thresholds, available)], dtype=np.uint64)
     else:
         if not np.isfinite(samples).all() or np.any(samples < 0):
             raise ValueError("Invalid H1 floating response")
+        if not np.isfinite(thresholds).all() or np.any(thresholds < 0):
+            raise ValueError("Invalid floating bootstrap threshold")
         encoded, threshold_values = samples, np.asarray(thresholds, dtype=float)
     rates = np.full((len(counts), samples.shape[0]), np.nan)
     for start in range(0, len(counts), batch):
@@ -342,6 +379,17 @@ def freeze_report_sources(out, target, phase, plan_hash):
     return sources, snapshots
 
 
+@contextmanager
+def _report_directory(target):
+    """Remove this attempt's output on failure; preserve prior reports."""
+    target.mkdir(parents=True)
+    try:
+        yield
+    except BaseException:
+        shutil.rmtree(target)
+        raise
+
+
 def run(out, phase):
     plan, ids, geometry, bindings = load_contract(out)
     calibration = artifact(out, "calibration.json", CAL_SCHEMA, plan)
@@ -363,143 +411,143 @@ def run(out, phase):
     target = out / "reports" / phase
     if target.exists():
         raise ValueError("Refusing to overwrite a sensitivity report")
-    target.mkdir(parents=True)
-    sources, snapshots = freeze_report_sources(out, target, phase, sha(out / "plan.json"))
     null_ids = phase_ids(plan, ids, "null_calibration")
     seed = int.from_bytes(hashlib.sha256(f"{SCHEMA}:{sha(out / 'plan.json')}:{phase}:global-paired-bootstrap".encode()).digest()[:8], "big")
     replicates = plan["loss_rule"]["bootstrap_replicates"]
     if plan["scope"] != "engineering_only" and replicates != 2000:
         raise ValueError("Frozen bootstrap count differs")
     weights = resampling(null_ids["raw_seed"], h1_ids["raw_seed"], replicates=replicates, seed=seed)
-    weights_path = target / "bootstrap-resampling.npz"
-    with weights_path.open("xb") as stream:
-        np.savez(stream, **weights)
-    outputs = {str(weights_path.relative_to(out)): sha(weights_path),
-               str((target / "analysis-contract.json").relative_to(out)): sha(target / "analysis-contract.json")}
-    cells = []
-    fixture_counts = {str(p): int(np.count_nonzero(h1_ids["payload"] == p)) for p in sorted(set(h1_ids["payload"].tolist()))}
-    for channel in plan["channels"]:
-        null, null_meta = load_scores(out / "scores/null_calibration" / f"ch{channel}.npz")
-        if (null_meta["channel"] != channel or null_meta["plan_sha256"] != sha(out / "plan.json")
-                or null_meta["anchors"] != geometry[channel]["anchors"]
-                or null_meta["trials"] != plan["counts"]["null_calibration"]):
-            raise ValueError("Calibration score identity/geometry differs")
-        for case in range(7):
-            snrs = grid["grids"][f"ch{channel}/case{case}"]
-            anchors = [geometry[channel]["anchors"][case], geometry[channel]["anchors"][7]]
-            pieces = []
-            for path, metadata in files[channel, case]:
-                raw = read_raw(path, metadata, len(snrs))
-                shape = raw["fixed_fine"].shape[:2]
-                flat = lambda a: a.reshape((-1, *a.shape[2:]))
-                # Frame powers are the fine sums (kernel core 3.0.0); the raw
-                # shards' coarse members are authenticated but not read.
-                result = reduce_powers(flat(raw["float_fine"]), flat(raw["fixed_fine"]),
-                    anchors, geometry[channel]["mu0"])
-                result = {k: v.reshape((*shape, *v.shape[1:])) for k, v in result.items()}
-                result["clip_count"] = raw["clip_count"]
-                pieces.append(result)
-            data = {k: np.concatenate([v[k] for v in pieces]) for k in pieces[0]}
-            if any(len(v) != len(h1_ids) for v in data.values()):
-                raise ValueError("Sensitivity trial denominator differs")
-            curve_records, primary_crossings, qualified = [], {str(p): {} for p in plan["primary_pfa"]}, {}
-            primary_null, primary_h1 = {}, {}
-            for slot, anchor in enumerate(anchors):
-                ranks = construct_geometry(anchor).ranks
-                for stage_index, stage in enumerate(STAGES):
-                    for column, rank in enumerate(ranks):
-                        exact = stage == Q16_STAGE
-                        sample = data["required_q16"][:, :, slot, column] if exact else data["fine_float"][:, :, slot, stage_index, column]
-                        valid = data["fixed_valid"][:, :, slot, column] if exact else data["fine_valid"][:, :, slot, stage_index, column]
-                        always = data["always_masked"][:, :, slot, column] if exact else None
-                        for pfa in plan["diagnostic_pfa"] + plan["primary_pfa"]:
-                            threshold = calibration["fine"][f"ch{channel}"][str(anchor)][stage][str(int(rank))][str(pfa)]["threshold"]
-                            summary = curve_summary(sample, valid, threshold, snrs, exact=exact, always=always)
-                            summary.update(kind="fine", stage=stage, geometry="calibrated" if slot == 0 else "fixed_nominal",
-                                           anchor=anchor, rank=int(rank), rank_index=column, pfa=pfa)
-                            decisions = valid & (sample > (np.uint64(threshold) if exact else threshold))
-                            if exact:
-                                decisions |= valid & always
-                            summary["fixture_descriptive"] = {
-                                str(payload): {"trials": int(mask.sum()), "counts": np.count_nonzero(decisions[mask], axis=0).tolist()}
-                                for payload in sorted(set(h1_ids["payload"].tolist())) for mask in [h1_ids["payload"] == payload]}
-                            curve_records.append(summary)
-                            if slot == 0 and column == 1 and pfa in plan["primary_pfa"]:
-                                primary_crossings[str(pfa)][stage] = summary["crossings"]
-                                qualified[stage] = summary["response_qualified"]
-                        if slot == 0 and column == 1:
-                            if exact:
-                                primary_null[stage] = decode_requirements(null["required_q16"][:, case, column], null["always_masked"][:, case, column], null["fixed_valid"][:, case, column])
-                                primary_h1[stage] = decode_requirements(sample, always, valid).T if valid.all() else None
-                            else:
-                                primary_null[stage] = null["fine_float"][:, case, stage_index, column]
-                                primary_h1[stage] = sample.T
-            coarse_records = []
-            for stage_index, stage in enumerate(FLOAT_STAGES):
-                for pfa in plan["diagnostic_pfa"] + plan["primary_pfa"]:
-                    threshold = calibration["coarse"][f"ch{channel}"][stage][str(pfa)]["threshold"]
-                    summary = curve_summary(data["coarse_float"][:, :, stage_index], data["coarse_valid"][:, :, stage_index], threshold, snrs)
-                    summary.update(kind="coarse", stage=stage, pfa=pfa)
-                    coarse_records.append(summary)
-            bootstrap, contrasts = paired_ladder(primary_null, primary_h1, qualified, primary_crossings, snrs, weights, plan["primary_pfa"])
-            benchmarks = []
-            if case == 1:  # Frozen aligned case, never selected by measured response.
-                for coarse in coarse_records:
-                    if coarse["pfa"] not in plan["primary_pfa"]:
-                        continue
-                    for pd in (.5, .9):
-                        fine = primary_crossings[str(coarse["pfa"])][coarse["stage"]][str(pd)]
-                        # Positive is a fine sensitivity advantage: coarse crossing minus fine.
-                        benchmarks.append({"stage": coarse["stage"], "pfa": coarse["pfa"], "target_pd": pd,
-                            "coarse_minus_fine_db": loss_bounds(fine, coarse["crossings"][str(pd)]),
-                            "scope": "Aligned-case raw-grid benchmark, no paired confidence interval for this coarse/fine contrast"})
-            prefix = target / "cells" / f"ch{channel}_case{case}"
-            prefix.parent.mkdir(parents=True, exist_ok=True)
-            score_path, bootstrap_path = prefix.with_suffix(".npz"), prefix.with_name(prefix.name + "-bootstrap.npz")
-            with score_path.open("xb") as stream:
-                np.savez(stream, **data, raw_seed=h1_ids["raw_seed"], payload=h1_ids["payload"], snr_db=np.asarray(snrs), anchors=np.asarray(anchors))
-            with bootstrap_path.open("xb") as stream:
-                np.savez(stream, **bootstrap)
-            report = {"schema": SCHEMA, "phase": phase, "channel": channel, "case_index": case,
-                "scope": plan["scope"], "coordinate_system": plan["coordinate_system"], "snr_db": snrs,
-                "trials": len(h1_ids), "fixture_counts": fixture_counts, "fine_curves": curve_records,
-                "coarse_curves": coarse_records, "paired_contrasts": contrasts, "aligned_benchmarks": benchmarks,
-                "bootstrap_array_axes": {"crossing_estimate_db": ["pfa", "pd_target", "stage", "replicate"],
-                                         "loss_db": ["pfa", "pd_target", "pair", "replicate"]},
-                "bootstrap_pfas": plan["primary_pfa"], "bootstrap_targets": [.5, .9], "bootstrap_stages": list(STAGES),
-                "bootstrap_pairs": [p[2] for p in PAIRS], "bootstrap_status_codes": STATUS,
-                "bootstrap_seed": seed, "bootstrap_resampling_sha256": sha(weights_path),
-                "bootstrap_replicates": replicates, "all_profile_equivalence": "not established",
-                "inference_scope": "Conditional independently randomized mixture of two fixed qualified fixtures" if phase == "evaluation" else "Separate failed-stationarity payload01 stress cohort; no primary acceptance inference",
-                "physical_certification": False}
-            report_path = prefix.with_suffix(".json")
-            write_json(report_path, report)
-            for path in (score_path, bootstrap_path, report_path):
-                outputs[str(path.relative_to(out))] = sha(path)
-            cells.append({"channel": channel, "case_index": case, "report": str(report_path.relative_to(out)),
-                          "fine_curves": len(curve_records), "coarse_curves": len(coarse_records),
-                          "paired_contrasts": len(contrasts), "paired_intervals_available": sum(v["interval_available"] for v in contrasts)})
-            print(json.dumps({"phase": phase, "channel": channel, "case": case, "completed_cells": len(cells),
-                              "total_cells": len(plan["channels"]) * 7}), flush=True)
-    rehash(out, bindings)
-    rehash(out, sources)
-    rehash(out, snapshots)
-    rehash(out, outputs)
-    report = {"schema": SCHEMA, "phase": phase, "scope": plan["scope"], "completed_utc": utc(),
-              "plan_sha256": sha(out / "plan.json"), "coordinate_system": plan["coordinate_system"],
-              "coverage_complete": len(cells) == len(plan["channels"]) * 7, "cells": cells,
-              "trials_per_cell_snr": len(h1_ids), "fixture_counts": fixture_counts,
-              "inputs_sha256": bindings, "outputs_sha256": outputs, "source_sha256": sources,
-              "snapshots_sha256": snapshots, "bootstrap_seed": seed, "bootstrap_replicates": replicates,
-              "bootstrap_scope": "All paired stage contrasts, both Pd targets and both primary Pfa, median rank/calibrated geometry only",
-              "pending_inference": ["Bootstrap for nonmedian ranks and fixed nominal anchor", "Simultaneous all-cell loss bound including grid discretization", "Measured physical receiver/feed covariance and transfer"],
-              "all_profile_equivalence": "not established", "physical_certification": False,
-              "chronology_scope": "Receipts authenticate completion after the frozen grid. The bound generating runner enforces calibration/grid before generation; completion timestamps alone do not independently prove start time.",
-              "thresholds_changed": False, "evaluation_grid_changed": False}
-    write_json(target / "report.json", report)
-    with (target / "report.sha256").open("x") as stream:
-        stream.write(sha(target / "report.json") + "\n")
-    return report
+    with _report_directory(target):
+        sources, snapshots = freeze_report_sources(out, target, phase, sha(out / "plan.json"))
+        weights_path = target / "bootstrap-resampling.npz"
+        with weights_path.open("xb") as stream:
+            np.savez(stream, **weights)
+        outputs = {str(weights_path.relative_to(out)): sha(weights_path),
+                   str((target / "analysis-contract.json").relative_to(out)): sha(target / "analysis-contract.json")}
+        cells = []
+        fixture_counts = {str(p): int(np.count_nonzero(h1_ids["payload"] == p)) for p in sorted(set(h1_ids["payload"].tolist()))}
+        for channel in plan["channels"]:
+            null, null_meta = load_scores(out / "scores/null_calibration" / f"ch{channel}.npz")
+            if (null_meta["channel"] != channel or null_meta["plan_sha256"] != sha(out / "plan.json")
+                    or null_meta["anchors"] != geometry[channel]["anchors"]
+                    or null_meta["trials"] != plan["counts"]["null_calibration"]):
+                raise ValueError("Calibration score identity/geometry differs")
+            for case in range(7):
+                snrs = grid["grids"][f"ch{channel}/case{case}"]
+                anchors = [geometry[channel]["anchors"][case], geometry[channel]["anchors"][7]]
+                pieces = []
+                for path, metadata in files[channel, case]:
+                    raw = read_raw(path, metadata, len(snrs))
+                    shape = raw["fixed_fine"].shape[:2]
+                    flat = lambda a: a.reshape((-1, *a.shape[2:]))
+                    # Frame powers are the fine sums (kernel core 3.0.0); the raw
+                    # shards' coarse members are authenticated but not read.
+                    result = reduce_powers(flat(raw["float_fine"]), flat(raw["fixed_fine"]),
+                        anchors, geometry[channel]["mu0"])
+                    result = {k: v.reshape((*shape, *v.shape[1:])) for k, v in result.items()}
+                    result["clip_count"] = raw["clip_count"]
+                    pieces.append(result)
+                data = {k: np.concatenate([v[k] for v in pieces]) for k in pieces[0]}
+                if any(len(v) != len(h1_ids) for v in data.values()):
+                    raise ValueError("Sensitivity trial denominator differs")
+                curve_records, primary_crossings, qualified = [], {str(p): {} for p in plan["primary_pfa"]}, {}
+                primary_null, primary_h1 = {}, {}
+                for slot, anchor in enumerate(anchors):
+                    ranks = construct_geometry(anchor).ranks
+                    for stage_index, stage in enumerate(STAGES):
+                        for column, rank in enumerate(ranks):
+                            exact = stage == Q16_STAGE
+                            sample = data["required_q16"][:, :, slot, column] if exact else data["fine_float"][:, :, slot, stage_index, column]
+                            valid = data["fixed_valid"][:, :, slot, column] if exact else data["fine_valid"][:, :, slot, stage_index, column]
+                            always = data["always_masked"][:, :, slot, column] if exact else None
+                            for pfa in plan["diagnostic_pfa"] + plan["primary_pfa"]:
+                                threshold = calibration["fine"][f"ch{channel}"][str(anchor)][stage][str(int(rank))][str(pfa)]["threshold"]
+                                summary = curve_summary(sample, valid, threshold, snrs, exact=exact, always=always)
+                                summary.update(kind="fine", stage=stage, geometry="calibrated" if slot == 0 else "fixed_nominal",
+                                               anchor=anchor, rank=int(rank), rank_index=column, pfa=pfa)
+                                decisions = valid & (sample > (np.uint64(threshold) if exact else threshold))
+                                if exact:
+                                    decisions |= valid & always
+                                summary["fixture_descriptive"] = {
+                                    str(payload): {"trials": int(mask.sum()), "counts": np.count_nonzero(decisions[mask], axis=0).tolist()}
+                                    for payload in sorted(set(h1_ids["payload"].tolist())) for mask in [h1_ids["payload"] == payload]}
+                                curve_records.append(summary)
+                                if slot == 0 and column == 1 and pfa in plan["primary_pfa"]:
+                                    primary_crossings[str(pfa)][stage] = summary["crossings"]
+                                    qualified[stage] = summary["response_qualified"]
+                            if slot == 0 and column == 1:
+                                if exact:
+                                    primary_null[stage] = decode_requirements(null["required_q16"][:, case, column], null["always_masked"][:, case, column], null["fixed_valid"][:, case, column])
+                                    primary_h1[stage] = decode_requirements(sample, always, valid).T if valid.all() else None
+                                else:
+                                    primary_null[stage] = null["fine_float"][:, case, stage_index, column]
+                                    primary_h1[stage] = sample.T
+                coarse_records = []
+                for stage_index, stage in enumerate(FLOAT_STAGES):
+                    for pfa in plan["diagnostic_pfa"] + plan["primary_pfa"]:
+                        threshold = calibration["coarse"][f"ch{channel}"][stage][str(pfa)]["threshold"]
+                        summary = curve_summary(data["coarse_float"][:, :, stage_index], data["coarse_valid"][:, :, stage_index], threshold, snrs)
+                        summary.update(kind="coarse", stage=stage, pfa=pfa)
+                        coarse_records.append(summary)
+                bootstrap, contrasts = paired_ladder(primary_null, primary_h1, qualified, primary_crossings, snrs, weights, plan["primary_pfa"])
+                benchmarks = []
+                if case == 1:  # Frozen aligned case, never selected by measured response.
+                    for coarse in coarse_records:
+                        if coarse["pfa"] not in plan["primary_pfa"]:
+                            continue
+                        for pd in (.5, .9):
+                            fine = primary_crossings[str(coarse["pfa"])][coarse["stage"]][str(pd)]
+                            # Positive is a fine sensitivity advantage: coarse crossing minus fine.
+                            benchmarks.append({"stage": coarse["stage"], "pfa": coarse["pfa"], "target_pd": pd,
+                                "coarse_minus_fine_db": loss_bounds(fine, coarse["crossings"][str(pd)]),
+                                "scope": "Aligned-case raw-grid benchmark, no paired confidence interval for this coarse/fine contrast"})
+                prefix = target / "cells" / f"ch{channel}_case{case}"
+                prefix.parent.mkdir(parents=True, exist_ok=True)
+                score_path, bootstrap_path = prefix.with_suffix(".npz"), prefix.with_name(prefix.name + "-bootstrap.npz")
+                with score_path.open("xb") as stream:
+                    np.savez(stream, **data, raw_seed=h1_ids["raw_seed"], payload=h1_ids["payload"], snr_db=np.asarray(snrs), anchors=np.asarray(anchors))
+                with bootstrap_path.open("xb") as stream:
+                    np.savez(stream, **bootstrap)
+                report = {"schema": SCHEMA, "phase": phase, "channel": channel, "case_index": case,
+                    "scope": plan["scope"], "coordinate_system": plan["coordinate_system"], "snr_db": snrs,
+                    "trials": len(h1_ids), "fixture_counts": fixture_counts, "fine_curves": curve_records,
+                    "coarse_curves": coarse_records, "paired_contrasts": contrasts, "aligned_benchmarks": benchmarks,
+                    "bootstrap_array_axes": {"crossing_estimate_db": ["pfa", "pd_target", "stage", "replicate"],
+                                             "loss_db": ["pfa", "pd_target", "pair", "replicate"]},
+                    "bootstrap_pfas": plan["primary_pfa"], "bootstrap_targets": [.5, .9], "bootstrap_stages": list(STAGES),
+                    "bootstrap_pairs": [p[2] for p in PAIRS], "bootstrap_status_codes": STATUS,
+                    "bootstrap_seed": seed, "bootstrap_resampling_sha256": sha(weights_path),
+                    "bootstrap_replicates": replicates, "all_profile_equivalence": "not established",
+                    "inference_scope": "Conditional independently randomized mixture of two fixed qualified fixtures" if phase == "evaluation" else "Separate failed-stationarity payload01 stress cohort; no primary acceptance inference",
+                    "physical_certification": False}
+                report_path = prefix.with_suffix(".json")
+                write_json(report_path, report)
+                for path in (score_path, bootstrap_path, report_path):
+                    outputs[str(path.relative_to(out))] = sha(path)
+                cells.append({"channel": channel, "case_index": case, "report": str(report_path.relative_to(out)),
+                              "fine_curves": len(curve_records), "coarse_curves": len(coarse_records),
+                              "paired_contrasts": len(contrasts), "paired_intervals_available": sum(v["interval_available"] for v in contrasts)})
+                print(json.dumps({"phase": phase, "channel": channel, "case": case, "completed_cells": len(cells),
+                                  "total_cells": len(plan["channels"]) * 7}), flush=True)
+        rehash(out, bindings)
+        rehash(out, sources)
+        rehash(out, snapshots)
+        rehash(out, outputs)
+        report = {"schema": SCHEMA, "phase": phase, "scope": plan["scope"], "completed_utc": utc(),
+                  "plan_sha256": sha(out / "plan.json"), "coordinate_system": plan["coordinate_system"],
+                  "coverage_complete": len(cells) == len(plan["channels"]) * 7, "cells": cells,
+                  "trials_per_cell_snr": len(h1_ids), "fixture_counts": fixture_counts,
+                  "inputs_sha256": bindings, "outputs_sha256": outputs, "source_sha256": sources,
+                  "snapshots_sha256": snapshots, "bootstrap_seed": seed, "bootstrap_replicates": replicates,
+                  "bootstrap_scope": "All paired stage contrasts, both Pd targets and both primary Pfa, median rank/calibrated geometry only",
+                  "pending_inference": ["Bootstrap for nonmedian ranks and fixed nominal anchor", "Simultaneous all-cell loss bound including grid discretization", "Measured physical receiver/feed covariance and transfer"],
+                  "all_profile_equivalence": "not established", "physical_certification": False,
+                  "chronology_scope": "Receipts authenticate completion after the frozen grid. The bound generating runner enforces calibration/grid before generation; completion timestamps alone do not independently prove start time.",
+                  "thresholds_changed": False, "evaluation_grid_changed": False}
+        write_json(target / "report.json", report)
+        with (target / "report.sha256").open("x") as stream:
+            stream.write(sha(target / "report.json") + "\n")
+        return report
 
 
 def main():

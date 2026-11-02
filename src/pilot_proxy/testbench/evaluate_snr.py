@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -102,6 +103,7 @@ from pilot_proxy.secondary_python import (  # noqa: E402
     package_only_pythonpath,
     prepend_pythonpath,
 )
+from pilot_proxy.testbench.binomial import wilson_interval  # noqa: E402
 from pilot_proxy.testbench.quantize import (  # noqa: E402
     ATSC_CHANNEL_WIDTH_HZ,
     ATSC_PILOT_OFFSET_HZ,
@@ -125,6 +127,7 @@ DEFAULT_SNR_SWEEP_MAX_DB = 21.0
 DEFAULT_SNR_SWEEP_STEP_DB = 3.0
 SUPPORTED_SNR_MIN_DB = -60.0
 SUPPORTED_SNR_MAX_DB = 60.0
+MAX_SNR_SWEEP_POINTS = 1_000_000
 DEFAULT_CHANNEL_FREQUENCY_OFFSET_HZ = 0.0
 STANDARD_FREQUENCY_OFFSET_SWEEP_HZ = (-1_000.0, 0.0, 1_000.0)
 DEFAULT_CHANNEL_GAIN_DB = 0.0
@@ -373,16 +376,38 @@ def _resolve_rf_center_hz(args: argparse.Namespace) -> float:
 
 def _requested_snr_shelf_values(args: argparse.Namespace) -> list[float]:
     values = [float(v) for v in args.requested_data_shelf_snr_db or []]
-    if args.snr_start_db is not None:
-        if args.snr_stop_db is None or args.snr_step_db is None:
+    endpoints = [args.snr_start_db, args.snr_stop_db]
+    for value in values + [float(v) for v in endpoints if v is not None]:
+        if not math.isfinite(value) or not (
+            SUPPORTED_SNR_MIN_DB - SNR_RANGE_EPSILON
+            <= value <= SUPPORTED_SNR_MAX_DB + SNR_RANGE_EPSILON
+        ):
             raise SystemExit(
-                "--snr-start-db requires --snr-stop-db and --snr-step-db."
+                "Testbench SNR values must be finite and in the supported range "
+                f"[{SUPPORTED_SNR_MIN_DB:g}, {SUPPORTED_SNR_MAX_DB:g}] dB; "
+                f"got {value:g} dB."
             )
-        if args.snr_step_db == 0.0:
-            raise SystemExit("--snr-step-db must be non-zero.")
+    if len(values) > MAX_SNR_SWEEP_POINTS:
+        raise SystemExit(f"An SNR sweep may contain at most {MAX_SNR_SWEEP_POINTS} points.")
+    if any(v is not None for v in [*endpoints, args.snr_step_db]):
+        if any(v is None for v in [*endpoints, args.snr_step_db]):
+            raise SystemExit(
+                "An SNR range requires --snr-start-db, --snr-stop-db, "
+                "and --snr-step-db."
+            )
         current = float(args.snr_start_db)
         stop = float(args.snr_stop_db)
         step = float(args.snr_step_db)
+        if not math.isfinite(step) or step == 0.0:
+            raise SystemExit("--snr-step-db must be finite and non-zero.")
+        if (stop > current and step < 0) or (stop < current and step > 0):
+            raise SystemExit("--snr-step-db must advance from the start toward the stop.")
+        if current != stop and current + step == current:
+            raise SystemExit("--snr-step-db is too small to advance the SNR range.")
+        # Bound allocation before iterating a valid but impractically small step.
+        intervals = (stop - current) / step
+        if not math.isfinite(intervals) or intervals >= MAX_SNR_SWEEP_POINTS - len(values):
+            raise SystemExit(f"An SNR sweep may contain at most {MAX_SNR_SWEEP_POINTS} points.")
         compare = (
             (lambda a, b: a <= b + SNR_RANGE_EPSILON)
             if step > 0
@@ -391,23 +416,25 @@ def _requested_snr_shelf_values(args: argparse.Namespace) -> list[float]:
             )
         )
         while compare(current, stop):
+            if not (
+                SUPPORTED_SNR_MIN_DB - SNR_RANGE_EPSILON
+                <= current <= SUPPORTED_SNR_MAX_DB + SNR_RANGE_EPSILON
+            ):
+                raise SystemExit("Generated SNR value is outside the supported range.")
+            if len(values) >= MAX_SNR_SWEEP_POINTS:
+                raise SystemExit(f"An SNR sweep may contain at most {MAX_SNR_SWEEP_POINTS} points.")
             values.append(float(current))
-            current += step
+            if current == stop:
+                break
+            next_value = current + step
+            if next_value == current:
+                raise SystemExit("--snr-step-db is too small to advance the SNR range.")
+            current = next_value
     if not values:
         current = DEFAULT_SNR_SWEEP_MIN_DB
         while current <= DEFAULT_SNR_SWEEP_MAX_DB + SNR_RANGE_EPSILON:
             values.append(float(current))
             current += DEFAULT_SNR_SWEEP_STEP_DB
-    for value in values:
-        if (
-            value < SUPPORTED_SNR_MIN_DB - SNR_RANGE_EPSILON
-            or value > SUPPORTED_SNR_MAX_DB + SNR_RANGE_EPSILON
-        ):
-            raise SystemExit(
-                "Testbench SNR values must be in the supported range "
-                f"[{SUPPORTED_SNR_MIN_DB:g}, {SUPPORTED_SNR_MAX_DB:g}] dB; "
-                f"got {value:g} dB."
-            )
     return values
 
 
@@ -801,29 +828,10 @@ def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
-def _command_or_path_exists(command: str) -> bool:
-    command_text = str(command)
-    if not command_text:
-        return False
-    if Path(command_text).exists():
-        return True
-    has_path_separator = any(
-        separator and separator in command_text for separator in (os.sep, os.altsep)
-    )
-    if has_path_separator:
-        return False
-    return any(
-        (Path(directory) / command_text).exists()
-        for directory in os.environ.get("PATH", "").split(os.pathsep)
-        if directory
-    )
-
-
 def _evaluate_one_trial(
     *,
     args: argparse.Namespace,
     rng: np.random.Generator,
-    cp: Any,
     kernel: PilotProxyKernel,
     weights: np.ndarray,
     cpu_float_weights: np.ndarray,
@@ -1233,35 +1241,6 @@ def _evaluate_one_trial(
     return row
 
 
-def wilson_interval(
-    successes: int,
-    trials: int,
-    *,
-    z: float = 1.959963984540054,
-) -> tuple[float, float]:
-    """Wilson score 95% interval for a binomial proportion.
-
-    Detection-rate points on publication curves should carry these bounds;
-    they stay meaningful at rates near 0 or 1 where the normal approximation
-    fails. Returns (lo, hi); (nan, nan) when trials == 0.
-    """
-    n = int(trials)
-    if n <= 0:
-        return (float("nan"), float("nan"))
-    p = float(successes) / n
-    if successes <= 0:
-        p = 0.0
-    elif successes >= n:
-        p = 1.0
-    z2 = z * z
-    denom = 1.0 + z2 / n
-    center = (p + z2 / (2.0 * n)) / denom
-    half = z * ((p * (1.0 - p) / n + z2 / (4.0 * n * n)) ** 0.5) / denom
-    lo = 0.0 if successes <= 0 else max(0.0, center - half)
-    hi = 1.0 if successes >= n else min(1.0, center + half)
-    return (lo, hi)
-
-
 def _detection_rate_fields(group: list[dict]) -> dict:
     """Return estimator-censoring and requested-threshold fractions."""
     fields: dict = {}
@@ -1564,7 +1543,10 @@ def build_parser(add_help: bool = True) -> argparse.ArgumentParser:
     )
     parser.add_argument("--snr-start-db", type=float, default=None)
     parser.add_argument("--snr-stop-db", type=float, default=None)
-    parser.add_argument("--snr-step-db", type=float, default=None)
+    parser.add_argument(
+        "--snr-step-db", type=float, default=None,
+        help=f"SNR range step; at most {MAX_SNR_SWEEP_POINTS} total sweep points are allowed.",
+    )
     parser.add_argument(
         "--frequency-offset-hz",
         type=float,
@@ -1797,6 +1779,7 @@ def run(args: argparse.Namespace) -> int:
                 "The waveform audit lacks a positive measured_pilot_below_data_db."
             )
         args.pilot_below_data_db = float(measured)
+    requested_values = _requested_snr_shelf_values(args)
     if args.bits != LOCKED_BITS_PER_COMPONENT:
         raise SystemExit("This evaluator is intended for locked 4+4 bit input.")
     if args.detector_window_samples != LOCKED_DETECTOR_WINDOW_SAMPLES:
@@ -1825,7 +1808,7 @@ def run(args: argparse.Namespace) -> int:
         )
     if args.noise_source == "gnuradio":
         gnuradio_python = str(args.gnuradio_python)
-        if not _command_or_path_exists(gnuradio_python):
+        if shutil.which(gnuradio_python) is None:
             raise SystemExit(
                 f"Could not find GNU Radio Python executable: {gnuradio_python}"
             )
@@ -1902,7 +1885,6 @@ def run(args: argparse.Namespace) -> int:
 
     rng = np.random.default_rng(int(args.seed))
     rows: list[dict[str, Any]] = []
-    requested_values = _requested_snr_shelf_values(args)
     frequency_offset_values = _frequency_offset_values(args)
     composite_to_shelf_db = composite_to_data_shelf_snr_correction_db(
         pilot_below_data_db=float(args.pilot_below_data_db)
@@ -1989,7 +1971,6 @@ def run(args: argparse.Namespace) -> int:
                     row = _evaluate_one_trial(
                         args=args,
                         rng=rng,
-                        cp=cp,
                         kernel=kernel,
                         weights=weights,
                         cpu_float_weights=cpu_float_weights,

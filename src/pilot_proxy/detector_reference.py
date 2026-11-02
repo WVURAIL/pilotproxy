@@ -17,6 +17,7 @@ length ``L_F`` scales by ``L_F`` in every term, so the ratio is the same.
 
 from __future__ import annotations
 
+import operator
 from typing import Any
 
 import numpy as np
@@ -33,7 +34,12 @@ FRAME_POWER_WINDOWS_PER_STREAM = 128  # the frozen fxfft256 input length
 
 def packed_dtype_for_component_bits(bits: int) -> np.dtype:
     """Return a packed integer dtype for a per-component bit depth."""
-    bits = int(bits)
+    if isinstance(bits, (bool, np.bool_)):
+        raise TypeError("component bit depth must be an integer, not a boolean.")
+    try:
+        bits = operator.index(bits)
+    except TypeError as exc:
+        raise TypeError("component bit depth must be an integer.") from exc
     if bits == INT4_COMPONENT_BITS:
         return np.dtype(np.int8)
     if bits == INT8_COMPONENT_BITS:
@@ -54,6 +60,7 @@ def quantize_complex_numpy(
     if not np.all(np.isfinite(data)):
         raise ValueError("quantization samples must be finite.")
     packed_dtype = packed_dtype_for_component_bits(bits)
+    bits = operator.index(bits)
     max_int = (1 << (bits - 1)) - 1
     mask = (1 << bits) - 1
 
@@ -77,6 +84,7 @@ def unpack_packed_complex(
 ) -> np.ndarray:
     """Unpack packed integer samples to a complex array."""
     packed_dtype = packed_dtype_for_component_bits(bits)
+    bits = operator.index(bits)
     p = np.asarray(packed, dtype=packed_dtype).astype(np.int32, copy=False)
     mask = (1 << bits) - 1
     sign_bit = 1 << (bits - 1)

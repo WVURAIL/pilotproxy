@@ -5,13 +5,13 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
-import re
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
 from . import invpaths
 from .names import validate_identifier
+from .selection import parse_freq_ids
 from .survey_provenance import inventory_identity, runtime_provenance
 
 INVENTORY_META_SCHEMA_KEY = "datatrawl_inventory"
@@ -26,12 +26,21 @@ def inventory_meta_path(inventory_path: str | Path) -> Path:
 
 
 def _freq_id_slug(freq_ids: object) -> str:
-    if not freq_ids or str(freq_ids).strip().lower() in {"all", "*"}:
+    selected = parse_freq_ids(freq_ids)
+    if selected is None:
         return ""
-    slug = str(freq_ids).strip().lower().replace(" ", "").replace(",", "-")
-    slug = re.sub(r"[^a-z0-9._-]", "", slug)
-    if slug and slug[0].isdigit():
-        slug = "fid" + slug
+    # Canonical ranges preserve the selection across spellings and ordering.
+    # Separate runs with '_' so a list cannot collide with a larger range.
+    runs: list[list[int]] = []
+    for channel in sorted(selected):
+        if runs and channel == runs[-1][1] + 1:
+            runs[-1][1] = channel
+        else:
+            runs.append([channel, channel])
+    slug = "fid" + "_".join(
+        str(first) if first == last else f"{first}-{last}"
+        for first, last in runs
+    )
     if len(slug) > _MAX_SLUG_LENGTH:
         import hashlib
 

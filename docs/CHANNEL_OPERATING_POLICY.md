@@ -6,8 +6,8 @@ policy kotekan reads. Each ATSC channel 14 to 36 gets one assignment at its
 receiver frequency ID:
 
 - **deployed** (outcome `useful`): a finite threshold at the decided Q16 word
-  (`deployed_word`: the knee, or the loosest word below it that meets the
-  tolerance);
+  (`deployed_word`: the supported word with the greatest retained fraction
+  among those meeting the bias tolerance);
 - **not deployed** (outcome `not useful`): the **reject-all limit of the same
   threshold family**, which permanently masks that frequency. It is encoded as
   `threshold.kind: reject_all`, never as `eta_q16: 0`: the frozen detector

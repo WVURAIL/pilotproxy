@@ -9,7 +9,10 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
+
+import matplotlib
 
 from pilot_proxy import figure_style as style
 
@@ -24,11 +27,16 @@ from .evaluations import (
 
 
 def _calibration(text: str | None) -> Calibration | None:
-    if not text:
+    if text is None:
         return None
-    parts = [float(p) for p in text.split(",")]
+    try:
+        parts = [float(p) for p in text.split(",")]
+    except ValueError as exc:
+        raise SystemExit("--calibration requires numeric fields") from exc
     if len(parts) not in (3, 4):
         raise SystemExit("--calibration takes pilot_below_db,bin_enbw_hz,dtv_bandwidth_hz[,efficiency]")
+    if not all(math.isfinite(value) for value in parts) or any(value <= 0 for value in parts[1:]):
+        raise SystemExit("--calibration requires finite fields and positive bandwidths and efficiency")
     return Calibration(*parts)
 
 
@@ -56,11 +64,13 @@ def main(argv: list[str] | None = None) -> int:
                                            bootstrap_samples=args.bootstrap_samples), args.out))
         return 0
 
+    calibration = _calibration(args.calibration)
     style.configure(require_tex=not args.no_tex)
-    if args.command == "estimator-transfer":
-        release = load_release(args.release, calibration=_calibration(args.calibration))
-        out = figure_estimator_transfer(release, out=args.out, title=args.title, y_min_db=args.y_min)
-        print(out)
+    if args.no_tex:
+        matplotlib.rcParams["text.usetex"] = False
+    release = load_release(args.release, calibration=calibration)
+    out = figure_estimator_transfer(release, out=args.out, title=args.title, y_min_db=args.y_min)
+    print(out)
     return 0
 
 

@@ -1,7 +1,6 @@
 """The section 8.1 stable-era procedure on synthetic monthly records and a synthetic product."""
 from __future__ import annotations
 
-import csv
 import datetime as dt
 import hashlib
 import importlib.util
@@ -366,25 +365,17 @@ def test_era_table_on_a_synthetic_product(product_path, tmp_path):
         assert own.campaign_last_month == M0 + 21
         assert eras.campaign_last_populated_month([p]) == M0 + 21
 
-        out = eras._write_csv(eras.era_rows(table), tmp_path / "eras.csv", eras.ERA_COLUMNS)
-        with out.open(newline="") as fh:
-            rows = list(csv.DictReader(fh))
-        assert tuple(rows[0].keys()) == eras.ERA_COLUMNS and len(rows) == 3
-        assert rows[2]["first_month"] == "2021-01" and rows[2]["last_month"] == "2021-10"
-        assert [r["is_current"] for r in rows] == ["False", "False", "True"]
-        assert rows[2]["stale_latest"] == "True" and rows[2]["coverage"] == "1.0"
-        assert rows[2]["peak_offset_bins"] == "" and rows[0]["peak_offset_bins"] == "4.0"
-        assert rows[1]["evidence"] == EVIDENCE_INSTRUMENT and rows[1]["first_month"] == "2020-09"
-        assert rows[0]["config_digest"] == eras.DEFAULT_CONFIG.digest
-        chan = eras._write_csv([eras.channel_row(table)], tmp_path / "eras_channels.csv", eras.CHANNEL_COLUMNS)
-        with chan.open(newline="") as fh:
-            crow = list(csv.DictReader(fh))
-        assert tuple(crow[0].keys()) == eras.CHANNEL_COLUMNS and len(crow) == 1
-        assert crow[0]["current_first_month"] == "2021-01" and crow[0]["transition_zone_months"] == "2020-11"
-        assert crow[0]["sensitivity_thresholds_moves"] == "1/1;1/2;2/2" and crow[0]["sensitivity_units_moves"] == ""
-        assert crow[0]["state_excursions"] == "2020-06:state:proxy-low"
-        assert crow[0]["instrument_change_months"] == "2020-09" and crow[0]["stale_lag_months"] == "2"
+        crow = eras.channel_row(table)
+        assert crow["current_first_month"] == "2021-01" and crow["transition_zone_months"] == "2020-11"
+        assert crow["sensitivity_thresholds_moves"] == "1/1;1/2;2/2" and crow["sensitivity_units_moves"] == ""
+        assert crow["state_excursions"] == "2020-06:state:proxy-low"
+        assert crow["instrument_change_months"] == "2020-09" and crow["stale_lag_months"] == 2
         js = json.loads(eras.write_era_json(table, tmp_path / "ch36.json").read_text())
+        assert len(js["eras"]) == 3 and js["current_era"] == 3
+        assert js["eras"][2]["first_month"] == "2021-01" and js["eras"][2]["last_month"] == "2021-10"
+        assert js["stale_latest"] is True and js["eras"][2]["coverage"] == 1.0
+        assert js["eras"][0]["peak_offset_bins"] == PEAK_OFFSET
+        assert js["eras"][1]["evidence"] == EVIDENCE_INSTRUMENT and js["eras"][1]["first_month"] == "2020-09"
         assert js["eras"][2]["evidence"] == current.evidence and js["config_digest"] == table.config.digest
         assert [m["era"] for m in js["months"]][8:13] == [2, 2, "zone", 3, 3]     # month 11 has no record
         assert js["months"][3]["peak_offset_bins"] == PEAK_OFFSET and js["eras"][2]["peak_offset_bins"] is None
@@ -430,8 +421,7 @@ def test_an_author_dated_era_list_replaces_the_rule_eras_and_keeps_its_month_rec
         js = json.loads(eras.write_era_json(table, tmp_path / "author.json").read_text())
         assert [m["era"] for m in js["months"]][5:10] == [1, "zone", "zone", 2, 2]
         assert js["boundary_source"] == eras.SOURCE_AUTHOR
-        rows = eras.era_rows(table)
-        assert [r["boundary_source"] for r in rows] == [eras.SOURCE_AUTHOR] * 2
+        assert len(js["eras"]) == 2
         # spans must be ordered, disjoint and hold a populated month
         for bad in ([("2020-05", "2020-01", EVIDENCE_START)],
                     [("2020-01", "2020-08", EVIDENCE_START), ("2020-08", "2021-10", eras.EVIDENCE_POWER)],

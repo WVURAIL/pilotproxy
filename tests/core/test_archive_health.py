@@ -1,7 +1,10 @@
 # coding=utf-8
 from __future__ import annotations
 
+import hashlib
+import io
 import json
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -49,6 +52,70 @@ NFFT = 16_384
 K = 128
 FINE_BINS = 256
 SAMPLE_RATE_HZ = 390_625.0
+
+
+def _product_attachment(path, products, *, extras=()):
+    """Write small NPZ members and return their independent payload hashes."""
+    summaries = []
+    with zipfile.ZipFile(path, "w") as archive:
+        for member, value in products:
+            payload = io.BytesIO()
+            np.savez(payload, measurement=np.asarray(value))
+            data = payload.getvalue()
+            archive.writestr(member, data)
+            summaries.append({"product_name": Path(member).name,
+                              "product_sha256": hashlib.sha256(data).hexdigest()})
+        for name, data in extras:
+            archive.writestr(name, data)
+    return summaries
+
+
+def test_product_archive_verifies_payloads_and_records_attachment_contents(tmp_path):
+    path = tmp_path / "products.zip"
+    summaries = _product_attachment(
+        path, [("nested/first.npz", [1, 2]), ("second.NPZ", [3, 4])],
+        extras=[("capture.h5", b"raw fixture"), ("logs/run.log", "completed"),
+                ("quarantine.jsonl", '{"key": "unit-b"}\n{"key": "unit-a"}\n')])
+    result = archive_health.verify_supporting_evidence(
+        summaries, [], product_archive=path)["product_archive"]
+    assert result["npz_members"] == 2
+    assert result["matches_all_audited_products"] is True
+    assert result["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert result["size_bytes"] == path.stat().st_size
+    assert result["contains_raw_hdf5"] is True
+    assert result["contains_log_named_members"] is True
+    assert result["quarantine_rows"] == 2
+    assert result["quarantine_unit_keys"] == ["unit-a", "unit-b"]
+
+
+@pytest.mark.parametrize("damage", ["missing", "extra", "mismatched"])
+def test_product_archive_requires_the_exact_audited_payload_set(tmp_path, damage):
+    path = tmp_path / "products.zip"
+    summaries = _product_attachment(path, [("first.npz", [1, 2]), ("second.npz", [3])])
+    if damage == "missing":
+        summaries.append({"product_name": "absent.npz", "product_sha256": "0" * 64})
+    elif damage == "extra":
+        summaries.pop()
+    else:
+        summaries[0]["product_sha256"] = "0" * 64
+    with pytest.raises(ArchiveHealthError, match=f"{damage}=\\['"):
+        archive_health.verify_supporting_evidence(summaries, [], product_archive=path)
+
+
+def test_product_archive_refuses_duplicate_basenames_even_when_hashes_match(tmp_path):
+    path = tmp_path / "duplicates.zip"
+    summaries = _product_attachment(path, [("a/first.npz", [1]), ("b/first.npz", [1])])
+    with pytest.raises(ArchiveHealthError, match="duplicate NPZ basename"):
+        archive_health.verify_supporting_evidence(summaries[:1], [], product_archive=path)
+
+
+def test_product_archive_refuses_ambiguous_quarantine_ledgers(tmp_path):
+    path = tmp_path / "quarantine.zip"
+    summaries = _product_attachment(
+        path, [("first.npz", [1])],
+        extras=[("a/quarantine.jsonl", ""), ("b/quarantine.jsonl", "")])
+    with pytest.raises(ArchiveHealthError, match="more than one quarantine.jsonl"):
+        archive_health.verify_supporting_evidence(summaries, [], product_archive=path)
 
 
 def _product(

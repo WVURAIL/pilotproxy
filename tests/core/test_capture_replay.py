@@ -10,7 +10,6 @@ import numpy as np
 import pytest
 
 from pilot_proxy import capture_replay as replay
-from pilot_proxy import runtime_calibration as calibration
 from pilot_proxy.capture_reference import (
     CHORD_METADATA_SIZE,
     CaptureGeometry,
@@ -100,14 +99,6 @@ def test_example_preserves_exact_valid_and_invalid_scores(tmp_path):
         > rows[0]["voltage_frames"][0]["payload_offset"]
     )
     assert len(read(output / "population_CH14.json")["scores"]) == 2
-    profile = read(output / "profile_CH14.json")
-    with pytest.raises(ValueError, match="Invalid score/support"):
-        calibration._load_population(
-            output / "population_CH14.json",
-            profile,
-            calibration.sha256(output / "profile_CH14.json"),
-            "calibration",
-        )
     assert replay.validate_replay(output) == report
 
 

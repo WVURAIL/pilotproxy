@@ -76,7 +76,6 @@ earlier cores.
 | `tests/` | Numerical contracts, archive integrity, and runtime interface tests |
 | `scripts/` | Installation, CI and archive operating scripts |
 | `tools/` | Explicit analysis, validation and maintenance commands |
-| `tools/archive/` | Study drivers that reproduce frozen records |
 | `docs/` | Contracts and operating guides |
 | `docs/evidence/`, `docs/runtime_freezes/` | Frozen receipts and provenance; not onboarding instructions |
 
@@ -90,15 +89,10 @@ Each frame power is the all-bin sum of its fixed-point fine spectrum. Products
 use schema v6. Readers also open the papers' schema-v5 archives and form the
 same powers from their stored fine spectra.
 
-The threshold rule combines the measured shelf proxy with RFIsher's response,
-a measured stack-to-proxy amplitude ratio, and an assumed effective temporal
-gain. Assigned words are conditional candidates. A compiled bundle or a passing
-replay does not establish telescope safety or a cross-day BAO contamination bound.
-
-The primary time comparison is the Overview's ideal calendar year: retaining
-fraction `kappa` costs `1 / kappa` years. [The pipeline guide](docs/START_HERE.md)
-documents the operating-duty option that reproduces the frozen records made
-with it.
+The threshold rule compares the signed shelf-power proxy, converted explicitly
+to additive covariance units, with the RFIsher schema-v3 response table.
+It selects the maximum-retention supported threshold satisfying the upper
+bias criterion. The exposure cost is 1/kappa. Follow docs/START_HERE.md.
 
 ## Maintainer checks
 

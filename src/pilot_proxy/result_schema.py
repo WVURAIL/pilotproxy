@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from numbers import Integral
 from typing import Any
 
 from pilot_proxy.detector_constants import (
@@ -99,19 +100,25 @@ def statistic_contract() -> dict[str, str]:
     }
 
 
+def _integer(value: object, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{field} must be an integer.")
+    return int(value)
+
+
 def fixed_point_contract(
     *,
     detector_window_samples: int = DEFAULT_DETECTOR_WINDOW_SAMPLES,
     reference_offset_bins: int = LOCKED_REFERENCE_OFFSET_BINS,
 ) -> dict[str, Any]:
     """Return the fixed-point detector contract for one run's geometry."""
-    window = int(detector_window_samples)
+    window = _integer(detector_window_samples, "detector_window_samples")
     if window not in SUPPORTED_DETECTOR_WINDOW_SAMPLES:
         raise ValueError(
             "detector_window_samples must be one of "
             f"{list(SUPPORTED_DETECTOR_WINDOW_SAMPLES)}; got {window}."
         )
-    offset = int(reference_offset_bins)
+    offset = _integer(reference_offset_bins, "reference_offset_bins")
     if offset != LOCKED_REFERENCE_OFFSET_BINS:
         raise ValueError(
             "reference_offset_bins must match the compiled detector contract: "
@@ -149,10 +156,10 @@ def result_layout(
     num_selected_channels: int = 1,
 ) -> dict[str, Any]:
     """Return current layout metadata for one combined detector frame."""
-    frame = int(frame_size_samples)
-    streams = int(num_input_streams)
-    window = int(detector_window_samples)
-    channels = int(num_selected_channels)
+    frame = _integer(frame_size_samples, "frame_size_samples")
+    streams = _integer(num_input_streams, "num_input_streams")
+    window = _integer(detector_window_samples, "detector_window_samples")
+    channels = _integer(num_selected_channels, "num_selected_channels")
     if frame <= 0 or streams <= 0 or window <= 0 or channels <= 0:
         raise ValueError("frame size, streams, window, and channels must be positive.")
     if frame % window != 0:
@@ -240,10 +247,10 @@ def result_schema_object(
         "schema_version": RESULT_SCHEMA_TOKEN,
         "statistic": statistic_contract(),
         "layout": result_layout(
-            frame_size_samples=int(frame_size_samples),
-            num_input_streams=int(num_input_streams),
-            detector_window_samples=int(detector_window_samples),
-            num_selected_channels=int(num_selected_channels),
+            frame_size_samples=frame_size_samples,
+            num_input_streams=num_input_streams,
+            detector_window_samples=detector_window_samples,
+            num_selected_channels=num_selected_channels,
         ),
         "calibration": calibration_contract(
             dtv_bandwidth_hz=float(dtv_bandwidth_hz),
@@ -255,8 +262,8 @@ def result_schema_object(
         ),
         "threshold": threshold_contract(threshold),
         "fixed_point_contract": fixed_point_contract(
-            detector_window_samples=int(detector_window_samples),
-            reference_offset_bins=int(reference_offset_bins),
+            detector_window_samples=detector_window_samples,
+            reference_offset_bins=reference_offset_bins,
         ),
         "mask_convention": mask_convention(),
     }

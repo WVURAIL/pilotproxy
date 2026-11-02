@@ -48,6 +48,8 @@ def _positive_to_db(value: float) -> float:
 
 
 def _read_iq(path: Path, max_samples: int) -> np.ndarray:
+    if int(max_samples) < MIN_AUDIT_SAMPLES:
+        raise SystemExit(f"max_samples must be at least {MIN_AUDIT_SAMPLES}.")
     iq = np.fromfile(path, dtype=np.complex64, count=int(max_samples))
     if iq.size < MIN_AUDIT_SAMPLES:
         raise SystemExit(
@@ -239,6 +241,12 @@ def audit_atsc_iq(
     max_edge_rolloff_db: float = DEFAULT_MAX_EDGE_ROLLOFF_DB,
 ) -> dict[str, Any]:
     """Return spectral audit metrics for a clean ATSC IQ file."""
+    for name, value in (("sample_rate_hz", sample_rate_hz),
+                        ("channel_width_hz", channel_width_hz)):
+        if not math.isfinite(value) or value <= 0:
+            raise SystemExit(f"{name} must be finite and positive.")
+    if not math.isfinite(occupied_power_fraction) or not 0 < occupied_power_fraction <= 1:
+        raise SystemExit("occupied_power_fraction must be finite and in (0, 1].")
     iq = _read_iq(input_iq, max_samples)
     freqs, psd = _periodogram(iq, sample_rate_hz)
     df = float(abs(freqs[1] - freqs[0]))

@@ -499,7 +499,10 @@ Two constraints determine how we run it:
 The following documents give the complete selection rules, local and
 CADC/CANFAR sequences, order constraint, and post-processing commands:
 
-- **[docs/RERUN_PARAMETER_REGISTER.md](../docs/RERUN_PARAMETER_REGISTER.md)** --- frozen scientific and product settings.
+- **Runtime settings:** [receiver profile](../configs/receiver_profiles/chime_dtv_fengine.json),
+  [detector core profile](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json),
+  [weight manifest](../weights/chime_dtv_weights_k128.bin.manifest.json), and
+  [product schema](PRODUCT_SCHEMA.md).
 - **[docs/VALIDATION_GATES.md](../docs/VALIDATION_GATES.md)** --- mandatory local launch gates.
 - **[docs/LOCAL_PROCESSING.md](../docs/LOCAL_PROCESSING.md)** --- measured local workstation profile and sole production command.
 - **[INTEGRATION.md](../INTEGRATION.md)** --- standalone archive integration contract.

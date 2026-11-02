@@ -284,7 +284,11 @@ def build_archive_candidate(plan_path, output_dir):
         "activation_authorized": False, "science_certification": False,
         "consumer_capability_implementation_verified": False, "kotekan_parameters": None,
         "selection_granularity": "detector_frame", "null_quantile_threshold_claim": False,
-        "profiles": proofs, "permanent_mask_channels": sorted(set(decisions) - set(finite)),
+        "profiles": proofs,
+        "permanent_mask_channels": sorted(ch for ch, decision in decisions.items()
+                                          if operating_policy._threshold_kind(decision) == "reject_all"),
+        "unmasked_channels": sorted(ch for ch, decision in decisions.items()
+                                    if operating_policy._threshold_kind(decision) == "pass_all"),
         "control_channel_37_bound": control, "runtime_bundle_validation": validation,
         "input_files_sha256": bindings,
         "source_plan": str(plan_path), "builder_source_sha256": runtime_calibration.sha256(__file__),
@@ -294,7 +298,7 @@ def build_archive_candidate(plan_path, output_dir):
                                 for name in REQUIRED_RUNTIME_BUNDLE_FILES},
         "remaining_acceptance": [
             "Re-evaluate retention, retained proxy, sampling guard, and the decision rule at the actual consumer masking granularity, including CHIMEv1 pair expansion and frame alignment.",
-            "Qualify current receiver/input state, physical transfer, and temporal covariance for the claimed science use.",
+            "Qualify current receiver/input state and power calibration for the claimed science use.",
             "Verify the consumer build, full-load behavior, and release approval before activation.",
         ],
     }

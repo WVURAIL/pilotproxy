@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import operator
 from collections.abc import Mapping, Sequence as SequenceABC
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,8 +73,15 @@ class InputStreamMap:
             raise ValueError(
                 f"unsupported stream map schema_version: {self.schema_version!r}"
             )
-        if self.num_streams <= 0:
-            raise ValueError("num_streams must be positive.")
+        if isinstance(self.num_streams, (bool, np.bool_)):
+            raise ValueError("num_streams must be a positive integer.")
+        try:
+            count = operator.index(self.num_streams)
+        except TypeError as exc:
+            raise ValueError("num_streams must be a positive integer.") from exc
+        if count <= 0:
+            raise ValueError("num_streams must be a positive integer.")
+        object.__setattr__(self, "num_streams", count)
         object.__setattr__(self, "streams", [dict(item) for item in self.streams])
         if len(self.streams) != int(self.num_streams):
             raise ValueError(
@@ -130,7 +138,7 @@ class InputStreamMap:
             schema_version=str(raw.get("schema_version", STREAM_MAP_SCHEMA_TOKEN)),
             receiver_profile_id=str(raw["receiver_profile_id"]),
             stream_unit=str(raw.get("stream_unit", "input_stream")),
-            num_streams=int(raw.get("num_streams", len(streams))),
+            num_streams=raw.get("num_streams", len(streams)),
             streams=streams,
             indexing_convention=raw.get("indexing_convention"),
             polarization_labels=raw.get("polarization_labels"),
@@ -233,9 +241,14 @@ def build_stream_map_for_channel(
     polarizations: Sequence[str | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Build stream metadata for one selected coarse channel across streams."""
-    count = int(num_input_streams)
+    if isinstance(num_input_streams, (bool, np.bool_)):
+        raise ValueError("num_input_streams must be a positive integer.")
+    try:
+        count = operator.index(num_input_streams)
+    except TypeError as exc:
+        raise ValueError("num_input_streams must be a positive integer.") from exc
     if count <= 0:
-        raise ValueError("num_input_streams must be positive.")
+        raise ValueError("num_input_streams must be a positive integer.")
     if feed_ids is not None and len(feed_ids) != count:
         raise ValueError("feed_ids length must match num_input_streams.")
     if polarizations is not None and len(polarizations) != count:

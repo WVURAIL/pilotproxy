@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import importlib.util
 import json
 import math
 import os
 from pathlib import Path
+import subprocess
+import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -62,6 +67,7 @@ def _write_evaluation(root: Path, snr_db: tuple[float, ...], *, trials: int = 6,
 
 def test_reader_loads_report_trials_and_summary(tmp_path):
     e = ev.load_evaluation(_write_evaluation(tmp_path / "e", (-30.0, -27.0)))
+    assert e.report["schema_version"] == "pilotproxy_snr_validation_report_v2"
     assert e.requested_snr_db == (-30.0, -27.0) and len(e.trials) == 12 and not e.is_radio
     assert e.calibration == CAL
     assert math.isnan(e.trials[0]["noise_seeds"])          # non-numeric cells read as NaN, not errors
@@ -157,15 +163,91 @@ RELEASE = os.environ.get("RFISHER_TRANSFER_RELEASE")
 
 @pytest.mark.skipif(not (SWEEP and RELEASE and Path(SWEEP).is_dir() and Path(RELEASE).is_dir()),
                     reason="set RFISHER_TRANSFER_SWEEP (raw shard root) and RFISHER_TRANSFER_RELEASE (release dir)")
-def test_the_frozen_digital_release_is_reproduced_from_its_raw_shards():
-    shards = ev.load_evaluations(ev.digital_sweep_layout(SWEEP))
-    conditioning = ev.Conditioning.from_json(Path(RELEASE) / "run" / "conditioning.json")
-    rows = ev.transfer_points(shards, conditioning=conditioning)
-    with (Path(RELEASE) / "data" / "plot_points.csv").open(newline="") as fh:
+def test_current_reader_refuses_the_frozen_row_domain_release():
+    for shard in ev.digital_sweep_layout(SWEEP):
+        with pytest.raises(ValueError, match="before kernel core 3.0.0"):
+            ev.load_evaluation(shard)
+
+
+@pytest.mark.skipif(not (SWEEP and RELEASE and Path(SWEEP).is_dir() and Path(RELEASE).is_dir()),
+                    reason="set RFISHER_TRANSFER_SWEEP (raw shard root) and RFISHER_TRANSFER_RELEASE (release dir)")
+def test_the_frozen_row_domain_release_is_reproduced_with_its_archived_collector(tmp_path, monkeypatch):
+    """Reproduce the historical row-domain result without admitting it as v2 input."""
+    release = Path(RELEASE)
+    manifest = json.loads((release / "release_manifest.json").read_text())
+    for record in manifest["artifacts"]:
+        data = (release / record["path"]).read_bytes()
+        assert len(data) == record["size_bytes"], record["path"]
+        assert hashlib.sha256(data).hexdigest() == record["sha256"], record["path"]
+    with (release / "raw" / "raw_input_inventory.csv").open(newline="") as fh:
+        inventory = list(csv.DictReader(fh))
+    assert len(inventory) == 120
+    for record in inventory:
+        data = (Path(SWEEP) / record["relative_path"]).read_bytes()
+        assert len(data) == int(record["size_bytes"]), record["relative_path"]
+        assert hashlib.sha256(data).hexdigest() == record["sha256"], record["relative_path"]
+
+    # The release pins the collector that pooled these row-domain powers.
+    # Current detector and reader semantics must not reinterpret them.
+    provenance = json.loads((release / "run" / "source_provenance.json").read_text())
+    identity = provenance["publication_export"]["source_files"]["publication_plot_source"]
+    repository = Path(os.environ.get("PILOT_PROXY_PROVENANCE_REPOSITORY",
+                                     Path(__file__).resolve().parents[3]))
+    source = subprocess.check_output(
+        ["git", "-C", str(repository), "cat-file", "blob", identity["archival_blob"]],
+    )
+    assert hashlib.sha256(source).hexdigest() == identity["sha256"]
+    source_path = tmp_path / "archived_plot_results.py"
+    source_path.write_bytes(source)
+    spec = importlib.util.spec_from_file_location("_frozen_transfer_collector", source_path)
+    collector = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, collector)
+    spec.loader.exec_module(collector)
+
+    shards = ev.digital_sweep_layout(SWEEP)
+    assert len(shards) == 40
+    summary_paths = [path / "dtv_snr_summary.csv" for path in shards]
+    summaries = collector._read_summary_rows(summary_paths)
+    trials = collector._read_trial_rows([path / "dtv_snr_eval.csv" for path in shards])
+    assert len(trials) == 9000
+    radio, _, calibration = collector._plot_calibrations(summaries, summary_paths)
+    assert not radio
+    analysis = json.loads((release / "data" / "analysis.json").read_text())
+    curves = {
+        prefix: {point["x"]: point for point in collector._curve_points(
+            summaries, trials, prefix=prefix, offset=0.0, calibration=calibration,
+            bootstrap_samples=analysis["plot"]["bootstrap_samples"],
+        )}
+        for prefix in ("gpu", "cpu_float", "cpu_packed")
+    }
+    coefficients = json.loads((release / "run" / "conditioning.json").read_text())["coefficients"]
+    conditioning = SimpleNamespace(delta=coefficients["delta"], signal_contrast=coefficients["a"],
+                                   reference_loading=coefficients["b"], conversion_offset_db=coefficients["C_db"])
+    rows = []
+    for snr in sorted(curves["gpu"]):
+        at_snr = [row for row in trials if row[collector.REQUESTED_SNR_COLUMN] == snr]
+        positive = sum(collector._direct_trial_ratio(row, "gpu") > 1.0 for row in at_snr)
+        row = dict(
+            requested_data_shelf_snr_db=snr,
+            ideal_local_reference_db=collector._reference_transfer_db([snr])[0],
+            waveform_conditioned_expected_db=collector._conditioned_transfer_db([snr], conditioning)[0],
+            gpu_fixed_db=curves["gpu"][snr]["y"],
+            cpu_float_db=curves["cpu_float"][snr]["y"],
+            cpu_packed_db=curves["cpu_packed"][snr]["y"],
+            trials=len(at_snr), positive_excess_trials=positive,
+            positive_excess_fraction=positive / len(at_snr),
+        )
+        for prefix in ("gpu", "cpu_float"):
+            point = curves[prefix][snr]
+            row[f"{prefix}_ci95_low_db"] = collector._excess_to_shelf_db(point["low_excess"], calibration)
+            row[f"{prefix}_ci95_high_db"] = collector._excess_to_shelf_db(point["high_excess"], calibration)
+        rows.append(row)
+    with (release / "data" / "plot_points.csv").open(newline="") as fh:
         released = list(csv.DictReader(fh))
     assert len(released) == len(rows) == 41
     for theirs, ours in zip(released, rows):
-        for name in ev.DIGITAL_COLUMNS:
+        assert set(theirs) == set(ours)
+        for name in theirs:
             a = math.nan if theirs[name] == "" else float(theirs[name])
             b = float(ours[name])
             assert (math.isnan(a) and math.isnan(b)) or a == pytest.approx(b, abs=1e-9), (name, theirs, ours)

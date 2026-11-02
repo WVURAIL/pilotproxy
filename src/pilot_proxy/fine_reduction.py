@@ -274,6 +274,10 @@ def fine_reduce(
     p2 = fine_bin_count(windows, pad_factor)
 
     arr = xp.asarray(matched_filter_row_projections)
+    if arr.dtype.kind not in "iuc":
+        raise TypeError(
+            "row projections must be an integer re/im array or a complex array."
+        )
     integer_input = arr.dtype.kind != "c"
     norm = _as_complex_rows(arr, terms, xp)
     if integer_input:

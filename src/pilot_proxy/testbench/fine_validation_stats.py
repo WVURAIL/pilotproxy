@@ -57,6 +57,13 @@ def _probability(value, name):
     return result
 
 
+def _float_probability(value, name):
+    result = float(_probability(value, name))
+    if not 0 < result < 1:
+        raise ValueError(f"{name} must be representable strictly between zero and one")
+    return result
+
+
 def _real_vector(values, name, *, positive=False):
     raw = np.asarray(values, dtype=object)
     if raw.ndim != 1 or raw.size == 0:
@@ -80,6 +87,7 @@ def _requirements(values):
 
 
 def higher_index(n, pfa):
+    n = _integer(n, "trials", 1)
     q = 1-_probability(pfa, "pfa")
     return (q.numerator*(n-1)+q.denominator-1)//q.denominator
 
@@ -121,13 +129,7 @@ def exact_q16_threshold(requirements, *, pfa):
 
 def higher_rank(trials: int, nominal_pfa: float) -> int:
     """One-based rank for ceil((1-p)*(n-1)), calculated without float rounding."""
-    if isinstance(trials, bool) or not isinstance(trials, int) or trials < 1:
-        raise ValueError("trials must be a positive integer")
-    p = Fraction(str(nominal_pfa))
-    if not 0 < p < 1:
-        raise ValueError("nominal_pfa must lie strictly between zero and one")
-    v = (1-p)*(trials-1)
-    return (v.numerator + v.denominator - 1)//v.denominator + 1
+    return higher_index(trials, nominal_pfa) + 1
 
 
 def calibration_reference(trials: int, nominal_pfa: float) -> dict:
@@ -154,11 +156,15 @@ def accepted_count_limit(trials: int, cap: float, *, family_tests: int = 1334,
     CP inversion is equivalent to BinomialCDF(k; n, cap) <= alpha/family.
     Returns -1 if even zero observed events cannot demonstrate the cap.
     """
-    if trials < 1 or int(trials) != trials or family_tests < 1 or int(family_tests) != family_tests:
-        raise ValueError("positive integer trial and family counts required")
-    if not 0 < cap < 1 or not 0 < confidence < 1:
-        raise ValueError("cap and confidence must lie strictly between zero and one")
-    alpha = (1-confidence)/family_tests
+    trials = _integer(trials, "trials", 1)
+    family_tests = _integer(family_tests, "family_tests", 1)
+    cap = _float_probability(cap, "cap")
+    level = _float_probability(confidence, "confidence")
+    # Form the division as a rational so an oversized family cannot overflow
+    # integer-to-float conversion or silently make the error budget zero.
+    alpha = float(Fraction(1-level) / family_tests)
+    if alpha == 0.0:
+        raise ValueError("family error budget must be representable above zero")
     lo, hi = -1, trials
     while hi-lo > 1:
         k = (lo+hi)//2
@@ -309,7 +315,7 @@ def binomial_interval(successes, trials, *, confidence=0.95, side="two-sided"):
     k = _integer(successes, "successes")
     if k > n:
         raise ValueError("successes cannot exceed trials")
-    level = float(_probability(confidence, "confidence"))
+    level = _float_probability(confidence, "confidence")
     if side not in {"two-sided", "upper", "lower"}:
         raise ValueError("side must be two-sided, upper or lower")
     alpha = 1.0-level
@@ -329,10 +335,10 @@ def false_alarm_validation(exceedances, trials, *, nominal_pfa, cap_pfa,
     target. Dependence between policies is allowed; trials within a policy must
     be independent. Call with the complete predeclared family size.
     """
-    nominal = float(_probability(nominal_pfa, "nominal_pfa"))
-    cap = float(_probability(cap_pfa, "cap_pfa"))
+    nominal = _float_probability(nominal_pfa, "nominal_pfa")
+    cap = _float_probability(cap_pfa, "cap_pfa")
     family = _integer(family_tests, "family_tests", 1)
-    level = float(_probability(confidence, "confidence"))
+    level = _float_probability(confidence, "confidence")
     pointwise = binomial_interval(exceedances, trials, confidence=level)
     per_test = 1-(1-level)/family
     if per_test == 1.0:
@@ -354,12 +360,14 @@ def raw_crossing_brackets(snr_db, rates, *, target):
     multi-point target plateau. Endpoints outside the sampled range are never
     extrapolated. Linear interpolation is labeled as a display estimate.
     """
+    if np.iscomplexobj(snr_db) or np.iscomplexobj(rates):
+        raise ValueError("SNR values and rates must be real")
     x = np.asarray(snr_db, dtype=float)
     y = np.asarray(rates, dtype=float)
-    t = float(_probability(target, "target"))
+    t = _float_probability(target, "target")
     if x.ndim != 1 or x.size < 2 or y.shape != x.shape:
         raise ValueError("at least two aligned SNR/rate points are required")
-    if not np.isfinite(x).all() or np.any(np.diff(x) <= 0):
+    if not np.isfinite(x).all() or np.any(x[1:] <= x[:-1]):
         raise ValueError("SNR grid must be finite and strictly increasing")
     if not np.isfinite(y).all() or np.any((y < 0) | (y > 1)):
         raise ValueError("rates must be finite probabilities; no rows are dropped")
@@ -373,7 +381,16 @@ def raw_crossing_brackets(snr_db, rates, *, target):
         elif y[i] > t >= y[i+1]:
             direction = downward
         if direction is not None:
-            estimate = x[i]+(x[i+1]-x[i])*(t-y[i])/(y[i+1]-y[i])
+            fraction = (t-y[i])/(y[i+1]-y[i])
+            lo, hi = float(x[i]), float(x[i+1])
+            # Opposite-sign endpoints can have an unrepresentable span even
+            # though their convex interpolation remains finite.
+            if lo < 0 < hi:
+                estimate = (1-fraction)*lo + fraction*hi
+            elif fraction <= 0.5:
+                estimate = lo + (hi-lo)*fraction
+            else:
+                estimate = hi - (hi-lo)*(1-fraction)
             direction.append({"indices": [i, i+1], "snr_lo_db": float(x[i]),
                               "snr_hi_db": float(x[i+1]), "rate_lo": float(y[i]),
                               "rate_hi": float(y[i+1]), "estimate_db": float(estimate)})

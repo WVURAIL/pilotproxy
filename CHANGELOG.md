@@ -5,6 +5,11 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `calibrate-bundle` sets each channel's word at the knee of its kept fraction, over
+  the 65-bin search of record, with a floor from the control channel. Channels with
+  no pilot or fewer than 30 captures take the floor. `test-bundle` compares each
+  masked fraction with the calibration, and its plan takes `channels` in place of
+  `strong` and `quiet`.
 - Bundle manifests record profile file names, so a bundle holds no local paths.
 - The CHIME era lists moved out of the repository. `projects/chime_atsc/eras/`
   holds empty stand-ins, and archive characterization needs the real lists copied in.

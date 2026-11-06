@@ -675,9 +675,10 @@ def _cmd_validate_runtime_weight_bundle(args: argparse.Namespace) -> None:
 
 def _cmd_calibrate_bundle(args: argparse.Namespace) -> None:
     report = calibrate_bundle(plan_path=args.plan, output_dir=args.output_dir)
-    print(f"word {report['word_q16']} (eta {report['eta']:.4f}) from {report['word_source']}")
+    print(f"floor {report['floor_word_q16']} (eta {report['floor_eta']:.4f}) from {report['floor_source']}")
     for channel, row in report["channels"].items():
-        print(f"channel {channel}: anchor {row['anchor_bin']} ({row['anchor_source']})")
+        print(f"channel {channel}: anchor {row['anchor_bin']} ({row['anchor_source']}), "
+              f"word {row['word_q16']} (eta {row['eta']:.4f}) from {row['word_source']}")
 
 
 def _cmd_test_bundle(args: argparse.Namespace) -> None:

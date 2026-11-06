@@ -12,9 +12,11 @@ The detector tests for a small excess of power at a television pilot over nearby
 | Weights | Receiver geometry and the pilot frequency | Computed, no data needed |
 | Anchor bin | The true pilot frequency of each transmitter | Measured from a capture |
 | Reference bins and rank | Lines near the pilot, which must be left out | Default, plus any measured exclusions |
-| Threshold word | The noise behaviour of the telescope | Measured from a channel with no pilot |
+| Threshold word | The frames of each channel, above the noise of the telescope | Knee of the kept fraction, with a floor from a channel with no pilot |
 
-The word is the part that does not transfer between telescopes. It depends on the number of inputs summed and on the behaviour of the real array. White noise gives a floor, which `"num_inputs"` simulates (1.84 as a ratio for 32 inputs, 1.36 for 128, and 1.08 for 2048). A real control can sit well above this floor, so a simulated word is only a first guess and a word from a short capture is a lower limit. Each telescope needs a control record of its own.
+The word is the part that does not transfer between telescopes, and each channel has its own. For each frame, we find the smallest word that keeps it. The kept fraction against the logarithm of the word rises over the frames with no pilot or a weak pilot and then bends, and the word at this bend, known as the knee, is the word of largest height above the chord of the curve. Every capture has equal weight, so a long capture does not set the curve. The knee is a generic starting point, with no link to a science requirement. A channel with a strong pilot in nearly every frame has no clean frames to bend away from, so its knee masks little, and the report marks it with `pilot_in_most_frames`. Such a channel is a candidate to flag whole.
+
+The floor keeps a word above the noise. It is the 99% quantile of the scores of a channel with no pilot, and it depends on the number of inputs summed and on the real array. White noise gives its lowest value, which `"num_inputs"` simulates (2.15 as a ratio for 32 inputs, 1.48 for 128, and 1.10 for 2048). A real control can sit well above this, so a simulated floor is only a first guess and a floor from a short capture is a lower limit. Each telescope needs a control record of its own.
 
 No channel is qualified for masking yet. The stage refuses words marked `archive_review_only`, and every bundle made by the commands below is a detect-only commissioning bundle. In detect-only mode the detector records its decisions and the visibilities do not change.
 
@@ -41,12 +43,12 @@ Merged Pathfinder files are chunked over all 6144 frequencies, so a read of one 
 python3 tools/extract_baseband_channels.py --input baseband_subset.00000000.h5 --output day1.h5 --coarse-freq 2531 2715 2869 3115 --blocks 20
 ```
 
-Calibration and testing use different epochs, at different times of day. The null quantile sets the amount of control data. A word at 99% needs at least 1000 scores, and each control frame gives about 50.
+Calibration and testing use different epochs, at different times of day. The null quantile sets the amount of control data. A floor at 99% needs at least 50 control frames, and more frames give a steadier floor. A knee needs at least 30 captures of each channel, spread over the conditions the telescope sees, because a curve from a few captures describes only those captures.
 
 
 ## Step 2: Calibrate
 
-`calibrate-bundle` exports the weights, measures each anchor, sets the word from the control channel, and writes a sealed bundle. It reads a plan:
+`calibrate-bundle` exports the weights, measures each anchor, finds the floor from the control channel, finds the knee of each channel, and writes a sealed bundle. It reads a plan:
 
 ```json
 {
@@ -65,23 +67,22 @@ Calibration and testing use different epochs, at different times of day. The nul
 pilot-proxy calibrate-bundle --plan calibrate.json --output-dir bundle
 ```
 
-Paths to profiles are relative to the plan. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first word. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, so its anchor is the expected bin and a capture with the pilot on should replace it. Lines in the reference bins are added to `exclude_bins`.
+Paths to profiles are relative to the plan. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first floor. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, so its anchor is the expected bin and a capture with the pilot on should replace it. Lines in the reference bins are added to `exclude_bins`.
 
-Two plan keys replace a measured value. `"word_q16"` sets the word, and `"anchors": {"29": 202}` sets an anchor. The report gives the strongest bin of each channel, which shows faint lines, so each anchor is read against the report before the bundle is tested. The strongest bin of a faint line can move between captures, so an anchor needs several epochs, and a single short capture is only trusted for a strong pilot.
+The report gives `word_source` for each channel. The word is the knee when the pilot was seen in at least 30 captures and the knee lies above the floor, and in any other case it is the floor. A first bundle from a few captures therefore holds the floor on every channel, which is enough for a detect-only run. Its `knee_interval_q16` gives the 16th and 84th percentiles of the knee over resampled captures, and a wide interval means more captures are needed.
+
+Three plan keys replace a measured value. `"word_q16"` sets the floor and the word of every channel, `"words": {"29": 165551}` sets the word of one channel, and `"anchors": {"29": 202}` sets an anchor. A word belongs to its geometry, so a word moved from another record must come with its anchor, search and reference bins. The report gives the strongest bin of each channel, which shows faint lines, so each anchor is read against the report before the bundle is tested. The strongest bin of a faint line can move between captures, so an anchor needs several epochs, and a single short capture is only trusted for a strong pilot.
 
 
 ## Step 3: Test
 
-`test-bundle` checks a bundle on captures it was not made from. The plan names a strong channel, a quiet channel, and the control:
+`test-bundle` checks a bundle on captures it was not made from. The plan names the channels and the control:
 
 ```json
 {
   "capture_format": "chime_baseband",
-  "strong": {"35": ["other_521.h5"]},
-  "quiet": {"29": ["other_614.h5"]},
-  "control": ["other_491.h5"],
-  "min_strong_masked": 0.9,
-  "max_quiet_masked": 0.2
+  "channels": {"35": ["other_521.h5"], "29": ["other_614.h5"]},
+  "control": ["other_491.h5"]
 }
 ```
 
@@ -97,9 +98,8 @@ Each check prints PASS or FAIL, and the exit status is 1 on any failure.
 | Every bound channel has values | A pending channel stops the instance at its first frame |
 | Test data differ from calibration data | A word tested on its own data proves nothing |
 | Rank support on each channel | A frame with too few reference bins is not tested |
-| Strong channel is masked | The detector sees a real pilot |
-| Quiet channel is rarely masked | The word and anchor do not fire on a clear channel |
-| False alarms on the control | The word gives the rate it claims |
+| Masked fraction on each channel | The word masks other captures as it masked the calibration captures |
+| False alarms on the control | The floor gives the rate it claims |
 
 Kotekan's `tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh` tests the code, and `test-bundle` tests the numbers. Both are needed after a change to the detector core.
 
@@ -158,7 +158,7 @@ The first check is the log. Each pilot must have a `bound ATSC physical channel`
 | N2 products | No new frame drops |
 | Disk use on CHIME | About 38 GB per hour |
 
-`tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support, and the masked fraction of the strong and quiet channels. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`.
+`tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support, and the masked fraction of each channel. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`.
 
 To remove the detector, Kotekan is restarted without `dtv_enabled`, and the rendered config then has no detector stages. A change of bundle, word, or channel list always needs a restart.
 
@@ -172,9 +172,8 @@ To remove the detector, Kotekan is restarted without `dtv_enabled`, and the rend
 | `missing bundle receiver namespace` | Bundle was made for the other telescope | Use the matching receiver profile |
 | `detector DISABLED` | No bundle pilot on this node | Check the frequency map |
 | N2 falls behind | Detector holds the voltage ring | Stop the detector and report its time per block |
-| Control false alarms fail | Word is too low, or the control has a line | Check `dtv_powers`, then recalibrate with more epochs |
-| Strong channel test fails | The pilot is weak on this array, with its ratio near the word | Read the report, then choose a stronger channel |
-| Quiet channel test fails | Word is too low, or the channel has a faint line | Read the report, then raise the word or choose another quiet channel |
+| Control false alarms fail | Floor is too low, or the control has a line | Check `dtv_powers`, then recalibrate with more epochs |
+| Masked fraction test fails | The test captures differ from the calibration captures | Read the report, then recalibrate with captures that cover both |
 
 
 ## Bad feeds

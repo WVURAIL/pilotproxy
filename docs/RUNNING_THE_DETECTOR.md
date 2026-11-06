@@ -108,10 +108,10 @@ Kotekan's `tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh` tests the code, 
 
 Kotekan reads the bundle from a local path once, at startup, and checks every digest. There is no service to query, and none is needed. A bundle changes only at a restart, and a failed lookup at startup would stop the correlator along with the detector.
 
-A passing bundle is committed to the bundle store with its report and test result. The store is a private Git repository owned by the telescope team, with one store for each telescope. CHIME words are derived from CHIME baseband, so a CHIME bundle stays on CHIME systems. Each bundle is an immutable directory named `<telescope>-<purpose>-<first 8 digits of the sha256 of sha256sums.txt>`, and the deployment step copies it to the node:
+A passing bundle is added through a Kotekan pull request to the bundle directory of the telescope, `config/chime/dtv_bundles/` or `config/chord/dtv_bundles/`. Each bundle is an immutable directory named `<purpose>-<first 8 digits of the sha256 of sha256sums.txt>`, and a new calibration gets a new directory. The deployment step copies it to the node:
 
 ```bash
-/opt/kotekan/dtv/<telescope>-<purpose>-<digest>/
+/opt/kotekan/dtv/<purpose>-<digest>/
 ```
 
 ```bash
@@ -167,7 +167,7 @@ To remove the detector, Kotekan is restarted without `dtv_enabled`, and the rend
 
 | Message or symptom | Cause | Action |
 |---|---|---|
-| `sha256 mismatch` | Bundle file changed or was copied badly | Copy it again from the store |
+| `sha256 mismatch` | Bundle file changed or was copied badly | Copy it again from the bundle directory |
 | Stops at first frame on an uncalibrated channel | Bound profile is `pending_campaign` | Run `calibrate-bundle` with that channel, or drop it |
 | `missing bundle receiver namespace` | Bundle was made for the other telescope | Use the matching receiver profile |
 | `detector DISABLED` | No bundle pilot on this node | Check the frequency map |

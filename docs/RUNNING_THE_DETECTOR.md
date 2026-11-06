@@ -67,7 +67,7 @@ pilot-proxy calibrate-bundle --plan calibrate.json --output-dir bundle
 
 Paths to profiles are relative to the plan. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first word. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, so its anchor is the expected bin and a capture with the pilot on should replace it. Lines in the reference bins are added to `exclude_bins`.
 
-Two plan keys replace a measured value. `"word_q16"` sets the word, and `"anchors": {"29": 202}` sets an anchor. The report gives the strongest bin of each channel, which shows faint lines, so each anchor is read against the report before the bundle is tested.
+Two plan keys replace a measured value. `"word_q16"` sets the word, and `"anchors": {"29": 202}` sets an anchor. The report gives the strongest bin of each channel, which shows faint lines, so each anchor is read against the report before the bundle is tested. The strongest bin of a faint line can move between captures, so an anchor needs several epochs, and a single short capture is only trusted for a strong pilot.
 
 
 ## Step 3: Test

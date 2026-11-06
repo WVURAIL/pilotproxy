@@ -17,11 +17,7 @@ from typing import Any, Iterator, Sequence
 import numpy as np
 
 from pilot_proxy.capture_reference import expected_matched_filter_row_projections
-from pilot_proxy.detectors.narrowband_marker.anchors import (
-    DESIGNATED_HALF_WIDTH,
-    WINDOW_HALF_WIDTH,
-    bulk_mask,
-)
+from pilot_proxy.detectors.narrowband_marker.anchors import WINDOW_HALF_WIDTH, bulk_mask
 from pilot_proxy.fine_decision import (
     FINE_DECISION_VERSION,
     fine_required_multiplier_q16,
@@ -41,9 +37,16 @@ WINDOWS = 128
 PAD_FACTOR = 2
 GUARD_FINE_BINS = 1
 Q16 = 65536
+# 65 designated bins, the search of record
+SEARCH_HALF_WIDTH = 32
+# the fewest kept captures the archive rule accepts
+MIN_KNEE_CAPTURES = 30
+BOOTSTRAP_REPLICATES = 200
 # chance of the hits under the null, kept small for the search over the window
 MAX_LINE_TAIL = 1e-4
+MIN_TAIL = 1e-3
 MIN_SIMULATED_FRAMES = 2000
+MAX_SCORE = (1 << 63) - 1
 BUNDLE_FILES = ("detector_contract.json", "pilot_profiles.json", "weights.bin", "weights.manifest.json")
 
 
@@ -118,27 +121,71 @@ def required_words(fines: Sequence[np.ndarray], *, anchor_bin: int, bulk: np.nda
     words = []
     for fine in fines:
         result = fine_required_multiplier_q16(
-            np.ascontiguousarray(fine), anchor_bin=anchor_bin, designated_half_width=DESIGNATED_HALF_WIDTH,
+            np.ascontiguousarray(fine), anchor_bin=anchor_bin, designated_half_width=SEARCH_HALF_WIDTH,
             bulk_mask=bulk, cfar_rank=rank)
-        words.append(int(result.multiplier_q16) if result.valid else -1)
+        words.append(-1 if not result.valid or result.multiplier_q16 is None
+                     else min(int(result.multiplier_q16), MAX_SCORE))
     return np.asarray(words, dtype=np.int64)
 
 
+def capture_weights(captures: np.ndarray) -> np.ndarray:
+    """Return frame weights that give every capture equal total weight."""
+    _, inverse, counts = np.unique(captures, return_inverse=True, return_counts=True)
+    return 1.0 / (counts.size * counts[inverse])
+
+
+def knee_word(words: np.ndarray, weights: np.ndarray) -> int:
+    """Return the keep word of largest height above the chord of the kept fraction on a log word axis."""
+    words = np.maximum(np.asarray(words, dtype=np.float64), 1.0)
+    order = np.argsort(words, kind="stable")
+    words = words[order]
+    kept = np.cumsum(np.asarray(weights, dtype=np.float64)[order])
+    kept /= kept[-1]
+    last = np.r_[words[1:] != words[:-1], True]
+    words, kept = words[last], kept[last]
+    if words.size == 1:
+        return int(words[0])
+    height = kept - np.log(words / words[0]) / np.log(words[-1] / words[0])
+    # the larger word wins a tie
+    return int(words[words.size - 1 - int(np.argmax(height[::-1]))])
+
+
+def bootstrap_captures(words: np.ndarray, captures: np.ndarray, word: int, seed: int = 20261106) -> dict[str, list[float]]:
+    """Return the 68% knee interval and 95% masked-fraction interval over resampled captures."""
+    rng = np.random.default_rng(seed)
+    groups = [words[captures == c] for c in np.unique(captures)]
+    knees, masked = [], []
+    for _ in range(BOOTSTRAP_REPLICATES):
+        picks = rng.integers(len(groups), size=len(groups))
+        sample = np.concatenate([groups[i] for i in picks])
+        ids = np.concatenate([np.full(groups[i].size, n) for n, i in enumerate(picks)])
+        knees.append(knee_word(sample, capture_weights(ids)))
+        masked.append(float(np.sum(capture_weights(ids)[sample > word])))
+    return dict(knee_interval_q16=[float(q) for q in np.quantile(knees, [0.16, 0.84])],
+                masked_interval=[float(q) for q in np.quantile(masked, [0.025, 0.975])])
+
+
 def null_scores(ratios: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> np.ndarray:
-    """Return Q16 null scores at pseudo-markers tiled over the reference bins of each frame."""
+    """Return Q16 null scores at pseudo-searches over the bins clear of the real search of each frame."""
     bins = np.flatnonzero(bulk)
     reference = np.sort(ratios[:, bins], axis=1)[:, rank]
-    width = 2 * DESIGNATED_HALF_WIDTH + 1
-    markers = (anchor_bin + width * np.arange(1, FINE_BINS // width)) % FINE_BINS
-    near = np.arange(-DESIGNATED_HALF_WIDTH, DESIGNATED_HALF_WIDTH + 1)
+    width = 2 * SEARCH_HALF_WIDTH + 1
+    # overlapping, so a short control fills the tail, but only clear_searches() of them are independent
+    markers = (anchor_bin + np.arange(width, FINE_BINS - width + 1, 2)) % FINE_BINS
+    near = np.arange(-SEARCH_HALF_WIDTH, SEARCH_HALF_WIDTH + 1)
     peaks = ratios[:, (markers[:, None] + near[None, :]) % FINE_BINS].max(axis=2)
     return (peaks / reference[:, None] * Q16).ravel()
+
+
+def clear_searches() -> int:
+    """Return the independent pseudo-searches in one frame."""
+    return FINE_BINS // (2 * SEARCH_HALF_WIDTH + 1) - 1
 
 
 def simulated_null_scores(num_inputs: int, frames: int = MIN_SIMULATED_FRAMES, seed: int = 20261105) -> np.ndarray:
     """Return null scores for white noise summed over num_inputs streams."""
     rng = np.random.default_rng(seed)
-    bulk = bulk_mask(0, pad_factor=PAD_FACTOR, guard_fine_bins=GUARD_FINE_BINS)
+    bulk = _bulk(0)
     rank = default_rank(bulk)
     ratios = np.empty((frames, FINE_BINS))
     for frame in range(frames):
@@ -148,22 +195,29 @@ def simulated_null_scores(num_inputs: int, frames: int = MIN_SIMULATED_FRAMES, s
     return null_scores(ratios, anchor_bin=0, bulk=bulk, rank=rank)
 
 
+def _bulk(anchor: int, excluded: Sequence[int] = ()) -> np.ndarray:
+    return bulk_mask(anchor, pad_factor=PAD_FACTOR, guard_fine_bins=GUARD_FINE_BINS, census_excluded_bins=excluded,
+                     designated_half_width=SEARCH_HALF_WIDTH)
+
+
 def _weights(row: dict[str, Any], bank: bytes) -> bytes:
     offset = int(row["weight_bank_offset_bytes"])
     return bank[offset:offset + int(row["weight_bank_nbytes"])]
 
 
 def _load_fines(paths: Sequence[str], capture_format: str, row: dict[str, Any], bank: bytes, k: int,
-                time_reverse: bool, max_frames: int | None) -> list[np.ndarray]:
+                time_reverse: bool, max_frames: int | None) -> tuple[list[np.ndarray], np.ndarray]:
+    """Return the fine powers of every frame and the capture index of each."""
     weights = _weights(row, bank)
     channel_id = int(row["receiver_channel_id"])
-    fines = []
-    for path in paths:
+    fines, captures = [], []
+    for index, path in enumerate(paths):
         for block in iter_blocks(path, capture_format, channel_id, k * WINDOWS, max_frames):
             fines.append(fine_powers(block, weights, k, time_reverse))
+            captures.append(index)
     if not fines:
         raise ValueError(f"no complete blocks for channel {row['physical_channel']}")
-    return fines
+    return fines, np.asarray(captures)
 
 
 def _export(plan: dict[str, Any], base: Path, channels: Sequence[int], out: Path) -> tuple[dict, bytes]:
@@ -220,8 +274,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         if control:
             row = rows[int(control["channel"])]
             anchor = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
-            bulk = bulk_mask(anchor, pad_factor=PAD_FACTOR, guard_fine_bins=GUARD_FINE_BINS)
-            fines = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
+            bulk = _bulk(anchor)
+            fines, _ = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
             scores = null_scores(fine_ratio(np.stack(fines)), anchor_bin=anchor, bulk=bulk, rank=default_rank(bulk))
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=default_rank(bulk),
@@ -232,12 +286,14 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             scores = simulated_null_scores(int(plan["num_inputs"]))
             control_record = None
             source = f"white noise, {int(plan['num_inputs'])} inputs"
-        if scores.size * (1.0 - quantile) < 10:
-            raise ValueError(f"{scores.size} null scores are too few for quantile {quantile}")
+        independent = (len(fines) if control else MIN_SIMULATED_FRAMES) * clear_searches()
+        if independent * (1.0 - quantile) < 1:
+            raise ValueError(f"{independent} independent null scores are too few for quantile {quantile}")
         measured_word = int(math.ceil(float(np.quantile(scores, quantile))))
-        word = int(plan.get("word_q16", measured_word))
+        floor = int(plan.get("word_q16", measured_word))
         if "word_q16" in plan:
             source = "the plan"
+        min_captures = int(plan.get("min_knee_captures", MIN_KNEE_CAPTURES))
 
         report_channels = {}
         values = {}
@@ -245,38 +301,61 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             row = rows[channel]
             nominal = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             paths = plan["channels"][str(channel)]
-            fines = _load_fines(paths, fmt, row, bank, k, reverse, max_frames)
+            fines, captures = _load_fines(paths, fmt, row, bank, k, reverse, max_frames)
+            ratios = fine_ratio(np.stack(fines))
             window = (nominal + np.arange(-WINDOW_HALF_WIDTH, WINDOW_HALF_WIDTH + 1)) % FINE_BINS
-            upper = np.quantile(fine_ratio(np.stack(fines)), 0.9, axis=0)
+            upper = np.quantile(ratios, 0.9, axis=0)
             anchor = int(window[np.argmax(upper[window])])
             given = plan.get("anchors", {}).get(str(channel))
             excluded = plan.get("exclude_bins", {}).get(str(channel), [])
-            bulk = bulk_mask(anchor, pad_factor=PAD_FACTOR, guard_fine_bins=GUARD_FINE_BINS,
-                             census_excluded_bins=excluded)
+            bulk = _bulk(anchor, excluded)
             rank = default_rank(bulk)
             seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank)
-            hits = int(np.count_nonzero(seen > word))
+            hits = int(np.count_nonzero(seen > floor))
             fraction = hits / seen.size
             measured = binomial_upper_tail(hits, seen.size, 1.0 - quantile) < MAX_LINE_TAIL
-            peak = float(np.median(fine_ratio(np.stack(fines))[:, anchor]))
+            peak = float(np.median(ratios[:, anchor]))
             origin = "measured" if measured else "nominal"
             if given is not None or not measured:
                 # noise peak in the window, so fall back to the expected bin
                 anchor = nominal if given is None else int(given)
                 origin = "nominal" if given is None else "plan"
-                bulk = bulk_mask(anchor, pad_factor=PAD_FACTOR, guard_fine_bins=GUARD_FINE_BINS,
-                                 census_excluded_bins=excluded)
+                bulk = _bulk(anchor, excluded)
                 rank = default_rank(bulk)
+                seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank)
+
+            supported = seen >= 0
+            if not supported.any():
+                raise ValueError(f"channel {channel} has no supported frames")
+            knee = knee_word(seen[supported], capture_weights(captures)[supported])
+            given_word = plan.get("words", {}).get(str(channel))
+            count = int(np.unique(captures).size)
+            if given_word is not None or "word_q16" in plan:
+                word, word_source = int(floor if given_word is None else given_word), "plan"
+            elif origin == "nominal":
+                word, word_source = floor, "floor, no pilot"
+            elif count < min_captures:
+                word, word_source = floor, f"floor, {count} captures of {min_captures}"
+            elif knee < floor:
+                word, word_source = floor, "floor, knee below it"
+            else:
+                word, word_source = knee, "knee"
+            weights = capture_weights(captures[supported])
+            masked = float(np.sum(weights[seen[supported] > word]))
+            intervals = bootstrap_captures(seen[supported], captures[supported], word)
             values[channel] = dict(
                 status="calibrated", decision_version=FINE_DECISION_VERSION, cfar_multiplier_q16=word,
-                anchor_bin=anchor, designated_half_width=DESIGNATED_HALF_WIDTH, cfar_rank=rank,
+                anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, cfar_rank=rank,
                 bulk_mask_words_hex=[f"0x{w:016x}" for w in pack_bulk_mask(bulk)],
                 provenance=dict(epochs=[str(plan.get("epoch", "unstated"))], source_product_sha256=[],
                                 null_quantile=quantile,
-                                note=f"Commissioning word from {source}. Detect-only, not a calibration."))
+                                note=f"Word from {word_source}, floor from {source}. Detect-only, not a calibration."))
             report_channels[str(channel)] = dict(
-                anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines),
-                strongest_bin_median_ratio=peak, strongest_bin_masked_fraction=fraction)
+                anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines), captures=count,
+                word_q16=word, eta=word / Q16, word_source=word_source, knee_word_q16=knee,
+                masked_fraction=masked, masked_at_floor=float(np.sum(weights[seen[supported] > floor])),
+                pilot_in_most_frames=bool(np.median(seen[supported]) > floor),
+                strongest_bin_median_ratio=peak, strongest_bin_masked_fraction=fraction, **intervals)
 
     bundle, _ = _export(plan, base, channels, output_dir)
     for row in bundle["profiles"]:
@@ -291,9 +370,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         shutil.rmtree(output_dir)
         raise ValueError(f"bundle failed validation: {validation['errors']}")
 
-    report = dict(word_q16=word, eta=word / Q16, measured_word_q16=measured_word, null_quantile=quantile,
-                  word_source=source,
-                  null_scores=int(scores.size), channels=report_channels, control=control_record,
+    report = dict(floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
+                  null_quantile=quantile, floor_source=source, search_half_width=SEARCH_HALF_WIDTH,
+                  null_scores=int(independent), channels=report_channels, control=control_record,
                   calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values() for p in ps))
     write_json_strict(output_dir.with_name(output_dir.name + ".report.json"), report)
     return report
@@ -305,12 +384,23 @@ def _sha256_text(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _binomial_log_pmf(count: int, trials: int, probability: float) -> float:
+    return (math.lgamma(trials + 1) - math.lgamma(count + 1) - math.lgamma(trials - count + 1)
+            + count * math.log(probability) + (trials - count) * math.log1p(-probability))
+
+
 def binomial_upper_tail(hits: int, trials: int, probability: float) -> float:
     """Return P(X >= hits) for X ~ Binomial(trials, probability)."""
-    total = 0.0
-    for count in range(hits, trials + 1):
-        total += math.comb(trials, count) * probability ** count * (1.0 - probability) ** (trials - count)
-    return min(total, 1.0)
+    if hits <= 0 or probability >= 1.0:
+        return 1.0
+    if probability <= 0.0:
+        return 0.0
+    return min(sum(math.exp(_binomial_log_pmf(c, trials, probability)) for c in range(hits, trials + 1)), 1.0)
+
+
+def binomial_lower_tail(hits: int, trials: int, probability: float) -> float:
+    """Return P(X <= hits) for X ~ Binomial(trials, probability)."""
+    return 1.0 if hits >= trials else 1.0 - binomial_upper_tail(hits + 1, trials, probability)
 
 
 def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None = None) -> dict[str, Any]:
@@ -341,32 +431,35 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
     uncalibrated = [c for c, row in rows.items() if row["fine_calibration"]["status"] != "calibrated"]
     check("every bound channel has values", not uncalibrated, f"pending: {uncalibrated}")
 
-    groups = [("strong", plan.get("strong", {})), ("quiet", plan.get("quiet", {}))]
-    used = {str(Path(p).resolve()) for _, group in groups for ps in group.values() for p in ps}
+    group = plan.get("channels", {})
+    used = {str(Path(p).resolve()) for ps in group.values() for p in ps}
     used |= {str(Path(p).resolve()) for p in plan.get("control", [])}
     reused = used & set(calibration.get("calibration_captures", []))
     reused |= used & set((calibration.get("control") or {}).get("captures", []))
     check("test data differ from calibration data", not reused, f"{len(reused)} shared captures")
 
-    for kind, group in groups:
-        for channel, paths in group.items():
-            channel = int(channel)
-            if channel not in rows:
-                check(f"{kind} channel {channel}", False, "channel is not in the bundle")
-                continue
-            fine_cal = rows[channel]["fine_calibration"]
-            bulk = unpack_bulk_mask([int(w, 16) for w in fine_cal["bulk_mask_words_hex"]])
-            words = required_words(_load_fines(paths, fmt, rows[channel], bank, k, reverse, max_frames),
-                                   anchor_bin=fine_cal["anchor_bin"], bulk=bulk, rank=fine_cal["cfar_rank"])
-            valid = words >= 0
-            check(f"rank support on channel {channel}", valid.all(), f"{int(valid.sum())} of {words.size} frames")
-            fraction = float(np.mean(words[valid] > fine_cal["cfar_multiplier_q16"]))
-            if kind == "strong":
-                limit = float(plan.get("min_strong_masked", 0.9))
-                check(f"strong channel {channel}", fraction >= limit, f"masked {fraction:.3f}, needs at least {limit}")
-            else:
-                limit = float(plan.get("max_quiet_masked", 0.2))
-                check(f"quiet channel {channel}", fraction <= limit, f"masked {fraction:.3f}, limit {limit}")
+    predicted = calibration.get("channels", {})
+    for channel, paths in group.items():
+        channel = int(channel)
+        if channel not in rows:
+            check(f"channel {channel}", False, "channel is not in the bundle")
+            continue
+        fine_cal = rows[channel]["fine_calibration"]
+        bulk = unpack_bulk_mask([int(w, 16) for w in fine_cal["bulk_mask_words_hex"]])
+        fines, _ = _load_fines(paths, fmt, rows[channel], bank, k, reverse, max_frames)
+        words = required_words(fines, anchor_bin=fine_cal["anchor_bin"], bulk=bulk, rank=fine_cal["cfar_rank"])
+        valid = words >= 0
+        check(f"rank support on channel {channel}", valid.all(), f"{int(valid.sum())} of {words.size} frames")
+        if str(channel) not in predicted:
+            check(f"channel {channel}", False, f"{report_path} has no prediction")
+            continue
+        hits = int(np.count_nonzero(words[valid] > fine_cal["cfar_multiplier_q16"]))
+        trials = int(valid.sum())
+        low, high = predicted[str(channel)]["masked_interval"]
+        # consistent if the count could come from a rate inside the calibration interval
+        agrees = binomial_upper_tail(hits, trials, high) >= MIN_TAIL and binomial_lower_tail(hits, trials, low) >= MIN_TAIL
+        check(f"masked fraction on channel {channel}", agrees,
+              f"masked {hits / trials:.3f}, calibration gave {low:.3f} to {high:.3f}")
 
     record = calibration.get("control")
     if plan.get("control") and record:
@@ -374,13 +467,13 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
                    weight_bank_offset_bytes=0, weight_bank_nbytes=len(record["weights_hex"]) // 2)
         bulk = np.zeros(FINE_BINS, dtype=bool)
         bulk[record["bulk_bins"]] = True
-        fines = _load_fines(plan["control"], fmt, row, bytes.fromhex(record["weights_hex"]), k, reverse, max_frames)
+        fines, _ = _load_fines(plan["control"], fmt, row, bytes.fromhex(record["weights_hex"]), k, reverse, max_frames)
         words = required_words(fines, anchor_bin=record["anchor_bin"], bulk=bulk, rank=record["cfar_rank"])
-        word = int(calibration["word_q16"])
+        word = int(calibration["floor_word_q16"])
         rate = 1.0 - float(calibration["null_quantile"])
         hits = int(np.count_nonzero(words > word))
         tail = binomial_upper_tail(hits, words.size, rate)
-        check("false alarms on the control channel", tail >= 1e-3,
+        check("false alarms on the control channel", tail >= MIN_TAIL,
               f"{hits} of {words.size} frames masked, target {rate:.3f}, tail probability {tail:.2g}")
     elif plan.get("control"):
         check("false alarms on the control channel", False, f"{report_path} is missing")

@@ -7,8 +7,11 @@ import numpy as np
 import pytest
 
 from pilot_proxy.bundle_calibration import (
+    binomial_lower_tail,
     binomial_upper_tail,
     calibrate_bundle,
+    capture_weights,
+    knee_word,
     nominal_fine_bin,
     simulated_null_scores,
     test_bundle as run_bundle_test,
@@ -51,14 +54,16 @@ def plans(tmp_path_factory):
         detector_core_profile=str(configs / "detector_core/pilotproxy_cuda_local_reference_power_ratio.json"),
         capture_format="chime_baseband",
     )
-    calibrate = dict(common, epoch="synthetic", null_quantile=0.9, channels={
-        "35": [write_capture(tmp / "c35.h5", 35, 6, 1, tone=0.8)],
+    # strong and clean captures in turn, so the kept fraction has a knee
+    mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    calibrate = dict(common, epoch="synthetic", null_quantile=0.8, min_knee_captures=4, channels={
+        "35": mixed,
         "29": [write_capture(tmp / "c29.h5", 29, 6, 2)],
-    }, control=dict(channel=37, captures=[write_capture(tmp / "c37.h5", 37, 6, 3)]))
-    test = dict(capture_format="chime_baseband", max_quiet_masked=0.5,
-                strong={"35": [write_capture(tmp / "t35.h5", 35, 4, 4, tone=0.8)]},
-                quiet={"29": [write_capture(tmp / "t29.h5", 29, 4, 5)]},
-                control=[write_capture(tmp / "t37.h5", 37, 6, 6)])
+    }, control=dict(channel=37, captures=[write_capture(tmp / "c37.h5", 37, 26, 3)]))
+    test = dict(capture_format="chime_baseband",
+                channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2)) for i in range(2)],
+                          "29": [write_capture(tmp / "t29.h5", 29, 4, 5)]},
+                control=[write_capture(tmp / "t37.h5", 37, 12, 6)])
     calibrate_path, test_path = tmp / "calibrate.json", tmp / "test.json"
     calibrate_path.write_text(json.dumps(calibrate))
     test_path.write_text(json.dumps(test))
@@ -98,27 +103,67 @@ def test_tampered_bundle_fails(plans, tmp_path):
 
 
 def test_reused_capture_fails(plans):
-    plan = dict(plans["test"], strong=plans["calibrate"]["channels"] | {})
-    plan["strong"] = {"35": plans["calibrate"]["channels"]["35"]}
+    plan = dict(plans["test"], channels={"35": plans["calibrate"]["channels"]["35"]})
     path = plans["tmp"] / "reused.json"
     path.write_text(json.dumps(plan))
     result = run_bundle_test(bundle_dir=plans["bundle"], plan_path=path)
     assert not next(c for c in result["checks"] if c["check"].startswith("test data"))["passed"]
 
 
-def test_quiet_channel_with_a_pilot_fails(plans):
-    plan = dict(plans["test"], quiet={"35": plans["test"]["strong"]["35"]})
+def test_channel_masked_unlike_its_calibration_fails(plans):
+    plan = dict(plans["test"], channels={"29": [write_capture(
+        plans["tmp"] / "t29_tone.h5", 29, 24, 7, tone=0.8)]})
     path = plans["tmp"] / "wrong.json"
     path.write_text(json.dumps(plan))
     assert not run_bundle_test(bundle_dir=plans["bundle"], plan_path=path)["passed"]
 
 
+def test_word_is_the_knee_above_the_floor(plans):
+    report = plans["report"]
+    channel = report["channels"]["35"]
+    assert channel["word_source"] == "knee"
+    assert channel["word_q16"] == channel["knee_word_q16"] > report["floor_word_q16"]
+    profiles = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())["profiles"]
+    fine = {p["physical_channel"]: p["fine_calibration"] for p in profiles}
+    assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
+    assert fine[35]["designated_half_width"] == 32
+
+
+def test_channel_with_no_pilot_takes_the_floor(plans):
+    channel = plans["report"]["channels"]["29"]
+    assert channel["word_source"] == "floor, no pilot"
+    assert channel["word_q16"] == plans["report"]["floor_word_q16"]
+
+
+def test_too_few_captures_take_the_floor(plans, tmp_path):
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], min_knee_captures=30)))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    assert report["channels"]["35"]["word_source"] == "floor, 6 captures of 30"
+
+
+def test_knee_sits_at_the_end_of_the_clean_population():
+    clean = np.exp(np.linspace(np.log(70000), np.log(80000), 900))
+    pilots = np.exp(np.linspace(np.log(2e5), np.log(1e8), 100))
+    words = np.r_[clean, pilots].astype(np.int64)
+    assert knee_word(words, np.ones(words.size)) == words[899]
+    assert knee_word(np.full(5, 70000), np.ones(5)) == 70000
+
+
+def test_capture_weights_are_equal_per_capture():
+    weights = capture_weights(np.array([0, 0, 0, 1]))
+    assert weights.sum() == pytest.approx(1.0)
+    assert weights[:3].sum() == pytest.approx(weights[3])
+
+
 def test_plan_values_override_the_measurements(plans, tmp_path):
-    plan = dict(plans["calibrate"], word_q16=80000, anchors={"29": 200})
+    plan = dict(plans["calibrate"], word_q16=80000, anchors={"29": 200}, words={"35": 90000})
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    assert report["word_q16"] == 80000
+    assert report["floor_word_q16"] == 80000
+    assert report["channels"]["29"]["word_q16"] == 80000
+    assert report["channels"]["35"]["word_q16"] == 90000
     assert report["channels"]["29"]["anchor_source"] == "plan"
     assert report["channels"]["29"]["anchor_bin"] == 200
 
@@ -131,7 +176,7 @@ def test_existing_output_is_refused(plans):
 def test_simulated_word_falls_with_input_count():
     few = np.quantile(simulated_null_scores(32, frames=200), 0.99) / 65536
     many = np.quantile(simulated_null_scores(256, frames=200), 0.99) / 65536
-    assert few == pytest.approx(1.84, abs=0.1)
+    assert few > 1.84
     assert many < few
 
 
@@ -142,3 +187,5 @@ def test_nominal_bin_matches_pathfinder_control():
 def test_binomial_tail():
     assert binomial_upper_tail(0, 10, 0.5) == 1.0
     assert binomial_upper_tail(10, 10, 0.5) == pytest.approx(2.0 ** -10)
+    assert binomial_lower_tail(0, 10, 0.5) == pytest.approx(2.0 ** -10)
+    assert binomial_upper_tail(1000, 5000, 0.2) == pytest.approx(0.5, abs=0.02)

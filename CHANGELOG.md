@@ -5,6 +5,7 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Bundle manifests record profile file names, so a bundle holds no local paths.
 - The CHIME era lists moved out of the repository. `projects/chime_atsc/eras/`
   holds empty stand-ins, and archive characterization needs the real lists copied in.
 - `pilot-proxy calibrate-bundle` builds a detect-only commissioning bundle from

@@ -1709,9 +1709,9 @@ def export_runtime_weight_bundle(
         "input_coordinate_system": detector_contract["input_coordinate_system"],
         "input_preprocessing": detector_contract["input_preprocessing"],
         "detector_contract_sha256": contract_digest,
-        "receiver_profile_path": str(receiver_profile_path),
+        "receiver_profile_path": Path(receiver_profile_path).name,
         "receiver_profile_hash": receiver_profile_hash(profile),
-        "detector_core_profile_path": str(detector_core_profile_path),
+        "detector_core_profile_path": Path(detector_core_profile_path).name,
         "physical_channels": channels,
         "num_profiles": int(len(channels)),
         "weight_profile_shape": [

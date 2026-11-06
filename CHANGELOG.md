@@ -5,6 +5,9 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `calibrate-bundle` and `test-bundle` read the `dtv_fine_powers` files of a detect-only
+  run, so calibration no longer needs baseband voltages, and empty capture lists give a
+  first bundle from the telescope parameters.
 - `calibrate-bundle` sets each channel's word at the knee of its kept fraction, over
   the 65-bin search of record, with a floor from the control channel. Channels with
   no pilot or fewer than 30 captures take the floor. `test-bundle` compares each

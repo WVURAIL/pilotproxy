@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from pilot_proxy.bundle_calibration import (
+    _load_fines,
     binomial_lower_tail,
     binomial_upper_tail,
     calibrate_bundle,
@@ -154,6 +155,48 @@ def test_capture_weights_are_equal_per_capture():
     weights = capture_weights(np.array([0, 0, 0, 1]))
     assert weights.sum() == pytest.approx(1.0)
     assert weights[:3].sum() == pytest.approx(weights[3])
+
+
+def write_run_file(path, channels, frames):
+    """Write one detect-only dtv_fine_powers file, with an idle row for the other channel."""
+    data = np.zeros((len(frames), len(channels), 3, 256), dtype=np.uint64)
+    data[:, 0] = frames
+    with h5py.File(path, "w") as handle:
+        handle["dtv_fine_powers_n0"] = data
+        handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = channels
+    return str(path)
+
+
+def test_detector_run_gives_the_bundle_of_its_captures(plans, tmp_path):
+    bundle = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())
+    bank = (plans["bundle"] / "weights.bin").read_bytes()
+    reverse = bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"])
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    files = []
+    for index, capture in enumerate(plans["calibrate"]["channels"]["35"]):
+        fines, _ = _load_fines([capture], "chime_baseband", row, bank, 128, reverse, None)
+        files.append(write_run_file(tmp_path / f"run_{index}.h5", [521, 614], fines))
+    plan = dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"]})
+    run = dict(plan, capture_format="dtv_fine_powers", channels={"35": [str(tmp_path / "run_*.h5")]},
+               control=None, num_inputs=INPUTS, word_q16=plans["report"]["floor_word_q16"])
+    plan.update(word_q16=plans["report"]["floor_word_q16"], control=None, num_inputs=INPUTS)
+    paths = tmp_path / "base.json", tmp_path / "run.json"
+    paths[0].write_text(json.dumps(plan))
+    paths[1].write_text(json.dumps(run))
+    base = calibrate_bundle(plan_path=paths[0], output_dir=tmp_path / "base")
+    other = calibrate_bundle(plan_path=paths[1], output_dir=tmp_path / "other")
+    for key in ("anchor_bin", "knee_word_q16", "frames", "captures", "masked_fraction"):
+        assert other["channels"]["35"][key] == base["channels"]["35"][key]
+    assert other["calibration_captures"] == sorted(files)
+
+
+def test_first_bundle_needs_no_captures(plans, tmp_path):
+    plan = dict(plans["calibrate"], channels={"29": [], "37": []}, control=None, num_inputs=32, null_quantile=0.99)
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    assert report["floor_eta"] > 1.84
+    assert report["channels"]["37"]["word_source"] == "floor, no captures"
 
 
 def test_plan_values_override_the_measurements(plans, tmp_path):

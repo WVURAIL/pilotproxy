@@ -7,6 +7,7 @@ the word the stage applies to the same voltages.
 """
 from __future__ import annotations
 
+import glob
 import json
 import math
 import shutil
@@ -27,6 +28,7 @@ from pilot_proxy.fine_decision import (
 from pilot_proxy.fxfft import fine_power_fx
 from pilot_proxy.json_utils import write_json_strict
 from pilot_proxy.runtime_bundle import (
+    CONTROL_PHYSICAL_CHANNEL,
     _write_sha256sums,
     export_runtime_weight_bundle,
     validate_runtime_weight_bundle,
@@ -83,6 +85,24 @@ def iter_blocks(path: str | Path, capture_format: str, channel_id: int, block_sa
         for frame in range(frames if max_frames is None else min(frames, max_frames)):
             lo = start + frame * block_samples
             yield read(lo, lo + block_samples)
+
+
+def iter_run_frames(path: str | Path, channel_id: int, max_frames: int | None = None) -> Iterator[np.ndarray]:
+    """Yield the uint64 [3, 256] fine powers of one channel from a dtv_fine_powers file of a detect-only run."""
+    import h5py
+
+    try:
+        import hdf5plugin  # noqa: F401  (registers the bitshuffle filter)
+    except ImportError:
+        pass
+    with h5py.File(path, "r") as handle:
+        data = handle[next(name for name in handle if name.startswith("dtv_fine_powers"))]
+        coarse = [int(c) for c in data.attrs["coarse_freq"]]
+        if channel_id not in coarse:
+            return
+        rows = data[:max_frames, coarse.index(channel_id)]
+    # a row of zeros was not tested
+    yield from (row for row in rows if row.any())
 
 
 def fine_powers(block: np.ndarray, weights: bytes, k: int, time_reverse: bool) -> np.ndarray:
@@ -205,15 +225,28 @@ def _weights(row: dict[str, Any], bank: bytes) -> bytes:
     return bank[offset:offset + int(row["weight_bank_nbytes"])]
 
 
+def _expand(paths: Sequence[str]) -> list[str]:
+    """Return the paths with any glob patterns expanded, in sorted order."""
+    found = []
+    for path in paths:
+        found += sorted(glob.glob(path)) if glob.has_magic(path) else [path]
+    return found
+
+
 def _load_fines(paths: Sequence[str], capture_format: str, row: dict[str, Any], bank: bytes, k: int,
                 time_reverse: bool, max_frames: int | None) -> tuple[list[np.ndarray], np.ndarray]:
     """Return the fine powers of every frame and the capture index of each."""
     weights = _weights(row, bank)
     channel_id = int(row["receiver_channel_id"])
     fines, captures = [], []
-    for index, path in enumerate(paths):
-        for block in iter_blocks(path, capture_format, channel_id, k * WINDOWS, max_frames):
-            fines.append(fine_powers(block, weights, k, time_reverse))
+    for index, path in enumerate(_expand(paths)):
+        if capture_format == "dtv_fine_powers":
+            frames = iter_run_frames(path, channel_id, max_frames)
+        else:
+            frames = (fine_powers(block, weights, k, time_reverse)
+                      for block in iter_blocks(path, capture_format, channel_id, k * WINDOWS, max_frames))
+        for frame in frames:
+            fines.append(frame)
             captures.append(index)
     if not fines:
         raise ValueError(f"no complete blocks for channel {row['physical_channel']}")
@@ -244,6 +277,17 @@ def _rows(bundle: dict[str, Any]) -> dict[int, dict[str, Any]]:
 
 def _bin_list(bulk: np.ndarray) -> list[int]:
     return [int(b) for b in np.flatnonzero(bulk)]
+
+
+def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: int, plan: dict[str, Any], quantile: float,
+                 note: str) -> dict[str, Any]:
+    # the control is decided and recorded, and never reaches a mask
+    status = "control" if channel == CONTROL_PHYSICAL_CHANNEL else "calibrated"
+    return dict(status=status, decision_version=FINE_DECISION_VERSION, cfar_multiplier_q16=word,
+                anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, cfar_rank=rank,
+                bulk_mask_words_hex=[f"0x{w:016x}" for w in pack_bulk_mask(bulk)],
+                provenance=dict(epochs=[str(plan.get("epoch", "unstated"))], source_product_sha256=[],
+                                null_quantile=quantile, note=f"{note} Detect-only, not a calibration."))
 
 
 def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
@@ -280,7 +324,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=default_rank(bulk),
                                   weights_hex=_weights(row, bank).hex(), frames=len(fines),
-                                  captures=[str(Path(p).resolve()) for p in control["captures"]])
+                                  captures=[str(Path(p).resolve()) for p in _expand(control["captures"])])
             source = "control channel"
         else:
             scores = simulated_null_scores(int(plan["num_inputs"]))
@@ -301,13 +345,23 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             row = rows[channel]
             nominal = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             paths = plan["channels"][str(channel)]
+            excluded = plan.get("exclude_bins", {}).get(str(channel), [])
+            if not paths:
+                # a first bundle, so the detector can record the data for the next one
+                anchor = int(plan.get("anchors", {}).get(str(channel), nominal))
+                bulk = _bulk(anchor, excluded)
+                values[channel] = _fine_values(channel, anchor, default_rank(bulk), bulk, floor, plan, quantile,
+                                               f"Word from the floor, no captures, floor from {source}.")
+                report_channels[str(channel)] = dict(
+                    anchor_bin=anchor, anchor_source="nominal", nominal_bin=nominal, frames=0, captures=0,
+                    word_q16=floor, eta=floor / Q16, word_source="floor, no captures")
+                continue
             fines, captures = _load_fines(paths, fmt, row, bank, k, reverse, max_frames)
             ratios = fine_ratio(np.stack(fines))
             window = (nominal + np.arange(-WINDOW_HALF_WIDTH, WINDOW_HALF_WIDTH + 1)) % FINE_BINS
             upper = np.quantile(ratios, 0.9, axis=0)
             anchor = int(window[np.argmax(upper[window])])
             given = plan.get("anchors", {}).get(str(channel))
-            excluded = plan.get("exclude_bins", {}).get(str(channel), [])
             bulk = _bulk(anchor, excluded)
             rank = default_rank(bulk)
             seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank)
@@ -343,13 +397,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             weights = capture_weights(captures[supported])
             masked = float(np.sum(weights[seen[supported] > word]))
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
-            values[channel] = dict(
-                status="calibrated", decision_version=FINE_DECISION_VERSION, cfar_multiplier_q16=word,
-                anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, cfar_rank=rank,
-                bulk_mask_words_hex=[f"0x{w:016x}" for w in pack_bulk_mask(bulk)],
-                provenance=dict(epochs=[str(plan.get("epoch", "unstated"))], source_product_sha256=[],
-                                null_quantile=quantile,
-                                note=f"Word from {word_source}, floor from {source}. Detect-only, not a calibration."))
+            values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile,
+                                           f"Word from {word_source}, floor from {source}.")
             report_channels[str(channel)] = dict(
                 anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines), captures=count,
                 word_q16=word, eta=word / Q16, word_source=word_source, knee_word_q16=knee,
@@ -373,7 +422,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
     report = dict(floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
                   null_quantile=quantile, floor_source=source, search_half_width=SEARCH_HALF_WIDTH,
                   null_scores=int(independent), channels=report_channels, control=control_record,
-                  calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values() for p in ps))
+                  calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values()
+                                             for p in _expand(ps)))
     write_json_strict(output_dir.with_name(output_dir.name + ".report.json"), report)
     return report
 
@@ -428,12 +478,12 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
     rows = _rows(bundle)
     fmt = plan.get("capture_format")
     max_frames = plan.get("max_frames_per_capture")
-    uncalibrated = [c for c, row in rows.items() if row["fine_calibration"]["status"] != "calibrated"]
+    uncalibrated = [c for c, row in rows.items() if row["fine_calibration"]["status"] not in ("calibrated", "control")]
     check("every bound channel has values", not uncalibrated, f"pending: {uncalibrated}")
 
     group = plan.get("channels", {})
-    used = {str(Path(p).resolve()) for ps in group.values() for p in ps}
-    used |= {str(Path(p).resolve()) for p in plan.get("control", [])}
+    used = {str(Path(p).resolve()) for ps in group.values() for p in _expand(ps)}
+    used |= {str(Path(p).resolve()) for p in _expand(plan.get("control", []))}
     reused = used & set(calibration.get("calibration_captures", []))
     reused |= used & set((calibration.get("control") or {}).get("captures", []))
     check("test data differ from calibration data", not reused, f"{len(reused)} shared captures")

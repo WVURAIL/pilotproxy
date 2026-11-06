@@ -25,17 +25,35 @@ No channel is qualified for masking yet. The stage refuses words marked `archive
 
 The same four steps are used for a first run, a new telescope, and a recalibration.
 
-1. Capture voltages on the telescope.
+1. Record data from the telescope.
 2. Calibrate, which builds a new bundle.
-3. Test the bundle on other captures.
+3. Test the bundle on data it was not made from.
 4. Deploy the bundle and run.
+
+The word stays fixed during a run. A threshold that followed the live data would rise with a stronger pilot and stop masking it, and the kept data would have no fixed definition. The live data instead feeds the next bundle, and each new bundle is tested before it is deployed.
 
 The loop is repeated after a change to the gains or quantization, the input population, or the frequency map of a node. It is also repeated when a pilot moves out of its marker bins or a new line appears in the reference bins, and both appear in `dtv_powers` before the mask changes.
 
 
-## Step 1: Capture
+## Step 1: Record
 
-Calibration needs baseband voltages of each channel to be bound and of a control channel with no pilot, on the block grid of the telescope. Channel 37 is the control for CHIME and the Pathfinder. Two formats are read today: CHIME baseband HDF5 (`chime_baseband`) and Pathfinder baseband HDF5 (`chord_baseband`). The CHIME upgrade has no voltage capture path of its own yet, so its first captures come from the CHIME/FRB baseband system.
+Calibration reads each channel to be bound and a control channel with no pilot. Channel 37 is the control for CHIME and the Pathfinder. The best source is the detector itself. With `dtv_record_fine_powers: true` and `dtv_write_enabled` on, a detect-only run writes the fine powers of every block to `dtv_fine_powers*.h5`, and each file of about 43 s counts as one capture (`dtv_fine_powers` in the plan). The channels and the control must be bound in the bundle of that run, and the voltages are not needed. Reading these files needs `h5py` and `hdf5plugin`. A run of a few days covers the changes over a day, and it gives far more than the 30 captures a knee needs.
+
+A telescope with no data starts from its parameters alone. A plan with empty capture lists, `"control": null` and `"num_inputs"` gives a first bundle at the simulated floor, and this bundle is enough to record the data for the next one:
+
+```json
+{
+  "receiver_profile": "configs/receiver_profiles/chord_pathfinder_dtv_fengine.json",
+  "detector_core_profile": "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json",
+  "capture_format": "dtv_fine_powers",
+  "epoch": "first bundle",
+  "channels": {"24": [], "37": []},
+  "control": null,
+  "num_inputs": 128
+}
+```
+
+Baseband voltages work as well, as CHIME baseband HDF5 (`chime_baseband`) or Pathfinder baseband HDF5 (`chord_baseband`). The CHIME upgrade has no voltage capture path of its own yet, and `config/chime/dtv.j2` does not write fine powers yet, so its first captures come from the CHIME/FRB baseband system.
 
 Merged Pathfinder files are chunked over all 6144 frequencies, so a read of one channel costs about 97 s per block on cx50. The channels are therefore extracted once, to a small file on `/scratch`:
 
@@ -67,7 +85,7 @@ Calibration and testing use different epochs, at different times of day. The nul
 pilot-proxy calibrate-bundle --plan calibrate.json --output-dir bundle
 ```
 
-Paths to profiles are relative to the plan. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first floor. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, so its anchor is the expected bin and a capture with the pilot on should replace it. Lines in the reference bins are added to `exclude_bins`.
+Paths to profiles are relative to the plan, and capture lists take glob patterns such as `"/scratch/dtv/run1/dtv_fine_powers*.h5"`. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first floor. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, so its anchor is the expected bin and a capture with the pilot on should replace it. Lines in the reference bins are added to `exclude_bins`.
 
 The report gives `word_source` for each channel. The word is the knee when the pilot was seen in at least 30 captures and the knee lies above the floor, and in any other case it is the floor. A first bundle from a few captures therefore holds the floor on every channel, which is enough for a detect-only run. Its `knee_interval_q16` gives the 16th and 84th percentiles of the knee over resampled captures, and a wide interval means more captures are needed.
 

@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
 
-from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
+from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
 from pilot_proxy.detector_contract import (
     WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,

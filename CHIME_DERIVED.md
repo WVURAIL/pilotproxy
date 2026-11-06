@@ -21,11 +21,6 @@ GNU Radio benches, the LimeSDR lab runs, the designed weight banks, RFIsher's fo
 | `docs/evidence/F1_INVENTORY.md` | Index of the two packages above (file counts, bytes, manifest SHA-256) |
 | `data/provenance/combine_subset_20260714/` (3 files) | Stack-subset decision record: the count of archive events per freq_id presence signature (190 signatures with counts, no event numbers) and the selected 16-channel block |
 | `data/provenance/dissertation_summary_v1.json`, `_v2.json`, `_v3.json` | Curated per-channel and per-epoch values of the archive trawl (mask fractions, retained frames, status) |
-| `projects/chime_atsc/eras/author_eras_2026-09-23.json` | Era boundaries per channel, dated from the archive's monthly spectrograms |
-| `projects/chime_atsc/eras/transmitter_off.json` | Transmitter on/off months per channel, read from the archive's pilot series, with the external record found for each |
-| `projects/chime_atsc/eras/power_eras_2026-10-04.json` | Historical power-era proposals per channel (current-era months) |
-| `projects/chime_atsc/eras/on_off_2026-10-14/` (3 files) | On/off era list: monthly pilot levels per channel (`monthly_levels.json`), their Bayesian Blocks (`blocks.json`) and the on/off eras (`eras.json`) |
-| `projects/chime_atsc/eras/line_identity_2026-10-17/` (4 files) | The era list the paper uses: the same levels and blocks with the pilot line's monthly offsets (`monthly_lines.json`) and the eras cut by on/off steps and by the line's identity (`eras.json`) |
 | `tests/data/threshold_decisions_2026-10-12.json` | Threshold decisions per channel: deployed word or reason not deployed, shelf, exclusions and historical conversion inputs; a test golden for the deployment compiler |
 
 ## Inline quotes
@@ -45,13 +40,21 @@ They stay in both cuts. Review them before any public release:
   Tests that need the withheld files skip in the code-only cut, but their source
   still holds these values.
 
+## Era lists
+
+The era lists are held by the WVU RAIL group and are not in this tree. The two files the
+project profile reads, `projects/chime_atsc/eras/author_eras_2026-09-23.json` and
+`transmitter_off.json`, are empty stand-ins, so tests of era values skip. The detector,
+bundle export, `calibrate-bundle` and `test-bundle` do not use them. To repeat the archive
+characterization, copy the real lists over the stand-ins.
+
 ## Code-only cut
 
 `python tools/make_code_only_cut.py OUTPUT_DIR` (or `make code-only-cut OUT=OUTPUT_DIR`)
 copies the tree without the paths below. The project profile needs an era list, so the
-cut writes empty stand-ins for `author_eras_2026-09-23.json` and `transmitter_off.json`
-(no dated channel, no off interval). Tests that read a withheld file, or a value only the
-withheld era list has, skip with the reason "withheld from the code-only cut".
+cut keeps the empty stand-ins for `author_eras_2026-09-23.json` and `transmitter_off.json`
+(no dated channel, no off interval). Tests that read a withheld file skip with the reason
+"withheld from the code-only cut".
 
 ```
 docs/evidence/ca_os_archive_bulk_2026-09-29/
@@ -62,10 +65,5 @@ data/provenance/combine_subset_20260714/
 data/provenance/dissertation_summary_v1.json
 data/provenance/dissertation_summary_v2.json
 data/provenance/dissertation_summary_v3.json
-projects/chime_atsc/eras/author_eras_2026-09-23.json
-projects/chime_atsc/eras/transmitter_off.json
-projects/chime_atsc/eras/power_eras_2026-10-04.json
-projects/chime_atsc/eras/on_off_2026-10-14/
-projects/chime_atsc/eras/line_identity_2026-10-17/
 tests/data/threshold_decisions_2026-10-12.json
 ```

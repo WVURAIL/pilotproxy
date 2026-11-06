@@ -5,6 +5,8 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The CHIME era lists moved out of the repository. `projects/chime_atsc/eras/`
+  holds empty stand-ins, and archive characterization needs the real lists copied in.
 - `pilot-proxy calibrate-bundle` builds a detect-only commissioning bundle from
   captures, and `pilot-proxy test-bundle` checks a bundle on other captures.
   `docs/RUNNING_THE_DETECTOR.md` describes the capture, calibrate, test and deploy

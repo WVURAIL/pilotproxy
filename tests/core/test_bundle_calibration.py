@@ -75,6 +75,12 @@ def test_strong_pilot_is_measured_and_quiet_channel_is_nominal(plans):
     assert channels["29"]["anchor_source"] == "nominal"
 
 
+def test_manifest_holds_no_local_paths(plans):
+    manifest = json.loads((plans["bundle"] / "weights.manifest.json").read_text())
+    assert manifest["receiver_profile_path"] == "chime_dtv_fengine.json"
+    assert "/" not in manifest["detector_core_profile_path"]
+
+
 def test_bundle_passes_on_other_captures(plans):
     result = run_bundle_test(bundle_dir=plans["bundle"], plan_path=plans["test_path"])
     assert result["passed"], result

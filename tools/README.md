@@ -11,3 +11,4 @@
 - Archive health: audit_per_pilot.py, audit_local_archive_run.py.
 
 Run each command with --help. Store new outputs separately from existing data.
+- Bundle workflow: extract_baseband_channels.py, analyze_dtv_run.py.

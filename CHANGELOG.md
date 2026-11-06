@@ -5,6 +5,10 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `pilot-proxy calibrate-bundle` builds a detect-only commissioning bundle from
+  captures, and `pilot-proxy test-bundle` checks a bundle on other captures.
+  `docs/RUNNING_THE_DETECTOR.md` describes the capture, calibrate, test and deploy
+  loop. `tools/extract_baseband_channels.py` and `tools/analyze_dtv_run.py` support it.
 - **Breaking threshold-model change:** selection now maximizes retention under
   both an upper first-order bias criterion and a checked finite-power limit.
   It uses RFIsher schema-v3 tables and the declared model normalization

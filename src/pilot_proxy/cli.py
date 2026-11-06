@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
 
+from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
 from pilot_proxy.detector_contract import (
     WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
@@ -672,6 +673,21 @@ def _cmd_validate_runtime_weight_bundle(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _cmd_calibrate_bundle(args: argparse.Namespace) -> None:
+    report = calibrate_bundle(plan_path=args.plan, output_dir=args.output_dir)
+    print(f"word {report['word_q16']} (eta {report['eta']:.4f}) from {report['word_source']}")
+    for channel, row in report["channels"].items():
+        print(f"channel {channel}: anchor {row['anchor_bin']} ({row['anchor_source']})")
+
+
+def _cmd_test_bundle(args: argparse.Namespace) -> None:
+    report = test_bundle(bundle_dir=args.bundle_dir, plan_path=args.plan, output_json=args.output_json)
+    for row in report["checks"]:
+        print(f"{'PASS' if row['passed'] else 'FAIL'}  {row['check']}: {row['detail']}")
+    if not report["passed"]:
+        raise SystemExit(1)
+
+
 def _cmd_list_channels(args: argparse.Namespace) -> None:
     weights = DetectorWeightBank(explicit_path=args.weights_path)
     layouts: list[Mapping[str, Any]] = []
@@ -1228,6 +1244,23 @@ def build_parser() -> argparse.ArgumentParser:
                                  help="Bundle directory to validate.")
     validate_bundle.add_argument("--output-json", type=Path, default=None)
     validate_bundle.set_defaults(func=_cmd_validate_runtime_weight_bundle)
+
+    calibrate = _add_command(
+        "calibrate-bundle",
+        "Build a detect-only commissioning bundle from captures.",
+    )
+    calibrate.add_argument("--plan", type=Path, required=True, help="Calibration plan JSON.")
+    calibrate.add_argument("--output-dir", type=Path, required=True, help="New bundle directory.")
+    calibrate.set_defaults(func=_cmd_calibrate_bundle)
+
+    test = _add_command(
+        "test-bundle",
+        "Check a bundle on captures it was not made from.",
+    )
+    test.add_argument("--bundle-dir", type=Path, required=True, help="Bundle directory to test.")
+    test.add_argument("--plan", type=Path, required=True, help="Test plan JSON.")
+    test.add_argument("--output-json", type=Path, default=None)
+    test.set_defaults(func=_cmd_test_bundle)
 
     fine_capture = _add_command(
         "replay-fine-capture",

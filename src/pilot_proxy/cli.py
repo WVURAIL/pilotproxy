@@ -47,6 +47,7 @@ from pilot_proxy.paths import (
     SOURCE_CHECKOUT_ROOT,
     resolve_user_path,
 )
+from pilot_proxy.run_spectrogram import run_spectrogram, write_run_spectrogram
 from pilot_proxy.runtime_bundle import (
     export_runtime_weight_bundle,
     validate_runtime_weight_bundle,
@@ -673,6 +674,15 @@ def _cmd_validate_runtime_weight_bundle(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _cmd_run_spectrogram(args: argparse.Namespace) -> None:
+    for channel in args.channel:
+        result = run_spectrogram(bundle_dir=args.bundle_dir, runs=args.run, channel=channel,
+                                 chunk_seconds=args.chunk_seconds)
+        data, figure = write_run_spectrogram(result, args.output_dir)
+        print(f"channel {channel}: {int(result['kept'].sum())} of {int(result['frames'].sum())} frames kept, "
+              f"{data}, {figure}")
+
+
 def _cmd_calibrate_bundle(args: argparse.Namespace) -> None:
     report = calibrate_bundle(plan_path=args.plan, output_dir=args.output_dir)
     print(f"floor {report['floor_word_q16']} (eta {report['floor_eta']:.4f}) from {report['floor_source']}")
@@ -1253,6 +1263,17 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--plan", type=Path, required=True, help="Calibration plan JSON.")
     calibrate.add_argument("--output-dir", type=Path, required=True, help="New bundle directory.")
     calibrate.set_defaults(func=_cmd_calibrate_bundle)
+
+    spectrogram = _add_command(
+        "run-spectrogram",
+        "Plot the fine powers of a detect-only run with and without the mask.",
+    )
+    spectrogram.add_argument("--bundle-dir", type=Path, required=True, help="Bundle of the run.")
+    spectrogram.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns.")
+    spectrogram.add_argument("--channel", type=int, nargs="+", required=True, help="Physical channels.")
+    spectrogram.add_argument("--chunk-seconds", type=float, default=10.0)
+    spectrogram.add_argument("--output-dir", type=Path, required=True)
+    spectrogram.set_defaults(func=_cmd_run_spectrogram)
 
     test = _add_command(
         "test-bundle",

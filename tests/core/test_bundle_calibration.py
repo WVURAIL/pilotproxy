@@ -17,6 +17,7 @@ from pilot_proxy.bundle_calibration import (
     simulated_null_scores,
     test_bundle as run_bundle_test,
 )
+from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_run_spectrogram
 
 ROOT = Path(__file__).resolve().parents[2]
 BLOCK = 16384
@@ -188,6 +189,25 @@ def test_detector_run_gives_the_bundle_of_its_captures(plans, tmp_path):
     for key in ("anchor_bin", "knee_word_q16", "frames", "captures", "masked_fraction"):
         assert other["channels"]["35"][key] == base["channels"]["35"][key]
     assert other["calibration_captures"] == sorted(files)
+
+
+def test_spectrogram_removes_masked_frames(plans, tmp_path):
+    bundle = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    anchor = row["fine_calibration"]["anchor_bin"]
+    rng = np.random.default_rng(7)
+    quiet = rng.integers(900, 1100, size=(48, 3, 256)).astype(np.uint64)
+    loud = quiet.copy()
+    loud[:16, 0, anchor] *= np.uint64(1000)
+    run = write_run_file(tmp_path / "run.h5", [521, 614], loud)
+    result = run_spectrogram(bundle_dir=plans["bundle"], runs=[run], channel=35, chunk_seconds=16 * FRAME_SECONDS)
+    assert result["frames"].tolist() == [16, 16, 16]
+    assert result["kept"].tolist() == [0, 16, 16]
+    assert result["all_frames"][0, anchor] > 100 * result["all_frames"][1, anchor]
+    assert np.isnan(result["kept_frames"][0]).all()
+    assert np.array_equal(result["kept_frames"][1], result["all_frames"][1])
+    data, figure = write_run_spectrogram(result, tmp_path / "out")
+    assert data.exists() and figure.exists()
 
 
 def test_first_bundle_needs_no_captures(plans, tmp_path):

@@ -178,6 +178,14 @@ The first check is the log. Each pilot must have a `bound ATSC physical channel`
 
 `tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support, and the masked fraction of each channel. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`.
 
+A run with `dtv_record_fine_powers` also gives a spectrogram of each bound channel with and without the mask, in 10 s chunks:
+
+```bash
+pilot-proxy run-spectrogram --bundle-dir bundle --run "/scratch/dtv/run1/dtv_fine_powers*.h5" --channel 18 24 29 37 --output-dir spectrograms
+```
+
+The decision is recomputed from the fine powers and the bundle word, so the control shows what its word would remove. A chunk with no kept frames is grey. The axis is recorded time, so a gap in the recording does not appear.
+
 To remove the detector, Kotekan is restarted without `dtv_enabled`, and the rendered config then has no detector stages. A change of bundle, word, or channel list always needs a restart.
 
 

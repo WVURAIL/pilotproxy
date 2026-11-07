@@ -1,4 +1,5 @@
 """Calibrate a bundle from synthetic captures, then test it."""
+import csv
 import json
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from pilot_proxy.bundle_calibration import (
     test_bundle as run_bundle_test,
 )
 from pilot_proxy.run_plans import write_run_plans
-from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_run_spectrogram
+from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
 
 ROOT = Path(__file__).resolve().parents[2]
 BLOCK = 16384
@@ -209,6 +210,13 @@ def test_spectrogram_removes_masked_frames(plans, tmp_path):
     assert np.array_equal(result["kept_frames"][1], result["all_frames"][1])
     data, figure = write_run_spectrogram(result, tmp_path / "out")
     assert data.exists() and figure.exists()
+    # 16 of 48 frames, in one stretch that crosses these 5-frame chunks
+    short = run_spectrogram(bundle_dir=plans["bundle"], runs=[run], channel=35, chunk_seconds=5 * FRAME_SECONDS)
+    assert short["longest_masked_frames"] == 16
+    summary = list(csv.DictReader(write_masked_summary([short], tmp_path / "out").open()))
+    assert summary[0]["channel"] == "35" and summary[0]["masked_frames"] == "16"
+    assert summary[0]["masked_percent"] == "33.33"
+    assert float(summary[0]["longest_masked_seconds"]) == pytest.approx(16 * FRAME_SECONDS, abs=0.005)
 
 
 def test_run_plans_split_each_channel_in_time(plans, tmp_path):

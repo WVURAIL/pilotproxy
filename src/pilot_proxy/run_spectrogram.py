@@ -1,6 +1,7 @@
 """Fine-power spectrograms of a detect-only run, with and without the detector mask."""
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Any, Sequence
@@ -35,8 +36,10 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
 
     every, kept, frames, kept_frames = [], [], [], []
     pending: list[np.ndarray] = []
+    streak = longest = 0
 
     def flush() -> None:
+        nonlocal streak, longest
         # the mask is recomputed so the control, whose stage mask stays zero, can be shown too
         block = np.stack(pending)
         keep = required_words(pending, anchor_bin=anchor, bulk=bulk, rank=rank) <= word
@@ -45,6 +48,10 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
         kept.append(target[keep].mean(axis=0) if keep.any() else np.full(target.shape[1], np.nan))
         frames.append(len(pending))
         kept_frames.append(int(keep.sum()))
+        # a masked stretch can cross chunks
+        for frame_kept in keep:
+            streak = 0 if frame_kept else streak + 1
+            longest = max(longest, streak)
         pending.clear()
 
     for path in _expand(runs):
@@ -59,7 +66,24 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
     frames = np.asarray(frames)
     return dict(channel=channel, anchor_bin=anchor, word_q16=word, chunk_seconds=per_chunk * FRAME_SECONDS,
                 all_frames=np.stack(every), kept_frames=np.stack(kept), frames=frames,
-                kept=np.asarray(kept_frames), minutes=np.cumsum(frames) * FRAME_SECONDS / 60.0)
+                kept=np.asarray(kept_frames), longest_masked_frames=longest,
+                minutes=np.cumsum(frames) * FRAME_SECONDS / 60.0)
+
+
+def write_masked_summary(results: Sequence[dict[str, Any]], output_dir: Path) -> Path:
+    """Write one row per channel with its masked percent and longest masked stretch."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "masked_summary.csv"
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["channel", "word_q16", "frames", "masked_frames", "masked_percent", "longest_masked_seconds"])
+        for result in results:
+            frames = int(result["frames"].sum())
+            masked = frames - int(result["kept"].sum())
+            writer.writerow([result["channel"], result["word_q16"], frames, masked, f"{100.0 * masked / frames:.2f}",
+                             f"{result['longest_masked_frames'] * FRAME_SECONDS:.2f}"])
+    return path
 
 
 def write_run_spectrogram(result: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:

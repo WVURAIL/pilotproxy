@@ -205,6 +205,8 @@ pilot-proxy run-spectrogram --bundle-dir bundle --run "/scratch/dtv/run1/dtv_fin
 
 The decision is recomputed from the fine powers and the bundle word, so the control shows what its word would remove. A chunk with no kept frames is grey. The axis is recorded time, so a gap in the recording does not appear.
 
+The same command writes `masked_summary.csv`, with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
+
 To remove the detector, Kotekan is restarted without `dtv_enabled`, and the rendered config then has no detector stages. A change of bundle, word, or channel list always needs a restart.
 
 

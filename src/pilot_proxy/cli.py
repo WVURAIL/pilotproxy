@@ -48,7 +48,11 @@ from pilot_proxy.paths import (
     resolve_user_path,
 )
 from pilot_proxy.run_plans import CORE_PROFILE, write_run_plans
-from pilot_proxy.run_spectrogram import run_spectrogram, write_run_spectrogram
+from pilot_proxy.run_spectrogram import (
+    run_spectrogram,
+    write_masked_summary,
+    write_run_spectrogram,
+)
 from pilot_proxy.runtime_bundle import (
     export_runtime_weight_bundle,
     validate_runtime_weight_bundle,
@@ -684,12 +688,15 @@ def _cmd_plan_run(args: argparse.Namespace) -> None:
 
 
 def _cmd_run_spectrogram(args: argparse.Namespace) -> None:
+    results = []
     for channel in args.channel:
         result = run_spectrogram(bundle_dir=args.bundle_dir, runs=args.run, channel=channel,
                                  chunk_seconds=args.chunk_seconds)
         data, figure = write_run_spectrogram(result, args.output_dir)
+        results.append(result)
         print(f"channel {channel}: {int(result['kept'].sum())} of {int(result['frames'].sum())} frames kept, "
               f"{data}, {figure}")
+    print(write_masked_summary(results, args.output_dir))
 
 
 def _cmd_calibrate_bundle(args: argparse.Namespace) -> None:

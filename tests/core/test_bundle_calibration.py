@@ -199,6 +199,18 @@ def test_first_bundle_needs_no_captures(plans, tmp_path):
     assert report["channels"]["37"]["word_source"] == "floor, no captures"
 
 
+def test_control_channel_can_be_bound(plans, tmp_path):
+    captures = plans["calibrate"]["control"]["captures"]
+    plan = dict(plans["calibrate"], channels={**plans["calibrate"]["channels"], "37": captures})
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    status = {row["physical_channel"]: row["fine_calibration"]["status"] for row in rows}
+    assert status == {29: "calibrated", 35: "calibrated", 37: "control"}
+    assert report["channels"]["37"]["word_q16"] == report["floor_word_q16"]
+
+
 def test_plan_values_override_the_measurements(plans, tmp_path):
     plan = dict(plans["calibrate"], word_q16=80000, anchors={"29": 200}, words={"35": 90000})
     path = tmp_path / "plan.json"

@@ -144,6 +144,7 @@ To enable the detector, these variables are set when `config/chord/pathfinder.j2
 dtv_enabled: true
 dtv_apply_mask: false
 dtv_runtime_bundle_dir: /opt/kotekan/dtv/<bundle>
+dtv_record_fine_powers: true
 dtv_output_dir: /scratch/dtv/<run>
 ```
 
@@ -158,6 +159,24 @@ curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true}' <node>:1
 ```
 
 A POST sent before the stages start has no effect, so the log line `PilotProxy detector on` must be seen. A restart returns both switches to off. The same POST with `"enabled": false` stops either one.
+
+The mask, powers, and fine support go to the recv node and are written under `/mnt/cs00/data/dtv`, one file for each half and window of about 43 s. A recv restart numbers its files from 0 and overwrites earlier files, so the directory is moved or renamed before a restart. Fine powers hold all 384 frequencies, about 900 MB/s over 16 halves, so they stay on each node under `dtv_output_dir`. Only the bound rows hold data, so the compressed files stay small. Each run gets its own `dtv_output_dir`.
+
+After a run, the fine powers are copied from the nodes that hold the bound channels, and `plan-run` splits them in time, with the first two thirds for calibration and the rest for the test:
+
+```bash
+pilot-proxy plan-run --bundle-dir bundle --run "run1/dtv_fine_powers*.h5" --epoch "2026-11 Pathfinder shakedown" --output-dir run1/plans
+```
+
+```bash
+pilot-proxy calibrate-bundle --plan run1/plans/calibrate.json --output-dir run1/bundle
+```
+
+```bash
+pilot-proxy test-bundle --bundle-dir run1/bundle --plan run1/plans/test.json --output-json run1/bundle.test.json
+```
+
+The bundle of the run must bind the control, or `plan-run` stops, because the run then gives no floor. A pilot that fades during the run can fail the masked fraction check on the last third, so a failure on a weak channel is read against its spectrogram before the word is changed.
 
 ### CHIME upgrade
 

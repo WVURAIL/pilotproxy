@@ -310,7 +310,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
     max_frames = plan.get("max_frames_per_capture")
 
     with tempfile.TemporaryDirectory() as temp:
-        wanted = channels + ([int(control["channel"])] if control else [])
+        wanted = sorted({*channels, *([int(control["channel"])] if control else [])})
         bundle, bank = _export(plan, base, wanted, Path(temp) / "all")
         rows = _rows(bundle)
         reverse = bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"])

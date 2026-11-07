@@ -5,6 +5,7 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `plan-run` splits a detect-only run into a calibration plan and a test plan.
 - `run-spectrogram` plots the fine powers of a detect-only run with and without the mask.
 - `calibrate-bundle` accepts the control channel as a bound channel, so a run records
   it for the next calibration.

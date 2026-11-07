@@ -47,6 +47,7 @@ from pilot_proxy.paths import (
     SOURCE_CHECKOUT_ROOT,
     resolve_user_path,
 )
+from pilot_proxy.run_plans import CORE_PROFILE, write_run_plans
 from pilot_proxy.run_spectrogram import run_spectrogram, write_run_spectrogram
 from pilot_proxy.runtime_bundle import (
     export_runtime_weight_bundle,
@@ -674,6 +675,14 @@ def _cmd_validate_runtime_weight_bundle(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _cmd_plan_run(args: argparse.Namespace) -> None:
+    plans = write_run_plans(bundle_dir=args.bundle_dir, runs=args.run, output_dir=args.output_dir, epoch=args.epoch,
+                            receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
+                            null_quantile=args.null_quantile)
+    for channel, paths in plans["calibrate"]["channels"].items():
+        print(f"channel {channel}: {len(paths)} files to calibrate, {len(plans['test']['channels'][channel])} to test")
+
+
 def _cmd_run_spectrogram(args: argparse.Namespace) -> None:
     for channel in args.channel:
         result = run_spectrogram(bundle_dir=args.bundle_dir, runs=args.run, channel=channel,
@@ -1263,6 +1272,19 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--plan", type=Path, required=True, help="Calibration plan JSON.")
     calibrate.add_argument("--output-dir", type=Path, required=True, help="New bundle directory.")
     calibrate.set_defaults(func=_cmd_calibrate_bundle)
+
+    plan_run = _add_command(
+        "plan-run",
+        "Split a detect-only run into calibrate.json and test.json.",
+    )
+    plan_run.add_argument("--bundle-dir", type=Path, required=True, help="Bundle of the run.")
+    plan_run.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns.")
+    plan_run.add_argument("--output-dir", type=Path, required=True)
+    plan_run.add_argument("--epoch", required=True, help="When and where the run was recorded.")
+    plan_run.add_argument("--receiver-profile", type=Path, default=None)
+    plan_run.add_argument("--detector-core-profile", type=Path, default=Path(CORE_PROFILE))
+    plan_run.add_argument("--null-quantile", type=float, default=0.99)
+    plan_run.set_defaults(func=_cmd_plan_run)
 
     spectrogram = _add_command(
         "run-spectrogram",

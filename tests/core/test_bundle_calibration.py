@@ -17,6 +17,7 @@ from pilot_proxy.bundle_calibration import (
     simulated_null_scores,
     test_bundle as run_bundle_test,
 )
+from pilot_proxy.run_plans import write_run_plans
 from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_run_spectrogram
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -208,6 +209,29 @@ def test_spectrogram_removes_masked_frames(plans, tmp_path):
     assert np.array_equal(result["kept_frames"][1], result["all_frames"][1])
     data, figure = write_run_spectrogram(result, tmp_path / "out")
     assert data.exists() and figure.exists()
+
+
+def test_run_plans_split_each_channel_in_time(plans, tmp_path):
+    captures = plans["calibrate"]["control"]["captures"]
+    plan = dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    frames = np.ones((2, 3, 256), dtype=np.uint64)
+    for index in range(6):
+        name = write_run_file(tmp_path / f"run_{index}.h5", [521, 491], frames)
+        with h5py.File(name, "a") as handle:
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = 1000 - index
+    # another half, with no bound channel
+    write_run_file(tmp_path / "run_other.h5", [614, 700], frames)
+    result = write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "out",
+                             epoch="synthetic", receiver_profile=Path(plans["calibrate"]["receiver_profile"]))
+    first, last = result["calibrate"]["channels"]["37"], result["test"]["channels"]["37"]
+    assert [Path(p).name for p in first] == ["run_5.h5", "run_4.h5", "run_3.h5", "run_2.h5"]
+    assert [Path(p).name for p in last] == ["run_1.h5", "run_0.h5"]
+    assert result["calibrate"]["control"] == dict(channel=37, captures=first)
+    assert result["test"]["control"] == last
+    assert json.loads((tmp_path / "out" / "test.json").read_text()) == result["test"]
 
 
 def test_first_bundle_needs_no_captures(plans, tmp_path):

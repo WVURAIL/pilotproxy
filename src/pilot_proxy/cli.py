@@ -48,6 +48,7 @@ from pilot_proxy.paths import (
     resolve_user_path,
 )
 from pilot_proxy.run_plans import CORE_PROFILE, write_run_plans
+from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import (
     run_spectrogram,
     write_masked_summary,
@@ -699,6 +700,14 @@ def _cmd_run_spectrogram(args: argparse.Namespace) -> None:
     print(write_masked_summary(results, args.output_dir))
 
 
+def _cmd_run_scores(args: argparse.Namespace) -> None:
+    for channel in args.channel:
+        result = build_run_scores(bundle_dir=args.bundle_dir, runs=args.run, channel=channel, output_dir=args.output_dir,
+                                  event_seconds=args.event_seconds, jobs=args.jobs)
+        print(f"channel {channel}: {result['frames']} frames, {result['events']} events, "
+              f"{result['masked_percent']}% masked at the bundle word")
+
+
 def _cmd_calibrate_bundle(args: argparse.Namespace) -> None:
     report = calibrate_bundle(plan_path=args.plan, output_dir=args.output_dir)
     print(f"floor {report['floor_word_q16']} (eta {report['floor_eta']:.4f}) from {report['floor_source']}")
@@ -1303,6 +1312,18 @@ def build_parser() -> argparse.ArgumentParser:
     spectrogram.add_argument("--chunk-seconds", type=float, default=10.0)
     spectrogram.add_argument("--output-dir", type=Path, required=True)
     spectrogram.set_defaults(func=_cmd_run_spectrogram)
+
+    scores = _add_command(
+        "run-scores",
+        "Write the threshold rule's score cache from a detect-only run.",
+    )
+    scores.add_argument("--bundle-dir", type=Path, required=True, help="Bundle of the run.")
+    scores.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns.")
+    scores.add_argument("--channel", type=int, nargs="+", required=True, help="Physical channels.")
+    scores.add_argument("--event-seconds", type=float, default=10.0, help="Chunk that clusters the error.")
+    scores.add_argument("--jobs", type=int, default=1, help="Files scored in parallel.")
+    scores.add_argument("--output-dir", type=Path, required=True)
+    scores.set_defaults(func=_cmd_run_scores)
 
     test = _add_command(
         "test-bundle",

@@ -42,7 +42,7 @@ def _file_scores(path: str, channel_id: int, anchor: int, bulk: np.ndarray, rank
     # zeros were not tested, and 0xFF fills a block missing from the concat window
     present = np.flatnonzero(rows.any(axis=(1, 2)) & ~(rows == MISSING).all(axis=(1, 2)))
     rows = rows[present]
-    return dict(words=required_words(list(rows), anchor_bin=anchor, bulk=bulk, rank=rank),
+    return dict(words=required_words(rows, anchor_bin=anchor, bulk=bulk, rank=rank),
                 powers=rows.sum(axis=2, dtype=np.uint64),
                 time=(start_ns + present * BLOCK_SAMPLES * SAMPLE_NS) * 1e-9)
 

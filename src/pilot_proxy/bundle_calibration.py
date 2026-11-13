@@ -41,9 +41,9 @@ GUARD_FINE_BINS = 1
 Q16 = 65536
 # 65 designated bins, the search of record
 SEARCH_HALF_WIDTH = 32
-# the fewest kept captures the archive rule accepts
 # above this share of frames with a pilot, the knee has no clean frames to bend from
 ALWAYS_ON_SHARE = 0.9
+# the fewest kept captures the archive rule accepts
 MIN_KNEE_CAPTURES = 30
 BOOTSTRAP_REPLICATES = 200
 # chance of the hits under the null, kept small for the search over the window
@@ -51,6 +51,12 @@ MAX_LINE_TAIL = 1e-4
 MIN_TAIL = 1e-3
 MIN_SIMULATED_FRAMES = 2000
 MAX_SCORE = (1 << 63) - 1
+# frames scored together, about 0.2 GB of float temporaries
+WORD_CHUNK = 65536
+# control frames scored together, 33 kB each in the pseudo-search peaks
+NULL_CHUNK = 4096
+# relative float gap below which a frame is scored exactly, far above the 1e-15 error of the float word
+FLOAT_MARGIN = 1e-12
 BUNDLE_FILES = ("detector_contract.json", "pilot_profiles.json", "weights.bin", "weights.manifest.json")
 
 
@@ -91,6 +97,11 @@ def iter_blocks(path: str | Path, capture_format: str, channel_id: int, block_sa
 
 def iter_run_frames(path: str | Path, channel_id: int, max_frames: int | None = None) -> Iterator[np.ndarray]:
     """Yield the uint64 [3, 256] fine powers of one channel from a dtv_fine_powers file of a detect-only run."""
+    yield from run_rows(path, channel_id, max_frames)
+
+
+def run_rows(path: str | Path, channel_id: int, max_frames: int | None = None) -> np.ndarray:
+    """Return the uint64 [N, 3, 256] tested fine powers of one channel from a dtv_fine_powers file."""
     import h5py
 
     try:
@@ -102,11 +113,11 @@ def iter_run_frames(path: str | Path, channel_id: int, max_frames: int | None = 
         # the attribute is dropped when every row is unused (-1)
         coarse = [int(c) for c in data.attrs.get("coarse_freq", [])]
         if channel_id not in coarse:
-            return
+            return np.empty((0, 3, FINE_BINS), np.uint64)
         rows = data[:max_frames, coarse.index(channel_id)]
     # zeros were not tested, and 0xFF fills a block missing from the concat window
     missing = np.iinfo(np.uint64).max
-    yield from (row for row in rows if row.any() and not (row == missing).all())
+    return rows[rows.any(axis=(1, 2)) & ~(rows == missing).all(axis=(1, 2))]
 
 
 def fine_powers(block: np.ndarray, weights: bytes, k: int, time_reverse: bool) -> np.ndarray:
@@ -140,16 +151,66 @@ def default_rank(bulk: np.ndarray) -> int:
     return (int(np.count_nonzero(bulk)) - 1) // 2
 
 
-def required_words(fines: Sequence[np.ndarray], *, anchor_bin: int, bulk: np.ndarray, rank: int) -> np.ndarray:
-    """Return each frame's smallest keeping word, -1 where the rank has too little support."""
-    words = []
-    for fine in fines:
-        result = fine_required_multiplier_q16(
-            np.ascontiguousarray(fine), anchor_bin=anchor_bin, designated_half_width=SEARCH_HALF_WIDTH,
-            bulk_mask=bulk, cfar_rank=rank)
-        words.append(-1 if not result.valid or result.multiplier_q16 is None
-                     else min(int(result.multiplier_q16), MAX_SCORE))
-    return np.asarray(words, dtype=np.int64)
+def _exact_word(fine: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> int:
+    result = fine_required_multiplier_q16(
+        np.ascontiguousarray(fine), anchor_bin=anchor_bin, designated_half_width=SEARCH_HALF_WIDTH,
+        bulk_mask=bulk, cfar_rank=rank)
+    return -1 if not result.valid or result.multiplier_q16 is None else min(int(result.multiplier_q16), MAX_SCORE)
+
+
+def _float_words(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return the words of fine_required_multiplier_q16 from float ratios, and the frames too close to call."""
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        return _float_words_unchecked(fines, anchor_bin=anchor_bin, bulk=bulk, rank=rank)
+
+
+def _float_words_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> tuple[np.ndarray, np.ndarray]:
+    num = 2.0 * fines[:, 0].astype(np.float64)
+    den = fines[:, 1].astype(np.float64) + fines[:, 2].astype(np.float64)
+    usable = den > 0
+    ratio = np.where(usable, num / np.where(usable, den, 1.0), np.inf)
+    background = np.sort(ratio[:, np.flatnonzero(bulk)], axis=1)
+    count = np.count_nonzero(usable[:, bulk], axis=1)
+    valid = rank < count
+    r = background[:, rank]
+    # a neighbour within the margin could be the exact rank value
+    close = np.zeros(len(fines), bool)
+    if rank > 0:
+        close |= background[:, rank] - background[:, rank - 1] <= FLOAT_MARGIN * r
+    if rank + 1 < background.shape[1]:
+        close |= background[:, rank + 1] - r <= FLOAT_MARGIN * r
+
+    search = (anchor_bin + np.arange(-SEARCH_HALF_WIDTH, SEARCH_HALF_WIDTH + 1)) % FINE_BINS
+    fires = usable[:, search] & (num[:, search] > 0)
+    x = np.where(fires, ratio[:, search], 0.0).max(axis=1) * Q16 / r
+    always = fires.any(axis=1) & (r == 0)
+    # every word from 2**63 up is reported as MAX_SCORE
+    huge = always | (x > 2.0**63 * (1 + FLOAT_MARGIN))
+    x = np.where(huge | ~fires.any(axis=1), 1.0, x)
+    # the ceiling of a value this close to an integer needs the exact products
+    close |= ~huge & fires.any(axis=1) & (np.abs(x - np.rint(x)) <= FLOAT_MARGIN * x)
+    words = np.maximum(np.ceil(x), 1.0)
+    huge |= words >= 2.0**63
+    out = np.where(huge, MAX_SCORE, np.where(huge, 1.0, words).astype(np.int64))
+    out = np.where(valid, out, -1)
+    return out, close & valid
+
+
+def required_words(fines: Sequence[np.ndarray] | np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> np.ndarray:
+    """Return each frame's smallest keeping word, -1 where the rank has too little support.
+
+    Equal to fine_required_multiplier_q16 on every frame. Float ratios score most frames, and a frame
+    whose rank value or word falls within FLOAT_MARGIN of a tie or an integer is scored exactly.
+    """
+    bulk = np.asarray(bulk, dtype=bool)
+    words = np.empty(len(fines), dtype=np.int64)
+    for lo in range(0, len(fines), WORD_CHUNK):
+        chunk = np.asarray(fines[lo:lo + WORD_CHUNK], dtype=np.uint64).reshape(-1, 3, FINE_BINS)
+        part, close = _float_words(chunk, anchor_bin=anchor_bin, bulk=bulk, rank=rank)
+        for i in np.flatnonzero(close):
+            part[i] = _exact_word(chunk[i], anchor_bin=anchor_bin, bulk=bulk, rank=rank)
+        words[lo:lo + len(chunk)] = part
+    return words
 
 
 def capture_weights(captures: np.ndarray) -> np.ndarray:
@@ -238,23 +299,24 @@ def _expand(paths: Sequence[str]) -> list[str]:
 
 
 def _load_fines(paths: Sequence[str], capture_format: str, row: dict[str, Any], bank: bytes, k: int,
-                time_reverse: bool, max_frames: int | None) -> tuple[list[np.ndarray], np.ndarray]:
-    """Return the fine powers of every frame and the capture index of each."""
+                time_reverse: bool, max_frames: int | None) -> tuple[np.ndarray, np.ndarray]:
+    """Return the uint64 [N, 3, 256] fine powers of every frame and the capture index of each."""
     weights = _weights(row, bank)
     channel_id = int(row["receiver_channel_id"])
-    fines, captures = [], []
+    parts, captures = [], []
     for index, path in enumerate(_expand(paths)):
         if capture_format == "dtv_fine_powers":
-            frames = iter_run_frames(path, channel_id, max_frames)
+            frames = run_rows(path, channel_id, max_frames)
         else:
-            frames = (fine_powers(block, weights, k, time_reverse)
-                      for block in iter_blocks(path, capture_format, channel_id, k * WINDOWS, max_frames))
-        for frame in frames:
-            fines.append(frame)
-            captures.append(index)
-    if not fines:
+            frames = np.asarray([fine_powers(block, weights, k, time_reverse)
+                                 for block in iter_blocks(path, capture_format, channel_id, k * WINDOWS, max_frames)],
+                                dtype=np.uint64).reshape(-1, 3, FINE_BINS)
+        parts.append(frames)
+        captures.append(np.full(len(frames), index))
+    fines = np.concatenate(parts) if parts else np.empty((0, 3, FINE_BINS), np.uint64)
+    if not len(fines):
         raise ValueError(f"no complete blocks for channel {row['physical_channel']}")
-    return fines, np.asarray(captures)
+    return fines, np.concatenate(captures)
 
 
 def _export(plan: dict[str, Any], base: Path, channels: Sequence[int], out: Path) -> tuple[dict, bytes]:
@@ -324,7 +386,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             anchor = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             bulk = _bulk(anchor)
             fines, _ = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
-            scores = null_scores(fine_ratio(np.stack(fines)), anchor_bin=anchor, bulk=bulk, rank=default_rank(bulk))
+            # in chunks, so the float ratios of a long control never sit in memory at once
+            scores = np.concatenate([
+                null_scores(fine_ratio(fines[lo:lo + NULL_CHUNK]), anchor_bin=anchor, bulk=bulk, rank=default_rank(bulk))
+                for lo in range(0, len(fines), NULL_CHUNK)])
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=default_rank(bulk),
                                   weights_hex=_weights(row, bank).hex(), frames=len(fines),
@@ -361,10 +426,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                     word_q16=floor, eta=floor / Q16, word_source="floor, no captures")
                 continue
             fines, captures = _load_fines(paths, fmt, row, bank, k, reverse, max_frames)
-            ratios = fine_ratio(np.stack(fines))
             window = (nominal + np.arange(-WINDOW_HALF_WIDTH, WINDOW_HALF_WIDTH + 1)) % FINE_BINS
-            upper = np.quantile(ratios, 0.9, axis=0)
-            anchor = int(window[np.argmax(upper[window])])
+            # only the window, so the ratios stay small
+            upper = np.quantile(fine_ratio(fines[:, :, window]), 0.9, axis=0)
+            anchor = int(window[np.argmax(upper)])
             given = plan.get("anchors", {}).get(str(channel))
             bulk = _bulk(anchor, excluded)
             rank = default_rank(bulk)
@@ -372,7 +437,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             hits = int(np.count_nonzero(seen > floor))
             fraction = hits / seen.size
             measured = binomial_upper_tail(hits, seen.size, 1.0 - quantile) < MAX_LINE_TAIL
-            peak = float(np.median(ratios[:, anchor]))
+            peak = float(np.median(fine_ratio(fines[:, :, [anchor]])))
             origin = "measured" if measured else "nominal"
             if given is not None or not measured:
                 # noise peak in the window, so fall back to the expected bin

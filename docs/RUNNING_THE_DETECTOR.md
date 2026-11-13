@@ -183,9 +183,16 @@ The bundle of the run must bind the control, or `plan-run` stops, because the ru
 
 ### CHIME upgrade
 
-The template `config/include/dtv_chime_upgrade.j2` must be ported before the first run. It was written for the single-domain `chime_upgrade_n2.j2`, and `develop` now has `config/chime/chime_upgrade_2numa.j2`, where each buffer carries a `_n<numa>` suffix. The port places the detector stage, its three buffers, and its writers in the `for numa in numa_domains` loop, with one detector on each GPU.
+`config/chime/chime_upgrade_2numa.j2` includes `config/chime/dtv.j2` in each NUMA domain when `dtv_enabled` is set, with one detector on each GPU (kotekan#1859). It is detect only, and no visibility or weight consumer reads its outputs. These variables are set when it is rendered:
 
-The node must carry the `freq_id` values of the bundle, and the voltage metadata must carry the 16 `coarse_freq` values of each domain. The template has no REST switch, so the detector runs from startup.
+```yaml
+dtv_enabled: true
+dtv_runtime_bundle_dir: /opt/kotekan/dtv/<bundle>
+dtv_write_enabled: true
+dtv_output_dir: /scratch/dtv
+```
+
+The bundle profiles must use `chime_freq_id`, and the voltage metadata must carry the 16 `coarse_freq` values of each domain. There is no REST switch, so the detector runs and writes from startup. On `develop` the mask, powers and fine support are written, with no fine powers, so a CHIME run cannot yet be calibrated, and every input is summed. kotekan#1880 drops the inputs flagged by `bufferBadInputs`, writes only the mask unless `dtv_calibration_mode` is set, which adds the powers, fine support and fine powers as on CHORD, and adds a first bundle, `chime-first-56005bb7`.
 
 ### Checking a run
 
@@ -240,7 +247,7 @@ On CHIME, the detector is removed by a restart without `dtv_enabled`, and the re
 
 ## Bad feeds
 
-The detector sums every input in the voltage ring, and it does not read the bad feed mask.
+On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, as if it carried no signal, and `bufferBadInputs` also flags the RFI antennas (`bf_mask_name` in `config/chord/dtv.j2`). On CHIME, it sums every input until kotekan#1880 merges. A change in the flagged inputs changes the noise of the sum, so a word calibrated with one set of inputs is read with care after a large change.
 
 
 ## Applying the mask

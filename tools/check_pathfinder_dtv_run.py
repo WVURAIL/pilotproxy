@@ -96,8 +96,11 @@ def check_channel(channel, masks, supports, fines, anchor, chunk_blocks):
     target, keep = np.concatenate(target), np.concatenate(keep)
     if not target.size:
         return report, None
-    peak = int(np.argmax(target.mean(axis=0)))
-    report.update(peak_bin=peak, anchor_bin=anchor, peak_minus_anchor=None if anchor is None else peak - anchor)
+    mean = target.mean(axis=0)
+    peak = int(np.argmax(mean))
+    # near 1 on a channel with no pilot, where the peak bin is noise
+    report.update(peak_bin=peak, peak_over_median=round(float(mean[peak] / np.median(mean)), 2), anchor_bin=anchor,
+                  peak_minus_anchor=None if anchor is None else peak - anchor)
     chunks = range(0, len(target), chunk_blocks)
     every = np.stack([target[i:i + chunk_blocks].mean(axis=0) for i in chunks])
     kept = np.stack([target[i:i + chunk_blocks][keep[i:i + chunk_blocks]].mean(axis=0)

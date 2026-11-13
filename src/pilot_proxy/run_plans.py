@@ -18,12 +18,16 @@ def _file_info(path: str) -> tuple[int, list[int]]:
     with h5py.File(path, "r") as handle:
         data = handle[next(name for name in handle if name.startswith("dtv_fine_powers"))]
         start = int(data.attrs.get("fpga_seq_num", 0))
-        return start, [int(c) for c in data.attrs["coarse_freq"]]
+        # the attribute is dropped when every row is unused (-1)
+        return start, [int(c) for c in data.attrs.get("coarse_freq", [])]
 
 
 def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoch: str, receiver_profile: Path | None = None,
-                    detector_core_profile: Path = Path(CORE_PROFILE), null_quantile: float = 0.99) -> dict[str, Any]:
+                    detector_core_profile: Path = Path(CORE_PROFILE), null_quantile: float = 0.99,
+                    calibration_share: float = CALIBRATION_SHARE) -> dict[str, Any]:
     """Split the files of each bound channel in time, and write calibrate.json and test.json."""
+    if not 0.0 < calibration_share < 1.0:
+        raise ValueError("calibration_share must lie between 0 and 1")
     bundle = json.loads((Path(bundle_dir) / "pilot_profiles.json").read_text())
     receiver = receiver_profile or Path(f"configs/receiver_profiles/{bundle['receiver_profile_id']}.json")
     files = sorted(((*_file_info(path), path) for path in _expand(runs)), key=lambda item: (item[0], item[2]))
@@ -34,7 +38,7 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
         mine = [path for _, coarse, path in files if int(row["receiver_channel_id"]) in coarse]
         if len(mine) < 2:
             raise ValueError(f"channel {channel} has {len(mine)} run files, and a split needs two")
-        split = min(len(mine) - 1, max(1, round(len(mine) * CALIBRATION_SHARE)))
+        split = min(len(mine) - 1, max(1, round(len(mine) * calibration_share)))
         first[str(channel)], last[str(channel)] = mine[:split], mine[split:]
         if row["fine_calibration"]["status"] == "control":
             control = channel

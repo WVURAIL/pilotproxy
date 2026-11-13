@@ -37,7 +37,7 @@ The loop is repeated after a change to the gains or quantization, the input popu
 
 ## Step 1: Record
 
-Calibration reads each channel to be bound and a control channel with no pilot. Channel 37 is the control for CHIME and the Pathfinder. The best source is the detector itself. With `dtv_record_fine_powers: true` and `dtv_write_enabled` on, a detect-only run writes the fine powers of every block to `dtv_fine_powers*.h5`, and each file of about 43 s counts as one capture (`dtv_fine_powers` in the plan). The channels and the control must be bound in the bundle of that run, and the voltages are not needed. Reading these files needs `h5py` and `hdf5plugin`. A run of a few days covers the changes over a day, and it gives far more than the 30 captures a knee needs.
+Calibration reads each channel to be bound and a control channel with no pilot. Channel 37 is the control for CHIME and the Pathfinder. The best source is the detector itself. With `dtv_calibration_mode` and `dtv_write_enabled` on, a detect-only run writes the fine powers of every block to `dtv_fine_powers*.h5`, and each file of about 43 s counts as one capture (`dtv_fine_powers` in the plan). The channels and the control must be bound in the bundle of that run, and the voltages are not needed. Reading these files needs `h5py` and `hdf5plugin`. A run of a few days covers the changes over a day, and it gives far more than the 30 captures a knee needs.
 
 A telescope with no data starts from its parameters alone. A plan with empty capture lists, `"control": null` and `"num_inputs"` gives a first bundle at the simulated floor, and this bundle is enough to record the data for the next one:
 
@@ -138,34 +138,33 @@ sha256sum -c sha256sums.txt
 
 ### CHORD Pathfinder
 
-To enable the detector, these variables are set when `config/chord/pathfinder.j2` is rendered:
+The detector always runs in `config/chord/pathfinder.j2`. These variables are set when it and `config/chord/recv.j2` are rendered:
 
 ```yaml
-dtv_enabled: true
-dtv_apply_mask: false
 dtv_runtime_bundle_dir: /opt/kotekan/dtv/<bundle>
-dtv_record_fine_powers: true
-dtv_output_dir: /scratch/dtv/<run>
+dtv_apply_mask: false
+dtv_write_enabled: false
+dtv_calibration_mode: true
 ```
 
-Detection and recording start off, and both are turned on over REST:
+Without `dtv_calibration_mode` only the mask is sent. With it, the powers, fine support and fine powers are sent too, and both templates must be rendered with the same value. The mask and recording switches start from the values above, and either is changed over REST until the next restart:
 
 ```bash
-curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true, "valid_at_time_ns": 0}' <node>:12048/dtv_detector_enabled
+curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true, "valid_at_time_ns": 0}' <node>:12048/dtv_mask_enabled
 ```
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true}' <node>:12048/dtv_write_enabled
 ```
 
-A POST sent before the stages start has no effect, so the log line `PilotProxy detector on` must be seen. A restart returns both switches to off. The same POST with `"enabled": false` stops either one.
+A POST sent before the stages start has no effect. A `valid_at_time_ns` of 0 applies the mask from the next frame.
 
-The mask, powers, and fine support go to the recv node and are written under `/mnt/cs00/data/dtv`, one file for each half and window of about 43 s. A recv restart numbers its files from 0 and overwrites earlier files, so the directory is moved or renamed before a restart. Fine powers hold all 384 frequencies, about 900 MB/s over 16 halves, so they stay on each node under `dtv_output_dir`. Only the bound rows hold data, so the compressed files stay small. Each run gets its own `dtv_output_dir`.
+The recv node writes the products under `/mnt/cs00/data/dtv/acq_<start time>/`, with a new directory for each recv start, and one file for each half and window of about 43 s. The `coarse_freq` and `fpga_seq_num` attributes identify the half and the window. A block missing from a window is a row of 0xFF bytes, and the reader skips it.
 
-After a run, the fine powers are copied from the nodes that hold the bound channels, and `plan-run` splits them in time, with the first two thirds for calibration and the rest for the test:
+After a run, `plan-run` splits them in time, with the first two thirds for calibration and the rest for the test:
 
 ```bash
-pilot-proxy plan-run --bundle-dir bundle --run "run1/dtv_fine_powers*.h5" --epoch "2026-11 Pathfinder shakedown" --output-dir run1/plans
+pilot-proxy plan-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "2026-11 Pathfinder shakedown" --output-dir run1/plans
 ```
 
 ```bash
@@ -197,17 +196,17 @@ The first check is the log. Each pilot must have a `bound ATSC physical channel`
 
 `tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support, and the masked fraction of each channel. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`.
 
-A run with `dtv_record_fine_powers` also gives a spectrogram of each bound channel with and without the mask, in 10 s chunks:
+A run with `dtv_calibration_mode` also gives a spectrogram of each bound channel with and without the mask, in 10 s chunks:
 
 ```bash
-pilot-proxy run-spectrogram --bundle-dir bundle --run "/scratch/dtv/run1/dtv_fine_powers*.h5" --channel 18 24 29 37 --output-dir spectrograms
+pilot-proxy run-spectrogram --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --channel 18 24 29 37 --output-dir spectrograms
 ```
 
 The decision is recomputed from the fine powers and the bundle word, so the control shows what its word would remove. A chunk with no kept frames is grey. The axis is recorded time, so a gap in the recording does not appear.
 
 The same command writes `masked_summary.csv`, with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
 
-To remove the detector, Kotekan is restarted without `dtv_enabled`, and the rendered config then has no detector stages. A change of bundle, word, or channel list always needs a restart.
+On CHIME, the detector is removed by a restart without `dtv_enabled`, and the rendered config then has no detector stages. A change of bundle, word, or channel list always needs a restart.
 
 
 ## Common failures

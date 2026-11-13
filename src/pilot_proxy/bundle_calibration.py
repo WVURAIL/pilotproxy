@@ -101,8 +101,9 @@ def iter_run_frames(path: str | Path, channel_id: int, max_frames: int | None = 
         if channel_id not in coarse:
             return
         rows = data[:max_frames, coarse.index(channel_id)]
-    # a row of zeros was not tested
-    yield from (row for row in rows if row.any())
+    # zeros were not tested, and 0xFF fills a block missing from the concat window
+    missing = np.iinfo(np.uint64).max
+    yield from (row for row in rows if row.any() and not (row == missing).all())
 
 
 def fine_powers(block: np.ndarray, weights: bytes, k: int, time_reverse: bool) -> np.ndarray:
@@ -229,7 +230,7 @@ def _expand(paths: Sequence[str]) -> list[str]:
     """Return the paths with any glob patterns expanded, in sorted order."""
     found = []
     for path in paths:
-        found += sorted(glob.glob(path)) if glob.has_magic(path) else [path]
+        found += sorted(glob.glob(path, recursive=True)) if glob.has_magic(path) else [path]
     return found
 
 

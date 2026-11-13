@@ -1285,7 +1285,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Split a detect-only run into calibrate.json and test.json.",
     )
     plan_run.add_argument("--bundle-dir", type=Path, required=True, help="Bundle of the run.")
-    plan_run.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns.")
+    plan_run.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns, such as 'dtv/acq_*/dtv_fine_powers*.h5'.")
     plan_run.add_argument("--output-dir", type=Path, required=True)
     plan_run.add_argument("--epoch", required=True, help="When and where the run was recorded.")
     plan_run.add_argument("--receiver-profile", type=Path, default=None)
@@ -1298,7 +1298,7 @@ def build_parser() -> argparse.ArgumentParser:
         "Plot the fine powers of a detect-only run with and without the mask.",
     )
     spectrogram.add_argument("--bundle-dir", type=Path, required=True, help="Bundle of the run.")
-    spectrogram.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns.")
+    spectrogram.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns, such as 'dtv/acq_*/dtv_fine_powers*.h5'.")
     spectrogram.add_argument("--channel", type=int, nargs="+", required=True, help="Physical channels.")
     spectrogram.add_argument("--chunk-seconds", type=float, default=10.0)
     spectrogram.add_argument("--output-dir", type=Path, required=True)

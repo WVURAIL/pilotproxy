@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from pilot_proxy.bundle_calibration import _expand, _rows
+from pilot_proxy.paths import CONFIGS_DIR
 
-CORE_PROFILE = "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json"
+# from the checkout or the installed package, so the commands run from any directory
+CORE_PROFILE = str(CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json")
 CALIBRATION_SHARE = 2.0 / 3.0
 
 
@@ -29,7 +31,7 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
     if not 0.0 < calibration_share < 1.0:
         raise ValueError("calibration_share must lie between 0 and 1")
     bundle = json.loads((Path(bundle_dir) / "pilot_profiles.json").read_text())
-    receiver = receiver_profile or Path(f"configs/receiver_profiles/{bundle['receiver_profile_id']}.json")
+    receiver = receiver_profile or CONFIGS_DIR / "receiver_profiles" / f"{bundle['receiver_profile_id']}.json"
     files = sorted(((*_file_info(path), path) for path in _expand(runs)), key=lambda item: (item[0], item[2]))
     first: dict[str, list[str]] = {}
     last: dict[str, list[str]] = {}

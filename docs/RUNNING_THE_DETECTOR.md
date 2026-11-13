@@ -161,7 +161,13 @@ A POST sent before the stages start has no effect. A `valid_at_time_ns` of 0 app
 
 The recv node writes the products under `/mnt/cs00/data/dtv/acq_<start time>/`, with a new directory for each recv start, and one file for each half and window of about 43 s. The `coarse_freq` and `fpga_seq_num` attributes identify the half and the window. A block missing from a window is a row of 0xFF bytes, and the reader skips it.
 
-After a run, `plan-run` splits the files in time, with the first two thirds for calibration and the rest for the test. On a 48 h run, `--calibration-share 0.5` calibrates on the first day and tests on the second, so each covers a whole day:
+After a run, one command does every step below and writes a summary of each channel to `summary.md`: the anchor, the word and its source, the pilot share, the masked percent on each part under the new bundle, the longest masked stretch, and the test result. It also writes the plans, the bundle and its report, the test record, and the spectrograms of each part:
+
+```bash
+pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "2026-11 Pathfinder 48 h" --calibration-share 0.5 --output-dir run1
+```
+
+The steps can also be run one at a time. `plan-run` splits the files in time, with the first two thirds for calibration and the rest for the test. On a 48 h run, `--calibration-share 0.5` calibrates on the first day and tests on the second, so each covers a whole day:
 
 ```bash
 pilot-proxy plan-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "2026-11 Pathfinder shakedown" --calibration-share 0.5 --output-dir run1/plans

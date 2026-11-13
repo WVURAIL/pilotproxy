@@ -42,7 +42,9 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
         nonlocal streak, longest
         # the mask is recomputed so the control, whose stage mask stays zero, can be shown too
         block = np.stack(pending)
-        keep = required_words(pending, anchor_bin=anchor, bulk=bulk, rank=rank) <= word
+        # DtvRfiMask masks a block whose rank has too little support (-1)
+        words = required_words(pending, anchor_bin=anchor, bulk=bulk, rank=rank)
+        keep = (words >= 0) & (words <= word)
         target = block[:, TARGET_ROW].astype(np.float64)
         every.append(target.mean(axis=0))
         kept.append(target[keep].mean(axis=0) if keep.any() else np.full(target.shape[1], np.nan))

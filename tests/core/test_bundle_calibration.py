@@ -20,7 +20,9 @@ from pilot_proxy.bundle_calibration import (
     simulated_null_scores,
     test_bundle as run_bundle_test,
 )
+from pilot_proxy.characterization import threshold_rule
 from pilot_proxy.run_plans import write_run_plans
+from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -232,6 +234,35 @@ def test_spectrogram_removes_masked_frames(plans, tmp_path):
     assert summary[0]["channel"] == "35" and summary[0]["masked_frames"] == "16"
     assert summary[0]["masked_percent"] == "33.33"
     assert float(summary[0]["longest_masked_seconds"]) == pytest.approx(16 * FRAME_SECONDS, abs=0.005)
+
+
+def test_run_scores_feed_the_threshold_rule(plans, tmp_path):
+    bundle = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    anchor, word = row["fine_calibration"]["anchor_bin"], row["fine_calibration"]["cfar_multiplier_q16"]
+    rng = np.random.default_rng(7)
+    runs = []
+    for index in range(2):
+        frames = rng.integers(900, 1100, size=(48, 3, 256)).astype(np.uint64)
+        frames[:16, 0, anchor] *= np.uint64(1000)
+        frames[40:] = np.iinfo(np.uint64).max
+        runs.append(write_run_file(tmp_path / f"run_{index}.h5", [521, 614], frames))
+        with h5py.File(runs[-1], "a") as handle:
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = (1 - index) * 48 * 8192
+    result = build_run_scores(bundle_dir=plans["bundle"], runs=runs, channel=35, output_dir=tmp_path / "scores",
+                              event_seconds=8 * FRAME_SECONDS, jobs=2)
+    assert result["frames"] == 80 and result["events"] == 10
+    frames = threshold_rule.load_frames(35, tmp_path / "scores")
+    assert frames.current_word == word
+    assert np.all(np.diff(frames.time) > 0)
+    kept = threshold_rule.keep(frames, word)
+    assert kept.sum() == 48 and not kept[:16].any() and not kept[40:56].any()
+    assert frames.excess[:16].min() > 10 * abs(frames.excess[16:40]).max()
+    sweep = threshold_rule.sweep(frames)
+    assert sweep["kappa"][-1] == pytest.approx(1.0)
+    assert sweep["x"][-1] > sweep["x"][0]
+    with pytest.raises(ValueError, match="already exists"):
+        build_run_scores(bundle_dir=plans["bundle"], runs=runs, channel=35, output_dir=tmp_path / "scores")
 
 
 def test_run_plans_split_each_channel_in_time(plans, tmp_path):

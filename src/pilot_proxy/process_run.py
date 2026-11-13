@@ -5,14 +5,18 @@ each part under the new bundle, and summary.md and summary.json, one row per cha
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Sequence
 
 from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
 from pilot_proxy.json_utils import write_json_strict
 from pilot_proxy.run_plans import CALIBRATION_SHARE, CORE_PROFILE, write_run_plans
-from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
+from pilot_proxy.run_spectrogram import (
+    FRAME_SECONDS,
+    run_spectrogram,
+    write_masked_summary,
+    write_run_spectrogram,
+)
 
 PARTS = ("calibrate", "test")
 

@@ -42,6 +42,8 @@ Q16 = 65536
 # 65 designated bins, the search of record
 SEARCH_HALF_WIDTH = 32
 # the fewest kept captures the archive rule accepts
+# above this share of frames with a pilot, the knee has no clean frames to bend from
+ALWAYS_ON_SHARE = 0.9
 MIN_KNEE_CAPTURES = 30
 BOOTSTRAP_REPLICATES = 200
 # chance of the hits under the null, kept small for the search over the window
@@ -384,6 +386,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             if not supported.any():
                 raise ValueError(f"channel {channel} has no supported frames")
             knee = knee_word(seen[supported], capture_weights(captures)[supported])
+            weights = capture_weights(captures[supported])
+            at_floor = float(np.sum(weights[seen[supported] > floor]))
+            # share of frames with a pilot, less the clean frames the floor masks
+            share = (at_floor - (1.0 - quantile)) / quantile
             given_word = plan.get("words", {}).get(str(channel))
             count = int(np.unique(captures).size)
             if given_word is not None or "word_q16" in plan:
@@ -392,11 +398,13 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 word, word_source = floor, "floor, no pilot"
             elif count < min_captures:
                 word, word_source = floor, f"floor, {count} captures of {min_captures}"
+            elif share > ALWAYS_ON_SHARE:
+                # no clean frames for the curve to bend from, so the knee would sit in the pilot's own spread
+                word, word_source = floor, "floor, pilot in nearly every frame"
             elif knee < floor:
                 word, word_source = floor, "floor, knee below it"
             else:
                 word, word_source = knee, "knee"
-            weights = capture_weights(captures[supported])
             masked = float(np.sum(weights[seen[supported] > word]))
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
             values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile,
@@ -404,8 +412,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             report_channels[str(channel)] = dict(
                 anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines), captures=count,
                 word_q16=word, eta=word / Q16, word_source=word_source, knee_word_q16=knee,
-                masked_fraction=masked, masked_at_floor=float(np.sum(weights[seen[supported] > floor])),
-                pilot_in_most_frames=bool(np.median(seen[supported]) > floor),
+                masked_fraction=masked, masked_at_floor=at_floor, pilot_share=share,
+                pilot_in_nearly_every_frame=bool(share > ALWAYS_ON_SHARE),
                 strongest_bin_median_ratio=peak, strongest_bin_masked_fraction=fraction, **intervals)
 
     bundle, _ = _export(plan, base, channels, output_dir)

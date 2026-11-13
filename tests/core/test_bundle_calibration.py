@@ -8,11 +8,13 @@ import numpy as np
 import pytest
 
 from pilot_proxy.bundle_calibration import (
+    _expand,
     _load_fines,
     binomial_lower_tail,
     binomial_upper_tail,
     calibrate_bundle,
     capture_weights,
+    iter_run_frames,
     knee_word,
     nominal_fine_bin,
     simulated_null_scores,
@@ -168,6 +170,16 @@ def write_run_file(path, channels, frames):
         handle["dtv_fine_powers_n0"] = data
         handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = channels
     return str(path)
+
+
+def test_run_frames_skip_untested_and_missing_blocks(tmp_path):
+    frames = np.ones((3, 3, 256), dtype=np.uint64)
+    frames[1] = np.iinfo(np.uint64).max
+    (tmp_path / "acq_1").mkdir()
+    write_run_file(tmp_path / "acq_1" / "run.h5", [521, 614], frames)
+    assert len(list(iter_run_frames(tmp_path / "acq_1" / "run.h5", 521))) == 2
+    assert not list(iter_run_frames(tmp_path / "acq_1" / "run.h5", 614))
+    assert _expand([str(tmp_path / "**" / "run.h5")]) == [str(tmp_path / "acq_1" / "run.h5")]
 
 
 def test_detector_run_gives_the_bundle_of_its_captures(plans, tmp_path):

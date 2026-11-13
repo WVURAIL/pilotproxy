@@ -97,7 +97,8 @@ def iter_run_frames(path: str | Path, channel_id: int, max_frames: int | None = 
         pass
     with h5py.File(path, "r") as handle:
         data = handle[next(name for name in handle if name.startswith("dtv_fine_powers"))]
-        coarse = [int(c) for c in data.attrs["coarse_freq"]]
+        # the attribute is dropped when every row is unused (-1)
+        coarse = [int(c) for c in data.attrs.get("coarse_freq", [])]
         if channel_id not in coarse:
             return
         rows = data[:max_frames, coarse.index(channel_id)]

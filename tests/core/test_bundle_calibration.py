@@ -180,6 +180,9 @@ def test_run_frames_skip_untested_and_missing_blocks(tmp_path):
     assert len(list(iter_run_frames(tmp_path / "acq_1" / "run.h5", 521))) == 2
     assert not list(iter_run_frames(tmp_path / "acq_1" / "run.h5", 614))
     assert _expand([str(tmp_path / "**" / "run.h5")]) == [str(tmp_path / "acq_1" / "run.h5")]
+    with h5py.File(tmp_path / "idle.h5", "w") as handle:
+        handle["dtv_fine_powers"] = np.zeros((3, 2, 3, 256), dtype=np.uint64)
+    assert not list(iter_run_frames(tmp_path / "idle.h5", 521))
 
 
 def test_detector_run_gives_the_bundle_of_its_captures(plans, tmp_path):

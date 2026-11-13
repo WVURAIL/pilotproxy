@@ -126,22 +126,26 @@ Kotekan's `tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh` tests the code, 
 
 Kotekan reads the bundle from a local path once, at startup, and checks every digest. There is no service to query, and none is needed. A bundle changes only at a restart, and a failed lookup at startup would stop the correlator along with the detector.
 
-A passing bundle is added through a Kotekan pull request to the bundle directory of the telescope, `config/chime/dtv_bundles/` or `config/chord/dtv_bundles/`. Each bundle is an immutable directory named `<purpose>-<first 8 digits of the sha256 of sha256sums.txt>`, and a new calibration gets a new directory. The deployment step copies it to the node:
+A passing bundle is added through a Kotekan pull request to the bundle directory of the telescope, `config/chime/dtv_bundles/` or `config/chord/dtv_bundles/`. Each bundle is an immutable directory named `<purpose>-<first 8 digits of the sha256 of sha256sums.txt>`, and a new calibration gets a new directory. `make install` copies the whole config tree, bundles included, to `<prefix>/etc/kotekan/`, so with the default prefix a bundle is on the node at:
 
 ```bash
-/opt/kotekan/dtv/<purpose>-<digest>/
+/usr/local/etc/kotekan/chord/dtv_bundles/<purpose>-<digest>/
 ```
+
+The digests can be checked there before a restart:
 
 ```bash
 sha256sum -c sha256sums.txt
 ```
 
+With `CMAKE_INSTALL_PREFIX=/usr`, the configs go to `/etc/kotekan/` instead, and `dtv_runtime_bundle_dir` must be set to match.
+
 ### CHORD Pathfinder
 
-The detector always runs in `config/chord/pathfinder.j2`. These variables are set when it and `config/chord/recv.j2` are rendered:
+The detector always runs in `config/chord/pathfinder.j2`. With kotekan#1895, its bundle defaults to the installed `pathfinder-commissioning-e2e90219`. A new bundle is named in that default by a Kotekan pull request, or set for one run. These variables are set when `pathfinder.j2` and `config/chord/recv.j2` are rendered:
 
 ```yaml
-dtv_runtime_bundle_dir: /opt/kotekan/dtv/<bundle>
+dtv_runtime_bundle_dir: /usr/local/etc/kotekan/chord/dtv_bundles/<bundle>
 dtv_apply_mask: false
 dtv_write_enabled: false
 dtv_calibration_mode: true
@@ -193,7 +197,7 @@ The bundle of the run must bind the control, or `plan-run` stops, because the ru
 
 ```yaml
 dtv_enabled: true
-dtv_runtime_bundle_dir: /opt/kotekan/dtv/<bundle>
+dtv_runtime_bundle_dir: /usr/local/etc/kotekan/chime/dtv_bundles/<bundle>
 dtv_write_enabled: true
 dtv_output_dir: /scratch/dtv
 ```

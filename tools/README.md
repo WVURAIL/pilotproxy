@@ -12,3 +12,5 @@
 
 Run each command with --help. Store new outputs separately from existing data.
 - Bundle workflow: extract_baseband_channels.py, analyze_dtv_run.py.
+- Pathfinder runs: pathfinder_dtv_switch.py (mask and recording switches over REST),
+  check_pathfinder_dtv_run.py (per-channel checks and spectrograms from the recv files).

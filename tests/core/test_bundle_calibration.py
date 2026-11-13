@@ -8,15 +8,19 @@ import numpy as np
 import pytest
 
 from pilot_proxy.bundle_calibration import (
+    _bulk,
+    _exact_word,
     _expand,
     _load_fines,
     binomial_lower_tail,
     binomial_upper_tail,
     calibrate_bundle,
     capture_weights,
+    default_rank,
     iter_run_frames,
     knee_word,
     nominal_fine_bin,
+    required_words,
     simulated_null_scores,
     test_bundle as run_bundle_test,
 )
@@ -162,6 +166,32 @@ def test_pilot_in_every_capture_takes_the_floor(plans, tmp_path):
     assert channel["word_source"] == "floor, pilot in nearly every frame"
     assert channel["word_q16"] == report["floor_word_q16"]
     assert channel["masked_fraction"] > 0.9
+
+
+@pytest.mark.parametrize("kind", ["noise", "ties", "dead bins", "near the top", "always masked"])
+@pytest.mark.parametrize("anchor", [100, 3])
+def test_fast_words_equal_the_exact_reference(kind, anchor):
+    rng = np.random.default_rng(len(kind) + anchor)
+    n = 300
+    if kind == "noise":
+        fines = rng.gamma(44, 1e6 / 44, size=(n, 3, 256))
+        fines[:, 0, 100] *= rng.choice([1, 3, 30, 1e6], n)
+    elif kind == "ties":
+        fines = rng.integers(0, 4, size=(n, 3, 256))
+    elif kind == "dead bins":
+        fines = rng.integers(0, 50, size=(n, 3, 256))
+        fines[:, 1:, rng.random(256) < 0.5] = 0
+        fines[:, 0, rng.random(256) < 0.3] = 0
+    elif kind == "near the top":
+        fines = rng.integers(2**62, 2**63, size=(n, 3, 256), dtype=np.uint64)
+    else:
+        fines = rng.integers(1, 3, size=(n, 3, 256)).astype(np.uint64)
+        fines[:, 0, 90:110] = np.uint64(2**63)
+    fines = np.asarray(fines).astype(np.uint64)
+    bulk = _bulk(anchor)
+    rank = default_rank(bulk)
+    exact = [_exact_word(f, anchor_bin=anchor, bulk=bulk, rank=rank) for f in fines]
+    assert required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank).tolist() == exact
 
 
 def test_knee_sits_at_the_end_of_the_clean_population():

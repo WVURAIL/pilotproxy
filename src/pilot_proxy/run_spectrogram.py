@@ -102,7 +102,8 @@ def write_run_spectrogram(result: dict[str, Any], output_dir: Path) -> tuple[Pat
     data = output_dir / f"{name}.npz"
     np.savez_compressed(data, **result)
 
-    style.configure(require_tex=shutil.which("latex") is not None)
+    # the TeX style also needs dvipng and kpsewhich, so a lone latex falls back to plain text
+    style.configure(require_tex=all(shutil.which(c) for c in ("latex", "dvipng", "kpsewhich")))
     fig, axes = style.plt.subplots(1, 2, figsize=(style.TEXT_WIDTH, 3.4), sharex=True, sharey=True,
                                    constrained_layout=True)
     # one reference and one colour scale, so the panels compare directly

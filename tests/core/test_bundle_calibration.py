@@ -286,6 +286,17 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     assert result["calibrate"]["control"] == dict(channel=37, captures=first)
     assert result["test"]["control"] == last
     assert json.loads((tmp_path / "out" / "test.json").read_text()) == result["test"]
+    # a half with no bound channel drops coarse_freq, and half the files split a run by day
+    with h5py.File(tmp_path / "run_idle.h5", "w") as handle:
+        handle["dtv_fine_powers"] = frames[:, None].repeat(2, axis=1)
+        handle["dtv_fine_powers"].attrs["fpga_seq_num"] = 0
+    half = write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "half",
+                           epoch="synthetic", receiver_profile=Path(plans["calibrate"]["receiver_profile"]),
+                           calibration_share=0.5)
+    assert len(half["calibrate"]["channels"]["37"]) == len(half["test"]["channels"]["37"]) == 3
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "bad",
+                        epoch="synthetic", calibration_share=1.0)
 
 
 def test_first_bundle_needs_no_captures(plans, tmp_path):

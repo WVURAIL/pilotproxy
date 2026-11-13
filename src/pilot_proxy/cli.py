@@ -683,7 +683,7 @@ def _cmd_validate_runtime_weight_bundle(args: argparse.Namespace) -> None:
 def _cmd_plan_run(args: argparse.Namespace) -> None:
     plans = write_run_plans(bundle_dir=args.bundle_dir, runs=args.run, output_dir=args.output_dir, epoch=args.epoch,
                             receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
-                            null_quantile=args.null_quantile)
+                            null_quantile=args.null_quantile, calibration_share=args.calibration_share)
     for channel, paths in plans["calibrate"]["channels"].items():
         print(f"channel {channel}: {len(paths)} files to calibrate, {len(plans['test']['channels'][channel])} to test")
 
@@ -1300,6 +1300,8 @@ def build_parser() -> argparse.ArgumentParser:
     plan_run.add_argument("--receiver-profile", type=Path, default=None)
     plan_run.add_argument("--detector-core-profile", type=Path, default=Path(CORE_PROFILE))
     plan_run.add_argument("--null-quantile", type=float, default=0.99)
+    plan_run.add_argument("--calibration-share", type=float, default=2.0 / 3.0,
+                          help="Share of each channel's files, from the start, used to calibrate. 0.5 splits 48 h by day.")
     plan_run.set_defaults(func=_cmd_plan_run)
 
     spectrogram = _add_command(

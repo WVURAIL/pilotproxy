@@ -47,6 +47,7 @@ from pilot_proxy.paths import (
     SOURCE_CHECKOUT_ROOT,
     resolve_user_path,
 )
+from pilot_proxy.process_run import process_run
 from pilot_proxy.run_plans import CORE_PROFILE, write_run_plans
 from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import (
@@ -688,6 +689,16 @@ def _cmd_plan_run(args: argparse.Namespace) -> None:
         print(f"channel {channel}: {len(paths)} files to calibrate, {len(plans['test']['channels'][channel])} to test")
 
 
+def _cmd_process_run(args: argparse.Namespace) -> None:
+    summary = process_run(bundle_dir=args.bundle_dir, runs=args.run, epoch=args.epoch, output_dir=args.output_dir,
+                          calibration_share=args.calibration_share, null_quantile=args.null_quantile,
+                          receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
+                          chunk_seconds=args.chunk_seconds, log=lambda line: print(line, flush=True))
+    print((args.output_dir / "summary.md").read_text(), end="")
+    if not summary["passed"]:
+        raise SystemExit(1)
+
+
 def _cmd_run_spectrogram(args: argparse.Namespace) -> None:
     results = []
     for channel in args.channel:
@@ -1303,6 +1314,22 @@ def build_parser() -> argparse.ArgumentParser:
     plan_run.add_argument("--calibration-share", type=float, default=2.0 / 3.0,
                           help="Share of each channel's files, from the start, used to calibrate. 0.5 splits 48 h by day.")
     plan_run.set_defaults(func=_cmd_plan_run)
+
+    process = _add_command(
+        "process-run",
+        "Split a detect-only run, calibrate, test, plot and summarize it in one step.",
+    )
+    process.add_argument("--bundle-dir", type=Path, required=True, help="Bundle of the run.")
+    process.add_argument("--run", nargs="+", required=True, help="dtv_fine_powers files or glob patterns, such as 'dtv/acq_*/dtv_fine_powers*.h5'.")
+    process.add_argument("--epoch", required=True, help="When and where the run was recorded.")
+    process.add_argument("--output-dir", type=Path, required=True, help="New or empty directory.")
+    process.add_argument("--calibration-share", type=float, default=2.0 / 3.0,
+                         help="Share of each channel's files, from the start, used to calibrate. 0.5 splits 48 h by day.")
+    process.add_argument("--null-quantile", type=float, default=0.99)
+    process.add_argument("--receiver-profile", type=Path, default=None)
+    process.add_argument("--detector-core-profile", type=Path, default=Path(CORE_PROFILE))
+    process.add_argument("--chunk-seconds", type=float, default=10.0)
+    process.set_defaults(func=_cmd_process_run)
 
     spectrogram = _add_command(
         "run-spectrogram",

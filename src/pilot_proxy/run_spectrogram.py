@@ -72,6 +72,10 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
                 minutes=np.cumsum(frames) * FRAME_SECONDS / 60.0)
 
 
+# set once TeX fails, so later figures go straight to plain text
+_TEX_FAILED = False
+
+
 def write_masked_summary(results: Sequence[dict[str, Any]], output_dir: Path) -> Path:
     """Write one row per channel with its masked percent and longest masked stretch."""
     output_dir = Path(output_dir)
@@ -92,8 +96,6 @@ def write_run_spectrogram(result: dict[str, Any], output_dir: Path) -> tuple[Pat
     """Save the arrays and a two-panel figure, and return their paths."""
     import shutil
 
-    import matplotlib.colors as colors
-
     from pilot_proxy import figure_style as style
 
     output_dir = Path(output_dir)
@@ -102,8 +104,29 @@ def write_run_spectrogram(result: dict[str, Any], output_dir: Path) -> tuple[Pat
     data = output_dir / f"{name}.npz"
     np.savez_compressed(data, **result)
 
-    # the TeX style also needs dvipng and kpsewhich, so a lone latex falls back to plain text
-    style.configure(require_tex=all(shutil.which(c) for c in ("latex", "dvipng", "kpsewhich")))
+    # the TeX style also needs dvipng, kpsewhich and matplotlib's cm-super fonts, so a run's figures fall
+    # back to plain text rather than stop the processing
+    global _TEX_FAILED
+    tex = not _TEX_FAILED and all(shutil.which(c) for c in ("latex", "dvipng", "kpsewhich"))
+    try:
+        figure = _draw(result, output_dir / f"{name}.pdf", tex=tex)
+    except RuntimeError:
+        if not tex:
+            raise
+        _TEX_FAILED = True
+        style.plt.close("all")
+        figure = _draw(result, output_dir / f"{name}.pdf", tex=False)
+    return data, Path(figure)
+
+
+def _draw(result: dict[str, Any], path: Path, *, tex: bool) -> str:
+    import matplotlib
+    import matplotlib.colors as colors
+
+    from pilot_proxy import figure_style as style
+
+    style.configure(require_tex=tex)
+    matplotlib.rcParams["text.usetex"] = tex
     fig, axes = style.plt.subplots(1, 2, figsize=(style.TEXT_WIDTH, 3.4), sharex=True, sharey=True,
                                    constrained_layout=True)
     # one reference and one colour scale, so the panels compare directly
@@ -122,5 +145,4 @@ def write_run_spectrogram(result: dict[str, Any], output_dir: Path) -> tuple[Pat
         style.panel_label(ax, "ab"[index])
     axes[0].set_ylabel("Recorded time (min)")
     fig.colorbar(image, ax=axes, label="Fine power (dB)")
-    figure = style.save(fig, output_dir / f"{name}.pdf", title=f"Channel {result['channel']} spectrogram")
-    return data, Path(figure)
+    return style.save(fig, path, title=f"Channel {result['channel']} spectrogram")

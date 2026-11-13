@@ -25,6 +25,7 @@ from pilot_proxy.bundle_calibration import (
     test_bundle as run_bundle_test,
 )
 from pilot_proxy.characterization import threshold_rule
+from pilot_proxy.process_run import process_run
 from pilot_proxy.run_plans import write_run_plans
 from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
@@ -341,6 +342,37 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     with pytest.raises(ValueError, match="between 0 and 1"):
         write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "bad",
                         epoch="synthetic", calibration_share=1.0)
+
+
+def test_process_run_summarizes_a_run(plans, tmp_path):
+    captures = plans["calibrate"]["control"]["captures"]
+    plan = dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    profiles = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    anchor = next(p for p in profiles if p["physical_channel"] == 35)["fine_calibration"]["anchor_bin"]
+    rng = np.random.default_rng(3)
+    for index in range(8):
+        data = rng.gamma(44, 1e6 / 44, size=(32, 2, 3, 256))
+        data[:, 0, 0, anchor] *= 30  # channel 35's pilot in every frame
+        with h5py.File(tmp_path / f"run_{index}.h5", "w") as handle:
+            handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
+            handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 32 * 8192
+    out = tmp_path / "processed"
+    summary = process_run(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
+                          output_dir=out, calibration_share=0.5,
+                          receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
+    rows = {row["channel"]: row for row in summary["channels"]}
+    assert rows[35]["word_source"].startswith("floor") and rows[35]["pilot_share"] > 0.9
+    assert rows[35]["calibrate_masked_percent"] > 90 and rows[35]["test_masked_percent"] > 90
+    assert rows[37]["test_masked_percent"] < 10
+    assert json.loads((out / "summary.json").read_text()) == summary
+    assert "| 35 |" in (out / "summary.md").read_text()
+    assert (out / "spectrograms" / "test" / "masked_summary.csv").exists()
+    with pytest.raises(ValueError, match="not empty"):
+        process_run(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic", output_dir=out)
 
 
 def test_first_bundle_needs_no_captures(plans, tmp_path):

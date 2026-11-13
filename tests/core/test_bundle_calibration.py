@@ -130,6 +130,7 @@ def test_word_is_the_knee_above_the_floor(plans):
     report = plans["report"]
     channel = report["channels"]["35"]
     assert channel["word_source"] == "knee"
+    assert not channel["pilot_in_nearly_every_frame"]
     assert channel["word_q16"] == channel["knee_word_q16"] > report["floor_word_q16"]
     profiles = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())["profiles"]
     fine = {p["physical_channel"]: p["fine_calibration"] for p in profiles}
@@ -148,6 +149,19 @@ def test_too_few_captures_take_the_floor(plans, tmp_path):
     path.write_text(json.dumps(dict(plans["calibrate"], min_knee_captures=30)))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     assert report["channels"]["35"]["word_source"] == "floor, 6 captures of 30"
+
+
+def test_pilot_in_every_capture_takes_the_floor(plans, tmp_path):
+    # no clean frames, so the knee would sit in the pilot's own spread and keep most of it
+    always = [write_capture(tmp_path / f"a35_{i}.h5", 35, 2, 40 + i, tone=0.8) for i in range(6)]
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": always})))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    channel = report["channels"]["35"]
+    assert channel["pilot_in_nearly_every_frame"]
+    assert channel["word_source"] == "floor, pilot in nearly every frame"
+    assert channel["word_q16"] == report["floor_word_q16"]
+    assert channel["masked_fraction"] > 0.9
 
 
 def test_knee_sits_at_the_end_of_the_clean_population():

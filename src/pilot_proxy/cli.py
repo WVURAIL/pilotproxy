@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
 
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
-from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
+from pilot_proxy.bundle_calibration import THRESHOLDS, calibrate_bundle, test_bundle
 from pilot_proxy.detector_contract import (
     WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
@@ -681,10 +681,18 @@ def _cmd_validate_runtime_weight_bundle(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _add_threshold_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--threshold", choices=THRESHOLDS, default="knee",
+                        help="Word of each channel: its knee, or the word that keeps the most frames under a checked power limit.")
+    parser.add_argument("--power-limit", type=Path, default=None,
+                        help="For --threshold power_limit: JSON naming the response table and the checked power limits.")
+
+
 def _cmd_plan_run(args: argparse.Namespace) -> None:
     plans = write_run_plans(bundle_dir=args.bundle_dir, runs=args.run, output_dir=args.output_dir, epoch=args.epoch,
                             receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
-                            null_quantile=args.null_quantile, calibration_share=args.calibration_share)
+                            null_quantile=args.null_quantile, calibration_share=args.calibration_share,
+                            threshold=args.threshold, power_limit=args.power_limit)
     for channel, paths in plans["calibrate"]["channels"].items():
         print(f"channel {channel}: {len(paths)} files to calibrate, {len(plans['test']['channels'][channel])} to test")
 
@@ -693,7 +701,8 @@ def _cmd_process_run(args: argparse.Namespace) -> None:
     summary = process_run(bundle_dir=args.bundle_dir, runs=args.run, epoch=args.epoch, output_dir=args.output_dir,
                           calibration_share=args.calibration_share, null_quantile=args.null_quantile,
                           receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
-                          chunk_seconds=args.chunk_seconds, log=lambda line: print(line, flush=True))
+                          chunk_seconds=args.chunk_seconds, threshold=args.threshold, power_limit=args.power_limit,
+                          log=lambda line: print(line, flush=True))
     print((args.output_dir / "summary.md").read_text(), end="")
     if not summary["passed"]:
         raise SystemExit(1)
@@ -721,6 +730,7 @@ def _cmd_run_scores(args: argparse.Namespace) -> None:
 
 def _cmd_calibrate_bundle(args: argparse.Namespace) -> None:
     report = calibrate_bundle(plan_path=args.plan, output_dir=args.output_dir)
+    print(f"threshold {report['threshold']}")
     print(f"floor {report['floor_word_q16']} (eta {report['floor_eta']:.4f}) from {report['floor_source']}")
     for channel, row in report["channels"].items():
         print(f"channel {channel}: anchor {row['anchor_bin']} ({row['anchor_source']}), "
@@ -1313,6 +1323,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan_run.add_argument("--null-quantile", type=float, default=0.99)
     plan_run.add_argument("--calibration-share", type=float, default=2.0 / 3.0,
                           help="Share of each channel's files, from the start, used to calibrate. 0.5 splits 48 h by day.")
+    _add_threshold_arguments(plan_run)
     plan_run.set_defaults(func=_cmd_plan_run)
 
     process = _add_command(
@@ -1329,6 +1340,7 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--receiver-profile", type=Path, default=None)
     process.add_argument("--detector-core-profile", type=Path, default=Path(CORE_PROFILE))
     process.add_argument("--chunk-seconds", type=float, default=10.0)
+    _add_threshold_arguments(process)
     process.set_defaults(func=_cmd_process_run)
 
     spectrogram = _add_command(

@@ -24,9 +24,21 @@ def _file_info(path: str) -> tuple[int, list[int]]:
         return start, [int(c) for c in data.attrs.get("coarse_freq", [])]
 
 
+def _limit_plan(path: Path | None) -> dict[str, Any]:
+    """Return the power-limit inputs of a plan, with the paths of the table and the limits made absolute."""
+    if path is None:
+        raise ValueError("the power_limit threshold needs a JSON file that names the response table and the checked power limits")
+    given = json.loads(Path(path).read_text())
+    if not {"table", "limits"} <= set(given):
+        raise ValueError(f"{path} must name a table and limits")
+    base = Path(path).resolve().parent
+    return {**given, **{key: str((base / given[key]).resolve()) for key in ("table", "limits")}}
+
+
 def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoch: str, receiver_profile: Path | None = None,
                     detector_core_profile: Path = Path(CORE_PROFILE), null_quantile: float = 0.99,
-                    calibration_share: float = CALIBRATION_SHARE) -> dict[str, Any]:
+                    calibration_share: float = CALIBRATION_SHARE, threshold: str = "knee",
+                    power_limit: Path | None = None) -> dict[str, Any]:
     """Split the files of each bound channel in time, and write calibrate.json and test.json."""
     if not 0.0 < calibration_share < 1.0:
         raise ValueError("calibration_share must lie between 0 and 1")
@@ -49,6 +61,8 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
     calibrate = dict(receiver_profile=str(receiver.resolve()), detector_core_profile=str(detector_core_profile.resolve()),
                      capture_format="dtv_fine_powers", epoch=epoch, null_quantile=null_quantile, channels=first,
                      control=dict(channel=control, captures=first[str(control)]))
+    if threshold != "knee":
+        calibrate.update(threshold=threshold, power_limit=_limit_plan(power_limit))
     test = dict(capture_format="dtv_fine_powers", channels=last, control=last[str(control)])
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

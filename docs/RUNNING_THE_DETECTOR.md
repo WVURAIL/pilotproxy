@@ -92,6 +92,38 @@ The report gives `word_source` for each channel. The word is the knee when the p
 Three plan keys replace a measured value. `"word_q16"` sets the floor and the word of every channel, `"words": {"29": 165551}` sets the word of one channel, and `"anchors": {"29": 202}` sets an anchor. A word belongs to its geometry, so a word moved from another record must come with its anchor, search and reference bins. The report gives the strongest bin of each channel, which shows faint lines, so each anchor is read against the report before the bundle is tested. The strongest bin of a faint line can move between captures, so an anchor needs several epochs, and a single short capture is only trusted for a strong pilot.
 
 
+### Choosing the threshold
+
+A plan takes one of two thresholds. `"threshold": "knee"`, the default, gives each channel the general word above. `"threshold": "power_limit"` gives each channel the word that keeps the most frames while the upper residual power meets a checked limit:
+
+```
+f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0)
+```
+
+With the RFIsher table and limits of the BAO forecast, this is the BAO acceptance test, and its word is the BAO threshold. The kept mean excess `e(u)` and its error `s` come from the same fine powers as the knee. The null `o` and the selection shift `delta(u)` are measured on the control, under the geometry and words of each channel, so this plan needs a recorded control. The plan names the rest:
+
+```json
+{
+  "threshold": "power_limit",
+  "power_limit": {
+    "table": "channel_table.json",
+    "limits": "limits.json",
+    "coupling": {"29": 0.2},
+    "curvature": {"29": [1.0e-6, 1.0e-7]},
+    "margin": 1.0e-6
+  }
+}
+```
+
+`table` is the RFIsher channel table of this telescope, which supplies `power_scale`, and `limits` gives each channel's checked power limit in mK². These two are required, and a table of another telescope gives a wrong word. `coupling` is the fraction `f` of the kept shelf power that reaches the map, and a channel with none takes 1, the worst case. `curvature` is the passband curvature left between the pilot position and the control position, with its standard error, and `margin` is added to the upper estimate. Both are in units of the shelf estimate and default to zero. A word must keep at least 30 captures (`min_captures`).
+
+A channel with a passing word carries it, with `word_source` `power limit`. A channel with no passing word holds the floor in the bundle, and the operating policy masks it whole. `bundle.decisions.json` records each outcome in the form that `compile-operating-policy` reads ([CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)), and the report keeps the knee of each channel beside its test. The control is tested with no corrections, as a check on the run.
+
+The test bounds the bias of the residual at the given `f`. It does not test a residual that enters as noise. Its word is in-sample, so it is tested on later data before it masks. This threshold holds the control in memory beside each channel, about 13 GB more for a day.
+
+`plan-run` and `process-run` take `--threshold power_limit --power-limit inputs.json`, where the file holds the `power_limit` object above.
+
+
 ## Step 3: Test
 
 `test-bundle` checks a bundle on captures it was not made from. The plan names the channels and the control:
@@ -227,7 +259,7 @@ The decision is recomputed from the fine powers and the bundle word, so the cont
 
 The same command writes `masked_summary.csv`, with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
 
-For a threshold from the run, `run-scores` writes the score cache of the threshold rule: each frame's smallest keeping word, its frame powers and its 10 s event. It reads the files once, and `--jobs` scores them in parallel:
+`--threshold power_limit` sets the word of the BAO acceptance test in the bundle (Step 2). To study the sweep of a channel by itself, `run-scores` writes the score cache of the threshold rule: each frame's smallest keeping word, its frame powers and its 10 s event. It reads the files once, and `--jobs` scores them in parallel:
 
 ```bash
 pilot-proxy run-scores --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --channel 18 24 29 --jobs 32 --output-dir scores
@@ -237,7 +269,7 @@ pilot-proxy run-scores --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_f
 python tools/threshold_rule.py --scores scores --power-limits limits.json --out thresholds
 ```
 
-The rule keeps the most data while the BAO bias from the residual shelf power stays under one standard deviation in the RFIsher table, with a margin of two standard errors. `limits.json` gives each channel's checked power limit in mK². The result is in-sample, so it is checked on a later part of the run or on another run.
+This rule keeps the most data while the BAO bias from the residual shelf power stays under one standard deviation in the RFIsher table, with a margin of two standard errors. It applies no control corrections. `limits.json` gives each channel's checked power limit in mK². The result is in-sample, so it is checked on a later part of the run or on another run.
 
 On CHIME, the detector is removed by a restart without `dtv_enabled`, and the rendered config then has no detector stages. A change of bundle, word, or channel list always needs a restart.
 

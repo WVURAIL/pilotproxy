@@ -5,6 +5,11 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `calibrate-bundle`, `plan-run` and `process-run` take a threshold choice. `knee` is
+  the default. `power_limit` gives each channel the word that keeps the most frames
+  under a checked residual power, the BAO acceptance test with the RFIsher table. It
+  uses the same fine powers, measures the null and the selection shift on the control,
+  and writes `bundle.decisions.json` for the operating-policy compiler.
 - `plan-run` splits a detect-only run into a calibration plan and a test plan.
 - `run-spectrogram` plots the fine powers of a detect-only run with and without the mask.
 - `calibrate-bundle` accepts the control channel as a bound channel, so a run records

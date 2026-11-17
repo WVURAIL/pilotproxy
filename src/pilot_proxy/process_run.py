@@ -61,6 +61,12 @@ def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: 
     failed = [c for c in tested["checks"] if not c["passed"]]
     if failed:
         lines += ["", "Failed checks:", ""] + [f"- {c['check']}: {c['detail']}" for c in failed]
+    if report.get("threshold") == "power_limit":
+        tested = report["power_limit"]
+        none = ", ".join(str(c) for c in tested["no_passing_word"]) or "none"
+        lines += ["", f"Threshold: power limit, against {tested['experiment']}. Channels with no passing word: {none}. "
+                  "The operating policy masks these whole, and the bundle holds the floor on them. A power-limit word "
+                  "is in-sample, and it needs a test on independent data before it masks."]
     lines += ["", "A word from the knee or the floor is only as good as the run behind it. Read each channel's "
               "spectrograms under spectrograms/ before the bundle is used."]
     return "\n".join(lines) + "\n"
@@ -69,14 +75,16 @@ def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: 
 def process_run(*, bundle_dir: Path, runs: Sequence[str], epoch: str, output_dir: Path,
                 calibration_share: float = CALIBRATION_SHARE, null_quantile: float = 0.99,
                 receiver_profile: Path | None = None, detector_core_profile: Path = Path(CORE_PROFILE),
-                chunk_seconds: float = 10.0, log=print) -> dict[str, Any]:
+                chunk_seconds: float = 10.0, threshold: str = "knee", power_limit: Path | None = None,
+                log=print) -> dict[str, Any]:
     """Split the run, calibrate a bundle on the first part, test it on the rest, and write the summary."""
     output_dir = Path(output_dir)
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError(f"{output_dir} is not empty")
     plans = write_run_plans(bundle_dir=bundle_dir, runs=list(runs), output_dir=output_dir / "plans", epoch=epoch,
                             receiver_profile=receiver_profile, detector_core_profile=detector_core_profile,
-                            null_quantile=null_quantile, calibration_share=calibration_share)
+                            null_quantile=null_quantile, calibration_share=calibration_share, threshold=threshold,
+                            power_limit=power_limit)
     log("plans written")
     bundle = output_dir / "bundle"
     report = calibrate_bundle(plan_path=output_dir / "plans" / "calibrate.json", output_dir=bundle)
@@ -97,7 +105,7 @@ def process_run(*, bundle_dir: Path, runs: Sequence[str], epoch: str, output_dir
         log(f"spectrograms of the {part} part written")
 
     rows = _summary_rows(report, tested, masked)
-    summary = dict(epoch=epoch, passed=tested["passed"], floor_eta=report["floor_eta"],
+    summary = dict(epoch=epoch, passed=tested["passed"], threshold=report["threshold"], floor_eta=report["floor_eta"],
                    floor_source=report["floor_source"], calibration_share=calibration_share, channels=rows)
     write_json_strict(output_dir / "summary.json", summary)
     (output_dir / "summary.md").write_text(_markdown(epoch, report, tested, rows))

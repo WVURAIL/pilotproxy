@@ -7,6 +7,7 @@ import h5py
 import numpy as np
 import pytest
 
+from pilot_proxy.power_limit_word import control_corrections, limit_test, median_excess
 from pilot_proxy.bundle_calibration import (
     _bulk,
     _exact_word,
@@ -429,3 +430,170 @@ def test_binomial_tail():
     assert binomial_upper_tail(10, 10, 0.5) == pytest.approx(2.0 ** -10)
     assert binomial_lower_tail(0, 10, 0.5) == pytest.approx(2.0 ** -10)
     assert binomial_upper_tail(1000, 5000, 0.2) == pytest.approx(0.5, abs=0.02)
+
+
+def limit_plan(plans, tmp_path, limit, **given):
+    """Write a power-limit plan on the captures of the knee plan and return its path."""
+    limits = tmp_path / "limits.json"
+    limits.write_text(json.dumps({"35": limit, "29": limit}))
+    table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
+    path = tmp_path / "limit_plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], threshold="power_limit",
+                                    power_limit=dict(table=str(table), limits=str(limits), min_captures=2, **given))))
+    return path
+
+
+def test_knee_is_the_default_threshold(plans):
+    assert plans["report"]["threshold"] == "knee"
+    assert "power_limit" not in plans["report"] and "power_limit" not in plans["report"]["channels"]["35"]
+    assert not plans["bundle"].with_name("bundle.decisions.json").exists()
+
+
+def test_power_limit_threshold_keeps_the_most_frames_under_the_limit(plans, tmp_path):
+    report = calibrate_bundle(plan_path=limit_plan(plans, tmp_path, 1e-3), output_dir=tmp_path / "bundle")
+    channel = report["channels"]["35"]
+    tested = channel["power_limit"]
+    assert report["threshold"] == "power_limit" and report["power_limit"]["no_passing_word"] == [29]
+    assert tested["outcome"] == "useful" and channel["word_source"] == "power limit"
+    assert channel["word_q16"] == tested["word"]
+    # half of the captures hold the tone, and no word that keeps one of them meets the limit
+    assert tested["kappa"] == pytest.approx(0.5) and tested["ratio"] <= 1.0
+    assert tested["coupling"] == 1.0 and tested["coupling_source"] == "worst case"
+    assert tested["corrections"]["control_frames"] == 26
+    profiles = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    fine = {p["physical_channel"]: p["fine_calibration"] for p in profiles}
+    assert fine[35]["cfar_multiplier_q16"] == tested["word"]
+    # a channel whose pilot the run never showed takes the floor and no pass
+    quiet = report["channels"]["29"]
+    assert quiet["power_limit"]["outcome"] == "not useful" and quiet["power_limit"]["reason"] == "pilot not seen"
+    assert "word" not in quiet["power_limit"]
+    assert quiet["word_q16"] == report["floor_word_q16"]
+
+
+def test_power_limit_decisions_are_read_by_the_operating_policy(plans, tmp_path):
+    from pilot_proxy.operating_policy import _decisions, _threshold_kind
+
+    calibrate_bundle(plan_path=limit_plan(plans, tmp_path, 1e-3), output_dir=tmp_path / "bundle")
+    rows = _decisions(tmp_path / "bundle.decisions.json")
+    assert sorted(rows) == [29, 35]
+    assert _threshold_kind(rows[35]) == "finite" and _threshold_kind(rows[29]) == "pass_all"
+    report = json.loads((tmp_path / "bundle.report.json").read_text())
+    assert rows[35]["deployed_word"] == report["channels"]["35"]["word_q16"]
+
+
+def test_power_limit_channel_with_no_passing_word_takes_the_floor(plans, tmp_path):
+    from pilot_proxy.operating_policy import _decisions, _threshold_kind
+
+    report = calibrate_bundle(plan_path=limit_plan(plans, tmp_path, 1e-12), output_dir=tmp_path / "bundle")
+    channel = report["channels"]["35"]
+    assert channel["power_limit"]["outcome"] == "not useful" and channel["power_limit"]["least_ratio"] > 1.0
+    assert channel["word_source"] == "floor, power limit: no supported threshold meets tolerance"
+    assert channel["word_q16"] == report["floor_word_q16"]
+    assert report["power_limit"]["no_passing_word"] == [29, 35]
+    assert _threshold_kind(_decisions(tmp_path / "bundle.decisions.json")[35]) == "reject_all"
+
+
+def test_power_limit_coupling_scales_the_power(plans, tmp_path):
+    worst = calibrate_bundle(plan_path=limit_plan(plans, tmp_path, 1e-12), output_dir=tmp_path / "worst")
+    (tmp_path / "coupled").mkdir()
+    coupled = calibrate_bundle(plan_path=limit_plan(plans, tmp_path / "coupled", 1e-12, coupling={"35": 1e-6}),
+                               output_dir=tmp_path / "bundle")
+    a, b = worst["channels"]["35"]["power_limit"], coupled["channels"]["35"]["power_limit"]
+    assert b["coupling_source"] == "plan"
+    assert b["least_ratio"] == pytest.approx(1e-6 * a["least_ratio"])
+
+
+def test_power_limit_plan_errors(plans, tmp_path):
+    base = json.loads(limit_plan(plans, tmp_path, 1e-3).read_text())
+    path = tmp_path / "bad.json"
+    for change, message in ((dict(threshold="best"), "threshold must be"), (dict(power_limit={}), "needs"),
+                            (dict(words={"35": 70000}), "takes no words"),
+                            (dict(control=None, num_inputs=16), "needs a control"),
+                            (dict(power_limit=dict(base["power_limit"], coupling={"35": 2.0})), "at most 1")):
+        path.write_text(json.dumps(dict(base, **change)))
+        with pytest.raises(ValueError, match=message):
+            calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+        assert not (tmp_path / "bundle").exists()
+
+
+def test_median_excess_reads_the_pilot_over_the_background():
+    fines = np.full((3, 3, 256), 50, dtype=np.uint64)
+    fines[:, 0] = 100
+    fines[1, 0, 7] += 25600          # a pilot that doubles the frame power
+    fines[2, 1:] = 0                 # no reference
+    bulk = _bulk(7)
+    excess = median_excess(fines, bulk, default_rank(bulk))
+    assert excess[0] == pytest.approx(0.0) and excess[1] == pytest.approx(1.0) and np.isnan(excess[2])
+
+
+def test_control_corrections_equal_the_direct_sums():
+    rng = np.random.default_rng(11)
+    n = 600
+    words = rng.integers(100, 160, n)
+    excess = rng.normal(1e-3, 0.03, n) - 1e-4 * (words - 130)
+    unit = rng.integers(0, 9, n) * 5
+    at = np.r_[50, np.unique(words), 500]
+    got = control_corrections(words, excess, unit, at)
+    mean = excess.mean()
+    sums = np.bincount(unit, excess - mean)
+    assert got["null"] == pytest.approx(mean) and got["null_se"] == pytest.approx(np.sqrt(sums @ sums) / n)
+    for i, word in enumerate(at):
+        keep = words <= word
+        if not keep.any() or keep.all():
+            assert got["shift"][i] == 0.0 and got["shift_se"][i] == 0.0
+            continue
+        kept = excess[keep].mean()
+        influence = np.where(keep, (excess - kept) / keep.sum(), 0.0) - (excess - mean) / n
+        cluster = np.bincount(unit, influence)
+        assert got["shift"][i] == pytest.approx(kept - mean, rel=1e-9, abs=1e-15)
+        assert got["shift_se"][i] == pytest.approx(np.sqrt(cluster @ cluster), rel=1e-7)
+
+
+def test_limit_test_takes_the_largest_passing_word():
+    sweep = dict(word=np.array([10, 20, 30, 40], dtype=np.uint64), kappa=np.array([0.2, 0.5, 0.8, 1.0]),
+                 mean_excess=np.array([0.0, 1.0, 2.0, 30.0]), se=np.zeros(4), kept_frames=np.array([2, 5, 8, 10]),
+                 kept_events=np.array([1, 3, 3, 4]))
+    common = dict(shelf=0.01, power_scale=4.0, power_limit=4.0 * 0.021**2)
+    result = limit_test(sweep, min_captures=3, **common)
+    assert (result["word"], result["kappa"], result["passing_words"]) == (30, 0.8, 2)
+    assert result["ratio"] == pytest.approx((0.02 / 0.021) ** 2)
+    # the offset and the shift come off the estimate, and the margin goes onto it
+    shifted = limit_test(sweep, min_captures=3, offset=0.005, shift=np.full(4, -0.005), margin=0.001, **common)
+    assert shifted["upper_shelf"] == pytest.approx(0.021) and shifted["word"] == 30
+    assert limit_test(sweep, min_captures=5, **common)["reason"] == "no word keeps 5 captures"
+    assert limit_test(sweep, min_captures=3, coupling=1e-3, **common)["word"] == 40
+    with pytest.raises(ValueError, match="at most 1"):
+        limit_test(sweep, coupling=1.5, **common)
+
+
+def test_process_run_takes_the_power_limit_threshold(plans, tmp_path):
+    captures = plans["calibrate"]["control"]["captures"]
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    profiles = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    anchor = next(p for p in profiles if p["physical_channel"] == 35)["fine_calibration"]["anchor_bin"]
+    rng = np.random.default_rng(5)
+    for index in range(8):
+        data = rng.gamma(44, 1e6 / 44, size=(32, 2, 3, 256))
+        data[:, 0, 0, anchor] *= 1 + 299 * (index % 2)  # channel 35's pilot in every other file
+        with h5py.File(tmp_path / f"run_{index}.h5", "w") as handle:
+            handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
+            handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 32 * 8192
+    (tmp_path / "limits.json").write_text(json.dumps({"35": 1e-5, "37": 1e-5}))
+    table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
+    (tmp_path / "inputs.json").write_text(json.dumps(dict(table=str(table), limits="limits.json", min_captures=2)))
+    common = dict(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
+                  calibration_share=0.5, receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
+    summary = process_run(output_dir=tmp_path / "out", threshold="power_limit", power_limit=tmp_path / "inputs.json", **common)
+    rows = {row["channel"]: row for row in summary["channels"]}
+    assert summary["threshold"] == "power_limit" and rows[35]["word_source"] == "power limit"
+    # the word keeps the files with no pilot and masks the others
+    assert 40 < rows[35]["calibrate_masked_percent"] < 60
+    report = json.loads((tmp_path / "out" / "bundle.report.json").read_text())
+    assert report["channels"]["37"]["power_limit"]["corrections"] == "none, the control itself"
+    assert "Threshold: power limit" in (tmp_path / "out" / "summary.md").read_text()
+    assert (tmp_path / "out" / "bundle.decisions.json").exists()
+    with pytest.raises(ValueError, match="needs a JSON file"):
+        process_run(output_dir=tmp_path / "none", threshold="power_limit", **common)

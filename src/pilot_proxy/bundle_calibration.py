@@ -27,6 +27,13 @@ from pilot_proxy.fine_decision import (
 )
 from pilot_proxy.fxfft import fine_power_fx
 from pilot_proxy.json_utils import write_json_strict
+from pilot_proxy.power_limit_word import (
+    EVALUATION,
+    SELECTION,
+    control_corrections,
+    limit_test,
+    median_excess,
+)
 from pilot_proxy.runtime_bundle import (
     CONTROL_PHYSICAL_CHANNEL,
     _write_sha256sums,
@@ -58,6 +65,11 @@ NULL_CHUNK = 4096
 # relative float gap below which a frame is scored exactly, far above the 1e-15 error of the float word
 FLOAT_MARGIN = 1e-12
 BUNDLE_FILES = ("detector_contract.json", "pilot_profiles.json", "weights.bin", "weights.manifest.json")
+# the knee is the general word of a channel, and the power-limit word keeps the most frames under a checked residual power
+THRESHOLDS = ("knee", "power_limit")
+DECISIONS_SCHEMA = "pilotproxy-power-decisions-v4"
+# reported only for a channel that passes
+PASSING_FIELDS = ("word", "kappa", "ratio", "x", "upper_shelf", "kept_frames", "kept_captures")
 
 
 def iter_blocks(path: str | Path, capture_format: str, channel_id: int, block_samples: int,
@@ -356,6 +368,82 @@ def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: i
                                 null_quantile=quantile, note=f"{note} Detect-only, not a calibration."))
 
 
+def _shelf(plan: dict[str, Any], base: Path) -> float:
+    """Return the shelf power in one fine bin over the pilot power, C_s."""
+    adapter = json.loads((base / plan["receiver_profile"]).read_text())["detector_adapter"]
+    return 10 ** (float(adapter["pilot_below_data_db"]) / 10) * float(adapter["fine_bin_enbw_hz"]) / float(adapter["dtv_bandwidth_hz"])
+
+
+def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
+    """Return the response table, the checked limits and the optional corrections of a power-limit plan."""
+    from pilot_proxy.characterization import threshold_rule
+
+    given = plan.get("power_limit")
+    if not isinstance(given, dict) or not {"table", "limits"} <= set(given):
+        raise ValueError('the power_limit threshold needs "power_limit": {"table": ..., "limits": ...} in the plan')
+    unknown = set(given) - {"table", "limits", "coupling", "curvature", "margin", "min_captures"}
+    if unknown:
+        raise ValueError(f"unknown power_limit keys {sorted(unknown)}")
+    if "words" in plan or "word_q16" in plan:
+        raise ValueError("a power_limit plan takes no words, because the test sets them")
+    table_path, limits_path = (base / given["table"]).resolve(), (base / given["limits"]).resolve()
+    table = threshold_rule.load_table(table_path)
+    rows = {int(row["channel"]): row for row in table["channels"]}
+    margin = float(given.get("margin", 0.0))
+    if not np.isfinite(margin) or margin < 0:
+        raise ValueError("the margin must be finite and nonnegative")
+    curvature = {int(c): (float(v[0]), float(v[1])) for c, v in given.get("curvature", {}).items()}
+    return dict(
+        table=table, rows=rows, limits={int(c): float(v) for c, v in json.loads(limits_path.read_text()).items()},
+        coupling={int(c): float(v) for c, v in given.get("coupling", {}).items()}, curvature=curvature, margin=margin,
+        min_captures=int(given.get("min_captures", MIN_KNEE_CAPTURES)), shelf=_shelf(plan, base),
+        record=dict(table=str(table_path), table_sha256=_sha256_text(table_path.read_bytes()),
+                    experiment=table["inputs"].get("experiment"), limits=str(limits_path),
+                    limits_sha256=_sha256_text(limits_path.read_bytes()), margin=margin,
+                    selection=SELECTION, evaluation=EVALUATION))
+
+
+def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: np.ndarray, control, *, anchor: int,
+                 bulk: np.ndarray, rank: int, inputs: dict[str, Any]) -> dict[str, Any]:
+    """Return the power-limit test of one channel. The control is read with no corrections, as `control=None`."""
+    from pilot_proxy.characterization import threshold_rule
+
+    if channel not in inputs["rows"] or channel not in inputs["limits"]:
+        raise ValueError(f"channel {channel} needs a row in the response table and a checked power limit")
+    shelf = inputs["shelf"]
+    excess = median_excess(fines, bulk, rank)
+    good = (seen >= 0) & np.isfinite(excess)
+    sweep = threshold_rule.sweep(threshold_rule.ChannelFrames(
+        channel, np.where(good, seen, 0).astype(np.uint64), capture_weights(captures), good, captures,
+        np.where(good, excess, 0.0)), shelf=shelf)
+    offset, shift, margin, measured = 0.0, 0.0, 0.0, None
+    if control is not None:
+        words = required_words(control[0], anchor_bin=anchor, bulk=bulk, rank=rank)
+        control_excess = median_excess(control[0], bulk, rank)
+        good = (words >= 0) & np.isfinite(control_excess)
+        if not good.any():
+            raise ValueError(f"the control has no supported frames under the geometry of channel {channel}")
+        measured = control_corrections(words[good], control_excess[good], control[1][good], sweep["word"].astype(np.int64))
+        curvature, curvature_se = inputs["curvature"].get(channel, (0.0, 0.0))
+        offset = shelf * measured["null"] + curvature
+        shift = shelf * measured["shift"]
+        margin = 2.0 * (shelf * (measured["shift_se"] + measured["null_se"]) + curvature_se) + inputs["margin"]
+    coupling = inputs["coupling"].get(channel, 1.0)
+    result = limit_test(sweep, shelf=shelf, power_scale=threshold_rule.power_scale(inputs["table"], channel),
+                      power_limit=inputs["limits"][channel], coupling=coupling, offset=offset, shift=shift, margin=margin,
+                      min_captures=inputs["min_captures"])
+    result.update(coupling_source="plan" if channel in inputs["coupling"] else "worst case",
+                  corrections="none, the control itself" if measured is None else dict(
+                      null=shelf * measured["null"], null_se=shelf * measured["null_se"],
+                      curvature=inputs["curvature"].get(channel, (0.0, 0.0))[0],
+                      curvature_source="plan" if channel in inputs["curvature"] else "not given",
+                      control_frames=measured["frames"], control_captures=measured["captures"]))
+    if measured is not None and result["outcome"] == "useful":
+        at = int(np.searchsorted(sweep["word"], np.uint64(result["word"])))
+        result["corrections"].update(selection_shift=float(shift[at]), selection_shift_se=float(shelf * measured["shift_se"][at]))
+    return result
+
+
 def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
     """Write a detect-only commissioning bundle from a plan and return its report."""
     plan_path = Path(plan_path).resolve()
@@ -372,6 +460,12 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
     control = plan.get("control")
     if control is None and "num_inputs" not in plan:
         raise ValueError("a plan needs a control channel or num_inputs for a simulated first word")
+    threshold = plan.get("threshold", "knee")
+    if threshold not in THRESHOLDS:
+        raise ValueError(f"threshold must be one of {THRESHOLDS}, got {threshold!r}")
+    if threshold == "power_limit" and control is None:
+        raise ValueError("the power_limit threshold needs a control channel, which measures its corrections")
+    inputs = _limit_inputs(plan, base) if threshold == "power_limit" else None
     fmt = plan.get("capture_format")
     max_frames = plan.get("max_frames_per_capture")
 
@@ -385,7 +479,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             row = rows[int(control["channel"])]
             anchor = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             bulk = _bulk(anchor)
-            fines, _ = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
+            fines, control_captures = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
+            # the corrections of the power-limit test read the control again under the geometry of each channel
+            control_frames = (fines, control_captures) if inputs else None
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
                 null_scores(fine_ratio(fines[lo:lo + NULL_CHUNK]), anchor_bin=anchor, bulk=bulk, rank=default_rank(bulk))
@@ -457,8 +553,20 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             share = (at_floor - (1.0 - quantile)) / quantile
             given_word = plan.get("words", {}).get(str(channel))
             count = int(np.unique(captures).size)
+            is_control = bool(control) and channel == int(control["channel"])
+            tested = None
+            if inputs and (not is_control or (channel in inputs["rows"] and channel in inputs["limits"])):
+                tested = _limit_channel(channel, fines, captures, seen, None if is_control else control_frames,
+                                      anchor=anchor, bulk=bulk, rank=rank, inputs=inputs)
+                if origin == "nominal" and not is_control:
+                    # with no pilot in the run the estimate reads only noise, which is no pass
+                    tested = dict({key: value for key, value in tested.items() if key not in PASSING_FIELDS},
+                                  outcome="not useful", reason="pilot not seen")
             if given_word is not None or "word_q16" in plan:
                 word, word_source = int(floor if given_word is None else given_word), "plan"
+            elif tested is not None and not is_control:
+                # a channel with no passing word is masked whole by the operating policy, and holds the floor here
+                word, word_source = (tested["word"], "power limit") if tested["outcome"] == "useful" else (floor, f"floor, power limit: {tested['reason']}")
             elif origin == "nominal":
                 word, word_source = floor, "floor, no pilot"
             elif count < min_captures:
@@ -479,7 +587,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 word_q16=word, eta=word / Q16, word_source=word_source, knee_word_q16=knee,
                 masked_fraction=masked, masked_at_floor=at_floor, pilot_share=share,
                 pilot_in_nearly_every_frame=bool(share > ALWAYS_ON_SHARE),
-                strongest_bin_median_ratio=peak, strongest_bin_masked_fraction=fraction, **intervals)
+                strongest_bin_median_ratio=peak, strongest_bin_masked_fraction=fraction, **intervals,
+                **({"power_limit": tested} if tested is not None else {}))
 
     bundle, _ = _export(plan, base, channels, output_dir)
     for row in bundle["profiles"]:
@@ -494,11 +603,22 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         shutil.rmtree(output_dir)
         raise ValueError(f"bundle failed validation: {validation['errors']}")
 
-    report = dict(floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
+    report = dict(threshold=threshold, floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
                   null_quantile=quantile, floor_source=source, search_half_width=SEARCH_HALF_WIDTH,
                   null_scores=int(independent), channels=report_channels, control=control_record,
                   calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values()
                                              for p in _expand(ps)))
+    if inputs:
+        decided = {int(c): row["power_limit"] for c, row in report_channels.items()
+                   if "power_limit" in row and int(c) != int(control["channel"])}
+        report["power_limit"] = dict(inputs["record"], shelf=inputs["shelf"], min_captures=inputs["min_captures"],
+                             no_passing_word=sorted(c for c, t in decided.items() if t["outcome"] != "useful"))
+        # the record the operating-policy compiler reads: a word, or the reason a channel has none
+        write_json_strict(output_dir.with_name(output_dir.name + ".decisions.json"), dict(
+            schema=DECISIONS_SCHEMA, inputs=dict(inputs["record"], plan_sha256=_sha256_text(plan_path.read_bytes())),
+            channels=[dict(channel=c, outcome=t["outcome"], reason=t["reason"], deployed_word=t.get("word"),
+                           kappa=t.get("kappa"), ratio=t.get("ratio"), power_limit=t["power_limit"],
+                           power_scale=t["power_scale"], coupling=t["coupling"]) for c, t in sorted(decided.items())]))
     write_json_strict(output_dir.with_name(output_dir.name + ".report.json"), report)
     return report
 

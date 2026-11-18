@@ -786,7 +786,7 @@ support was added to Kotekan in kotekan\#1874.}
 \code{num_inputs} is recorded as \code{summed_inputs}, and the detector warns
 while the count of good inputs differs from it by more than 10\%. It warns
 rather than stops, because feeds are flagged and restored in normal running.
-On CHIME, the bad-feed mask is added by kotekan\#1880, which is open.}
+On CHIME, the bad-feed mask was added by kotekan\#1880.}
 
 \subsection{Detect-only before masking}
 \choice{Every bundle made by \code{calibrate-bundle} is a detect-only
@@ -1173,11 +1173,6 @@ telescope calibration, a passing \code{test-bundle} report with the control,
 \subsection{Open work and known limitations}
 
 \begin{itemize}
-  \item \textbf{CHIME calibration data.} On Kotekan \code{develop},
-        \code{config/chime/dtv.j2} writes no fine powers, so a CHIME run cannot
-        yet be calibrated, and every input is summed. kotekan\#1880 adds the
-        fine powers, the bad-feed mask, calibration mode and the
-        \code{chime-first-56005bb7} bundle. It is open.
   \item \textbf{Vendored core.} Kotekan vendors PilotProxy commit
         \code{afe1c9d}, which predates the name
         \code{post_nyquist_zone_normalization} and so cannot validate the
@@ -1226,7 +1221,7 @@ kotekan\#1859, \#1860 & Merged. Detector in each CHIME NUMA domain; zeroed flagg
 kotekan\#1862, \#1877 & Merged. Detect-only bundles; Pathfinder bundle with a control.\\ \hline
 kotekan\#1874 & Merged. Fine powers and the control channel.\\ \hline
 kotekan\#1878, \#1895 & Merged. Pathfinder products on the recv node; installed bundle path.\\ \hline
-kotekan\#1880 & Open. CHIME fine powers, bad feeds and the first CHIME bundle.\\ \hline
+kotekan\#1880 & Merged. CHIME fine powers, bad feeds, calibration mode and the first CHIME bundle.\\ \hline
 kotekan\#1905 & Open. Re-vendor of the core at \code{54ae410}.\\ \hline
 kotekan\#1906 & Open. Masking refused with a detect-only bundle; summed-input warning.\\ \hline
 \end{longtable}

@@ -243,7 +243,7 @@ dtv_write_enabled: true
 dtv_output_dir: /scratch/dtv
 ```
 
-The bundle profiles must use `chime_freq_id`, and the voltage metadata must carry the 16 `coarse_freq` values of each domain. There is no REST switch, so the detector runs and writes from startup. On `develop` the mask, powers and fine support are written, with no fine powers, so a CHIME run cannot yet be calibrated, and every input is summed. kotekan#1880 drops the inputs flagged by `bufferBadInputs`, writes only the mask unless `dtv_calibration_mode` is set, which adds the powers, fine support and fine powers as on CHORD, and adds a first bundle, `chime-first-56005bb7`.
+The bundle profiles must use `chime_freq_id`, and the voltage metadata must carry the 16 `coarse_freq` values of each domain. There is no REST switch, so the detector runs and writes from startup. The detector drops the inputs flagged by `bufferBadInputs` and writes only the mask unless `dtv_calibration_mode` is set, which adds the powers, fine support and fine powers as on CHORD. The first bundle is `chime-first-56005bb7` (kotekan#1880).
 
 ### Checking a run
 
@@ -298,7 +298,7 @@ On CHIME, the detector is removed by a restart without `dtv_enabled`, and the re
 
 ## Bad feeds
 
-On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, as if it carried no signal, and `bufferBadInputs` also flags the RFI antennas (`bf_mask_name` in `config/chord/dtv.j2`). On CHIME, it sums every input until kotekan#1880 merges. A change in the flagged inputs changes the noise of the sum. When the plan gives `num_inputs`, each profile records it as `summed_inputs`, and with kotekan#1906 the detector logs a warning while the count of good inputs differs from it by more than 10%. Recalibrate if the warning persists.
+On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, as if it carried no signal, and `bufferBadInputs` also flags the RFI antennas (`bf_mask_name` in `config/chord/dtv.j2`). On CHIME it does the same, since kotekan#1880. A change in the flagged inputs changes the noise of the sum. When the plan gives `num_inputs`, each profile records it as `summed_inputs`, and with kotekan#1906 the detector logs a warning while the count of good inputs differs from it by more than 10%. Recalibrate if the warning persists.
 
 
 ## Applying the mask

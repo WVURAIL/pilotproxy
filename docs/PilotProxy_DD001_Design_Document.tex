@@ -1164,17 +1164,13 @@ against the science tolerance, the shadow acceptance of
         yet be calibrated, and every input is summed. kotekan\#1880 adds the
         fine powers, the bad-feed mask, calibration mode and the
         \code{chime-first-56005bb7} bundle. It is open.
-  \item \textbf{kotekan\#1880 needs \code{develop}.} Its branch,
-        \code{chime-dtv-follow-up}, was cut before kotekan\#1874. Its
-        \code{dtv.j2} sets \code{dtv_fine_powers_name}, which its detector
-        lacks, and its detector refuses channel 37 and the status
-        \code{control} that \code{chime-first-56005bb7} uses. The branch must
-        take \code{develop} before it is merged.
   \item \textbf{Vendored core.} Kotekan vendors PilotProxy commit
-        \code{afe1c9d}. Later commits changed only comments in \code{cuda/},
-        and the vendored files still match the digests in \code{VENDOR.json}.
-        Re-vendor at the next change to the arithmetic, so that the
-        comments in Kotekan catch up.
+        \code{afe1c9d}, which predates the name
+        \code{post_nyquist_zone_normalization} and so cannot validate the
+        shipped bundles. A re-vendor at \code{54ae410}, whose \code{cuda/}
+        differs only in comments, is on the Kotekan branch
+        \code{pilotproxy-revendor-54ae410}. Re-vendor again at each change to
+        the core, after the change is merged in PilotProxy.
   \item \textbf{CHIME has no voltage capture path} of its own on the upgrade,
         so first captures come from the CHIME/FRB baseband system.
   \item \textbf{First CHIME calibration.} Record a detect-only run with the

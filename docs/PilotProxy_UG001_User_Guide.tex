@@ -880,7 +880,7 @@ Each X-engine half packs 1024 blocks (about 43 s) of each sent product into one 
 
 \subsection{CHIME Upgrade}
 
-\code{config/chime/chime_upgrade_2numa.j2} includes \code{config/chime/dtv.j2} in each NUMA domain when \code{dtv_enabled} is set, with one detector per GPU. It is detect-only: no visibility or weight consumer reads the outputs, and there is no \code{DtvRfiMask} and no REST switch. The detector uses \code{detector_window_samples: 128} and the namespace \code{chime_freq_id}, so the bundle must use \code{chime_freq_id}. The voltage metadata must carry the \code{coarse_freq} of each domain. The variables below are those of Kotekan pull request \#1880 (branch \code{chime-dtv-follow-up}).
+\code{config/chime/chime_upgrade_2numa.j2} includes \code{config/chime/dtv.j2} in each NUMA domain when \code{dtv_enabled} is set, with one detector per GPU. It is detect-only: no visibility or weight consumer reads the outputs, and there is no \code{DtvRfiMask} and no REST switch. The detector uses \code{detector_window_samples: 128} and the namespace \code{chime_freq_id}, so the bundle must use \code{chime_freq_id}. The voltage metadata must carry the \code{coarse_freq} of each domain.
 
 \begin{longtable}{|L{0.27\linewidth}|L{0.20\linewidth}|L{0.45\linewidth}|}
 \caption{CHIME configuration variables.}\label{tab:chimekeys}\\
@@ -913,7 +913,7 @@ With Kotekan pull request \#1906, which is open, \code{DtvRfiMask} reads \code{p
 
 \subsection{Bad Feeds}
 
-On both telescopes the detector reads the bad feed mask ring of \code{bufferBadInputs} (\code{bf_mask_name: bf_mask}), and a flagged input is packed as zero. On CHORD, \code{bufferBadInputs} also flags the elements outside the main array, so the detector drops the 16 RFI antennas. On CHIME this is part of pull request \#1880. \code{dtv_powers} and \code{dtv_fine_powers} fall as inputs are flagged. A word holds for the inputs summed at calibration. When the bundle records \code{summed_inputs}, the detector of Kotekan pull request \#1906 logs a warning while the count of good inputs differs from it by more than 10\%, and an INFO line when the count returns. The loop is repeated if the warning persists.
+On both telescopes the detector reads the bad feed mask ring of \code{bufferBadInputs} (\code{bf_mask_name: bf_mask}), and a flagged input is packed as zero. On CHORD, \code{bufferBadInputs} also flags the elements outside the main array, so the detector drops the 16 RFI antennas. On CHIME this was added by Kotekan pull request \#1880. \code{dtv_powers} and \code{dtv_fine_powers} fall as inputs are flagged. A word holds for the inputs summed at calibration. When the bundle records \code{summed_inputs}, the detector of Kotekan pull request \#1906 logs a warning while the count of good inputs differs from it by more than 10\%, and an INFO line when the count returns. The loop is repeated if the warning persists.
 
 %======================================================================
 \section{Checking a Run}

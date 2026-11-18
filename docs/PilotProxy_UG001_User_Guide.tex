@@ -613,7 +613,7 @@ python3 tools/extract_baseband_channels.py --input baseband_subset.00000000.h5 \
   --output day1.h5 --coarse-freq 2531 2715 2869 3115 --blocks 20
 \end{lstlisting}
 
-A knee needs at least 30 captures of a channel (\code{min_knee_captures}), and a floor at the 0.99 quantile needs enough control frames: calibration stops when the independent null scores times \(1-\)\code{null_quantile} is below 1. Calibration and test data are taken at different times. A run of 48 h, split by day, gives each part a whole day.
+A knee needs at least 30 captures of a channel (\code{min_knee_captures}), and a floor at the 0.99 quantile needs enough control frames: calibration stops when the independent null scores times \(1-\)\code{null_quantile} is below 1. Calibration and test data are taken at different times. A run of 48 h, split by day, gives each part a whole day. Every deployed word comes from such a run on the telescope where it is used. The archive values characterize the method and are not deployed.
 
 A telescope with no data starts from its parameters. A plan with empty capture lists, \code{"control": null} and \code{"num_inputs"} gives a first bundle at the simulated white-noise floor for that number of inputs. This bundle is enough to record the data for the next one. \code{chime-first-56005bb7} was made this way with 2048 inputs.
 

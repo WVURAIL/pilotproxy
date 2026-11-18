@@ -228,7 +228,7 @@ pilot-proxy test-bundle --bundle-dir run1/bundle --plan run1/plans/test.json --o
 
 Calibration holds the fine powers of one channel at a time, about 13 GB for a day. On a 90 min synthetic run of four channels, calibration took 18 s, the test 10 s and the spectrograms 15 s, and the time grows in proportion to the run.
 
-CHORD has no archive for the science rule of the threshold, so these runs set its words. A 48 h run calibrates on the first day and tests on the second, and a short run with the new bundle then confirms the masks on the nodes. The bundle is qualified as in Step 3 before the mask is switched on.
+These runs set the deployed words on every telescope; the archive values characterize the method and are not deployed. A 48 h run calibrates on the first day and tests on the second, and a short run with the new bundle then confirms the masks on the nodes. The bundle is qualified as in Step 3 before the mask is switched on.
 
 The bundle of the run must bind the control, or `plan-run` stops, because the run then gives no floor. A pilot that fades during the run can fail the masked fraction check on the last third, so a failure on a weak channel is read against its spectrogram before the word is changed.
 

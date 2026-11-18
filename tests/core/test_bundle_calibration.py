@@ -9,23 +9,27 @@ import pytest
 
 from pilot_proxy.power_limit_word import control_corrections, limit_test, median_excess
 from pilot_proxy.bundle_calibration import (
+    BUNDLE_FILES,
     _bulk,
     _exact_word,
     _expand,
     _load_fines,
     binomial_lower_tail,
     binomial_upper_tail,
+    bundle_digest,
     calibrate_bundle,
     capture_weights,
     default_rank,
     iter_run_frames,
     knee_word,
     nominal_fine_bin,
+    qualify_bundle,
     required_words,
     simulated_null_scores,
     test_bundle as run_bundle_test,
 )
 from pilot_proxy.characterization import threshold_rule
+from pilot_proxy.runtime_bundle import _write_sha256sums, validate_runtime_weight_bundle
 from pilot_proxy.process_run import process_run
 from pilot_proxy.run_plans import write_run_plans
 from pilot_proxy.run_scores import build_run_scores
@@ -103,6 +107,79 @@ def test_manifest_holds_no_local_paths(plans):
 def test_bundle_passes_on_other_captures(plans):
     result = run_bundle_test(bundle_dir=plans["bundle"], plan_path=plans["test_path"])
     assert result["passed"], result
+
+
+def test_bundle_test_needs_the_control(plans, tmp_path):
+    plan = dict(plans["test"], control=[])
+    path = tmp_path / "no_control.json"
+    path.write_text(json.dumps(plan))
+    result = run_bundle_test(bundle_dir=plans["bundle"], plan_path=path)
+    check = next(c for c in result["checks"] if c["check"] == "false alarms on the control channel")
+    assert not result["passed"] and not check["passed"] and "no control" in check["detail"]
+
+
+def _passing_report(plans, tmp_path):
+    report = tmp_path / "test_report.json"
+    assert run_bundle_test(bundle_dir=plans["bundle"], plan_path=plans["test_path"], output_json=report)["passed"]
+    return report
+
+
+def test_qualified_bundle_names_its_test_and_reviewer(plans, tmp_path):
+    report = _passing_report(plans, tmp_path)
+    summary = qualify_bundle(bundle_dir=plans["bundle"], test_report=report, reviewer="A. Reviewer",
+                             output_dir=tmp_path / "qualified")
+    assert summary["qualified_channels"] == [29, 35]
+    assert summary["source_bundle_sha256sums"] == bundle_digest(plans["bundle"]) != summary["bundle_sha256sums"]
+    profiles = json.loads((tmp_path / "qualified" / "pilot_profiles.json").read_text())["profiles"]
+    for row in profiles:
+        record = row["fine_calibration"]["provenance"].get("mask_qualification")
+        if row["physical_channel"] == 37:
+            assert record is None
+        else:
+            assert record == dict(test_report_sha256=summary["test_report_sha256"], reviewer="A. Reviewer")
+    assert not validate_runtime_weight_bundle(bundle_dir=tmp_path / "qualified").get("errors")
+
+
+def test_qualify_refuses_a_failed_or_foreign_report(plans, tmp_path):
+    report = _passing_report(plans, tmp_path)
+    failed = json.loads(report.read_text())
+    failed["passed"] = False
+    failed["checks"][0]["passed"] = False
+    (tmp_path / "failed.json").write_text(json.dumps(failed))
+    with pytest.raises(ValueError, match="did not pass"):
+        qualify_bundle(bundle_dir=plans["bundle"], test_report=tmp_path / "failed.json", reviewer="R",
+                       output_dir=tmp_path / "q1")
+    foreign = dict(json.loads(report.read_text()), bundle_sha256sums="0" * 64)
+    (tmp_path / "foreign.json").write_text(json.dumps(foreign))
+    with pytest.raises(ValueError, match="is not a test of"):
+        qualify_bundle(bundle_dir=plans["bundle"], test_report=tmp_path / "foreign.json", reviewer="R",
+                       output_dir=tmp_path / "q2")
+    assert not (tmp_path / "q1").exists() and not (tmp_path / "q2").exists()
+
+
+def test_qualification_is_refused_on_the_control(plans, tmp_path):
+    plan = dict(plans["calibrate"], channels={**plans["calibrate"]["channels"],
+                                              "37": plans["calibrate"]["control"]["captures"]})
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    bundle = tmp_path / "bundle"
+    calibrate_bundle(plan_path=path, output_dir=bundle)
+    data = json.loads((bundle / "pilot_profiles.json").read_text())
+    control = next(p for p in data["profiles"] if p["physical_channel"] == 37)
+    control["fine_calibration"]["provenance"]["mask_qualification"] = dict(test_report_sha256="a" * 64, reviewer="R")
+    (bundle / "pilot_profiles.json").write_text(json.dumps(data, indent=2) + "\n")
+    _write_sha256sums(bundle, BUNDLE_FILES)
+    errors = validate_runtime_weight_bundle(bundle_dir=bundle)["errors"]
+    assert any("only a calibrated channel" in e["message"] for e in errors), errors
+
+
+def test_plan_input_count_is_recorded(plans, tmp_path):
+    plan = dict(plans["calibrate"], num_inputs=INPUTS)
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    profiles = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    assert {row["fine_calibration"]["provenance"]["summed_inputs"] for row in profiles} == {INPUTS}
 
 
 def test_tampered_bundle_fails(plans, tmp_path):
@@ -309,6 +386,18 @@ def test_run_scores_feed_the_threshold_rule(plans, tmp_path):
     assert sweep["x"][-1] > sweep["x"][0]
     with pytest.raises(ValueError, match="already exists"):
         build_run_scores(bundle_dir=plans["bundle"], runs=runs, channel=35, output_dir=tmp_path / "scores")
+
+
+def test_run_scores_read_the_frame_timing_from_the_file(plans, tmp_path):
+    frames = np.random.default_rng(3).integers(900, 1100, size=(4, 3, 256)).astype(np.uint64)
+    path = write_run_file(tmp_path / "run_chime.h5", [521, 614], frames)
+    with h5py.File(path, "a") as handle:
+        handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = 0
+        handle["dtv_fine_powers_n0"].attrs["seq_length_nsec"] = 2560
+        handle["dtv_fine_powers_n0"].attrs["dim_scalings"] = [16384, 1, 1, 1]
+    build_run_scores(bundle_dir=plans["bundle"], runs=[path], channel=35, output_dir=tmp_path / "scores")
+    time = threshold_rule.load_frames(35, tmp_path / "scores").time
+    assert np.diff(time) == pytest.approx(16384 * 2560e-9)
 
 
 def test_run_plans_split_each_channel_in_time(plans, tmp_path):

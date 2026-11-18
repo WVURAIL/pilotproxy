@@ -1,4 +1,4 @@
-"""Score cache of a detect-only CHORD run, for the threshold rule.
+"""Score cache of a detect-only run, for the threshold rule.
 
 Each frame of a bound channel gets its smallest keeping word, its support, its
 time and its event (a chunk of ``event_seconds``). The product beside it holds the
@@ -19,6 +19,7 @@ from pilot_proxy.bundle_calibration import _expand, _rows, required_words
 from pilot_proxy.characterization.score_cache import sha, write_json
 from pilot_proxy.fine_decision import unpack_bulk_mask
 
+# Pathfinder timing, used when a file does not state its own
 BLOCK_SAMPLES = 8192
 SAMPLE_NS = 5120
 MISSING = np.iinfo(np.uint64).max
@@ -38,13 +39,19 @@ def _file_scores(path: str, channel_id: int, anchor: int, bulk: np.ndarray, rank
         if channel_id not in coarse:
             return {}
         rows = data[:, coarse.index(channel_id)]
-        start_ns = int(data.attrs.get("fpga_seq_time_nsec", int(data.attrs["fpga_seq_num"]) * SAMPLE_NS))
+        # Kotekan writes the sample period with the telescope metadata and the samples per
+        # frame as the first dim scaling: 2560 ns and 16384 on CHIME, 5120 ns and 8192 on
+        # the Pathfinder
+        sample_ns = int(data.attrs.get("seq_length_nsec", handle.attrs.get("seq_length_nsec", SAMPLE_NS)))
+        scalings = data.attrs.get("dim_scalings")
+        block_samples = int(scalings[0]) if scalings is not None and len(scalings) else BLOCK_SAMPLES
+        start_ns = int(data.attrs.get("fpga_seq_time_nsec", int(data.attrs["fpga_seq_num"]) * sample_ns))
     # zeros were not tested, and 0xFF fills a block missing from the concat window
     present = np.flatnonzero(rows.any(axis=(1, 2)) & ~(rows == MISSING).all(axis=(1, 2)))
     rows = rows[present]
     return dict(words=required_words(rows, anchor_bin=anchor, bulk=bulk, rank=rank),
                 powers=rows.sum(axis=2, dtype=np.uint64),
-                time=(start_ns + present * BLOCK_SAMPLES * SAMPLE_NS) * 1e-9)
+                time=(start_ns + present * block_samples * sample_ns) * 1e-9)
 
 
 def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, output_dir: Path,

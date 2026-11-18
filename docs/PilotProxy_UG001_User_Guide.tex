@@ -264,7 +264,7 @@ pilot-proxy --help
 \end{lstlisting}
 The \code{n2} extra installs \code{h5py} and \code{hdf5plugin}, which are needed to read the \code{dtv_fine_powers} files of a run. The \code{plot} extra installs Matplotlib for \code{run-spectrogram} and \code{process-run}. The \code{cuda} extra installs \code{cupy-cuda12x} for the GPU paths of the standalone testbench and the archive scan.
 
-The bundle commands (\code{export-runtime-weight-bundle}, \code{validate-runtime-weight-bundle}, \code{calibrate-bundle}, \code{test-bundle}, \code{plan-run}, \code{process-run}, \code{run-spectrogram} and \code{run-scores}) compute the fine powers and words with the Python integer path. They need no GPU. A day of fine powers of one channel takes about 13 GB of memory during calibration, because one channel is held at a time.
+The bundle commands (\code{export-runtime-weight-bundle}, \code{validate-runtime-weight-bundle}, \code{calibrate-bundle}, \code{test-bundle}, \code{qualify-bundle}, \code{plan-run}, \code{process-run}, \code{run-spectrogram} and \code{run-scores}) compute the fine powers and words with the Python integer path. They need no GPU. A day of fine powers of one channel takes about 13 GB of memory during calibration, because one channel is held at a time.
 
 \subsection{CUDA Kernel}
 
@@ -430,11 +430,13 @@ This file is the one an operator reads most. It holds the receiver binding and t
 \pfield{designated_half_width} & The half-width \(w\), below 128. Calibration writes 32. & \yes\\ \hline
 \pfield{cfar_rank} & The zero-based rank \(r\). Must be below the number of bulk bins. Calibration writes the median rank. & \yes\\ \hline
 \pfield{bulk_mask_words_hex} & Four 64-bit hex strings. Bit \(b \bmod 64\) of word \(\lfloor b/64\rfloor\) is set when bin \(b\) is a bulk bin. Bits within \(\max(w,2)\) bins of the anchor must be clear. & \yes\\ \hline
-\pfield{provenance} & Object with \code{epochs} (the plan's \code{epoch} text), \code{source_product_sha256} (SHA-256 of the calibration plan), \code{null_quantile}, a \code{note}, and optionally \code{threshold_selection}. & part\\ \hline
+\pfield{provenance} & Object with \code{epochs} (the plan's \code{epoch} text), \code{source_product_sha256} (SHA-256 of the calibration plan), \code{null_quantile}, a \code{note}, and optionally \code{summed_inputs}, \code{mask_qualification} and \code{threshold_selection}. & part\\ \hline
+\pfield{provenance.summed_inputs} & Inputs summed at calibration, from the plan's \code{num_inputs}. Kotekan warns while the live count differs from it by more than 10\%. & \yes\\ \hline
+\pfield{provenance.mask_qualification} & \code{test_report_sha256} and \code{reviewer}, written by \code{qualify-bundle} (Section~\ref{sec:deploy}). Only a \code{calibrated} channel may carry it. Kotekan masks only when every \code{calibrated} channel does. & \yes\\ \hline
 \pfield{provenance.threshold_selection} & When its \code{qualification} is \code{archive_review_only}, Kotekan refuses to bind the channel. & \yes\\ \hline
 \end{longtable}
 
-The \code{note} of a calibrated profile states where its word came from, for example ``Word from floor, 5 captures of 30, floor from control channel. Detect-only, not a calibration.'' Every bundle written by \code{calibrate-bundle} carries ``Detect-only, not a calibration.'' in its notes. Kotekan does not read this text, so the detect-only rule is enforced by the configuration (Section~\ref{sec:applymask}).
+The \code{note} of a calibrated profile states where its word came from, for example ``Word from floor, 5 captures of 30, floor from control channel. Detect-only, not a calibration.'' Every bundle written by \code{calibrate-bundle} carries ``Detect-only, not a calibration.'' in its notes. Kotekan does not read this text. It reads \code{mask_qualification} instead (Section~\ref{sec:applymask}).
 
 \subsection{\texorpdfstring{\code{weights.bin}}{weights.bin}}
 
@@ -549,7 +551,7 @@ test JSON (\code{--output-json}) & The \code{test-bundle} checks: \code{passed} 
 Kotekan ships its bundles in \code{config/chime/dtv_bundles/} and \code{config/chord/dtv_bundles/}, each with a \code{README.md}. \code{make install} copies the whole config tree to \code{<prefix>/etc/kotekan/}, so with the default prefix a bundle is at \code{/usr/local/etc/kotekan/<telescope>/dtv_bundles/<bundle>/}. With \code{CMAKE_INSTALL_PREFIX=/usr}, the tree goes to \code{/etc/kotekan/}.
 
 \begin{longtable}{|L{0.33\linewidth}|L{0.18\linewidth}|L{0.39\linewidth}|}
-\caption{Bundles shipped with Kotekan. All are detect-only and must never be used with \code{dtv_apply_mask}.}\label{tab:shipped}\\
+\caption{Bundles shipped with Kotekan. All are detect-only, and Kotekan refuses \code{dtv_apply_mask} with them.}\label{tab:shipped}\\
 \hline
 \textbf{Bundle} & \textbf{Channels} & \textbf{Use and words}\\ \hline
 \endfirsthead
@@ -663,7 +665,7 @@ A first bundle with no captures:
 \pfield{epoch} & Text recorded in each profile's \code{provenance.epochs}.\\ \hline
 \pfield{channels} & Map from channel to a list of captures. An empty list gives the floor at the nominal anchor.\\ \hline
 \pfield{control} & \code{{"channel": 37, "captures": [...]}}, or \code{null}.\\ \hline
-\pfield{num_inputs} & Inputs summed, for the simulated floor. Required when \code{control} is \code{null}.\\ \hline
+\pfield{num_inputs} & Inputs summed. Required when \code{control} is \code{null}, for the simulated floor. When given, each profile records it as \code{summed_inputs}.\\ \hline
 \pfield{null_quantile} & Quantile of the floor, default 0.99.\\ \hline
 \pfield{exclude_bins} & Map from channel to fine bins left out of the bulk, for lines found near the pilot.\\ \hline
 \pfield{anchors} & Map from channel to a fixed anchor bin.\\ \hline
@@ -771,10 +773,10 @@ every bound channel has values & No profile is \code{pending_campaign}.\\ \hline
 test data differ from calibration data & No test capture is in the report's calibration or control captures.\\ \hline
 rank support on channel \(c\) & Every block of the channel has a valid test.\\ \hline
 masked fraction on channel \(c\) & The masked count is consistent with a rate inside the calibration's \code{masked_interval}.\\ \hline
-false alarms on the control channel & The control's masked count at the floor is consistent with the rate \(1-\)\code{null_quantile}.\\ \hline
+false alarms on the control channel & The control's masked count at the floor is consistent with the rate \(1-\)\code{null_quantile}. A test plan without a control fails this check.\\ \hline
 \end{longtable}
 
-The masked-fraction check only shows that the test data are masked like the calibration data. It passes a poor word. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is used.
+The control check tests the floor on new data. Each word is at or above the floor, so it bounds the false alarms of every channel. The masked-fraction check shows that the test data are masked like the calibration data. Neither check can show that a word catches weak pilots, since the captures do not say which blocks hold one. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is qualified.
 
 \subsection{Processing a Run in One Step}
 
@@ -796,6 +798,13 @@ pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_
 
 \subsection{Step 4: Deploy}
 \label{sec:deploy}
+
+A bundle from \code{calibrate-bundle} is detect-only. To mask with it, a person reads its test report, the report of Step~2 and the spectrograms, and then runs
+\begin{lstlisting}[style=shell]
+pilot-proxy qualify-bundle --bundle-dir bundle --test-report bundle.test.json \
+  --reviewer "Name" --output-dir bundle-qualified
+\end{lstlisting}
+The command refuses a report that failed, that has no passing control check, or that is of another bundle (\code{bundle_sha256sums}). It writes a new bundle in which every \code{calibrated} channel carries \code{mask_qualification}: the SHA-256 of the report and the reviewer. The new bundle has new digests, so it gets a new \code{<purpose>-<digest>} name.
 
 Kotekan reads the bundle from a local path once, at startup. A bundle changes only at a restart. A passing bundle is added by a Kotekan pull request to \code{config/chime/dtv_bundles/} or \code{config/chord/dtv_bundles/}, under its \code{<purpose>-<digest>} name, with a line in that directory's \code{README.md}. After \code{make install} on the node, the digests are checked in place with \code{sha256sum -c sha256sums.txt}, and \code{dtv_runtime_bundle_dir} is set to the installed path. On the Pathfinder, the default of \code{dtv_runtime_bundle_dir} in \code{pathfinder.j2} is changed by a pull request, or the variable is set for one run.
 
@@ -900,11 +909,11 @@ With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>} (
 
 In detect-only mode the detector records its decisions and the visibilities do not change. On the Pathfinder this is \code{/dtv_mask_enabled} off. On CHIME it is the only mode. With the mask on, \code{DtvRfiMask} clears every sample of a block at a frequency that the detector rejected, that has fine support \((0,n)\), or that is in the permanent-mask list. The visibilities and the valid-sample counts change together.
 
-No shipped bundle is qualified for masking. Masking needs words from a calibration campaign on the telescope, chosen against the science tolerance, and then the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md}. Only then is \code{dtv_apply_mask: true} set.
+\code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. The control and \code{pending_campaign} channels never reach a mask and need no record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before \code{dtv_apply_mask: true} is set.
 
 \subsection{Bad Feeds}
 
-On both telescopes the detector reads the bad feed mask ring of \code{bufferBadInputs} (\code{bf_mask_name: bf_mask}), and a flagged input is packed as zero. On CHORD, \code{bufferBadInputs} also flags the elements outside the main array, so the detector drops the 16 RFI antennas. On CHIME this is part of pull request \#1880. \code{dtv_powers} and \code{dtv_fine_powers} fall as inputs are flagged. A word calibrated with one set of inputs is therefore read with care after a large change in the flagged inputs, and the loop is repeated.
+On both telescopes the detector reads the bad feed mask ring of \code{bufferBadInputs} (\code{bf_mask_name: bf_mask}), and a flagged input is packed as zero. On CHORD, \code{bufferBadInputs} also flags the elements outside the main array, so the detector drops the 16 RFI antennas. On CHIME this is part of pull request \#1880. \code{dtv_powers} and \code{dtv_fine_powers} fall as inputs are flagged. A word holds for the inputs summed at calibration. When the bundle records \code{summed_inputs}, the detector logs a warning while the count of good inputs differs from it by more than 10\%, and an INFO line when the count returns. The loop is repeated if the warning persists.
 
 %======================================================================
 \section{Checking a Run}
@@ -961,13 +970,13 @@ python tools/analyze_dtv_run.py --run-dir /scratch/dtv/<run> --bundle-dir <bundl
 
 \subsection{Score Cache}
 
-To study the threshold of a CHORD channel by itself, \code{run-scores} writes each block's keeping word, its frame powers and its 10 s event:
+To study the threshold of a channel by itself, \code{run-scores} writes each block's keeping word, its frame powers and its 10 s event:
 \begin{lstlisting}[style=shell]
 pilot-proxy run-scores --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
   --channel 18 24 29 --jobs 32 --output-dir scores
 python tools/threshold_rule.py --scores scores --power-limits limits.json --out thresholds
 \end{lstlisting}
-\code{run-scores} assumes the Pathfinder block (8192 samples of 5.12\,\textmu s). The result of \code{threshold_rule.py} is in-sample, so it is checked on a later part of the run or on another run.
+\code{run-scores} reads the block length and the sample period from each file. The result of \code{threshold_rule.py} is in-sample, so it is checked on a later part of the run or on another run.
 
 %======================================================================
 \section{Standalone and Synthetic Use}
@@ -1024,6 +1033,7 @@ The CHIME archive scan (\code{chime-survey}, \code{chime-scan}, \code{chime-comb
 \code{more than dtv_fine_powers_rows} & More bound channels on the node than fine-power rows. & Raise \code{dtv_fine_powers_rows} or bind fewer channels.\\ \hline
 \code{coarse_freq changed or disappeared after first-frame binding} & The frequency map changed during the run. & Restart.\\ \hline
 \code{DtvRfiMask ... mismatch} & Mask and detector products out of step in time, frequency or layout. & Check the stage configuration and the frame sizes.\\ \hline
+\code{bundle ... is detect-only} & The mask is on, at startup or by a POST, and a \code{calibrated} channel has no \code{mask_qualification}. & Switch the mask off, or deploy a bundle made by \code{qualify-bundle}.\\ \hline
 \end{longtable}
 
 \subsection{Symptoms During a Run}
@@ -1037,6 +1047,7 @@ The CHIME archive scan (\code{chime-survey}, \code{chime-scan}, \code{chime-comb
 \textbf{Symptom} & \textbf{Cause} & \textbf{Action}\\ \hline
 \endhead
 \code{detector DISABLED}, all-zero masks & No bundle pilot on this node. & Check the node's frequency map against the bundle's receiver IDs.\\ \hline
+\code{inputs are summed but the bundle was calibrated with} & Many more or fewer inputs flagged than at calibration. & Check \code{bufferBadInputs}; recalibrate if it persists.\\ \hline
 No \code{dtv_fine_powers} files & \code{dtv_calibration_mode} not set, or recording off. & Render with \code{dtv_calibration_mode: true}, and on the Pathfinder render \code{recv.j2} with the same value and enable \code{/dtv_write_enabled}.\\ \hline
 REST switch has no effect & POST sent before the stages started. & Send it again after startup.\\ \hline
 N2 falls behind & The detector holds the voltage ring. & Stop the detector and report its time per block from the stage's \code{/gpu_profile} endpoint.\\ \hline
@@ -1062,6 +1073,8 @@ Many \((0,n)\) support rows & Too few usable bulk bins. & Check \code{dtv_powers
 \code{is not empty} & Give \code{process-run} a new or empty \code{--output-dir}.\\ \hline
 \code{the power_limit threshold needs} & Add the \code{power_limit} inputs and a recorded control.\\ \hline
 HDF5 filter error on a \code{dtv_fine_powers} file & Install \code{hdf5plugin} (the \code{n2} extra).\\ \hline
+\code{the test plan has no control} & Add the control captures to the test plan.\\ \hline
+\code{did not pass}, \code{is not a test of}, \code{has no passing control check} & \code{qualify-bundle} needs a passing \code{--output-json} report of the same bundle, with a control.\\ \hline
 Control false alarms fail in \code{test-bundle} & Floor too low, or a line on the control. Check the control spectrogram, then recalibrate with more epochs.\\ \hline
 Masked fraction fails in \code{test-bundle} & The test captures differ from the calibration captures. Read the report and the spectrogram, then recalibrate with captures that cover both. A pilot that fades during the run can fail on the last part.\\ \hline
 \end{longtable}
@@ -1070,15 +1083,13 @@ Masked fraction fails in \code{test-bundle} & The test captures differ from the 
 \section{Known Limitations}
 
 \begin{itemize}
-  \item No channel is qualified for masking. Every shipped bundle is detect-only, and every bundle made by \code{calibrate-bundle} is a detect-only commissioning bundle.
-  \item Kotekan does not read the detect-only note in a bundle. Keeping \code{dtv_apply_mask} off is the operator's job.
-  \item The knee is a generic starting point with no link to a science requirement. \code{test-bundle} checks consistency between two parts of the data, not the quality of a word.
-  \item A floor from simulated white noise is the lowest a floor can be. A real control can sit well above it, and a floor from a short capture is a lower limit.
+  \item No shipped bundle is qualified for masking. Every bundle made by \code{calibrate-bundle} is detect-only until a person runs \code{qualify-bundle} on it.
+  \item A floor from simulated white noise is the lowest a floor can be. A real control can sit well above it, and a floor from a short capture is a lower limit. The first CHIME bundle has this floor until a run with the control replaces it.
+  \item \code{test-bundle} cannot show that a word catches weak pilots, since the captures do not say which blocks hold one.
   \item The detector masks only the coarse frequency that holds each pilot. A whole DTV channel is removed with the permanent-mask list of the F-engine template.
-  \item A word depends on the set of summed inputs. A large change in the flagged inputs calls for a new calibration.
-  \item The CHIME detector is detect-only and its configuration is part of Kotekan pull request \#1880. It reads the voltages of every domain with no mask path.
-  \item \code{run-scores} assumes the Pathfinder block timing.
-  \item The fine support does not cover packet loss, input health, or calibration quality.
+  \item Kotekan warns when the summed inputs differ from the calibration, and does not recalibrate. A bundle without \code{summed_inputs}, such as every shipped bundle, is not checked.
+  \item On CHIME the template has no mask path, so the detector is detect-only there.
+  \item The fine support reports only whether a block had enough bulk bins for the rank test. Packet loss and input health are handled by other Kotekan stages.
 \end{itemize}
 
 \end{document}

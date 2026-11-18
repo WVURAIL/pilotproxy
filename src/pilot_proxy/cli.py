@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import subprocess
@@ -12,7 +13,12 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
 
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
-from pilot_proxy.bundle_calibration import THRESHOLDS, calibrate_bundle, test_bundle
+from pilot_proxy.bundle_calibration import (
+    THRESHOLDS,
+    calibrate_bundle,
+    qualify_bundle,
+    test_bundle,
+)
 from pilot_proxy.detector_contract import (
     WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     WEIGHT_COORDINATE_RAW_INPUT,
@@ -745,6 +751,12 @@ def _cmd_test_bundle(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _cmd_qualify_bundle(args: argparse.Namespace) -> None:
+    summary = qualify_bundle(bundle_dir=args.bundle_dir, test_report=args.test_report,
+                             reviewer=args.reviewer, output_dir=args.output_dir)
+    print(json.dumps(summary, indent=2))
+
+
 def _cmd_list_channels(args: argparse.Namespace) -> None:
     weights = DetectorWeightBank(explicit_path=args.weights_path)
     layouts: list[Mapping[str, Any]] = []
@@ -1374,6 +1386,17 @@ def build_parser() -> argparse.ArgumentParser:
     test.add_argument("--plan", type=Path, required=True, help="Test plan JSON.")
     test.add_argument("--output-json", type=Path, default=None)
     test.set_defaults(func=_cmd_test_bundle)
+
+    qualify = _add_command(
+        "qualify-bundle",
+        "Copy a tested bundle with its channels qualified for masking.",
+    )
+    qualify.add_argument("--bundle-dir", type=Path, required=True, help="Bundle that was tested.")
+    qualify.add_argument("--test-report", type=Path, required=True,
+                         help="Passing test-bundle --output-json report of that bundle.")
+    qualify.add_argument("--reviewer", required=True, help="Person who read the report and qualifies the bundle.")
+    qualify.add_argument("--output-dir", type=Path, required=True, help="New bundle directory.")
+    qualify.set_defaults(func=_cmd_qualify_bundle)
 
     fine_capture = _add_command(
         "replay-fine-capture",

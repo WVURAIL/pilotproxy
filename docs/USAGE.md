@@ -583,7 +583,7 @@ stem.
 
 ## Build documentation
 
-Generated PDFs are ignored by git and are built locally with:
+Built copies of the user guide and the design document are kept in `docs/pdf/` for reading on GitHub. Rebuild and copy them there when either `.tex` changes. Other generated PDFs are ignored by git. The PDFs are built locally with:
 
 ```bash
 make docs        # latexmk; scratch in docs/auxil/, PDFs in docs/out/

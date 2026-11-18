@@ -130,7 +130,7 @@ the operating documentation in these paths:
 - `docs/CANFAR_RUNBOOK.md` - bounded CANFAR operating procedure.
 - `docs/OPERATOR_HANDOFF.md` - runtime-bundle and Kotekan handoff notes.
 - `docs/DESIGN_DECISIONS.md` - recorded detector and integration decisions.
-- `docs/PilotProxy_DS001_Data_Sheet.tex` - formal data sheet (build to PDF).
+- `docs/PilotProxy_DD001_Design_Document.tex` - formal design document (build to PDF).
 - `docs/PilotProxy_UG001_User_Guide.tex` - formal user guide (build to PDF).
 - `examples/quickstart.sh` - standalone release sanity-check workflow (CUDA and
   GNU Radio, with environment-specific defaults that are overridden with `SM`,
@@ -518,7 +518,7 @@ publication sensitivity estimate.
   <img src="figures/validation_flow.svg" alt="Standalone validation flow: ATSC generation, waveform audit, AWGN injection, reference PFB, packed int4 matrix, CUDA local-reference power ratio kernel, report" width="560">
 </p>
 
-The Data Sheet and the User Guide carry the same diagram, and all three are
+The Design Document and the User Guide carry the same diagram, and all three are
 rendered from the single source `docs/figures/validation_flow.tikz` (the header
 of that file gives the one-command SVG re-render).
 

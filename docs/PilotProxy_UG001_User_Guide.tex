@@ -1,4 +1,3 @@
-
 \documentclass[10pt,letterpaper]{article}
 
 \usepackage[letterpaper,margin=0.70in,headheight=22pt,headsep=16pt,footskip=24pt]{geometry}
@@ -93,6 +92,8 @@
 
 \newcommand{\field}[1]{\texttt{\detokenize{#1}}}
 \newcommand{\dB}{\,\mathrm{dB}}
+% A field name that may break across lines in a narrow table cell.
+\newcommand{\pfield}[1]{\path{#1}}
 
 % Single-sourced numeric specifications (versions, geometry, null_power_ratio range,
 % digests). Regenerate with: python tools/generate_doc_specs.py
@@ -113,7 +114,8 @@
 
 \title{PilotProxy CUDA DTV Pilot Detector\\User Guide}
 \author{Dylan J. Gormley}
-\date{PilotProxy-UG001 \\ October 2026}
+\date{PilotProxy-UG001 \\ November 2026}
+
 
 \begin{document}
 \thispagestyle{empty}
@@ -129,14 +131,16 @@
 {\Large User Guide}\par
 \vspace{0.35in}
 {\large PilotProxy-UG001}\par
-{\large October 2026}\par
+{\large November 2026}\par
 \vfill
 \begin{tabularx}{\linewidth}{|>{\bfseries}L{0.25\linewidth}|Y|}
 \hline
-Document scope & Package installation, source-tree CUDA build, ATSC waveform generation, detector tests, receiver integration, and interpretation of fixed-point outputs, including the time-coherent fine products.\\ \hline
+Document scope & Running the DTV detector: build it, make or pick a runtime bundle, configure Kotekan, run it, check the run, and fix common failures.\\ \hline
 Package version & \code{pilot-proxy} v\ppPackageVersion; kernel core \ppKernelCoreVersion.\\ \hline
-Primary runtime controls & A physical channel or pilot frequency selects weights. Frame size and, for synthetic threshold tests, DTV data-shelf SNR control the detector run.\\ \hline
-CHIME/CANFAR mode & The CHIME path masks at $F>\mu_0$, where $\mu_0$ is fixed by the quantized weight norms. It does not use a mean estimated from CANFAR data.\\ \hline
+Runtime input & A runtime bundle: one directory of five files, read once by Kotekan at startup.\\ \hline
+Telescopes & CHORD Pathfinder (\code{config/chord/pathfinder.j2}) and the CHIME upgrade (\code{config/chime/dtv.j2}).\\ \hline
+Status & Every shipped bundle is detect-only. No channel is qualified to mask the visibilities.\\ \hline
+Design reasoning & PilotProxy-DD001 Design Document.\\ \hline
 Project affiliation & West Virginia University.\\ \hline
 \end{tabularx}
 \newpage
@@ -145,693 +149,936 @@ Project affiliation & West Virginia University.\\ \hline
 \tableofcontents
 \clearpage
 
-\section{Introduction}
+%======================================================================
+\section{Introduction and Scope}
 
-PilotProxy measures ATSC 1.0 pilot tones with a fixed-point CUDA local-reference power-ratio detector. We use the narrow pilot as a proxy for a DTV data shelf that may lie below the broadband noise floor. The standalone testbench generates its own waveform and receiver geometry, while the CHIME workflow receives instrument metadata and packed baseband data through its own adapter.
+PilotProxy detects ATSC 1.0 digital television (DTV) in the CHIME and CHORD radio telescopes. An 8-VSB DTV channel is 6 MHz wide and carries a steady pilot tone 309.441 kHz above its lower edge. The detector looks for a small excess of power at the pilot over nearby fine frequency bins. It makes one decision for each block of 41.94304 ms, and it rejects the block when the excess passes a threshold word.
 
-The kernel is kept independent of the instrument by design. It measures target and reference powers with no knowledge of physical channels, decibels, or telescope layout, and host software supplies those meanings and records them with the output.
+The detector runs inside Kotekan as the \code{cudaPilotProxyDetector} command of a \code{cudaProcess} stage. The \code{DtvRfiMask} stage folds its decisions into the RFI mask that the correlator reads. Both stages read their numbers from a \emph{runtime bundle}, a directory of five files made by the PilotProxy Python tools.
 
-\subsection{Detector Objective}
+This guide is for the person who runs the detector. It covers:
+\begin{itemize}
+  \item building PilotProxy and the Kotekan detector;
+  \item the layout and content of a runtime bundle, file by file;
+  \item the record, calibrate, test and deploy loop that makes a bundle;
+  \item the Kotekan configuration for the CHORD Pathfinder and the CHIME upgrade;
+  \item checking a run, and the common failures.
+\end{itemize}
 
-\begin{quote}
-Given a local ATSC pilot excess, estimate the equivalent ATSC 1.0 data-shelf SNR relative to the stated non-DTV reference floor.
-\end{quote}
+The guide does not explain why the detector is built the way it is. The design reasoning is in the PilotProxy-DD001 Design Document (\code{docs/PilotProxy_DD001_Design_Document.tex}). Other references are listed in Table~\ref{tab:references}.
 
-In this guide, we first build and test the detector. We then generate an ATSC waveform, audit it, add noise at a requested shelf SNR, quantize the samples, and run the detector. Finally, we discuss receiver integration, output fields, limitations, and common failures.
-
-\subsection{Package Contents}
-
-\begin{longtable}{|L{0.30\linewidth}|L{0.62\linewidth}|}
+\begin{table}[H]
+\centering
+\caption{Other documents. Paths in the PilotProxy repository unless marked Kotekan.}
+\label{tab:references}
+\small
+\begin{tabularx}{\linewidth}{|L{0.44\linewidth}|Y|}
 \hline
-\textbf{Path} & \textbf{Contents}\\ \hline
-\code{cuda/} & CUDA kernel, public C header, CPU reference model, and C/CUDA tests.\\ \hline
-\code{src/pilot_proxy/} & Python package for kernel loading, detector geometry, reference channelization, DTV unit conversion, channel helpers, and detection.\\ \hline
-\code{src/pilot_proxy/testbench/} & GNU Radio ATSC generation, waveform audit, AWGN injection, quantization, and SNR evaluation.\\ \hline
-\code{weights/} & Prebuilt ATSC reference detector weights for channels 14-36.\\ \hline
-\code{docs/} & Markdown definitions, data sheet, and user guide source.\\ \hline
-\code{examples/quickstart.sh} & End-to-end release sanity-check workflow.\\ \hline
-\end{longtable}
+\textbf{Document} & \textbf{Contents}\\ \hline
+\code{docs/RUNNING_THE_DETECTOR.md} & The loop in short form, with the commands.\\ \hline
+\code{docs/CHANNEL_OPERATING_POLICY.md} & Compiling threshold decisions into the permanent-mask and required-fine lists.\\ \hline
+\code{docs/OPERATOR_HANDOFF.md} & Shadow acceptance before the mask is applied.\\ \hline
+\code{docs/CANFAR_RUNBOOK.md}, \code{INTEGRATION.md} & The CHIME archive scan (\code{chime-scan}) on CANFAR.\\ \hline
+\code{docs/USAGE.md} & Installation details, CUDA toolchain, and the standalone testbench.\\ \hline
+Kotekan \code{docs/sphinx/user/modules/pilotproxy.rst} & The Kotekan stages, their configuration and fatal errors.\\ \hline
+Kotekan \code{docs/sphinx/dev/dev_pilotproxy_chime.rst} & The CHIME geometry and its validation tests.\\ \hline
+Kotekan \code{config/*/dtv_bundles/README.md} & The bundles shipped with Kotekan.\\ \hline
+\end{tabularx}
+\end{table}
 
+%======================================================================
 \section{Definitions}
+\label{sec:definitions}
 
-The detector compares one target power with two local reference powers. For one result, we compute
-\begin{equation}
-  F=\frac{2P_t}{P_{r1}+P_{r2}},\qquad Q=F/\mu_0,\qquad e=Q-1.
-\end{equation}
-The normalization \(\mu_0\) is the ratio of the exact squared norms of the packed target and reference weights. The raw diagnostic \(F-1\) is not the physical excess, which is \(e\). We use \(\mathrm{PNR}_{\mathrm{bin},dB}=10\log_{10}e\) for \(e>0\), and convert it to an equivalent DTV data-shelf SNR with
-\begin{equation}
-  \mathrm{SNR}_{\mathrm{shelf},dB} = \mathrm{PNR}_{\mathrm{bin},dB}
-  -10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})
-  +\mathrm{pilot\_below\_data\_db}
-  -10\log_{10}(\eta_p).
-\end{equation}
-For the checked-in reference geometry,
-\begin{equation}
-  B_{\mathrm{bin}}=\frac{400\,\mathrm{MHz}}{1024\times128}=3051.7578125\,\mathrm{Hz},
-\end{equation}
-which gives the bandwidth spreading term
-\begin{equation}
-  10\log_{10}(6\,\mathrm{MHz}/B_{\mathrm{bin}})=32.936\dB.
-\end{equation}
+\subsection{Signal Path}
 
-\notebox{We independently recomputed this conversion from the checked-in formulas. A 1 dB normalized power-ratio level gives \(Q=1.2589\), \(e=0.2589\), \(\mathrm{PNR}_{\mathrm{bin}}=-5.868\dB\), and \(\mathrm{SNR}_{\mathrm{shelf}}\approx -27.50\dB\) for the 3.052 kHz reference bin.}
+For each bound channel, the detector packs one block of voltages from every input into 128 windows of \(K\) samples. \(K=128\) on CHIME (16384-sample blocks) and \(K=64\) on the Pathfinder (8192-sample blocks). Three weight terms are applied to each window: the \emph{target} term at the pilot and the \emph{lower} and \emph{upper} reference terms two detector bins away on each side. A fixed-point FFT along the window axis then gives \ppFineNumBins\ \emph{fine bins} of \ppFineBinHz\ Hz in each term, and the powers are summed over the inputs. The result is the exact \code{uint64} fine powers \(S_t[b]\), \(S_l[b]\) and \(S_u[b]\) of the block, for \(b=0,\dots,255\).
 
+The \emph{fine ratio} of bin \(b\) is
+\begin{equation}
+  F_2[b]=\frac{2\,S_t[b]}{S_l[b]+S_u[b]}.
+\end{equation}
+A bin with \(S_l[b]+S_u[b]=0\) has no ratio and cannot fire.
+
+\subsection{Decision}
+
+The bundle gives each channel an \emph{anchor bin} \(a\), a half-width \(w\), a set of \emph{bulk bins} \(\mathcal{B}\), a zero-based \emph{rank} \(r\) and a \emph{word} \(W\). The \emph{designated set} is the \(2w+1\) bins \(a-w,\dots,a+w\), taken modulo 256. The reference value \(R\) is the ratio of rank \(r\) among the bulk-bin ratios, sorted in ascending order. The block is rejected when
+\begin{equation}
+  \max_{b\in a\pm w} F_2[b] \;>\; \frac{W}{2^{16}}\,R .
+\end{equation}
+The kernel evaluates this test with exact integer cross products. When the bulk has \(r\) or fewer usable bins, the test is invalid: the mask bit is 0 and the fine support row is \((0,n)\). The threshold \(\eta=W/2^{16}\) is the word on a Q16 grid. Calibration currently uses \(w=32\) (65 designated bins) and the bulk median as the rank.
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[x=1.0cm,y=1.0cm,>=Latex]
-  \draw[->,thick] (-0.2,0) -- (10.5,0) node[right]{frequency};
-  \draw[->,thick] (0,-0.2) -- (0,4.1) node[above]{power / PSD};
-  \draw[fill=LightGray,draw=none] (1.2,1.05) rectangle (8.8,1.72);
-  \draw[thick,PilotProxyGray] (1.2,1.72) -- (8.8,1.72);
-  \draw[thick,PilotProxyGray] (0.4,0.95) .. controls (0.9,1.25) and (1.0,1.55) .. (1.2,1.72);
-  \draw[thick,PilotProxyGray] (8.8,1.72) .. controls (9.0,1.55) and (9.1,1.25) .. (9.6,0.95);
-  \draw[thick,PilotProxyBlue] (0.4,1.0) -- (9.6,1.0);
-  \draw[thick,PilotProxyRed] (2.0,1.0) -- (2.0,3.35);
-  \draw[fill=PilotProxyRed,draw=PilotProxyRed] (2.0,3.35) circle (0.055);
-  \draw[dashed,thick,WarnGold] (1.52,1.0) -- (1.52,1.35);
-  \draw[dashed,thick,WarnGold] (2.48,1.0) -- (2.48,1.35);
-  \draw[<->,thick,PilotProxyRed] (2.20,1.0) -- (2.20,3.35) node[midway,right]{pilot excess};
-  \draw[<->,thick,PilotProxyBlue] (8.95,1.0) -- (8.95,1.72) node[midway,right]{data shelf SNR};
-  \draw[decorate,decoration={brace,mirror,amplitude=5pt},thick] (1.2,-0.25) -- (8.8,-0.25)
-    node[midway,below=6pt]{nominal 6 MHz DTV channel};
-  \node[align=center] at (2.0,3.72) {ATSC pilot\\target bin $P_t$};
-  \node[align=center] at (1.05,1.55) {lower\\reference};
-  \node[align=center] at (3.05,1.55) {upper\\reference};
-  \node[align=left] at (6.1,2.12) {DTV data shelf\\below the non-DTV floor};
-  \node[align=left] at (6.2,0.65) {non-DTV noise floor};
+\begin{tikzpicture}[x=0.052cm,y=1cm,>=Latex]
+  \draw[thick] (0,0) -- (256,0);
+  \foreach \t in {0,64,128,192,256} \draw (\t,0) -- (\t,-0.12) node[below,font=\scriptsize]{\t};
+  % designated set around anchor 100, w=32
+  \fill[PilotProxyRed!25] (68,0.02) rectangle (133,0.9);
+  \draw[PilotProxyRed,thick] (68,0.02) rectangle (133,0.9);
+  \draw[PilotProxyRed,very thick] (100.5,0) -- (100.5,1.25) node[above,font=\scriptsize]{anchor \(a\)};
+  % bulk bins: every second bin outside the designated set and guards
+  \foreach \b in {0,2,...,66} \draw[PilotProxyBlue] (\b+0.5,0) -- (\b+0.5,0.45);
+  \foreach \b in {134,136,...,254} \draw[PilotProxyBlue] (\b+0.5,0) -- (\b+0.5,0.45);
+  \node[font=\scriptsize,align=center] at (100.5,0.55) {designated set\\\(a\pm w\)};
+  \node[font=\scriptsize,PilotProxyBlue] at (32,0.7) {bulk bins \(\mathcal{B}\)};
+  \node[font=\scriptsize,PilotProxyBlue] at (195,0.7) {bulk bins \(\mathcal{B}\)};
+  \node[font=\scriptsize] at (128,-0.62) {fine bin \(b\) of the target term};
 \end{tikzpicture}
-\caption{Signal definitions used by the detector. The red line is the ATSC pilot in the target bin \(P_t\), the gold dashed lines mark the lower and upper reference bins, the gray band is the DTV data shelf, and the blue line is the non-DTV noise floor. The kernel compares the target bin with the two reference bins, and host software converts the resulting one-bin excess to an equivalent 6 MHz data-shelf SNR under the recorded calibration constants.}
-\label{fig:spectrum_definitions}
+\caption{Fine-bin geometry of one channel, drawn for an anchor at bin 100 and \(w=32\). The red band is the designated set, which is searched for the pilot. The blue ticks are the bulk bins, which set the reference value \(R\). Every second bin outside the designated set is in the bulk, and the bins are circular modulo 256. The bundle stores the bulk as the 256-bit mask \code{bulk_mask_words_hex}.}
+\label{fig:finebins}
 \end{figure}
 
+\subsection{Terms}
 
-\section{Installation Model}
+\begin{longtable}{|L{0.25\linewidth}|L{0.67\linewidth}|}
+\hline
+\textbf{Term} & \textbf{Meaning}\\ \hline
+\endhead
+Block & One decision interval: 16384 samples on CHIME and 8192 on the Pathfinder, both 41.94304 ms.\\ \hline
+Physical channel & ATSC channel number, 14 to 36 for DTV. Channel 37 has no DTV and serves as the control.\\ \hline
+Receiver channel ID & The \code{coarse_freq} ID of the receiver, in the namespace \code{chime_freq_id} or \code{chord_freq_id}. Profiles bind to the node's frequencies by this ID.\\ \hline
+Bound channel & A bundle profile whose receiver channel ID is among the node's \code{coarse_freq} values at the first frame.\\ \hline
+Word & \code{cfar_multiplier_q16}, the threshold \(W\) on a Q16 grid.\\ \hline
+Keeping word & For one block, the smallest word that keeps it. Calibration computes it for every block and calls it the block's score.\\ \hline
+Floor & The \code{null_quantile} quantile (default 0.99) of the scores of the control channel, or of simulated white noise when there is no control record.\\ \hline
+Knee & The word at the bend of the kept fraction plotted against the logarithm of the word: the word of largest height above the chord of that curve.\\ \hline
+Control channel & Channel 37. Its profile has status \code{control}. It is decided and recorded like a pilot, and its mask stays 0.\\ \hline
+Capture & One input file of a plan: a baseband HDF5 file, or one \code{dtv_fine_powers} file of about 43 s from a detect-only run.\\ \hline
+Detect-only & The detector records its decisions and the visibilities do not change. All shipped bundles are for detect-only runs.\\ \hline
+Fine support & Per channel and block, \code{(valid, n)}: \((1,n)\) a valid test over \(n\) bulk bins, \((0,n)\) too few bulk bins, \((-1,-1)\) no test.\\ \hline
+\end{longtable}
 
-The end-to-end workflows in this guide use an editable checkout, with the extras required by each workflow:
+%======================================================================
+\section{Install and Build}
+
+\subsection{PilotProxy}
+
+PilotProxy is installed from a checkout, in a virtual environment, with the extras each task needs:
 \begin{lstlisting}[style=shell]
-python -m pip install -e ".[test]"              # CPU-side tests
-python -m pip install -e ".[cuda,test,plot]"    # CUDA and plots
+git clone https://github.com/WVURAIL/pilotproxy.git
+cd pilotproxy
+python -m pip install -e ".[test]"          # tests, h5py, matplotlib
+python -m pip install -e ".[n2,plot]"       # read dtv_fine_powers files, plot spectrograms
 pilot-proxy --help
 \end{lstlisting}
-Built wheels and source distributions contain the reference weight bank and the \code{configs/} tree, so default-resource CPU commands such as \code{list-channels} can run from any directory. The examples, the repository-relative generated paths, the helper scripts, and the two-interpreter workflows that use subprocesses are run from a checkout or given explicit paths. The CUDA shared library is not part of the Python distribution and is built from a clone before any GPU-backed command runs.
+The \code{n2} extra installs \code{h5py} and \code{hdf5plugin}, which are needed to read the \code{dtv_fine_powers} files of a run. The \code{plot} extra installs Matplotlib for \code{run-spectrogram} and \code{process-run}. The \code{cuda} extra installs \code{cupy-cuda12x} for the GPU paths of the standalone testbench and the archive scan.
 
-\subsection{Python Environments}
+The bundle commands (\code{export-runtime-weight-bundle}, \code{validate-runtime-weight-bundle}, \code{calibrate-bundle}, \code{test-bundle}, \code{plan-run}, \code{process-run}, \code{run-spectrogram} and \code{run-scores}) compute the fine powers and words with the Python integer path. They need no GPU. A day of fine powers of one channel takes about 13 GB of memory during calibration, because one channel is held at a time.
 
-When GNU Radio is installed as a system package, two Python interpreters may be necessary:
-\begin{itemize}
-  \item GNU Radio Python: used for ATSC generation and GNU Radio AWGN, typically \code{/usr/bin/python3}.
-  \item CUDA Python: the repository virtual environment, installed with the \code{cuda} and \code{test} extras and, when needed, the \code{plot} extra, and used for CuPy, the CUDA shared library, and detector evaluation.
-\end{itemize}
+\subsection{CUDA Kernel}
 
-The CUDA environment stays active for the examples below. The \code{generate-atsc} command and the GNU Radio noise source invoke the interpreter supplied through \code{--gnuradio-python}, typically \code{/usr/bin/python3}, and PilotProxy must also be importable by that interpreter. This guide supports an editable source checkout, whose wrapper supplies the \code{src/} path of the checkout to the child process. With a wheel, PilotProxy must be installed for the GNU Radio interpreter or reached through an explicit compatible \code{PYTHONPATH}, since an installation in the CUDA environment alone is not visible to that interpreter. On WSL, the CUDA driver path is commonly \code{/usr/lib/wsl/lib}, and it is verified on the target host.
-
-On WSL, adding the Python environment's \code{lib/} directory to
-\code{LD_LIBRARY_PATH} can make \code{/usr/bin/bash} load that environment's
-\code{libtinfo.so.6} and print a \code{no version information available}
-warning. The examples require only the CUDA driver path. When user-site packages shadow the NumPy build used by GNU Radio, \code{--no-python-user-site} is passed to \code{generate-atsc}. The GNU Radio noise subprocess of the evaluator already disables the user site.
-
-\section{Build and Test}
-
-\subsection{Build the CUDA Kernel}
-
-The kernel is built for the target GPU architecture with:
+The CUDA library is needed only for the standalone testbench and the archive scan. On a GPU host:
 \begin{lstlisting}[style=shell]
-make build-kernel   # SM auto-detected; pass SM=<arch> to override
+make build-kernel   # SM detected from nvidia-smi; SM=<arch> overrides it
 \end{lstlisting}
-This builds \code{cuda/libpilotproxy.so} and stages a copy to:
+This builds \code{cuda/libpilotproxy.so} and stages a copy at \code{~/.cache/pilot_proxy/libpilotproxy.so}. The CUDA toolchain is described in \code{docs/USAGE.md}.
+
+\subsection{Tests}
+
 \begin{lstlisting}[style=shell]
-~/.cache/pilot_proxy/libpilotproxy.so
-\end{lstlisting}
-On WSL, the cached copy avoids loading the shared library directly from \code{/mnt/c}. After a rebuild under \code{cuda/} alone, the staged copy is removed with:
-\begin{lstlisting}[style=shell]
-make clean-cache
+make test-python    # Python tests, no GPU
+make test-kernel    # CUDA and kernel tests, needs a GPU and nvcc
+make release-check  # adds the CPU C/C++ reference checks and bundle validation
 \end{lstlisting}
 
-\subsection{Run Tests}
+\subsection{Kotekan}
 
-The Python tests are run with:
+Kotekan carries a copy of the detector core in \code{external/pilotproxy}, pinned by \code{VENDOR.json}. The detector is built with \code{USE_CUDA=ON}. The stage checks bundle digests with OpenSSL's SHA-256, so Kotekan must also be built with OpenSSL. Without it the stage stops at startup with \code{Kotekan was built without OpenSSL}. The Kotekan tests of the detector are run with:
 \begin{lstlisting}[style=shell]
-python -m pytest tests -q
+bash tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh "$PWD/build"
 \end{lstlisting}
-The CUDA and kernel tests are run on a CUDA-capable host with:
-\begin{lstlisting}[style=shell]
-make -C cuda test DP4A=1   # SM auto-detected
-\end{lstlisting}
-The Python, CPU, CUDA, and GNU Radio checks are run as distinct suites, and the commit, host, and commands are recorded for each release test. A Python-only result says nothing about CUDA or GNU Radio behavior, so those checks are run on a suitable target before a release is tagged.
+This script checks the vendored files against \code{VENDOR.json}, installs the matching PilotProxy commit, exports a CHORD and a CHIME bundle, and runs the integration tests. These tests check the code. \code{test-bundle} (Section~\ref{sec:test}) checks the numbers in a bundle. Both are needed after a change to the detector core.
 
+%======================================================================
 \section{Quickstart}
 
-The provided script exercises the main standalone path:
+These steps check a shipped bundle and process a recorded Pathfinder run. No GPU is needed.
+
+\begin{enumerate}
+  \item Install PilotProxy with \code{.[n2,plot]} as above.
+  \item Validate a bundle. Kotekan installs its bundles under \code{<prefix>/etc/kotekan/}:
 \begin{lstlisting}[style=shell]
-bash examples/quickstart.sh   # GPU architecture auto-detected
+B=/usr/local/etc/kotekan/chord/dtv_bundles/pathfinder-commissioning-e2e90219
+(cd "$B" && sha256sum -c sha256sums.txt)
+pilot-proxy validate-runtime-weight-bundle --bundle-dir "$B"
 \end{lstlisting}
-The output has a waveform audit, the detector-input generation, an SNR evaluation, and the detection JSON. The summary headings are shown below. Numeric rows are not reproduced here, since the result is the output recorded when the script is rerun on the target commit.
+  \item Record a detect-only run with \code{dtv_calibration_mode: true} and recording enabled (Section~\ref{sec:pathfinder}).
+  \item Split, calibrate, test, plot and summarize the run in one step:
 \begin{lstlisting}[style=shell]
-frequency_offset_hz, requested_data_shelf_snr_db,
-measured_truth_data_shelf_snr_db, cpu_float_estimated_data_shelf_snr_db,
-gpu_estimated_data_shelf_snr_db, gpu_snr_error_db
-...
-blocks, positive_excess_set, coarse_power_ratio_mean,
-estimated_data_shelf_snr_db_mean
-...
+pilot-proxy process-run --bundle-dir "$B" \
+  --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
+  --epoch "2026-11 Pathfinder 48 h" --calibration-share 0.5 \
+  --output-dir run1
 \end{lstlisting}
+  \item Read \code{run1/summary.md} and the spectrograms under \code{run1/spectrograms/}. If the new bundle in \code{run1/bundle/} is to be deployed, add it to Kotekan by a pull request (Section~\ref{sec:deploy}).
+\end{enumerate}
 
-\section{Generate and Audit an ATSC Waveform}
+%======================================================================
+\section{Runtime Bundles}
+\label{sec:bundles}
 
-\subsection{Generate a Reference ATSC Signal}
+\subsection{Layout}
 
-The reference ATSC waveform is generated under the GNU Radio interpreter given by \code{--gnuradio-python}:
-\begin{lstlisting}[style=shell]
-pilot-proxy generate-atsc \
-  --gnuradio-python /usr/bin/python3 \
-  --output-iq generated/atsc/atsc_8vsb_complex64.cfile \
-  --num-iq-samples 600000
-\end{lstlisting}
+A runtime bundle is one directory with five files (Table~\ref{tab:bundlefiles}). Kotekan reads two of them directly: \code{pilot_profiles.json} and \code{weights.bin}, through \code{pilot_profiles_path} and \code{weights_path}. It reads the other three from the same directory to check the digests. A bundle is never edited in place. \code{calibrate-bundle} refuses an existing output directory, and a new calibration gets a new directory.
 
-\subsection{Audit the Reference Waveform}
-
-The generated waveform is audited before detector evaluation:
-\begin{lstlisting}[style=shell]
-pilot-proxy audit-atsc \
-  --input-iq generated/atsc/atsc_8vsb_complex64.cfile
-\end{lstlisting}
-The audit records the pilot frequency, pilot-to-data power, occupied bandwidth, shelf flatness, and edge rolloff. The field \field{measured_pilot_to_data_power_db} is the signed quantity \(10\log_{10}(P_{\mathrm{pilot}}/P_{\mathrm{data}})\). The field \field{measured_pilot_below_data_db} records its positive magnitude when the pilot is below the data shelf.
-
-\notebox{The audit reports pilot frequency in the generated complex-baseband coordinate. For physical channel 14, the baseband pilot corresponds to an RF pilot at 470.309441 MHz after reference-band placement.}
-
-\section{Reference Channelizer and Detector Resolution}
-
-The standalone testbench uses the following polyphase filter-bank (PFB) reference front end:
-\begin{longtable}{|L{0.36\linewidth}|L{0.56\linewidth}|}
+\begin{table}[H]
+\centering
+\caption{Files of a runtime bundle.}
+\label{tab:bundlefiles}
+\small
+\begin{tabularx}{\linewidth}{|L{0.22\linewidth}|Y|L{0.17\linewidth}|L{0.20\linewidth}|}
 \hline
-\textbf{Quantity} & \textbf{Value}\\ \hline
-Real ADC sample rate & 800 MS/s \\ \hline
-Reference lower band edge & 400 MHz \\ \hline
-Reference bandwidth & 400 MHz \\ \hline
-PFB taps & 4 \\ \hline
-PFB FFT size & 2048 real-input samples \\ \hline
-Usable positive-frequency channels & 1024 \\ \hline
-Coarse-channel spacing & 390.625 kHz \\ \hline
-Detector window & \ppDetectorWindowSamples\ samples \\ \hline
-Detector-bin width & \ppDetectorBinHz\ Hz \\ \hline
-Fine-bin width (padded) & \ppFineBinHz\ Hz (\ppFineNumBins\ bins per detector bin span) \\ \hline
-\end{longtable}
-This geometry gives a detector-bin width of \ppDetectorBinHz\ Hz. The default pilot-to-shelf conversion is valid for this geometry only, and another receiver must supply its measured or modeled effective noise bandwidth. In this guide, the \ppDetectorBinHz\ Hz resolution set by the \(K=\ppDetectorWindowSamples\) window is known as the \emph{detector bin}, and the \ppFineBinHz\ Hz resolution of the padded window-axis FFT described in Section~\ref{sec:fineproducts} is known as the \emph{fine bin}.
+\textbf{File} & \textbf{Holds} & \textbf{Written by} & \textbf{Read by}\\ \hline
+\code{pilot_profiles.json} & One profile per channel: receiver binding, weight offset, and the fine calibration (anchor, bulk, rank, word). & Export; rewritten by \code{calibrate-bundle} & Kotekan detector; all PilotProxy run tools\\ \hline
+\code{weights.bin} & The weight profiles of all channels, concatenated in profile order. & Export & Kotekan detector; calibration\\ \hline
+\pfield{weights.manifest.json} & Weight format, geometry and the placement of each channel's target and reference cells. & Export & Validator; Kotekan reads \code{weights_sha256}\\ \hline
+\pfield{detector_contract.json} & The receiver-neutral arithmetic contract: window size, terms, bit widths, ratio definitions. & Export & Validator; \code{test-bundle}\\ \hline
+\code{sha256sums.txt} & The SHA-256 of the other four files. & Export and \code{calibrate-bundle} & Kotekan; validator; \code{sha256sum -c}\\ \hline
+\end{tabularx}
+\end{table}
 
-\section{Channel Selection}
-
-The physical channels supported by the shipped weight bank are listed with:
-\begin{lstlisting}[style=shell]
-pilot-proxy list-channels
-\end{lstlisting}
-The shipped weights cover physical channels 14 through 36. The frequency helpers accept other UHF channels, but the detector still requires a matching row in the weight manifest. In the standalone reference coordinate, which ascends in frequency, channels 14, 21, and 36 are at coarse indices 179, 287, and 517. The shipped CHIME manifest, in the post-Nyquist-zone-normalization coordinate reported by \code{list-channels}, stores the same targets at 843, 735, and 505. An index is therefore compared with another only when both name their coordinate system.
-
-The default channel is physical channel 14:
-\begin{equation}
-  f_{\mathrm{lower}}=470\,\mathrm{MHz},\quad f_{\mathrm{pilot}}=470.309441\,\mathrm{MHz},\quad f_{\mathrm{center}}=473\,\mathrm{MHz}.
-\end{equation}
-In the shipped DC-centered bank, physical channel 14 tests a coarse-channel boundary. Its weight row wraps the lower reference across the circular coarse-channel spectrum while preserving the requested \(-2,+2\) detector-bin offsets. The manifest records this choice with \field{adaptive_reference_placement=true}, and \code{list-channels} prints the corresponding placement \code{NOTE}. No shipped channel collides with, or shifts around, the forbidden coarse-channel DC tone.
-
-\section{Quantize and Create Detector Input}
-
-A packed detector matrix is created with:
-\begin{lstlisting}[style=shell]
-pilot-proxy quantize \
-  --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-  --physical-channel 14 \
-  --frame-size-samples 16384
-\end{lstlisting}
-This example uses a 16384-sample frame, the frame of the checked-in CHIME
-reference profile. In an integration, the frame size is matched to the frame of
-the correlator, and it must be a positive multiple of the selected detector
-window. The detector core supports \(K=64\) and \(K=128\). The CHIME profile
-selects \(K=128\), while the CHORD profiles select \(K=64\). This repository is
-designed for the CHIME F-engine upgrade target of \(2^{14}=16384\) samples, and
-this value makes no statement about the CHIME correlator deployed today. Since
-the software infers no universal frame size from HDF5 metadata,
-\code{chime-run --frame-size-samples} is set from verified product information,
-and the Pilot Proxy CHIME instrument \code{nfft} used by \code{chime-scan} is
-set from the same information. The resolved value is recorded with each
-real-data product.
-
-The output matrix is row-major and has shape \code{(rows, K)} or
-\code{(batch, rows, K)} with dtype \code{int8}, where \code{K} is the selected
-compiled detector window. The CUDA wrapper checks both properties before
-passing pointers to the kernel.
-
-\section{Evaluate Shelf-SNR Response}
-
-The synthetic evaluator is run with the CUDA backend, here with the WSL driver path:
-\begin{lstlisting}[style=shell]
-LD_LIBRARY_PATH=/usr/lib/wsl/lib \
-pilot-proxy evaluate-snr \
-  --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-  --physical-channel 14 \
-  --frame-size-samples 16384 \
-  --requested-data-shelf-snr-db -26 \
-  --threshold-data-shelf-snr-db -26 \
-  --noise-trials 10 \
-  --noise-source gnuradio \
-  --gnuradio-python /usr/bin/python3
-\end{lstlisting}
-Outputs are written under \code{generated/dtv_snr_eval/}:
-\begin{itemize}
-  \item \code{dtv_snr_eval.csv}: per-trial validation rows;
-  \item \code{dtv_snr_summary.csv}: grouped summary;
-  \item \code{dtv_snr_eval.json}: full strict-JSON validation report.
-\end{itemize}
-
-If neither explicit \code{--requested-data-shelf-snr-db} values nor an
-\code{--snr-start-db}/\code{--snr-stop-db}/\code{--snr-step-db} range is
-provided, the evaluator sweeps from \(-60\dB\) to \(0\dB\) in 3 dB steps.
-Each trial counted by \code{--noise-trials} adds one independently generated
-noise frame at every requested SNR and frequency offset, so a response curve
-needs several trials per point. The GNU Radio noise path exercises more of the
-reference signal chain, while the Python noise path reduces the runtime of a
-large sweep:
-\begin{lstlisting}[style=shell]
-LD_LIBRARY_PATH=/usr/lib/wsl/lib \
-pilot-proxy evaluate-snr \
-  --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-  --physical-channel 14 \
-  --frame-size-samples 16384 \
-  --num-input-streams 1 \
-  --threshold-data-shelf-snr-db -26 \
-  --noise-trials 10 \
-  --noise-source python
-\end{lstlisting}
-This configuration produces 210 detector frames, with 10 frames at each of 21
-SNR values. Ten trials are enough to check the workflow, but they do not support
-an uncertainty claim in a publication. The final trial count is chosen from the
-precision required for the plotted interval, and that choice is recorded. When
-the \(-1\mathrm{kHz}\), \(0\mathrm{Hz}\), and \(+1\mathrm{kHz}\) curves are
-needed, \code{--standard-frequency-offset-sweep} triples the number of evaluated
-offset conditions.
-
-Large sweeps require no GPU. With \code{--detector-backend cpu-reference}, the primary fields come from the integer CPU reference, and each row records the backend. Before a CPU-only sweep is taken as representative of the CUDA implementation, a small sample with the same seed is compared on both backends, for example with:
-\begin{lstlisting}[style=shell]
-pilot-proxy evaluate-snr \
-  --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-  --physical-channel 14 \
-  --frame-size-samples 16384 \
-  --num-input-streams 1 \
-  --threshold-data-shelf-snr-db -26 \
-  --noise-trials 300 \
-  --noise-source python \
-  --detector-backend cpu-reference
-\end{lstlisting}
-
-For a CUDA-backed sweep, the grouped result is rendered without plot smoothing:
-\begin{lstlisting}[style=shell]
-pilot-proxy plot-results
-\end{lstlisting}
-The CSV, JSON, and PNG use the same grouped summary values. The plot helper labels its selected fixed-point series ``GPU fixed-point'' in every case. For a \code{cpu-reference} result that label is wrong, so the CSV is plotted directly or the series is relabeled ``CPU fixed-point,'' and the recorded \field{detector_backend} is kept with the figure.
+``Export'' means \code{export-runtime-weight-bundle}, which \code{calibrate-bundle} also calls. An exported bundle has every profile at status \code{pending_campaign}. \code{calibrate-bundle} then fills the fine calibration of each profile, rewrites \code{pilot_profiles.json}, and writes \code{sha256sums.txt} again.
 
 \begin{figure}[H]
 \centering
-\IfFileExists{../generated/dtv_snr_eval/dtv_snr_sweep.png}{%
-\includegraphics[width=0.92\linewidth]{../generated/dtv_snr_eval/dtv_snr_sweep.png}
-\caption{Example shelf-SNR response for the synthetic configuration of this section, from \(-60\dB\) to \(0\dB\) in 3 dB steps, with 10 Python-noise trials per point, one input stream, and no smoothing. The diagonal marks equal input and output SNR. The two curves are the unquantized floating-point model and the selected packed-int4 fixed-point backend. Ten trials per point demonstrate the workflow and do not set the uncertainty of a publication result.}
-}{%
-\fbox{\parbox{0.86\linewidth}{\centering The optional generated SNR sweep figure was not found. The validation sweep and plot workflow create \code{generated/dtv_snr_eval/dtv_snr_sweep.png}.}}
-\caption{Example shelf-SNR response for the synthetic configuration of this section, from \(-60\dB\) to \(0\dB\) in 3 dB steps, with 10 Python-noise trials per point, one input stream, and no smoothing. The diagonal marks equal input and output SNR. The two curves are the unquantized floating-point model and the selected packed-int4 fixed-point backend. Ten trials per point demonstrate the workflow and do not set the uncertainty of a publication result.}
-}
-\label{fig:snr_sweep_10trial}
-\end{figure}
-
-The main report fields are:
-\begin{itemize}
-  \item \field{requested_data_shelf_snr_db}
-  \item \field{measured_truth_data_shelf_snr_db}
-  \item \field{measured_truth_composite_atsc_snr_db}
-  \item \field{p_target_u64}, \field{p_ref_lower_u64}, \field{p_ref_upper_u64}
-  \item \field{coarse_power_ratio}, \field{normalized_coarse_power_ratio_db}, \field{raw_pilot_excess}, \field{pilot_excess_db}
-  \item \field{estimated_data_shelf_snr_db}, \field{snr_error_db}
-  \item \field{mask}, when \code{--threshold-data-shelf-snr-db} is supplied.
-\end{itemize}
-
-
-\begin{figure}[H]
-\centering
-\input{figures/validation_flow.tikz}
-\caption{Standalone validation flow. The included reference front end converts a generated ATSC waveform into the packed-input contract used by the detector.}
-\label{fig:validation_flow}
-\end{figure}
-
-
-\newpage\section{Detection on a Packed Matrix}
-
-Detection on a prebuilt packed detector matrix is run with:
-\begin{lstlisting}[style=shell]
-LD_LIBRARY_PATH=/usr/lib/wsl/lib \
-pilot-proxy detect \
-  --input-detector-matrix generated/detector_input/detector_matrix_i4.npy
-\end{lstlisting}
-The command reads the pilot identity from the \code{metadata.json} sidecar that
-\code{quantize} writes next to the matrix, and an explicit
-\code{--physical-channel} or \code{--dtv-pilot-mhz} must agree with it. With
-neither a sidecar nor a flag, \code{detect} stops, because it cannot select a
-weight row safely. If \code{detector_matrix_i4.npy} is absent but the batched
-\code{detector_blocks_i4.npy} file exists, \code{detect} resolves the default
-input to the batched file. If neither file exists, \code{quantize} must be run
-first.
-
-The detector JSON contains:
-\begin{itemize}
-  \item \field{selected_weight_layout}
-  \item \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v2}
-  \item \field{layout} with \field{frame_size_samples}, \field{num_input_streams}, \field{windows_per_stream}, and \field{detector_rows_per_frame}
-  \item \field{mask_rule}, \field{target_norm_sq}, \field{reference_norm_sum_sq}, and \field{null_power_ratio}
-  \item per-block \field{mask} and \field{normalized_positive_excess_mask}, exact powers, \field{coarse_power_ratio}, raw \field{raw_pilot_excess}, norm-corrected \field{normalized_pilot_excess}, and estimated shelf SNR.
-\end{itemize}
-The \code{detect} command applies no user-supplied shelf-SNR threshold. Its threshold fields in \field{result_schema} are \code{null}, and it masks a valid block at the norm-corrected condition \(F>\mu_0\). The basic raw convention \(F>1\) is used to define \(\rho=F-1\), while the CHIME mask rule is \(F>\mu_0\).
-
-\section{Receiver Integration Contract}
-
-The kernel does not encode telescope metadata. Receiver integrations provide the following JSON records and arrays:
-\begin{itemize}
-  \item \code{configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json} describes the locked CUDA kernel contract.
-  \item \code{receiver_profile.json} describes RF band, channelizer geometry, Nyquist zone, frame size, input streams, quantization defaults, bin ENBW, and pilot-capture efficiency.
-  \item \code{stream_map.json} maps stream indices to feed, polarization, beam, or other receiver-specific labels.
-  \item \code{check-profile}, \code{check-layout}, \code{make-weights}, and \code{chime-run} consume the applicable profile or stream-map records. The standalone \code{detect} command selects shipped weights from its sidecar or channel flag, while \code{evaluate-snr} uses the fixed testbench geometry.
-\end{itemize}
-
-\begin{figure}[H]
-\centering
-\input{figures/system_context.tikz}
-\caption{Mask path implemented in Kotekan. The detector reads the voltage ring
-and writes a rejection bit, the frame powers, and the optional rank support for
-each aligned block. The opt-in \code{DtvRfiMask} stage intersects those
-decisions with the existing RFImask, and both the visibility and sample-count
-consumers use the resulting mask. The diagnostic include for CHIME remains
-detect-only. Receiver qualification is described in
-\code{docs/OPERATOR_HANDOFF.md}.}
-\label{fig:system_context}
-\end{figure}
-
-The metadata is checked with:
-\begin{lstlisting}[style=shell]
-pilot-proxy check-profile \
-  --receiver-profile configs/receiver_profiles/reference_800mhz_pfb.json
-
-pilot-proxy check-layout \
-  --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
-  --stream-map configs/stream_maps/chime_feed_pol_example.json
-\end{lstlisting}
-
-Weights backed by a receiver profile are generated with:
-\begin{lstlisting}[style=shell]
-pilot-proxy make-weights \
-  --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
-  --detector-core-profile configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json \
-  --physical-channel-range 14:36 \
-  --weight-coordinate-system post_nyquist_zone_normalization \
-  --output generated/weights/chime_dtv_weights_k128.bin
-\end{lstlisting}
-
-The CHIME profile has the status \code{baseband_frame_verified_2026_07_29}. Its
-16384-sample frame represents the planned F-engine upgrade interface used for
-the tests and analysis of this repository, and it describes no correlator
-deployed today. The example stream map has 2048 feed-polarization entries, so
-the layout check exercises the intended row-count contract. Both files are
-verified against the actual data product before they are used in a telescope
-run. The standalone ATSC testbench requires neither file.
-
-\section{Thresholds}
-\label{sec:thresholds}
-
-For the synthetic threshold path, the user provides \code{threshold_data_shelf_snr_db}. Host code converts it to a rational half-threshold and compares the integer frame powers with the integer threshold terms, so the kernel takes no threshold.
-
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=0.35cm,>=Latex]
-\tikzstyle{block}=[rectangle,rounded corners,draw=PilotProxyRed,thick,fill=LightGray,minimum height=0.60cm,text width=0.72\linewidth,align=center]
-\node[block] (a) {User threshold: $S_{\mathrm{shelf,thr},dB}$};
-\node[block,below=of a] (b) {$\mathrm{PNR}_{\mathrm{bin,thr},dB}=S_{\mathrm{shelf,thr},dB}-\mathrm{pilot\_below\_data\_db}+10\log_{10}(B_{\mathrm{DTV}}/B_{\mathrm{bin}})+10\log_{10}(\eta_p)$};
-\node[block,below=of b] (c) {$\rho_{\mathrm{thr}}=10^{\mathrm{PNR}_{\mathrm{bin,thr},dB}/10}$};
-\node[block,below=of c] (d) {$F_{\mathrm{thr}}=1+\rho_{\mathrm{thr}}$};
-\node[block,below=of d] (e) {Host half-threshold: $T_{\mathrm{half}}=F_{\mathrm{thr}}/2=N_{\mathrm{half}}/D_{\mathrm{half}}$};
-\draw[->,thick] (a) -- (b);
-\draw[->,thick] (b) -- (c);
-\draw[->,thick] (c) -- (d);
-\draw[->,thick] (d) -- (e);
+\begin{tikzpicture}[>=Latex,
+  file/.style={rectangle,draw=PilotProxyBlue,thick,fill=LightGray,minimum height=0.7cm,text width=3.3cm,align=center,font=\footnotesize},
+  dig/.style={font=\scriptsize,align=center}]
+  \node[file] (sums) at (0,3.2) {\code{sha256sums.txt}};
+  \node[file] (prof) at (-5,1.3) {\code{pilot_profiles.json}};
+  \node[file] (man)  at (5,1.3) {\code{weights.manifest.json}};
+  \node[file] (con)  at (-5,-1.6) {\code{detector_contract.json}};
+  \node[file] (bin)  at (5,-1.6) {\code{weights.bin}};
+  \draw[->,thick] (sums) -- (prof);
+  \draw[->,thick] (sums) -- (man);
+  \draw[->,thick] (sums.south) to[out=-90,in=40] (con.north east);
+  \draw[->,thick] (sums.south) to[out=-90,in=140] (bin.north west);
+  \node[dig,fill=white] at (0,2.25) {SHA-256 of each file's bytes};
+  \draw[->,thick,PilotProxyRed] (man) -- (bin);
+  \draw[->,thick,PilotProxyRed] (prof.south east) -- (bin.west);
+  \node[dig,PilotProxyRed,anchor=north] at (bin.south) {\code{weights_sha256}};
+  \draw[->,thick,WarnGold,dashed] (prof) -- (con);
+  \draw[->,thick,WarnGold,dashed] (man.south west) -- (con.east);
+  \node[dig,WarnGold!70!black,anchor=north] at (con.south) {\code{detector_contract_sha256} (canonical JSON)};
+  \node[dig] at (0,-2.9) {directory name: \code{<purpose>-<first 8 hex digits of sha256(sha256sums.txt)>}};
 \end{tikzpicture}
-\caption{Synthetic threshold conversion. The user supplies a shelf-SNR threshold, and the host compares the integer frame powers with a fixed-point rational half-threshold. Here, \(S_{\mathrm{shelf,thr}}\) is the shelf-SNR threshold, \(\eta_p\) is the pilot capture efficiency, \(B_{\mathrm{DTV}}\) and \(B_{\mathrm{bin}}\) are the DTV bandwidth and the bin ENBW, \(\rho_{\mathrm{thr}}\) and \(F_{\mathrm{thr}}\) are the raw excess and the power ratio at threshold, and \(N_{\mathrm{half}}/D_{\mathrm{half}}\) is the rational form of the half-threshold.}
-\label{fig:threshold_conversion}
+\caption{Digest links inside a bundle. Black: \code{sha256sums.txt} lists the SHA-256 of the bytes of the other four files. Red: \code{pilot_profiles.json} and \code{weights.manifest.json} each carry \code{weights_sha256}, the SHA-256 of \code{weights.bin}. Gold: both also carry \code{detector_contract_sha256}, the SHA-256 of the contract in canonical form (Section~\ref{sec:checksums}).}
+\label{fig:bundle_digests}
 \end{figure}
 
+\subsection{\texorpdfstring{\code{pilot_profiles.json}}{pilot\_profiles.json}}
 
-For a \(-26\dB\) shelf-SNR threshold and the included reference geometry, the checked-in conversion code gives
+This file is the one an operator reads most. It holds the receiver binding and the threshold of every channel. Table~\ref{tab:pp_top} lists its top-level fields, Table~\ref{tab:pp_row} the fields of each entry of \code{profiles}, and Table~\ref{tab:pp_fine} the fields of each \code{fine_calibration} object. The column ``Kotekan'' marks the fields that the Kotekan detector reads. The PilotProxy validator requires every listed field.
+
+\begin{longtable}{|L{0.30\linewidth}|L{0.52\linewidth}|C{0.09\linewidth}|}
+\caption{Top-level fields of \code{pilot_profiles.json}.}\label{tab:pp_top}\\
+\hline
+\textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
+\endfirsthead
+\hline
+\textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
+\endhead
+\pfield{schema_version} & \code{pilotproxy_runtime_pilot_profiles_v1}. & \yes\\ \hline
+\pfield{receiver_profile_id} & The receiver profile the bundle was made from, for example \code{chime_dtv_fengine} or \code{chord_pathfinder_dtv_fengine}. \code{plan-run} uses it to find the receiver profile. & \no\\ \hline
+\pfield{receiver_channel_id_namespace} & \code{chime_freq_id} or \code{chord_freq_id}. Must equal the detector's \code{receiver_channel_id_namespace} setting. & \yes\\ \hline
+\pfield{weight_coordinate_system} & Frequency convention of the weights, \code{post_nyquist_zone_normalization} in the shipped bundles. & \no\\ \hline
+\pfield{input_coordinate_system} & Matching convention of the input, \code{post_nyquist_zone_normalized}. & \no\\ \hline
+\pfield{input_preprocessing} & Object with \code{time_reverse_detector_windows_before_kernel}. When true, each window is reversed in time before the kernel. & \yes\\ \hline
+\pfield{weights_sha256} & SHA-256 of \code{weights.bin}. & \yes\\ \hline
+\pfield{detector_contract_sha256} & SHA-256 of \code{detector_contract.json} in canonical form. & \no\\ \hline
+\pfield{profiles} & Array of channel profiles, in weight-bank order. & \yes\\ \hline
+\end{longtable}
+
+\begin{longtable}{|L{0.33\linewidth}|L{0.49\linewidth}|C{0.09\linewidth}|}
+\caption{Fields of each entry of \code{profiles}.}\label{tab:pp_row}\\
+\hline
+\textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
+\endfirsthead
+\hline
+\textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
+\endhead
+\pfield{physical_channel} & ATSC channel, 14 to 37. Unique in the file. & \yes\\ \hline
+\pfield{receiver_channel_id} & The receiver \code{coarse_freq} ID the profile binds to. Unique in the file. & \yes\\ \hline
+\pfield{receiver_channel_id_namespace} & Same value as the top level. & \yes\\ \hline
+\pfield{chime_channel_id}, \pfield{chord_channel_id} & Telescope aliases of the ID. The one of the bundle's namespace equals \code{receiver_channel_id}, and the other is \code{null}. & \yes\\ \hline
+\pfield{pilot_frequency_hz} & Pilot frequency in Hz. Kotekan prints it in the binding log line. & \yes\\ \hline
+\pfield{coarse_channel_center_hz} & Center of the coarse channel that holds the pilot. Calibration uses it to find the nominal fine bin of the pilot. & \no\\ \hline
+\pfield{coarse_channel_index} & Index of that coarse channel in the weight coordinate system. & \no\\ \hline
+\pfield{weight_bank_index} & Position of the profile in \code{weights.bin}. & \no\\ \hline
+\pfield{weight_bank_offset_bytes} & Byte offset of the profile in \code{weights.bin}. Offsets must be contiguous from 0, in file order. & \yes\\ \hline
+\pfield{weight_bank_nbytes} & Bytes of the profile: \(3K\), 384 on CHIME and 192 on the Pathfinder. Must match the compiled core. & \yes\\ \hline
+\pfield{target_norm_sq}, \pfield{reference_norm_sum_sq} & Exact squared norms of the target weights and of the two reference weights summed. & \no\\ \hline
+\pfield{null_power_ratio} & \(2\cdot\)\code{target_norm_sq}\(/\)\code{reference_norm_sum_sq}, the frame ratio expected from flat noise. & \no\\ \hline
+\pfield{positive_excess_half_threshold_num}, \pfield{positive_excess_half_threshold_den} & The same norms as a rational pair, for the coarse positive-excess rule of the archive products. & \no\\ \hline
+\pfield{reference_placement_status}, \pfield{placement_warnings} & How the reference cells were placed, for example \code{nominal} or \code{edge_wrapped}, and any warning text. & \no\\ \hline
+\pfield{fine_calibration} & The threshold of the channel (Table~\ref{tab:pp_fine}). & \yes\\ \hline
+\end{longtable}
+
+\begin{longtable}{|L{0.27\linewidth}|L{0.55\linewidth}|C{0.09\linewidth}|}
+\caption{Fields of each \code{fine_calibration} object.}\label{tab:pp_fine}\\
+\hline
+\textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
+\endfirsthead
+\hline
+\textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
+\endhead
+\pfield{status} & \code{pending_campaign} (exported, no values), \code{calibrated}, or \code{control}. Only channel 37 may be \code{control}, and channel 37 must be. A bound \code{pending_campaign} channel stops Kotekan at the first frame. \code{calibrated} means the values are filled in, not that the channel is qualified for masking. & \yes\\ \hline
+\pfield{decision_version} & \code{fine_decision_v1}, the integer test of Section~\ref{sec:definitions}. & \yes\\ \hline
+\pfield{cfar_multiplier_q16} & The word \(W\). \(\eta=W/65536\). Must be positive. & \yes\\ \hline
+\pfield{anchor_bin} & The anchor \(a\), 0 to 255. & \yes\\ \hline
+\pfield{designated_half_width} & The half-width \(w\), below 128. Calibration writes 32. & \yes\\ \hline
+\pfield{cfar_rank} & The zero-based rank \(r\). Must be below the number of bulk bins. Calibration writes the median rank. & \yes\\ \hline
+\pfield{bulk_mask_words_hex} & Four 64-bit hex strings. Bit \(b \bmod 64\) of word \(\lfloor b/64\rfloor\) is set when bin \(b\) is a bulk bin. Bits within \(\max(w,2)\) bins of the anchor must be clear. & \yes\\ \hline
+\pfield{provenance} & Object with \code{epochs} (the plan's \code{epoch} text), \code{source_product_sha256} (SHA-256 of the calibration plan), \code{null_quantile}, a \code{note}, and optionally \code{threshold_selection}. & part\\ \hline
+\pfield{provenance.threshold_selection} & When its \code{qualification} is \code{archive_review_only}, Kotekan refuses to bind the channel. & \yes\\ \hline
+\end{longtable}
+
+The \code{note} of a calibrated profile states where its word came from, for example ``Word from floor, 5 captures of 30, floor from control channel. Detect-only, not a calibration.'' Every bundle written by \code{calibrate-bundle} carries ``Detect-only, not a calibration.'' in its notes. Kotekan does not read this text, so the detect-only rule is enforced by the configuration (Section~\ref{sec:applymask}).
+
+\subsection{\texorpdfstring{\code{weights.bin}}{weights.bin}}
+
+\code{weights.bin} is the binary weight bank. It is the concatenation of one \code{int8} profile of shape \([3,K]\) per channel, in the order of \code{profiles}: the target term, then the lower reference, then the upper reference. The file has no header. Its size is the number of profiles times \(3K\) bytes. The shipped CHIME bundle \code{chime-first-56005bb7} has 24 profiles of 384 bytes, 9216 bytes in all. Kotekan checks that the profile offsets account for every byte of the file.
+
+\subsection{\texorpdfstring{\code{weights.manifest.json}}{weights.manifest.json}}
+
+The manifest describes the weight bank and how each channel's cells were placed. Kotekan reads only \code{weights_sha256} from it. The validator reads the rest.
+
+\begin{longtable}{|L{0.33\linewidth}|L{0.59\linewidth}|}
+\caption{Fields of \code{weights.manifest.json}.}\label{tab:manifest}\\
+\hline
+\textbf{Field} & \textbf{Meaning}\\ \hline
+\endfirsthead
+\hline
+\textbf{Field} & \textbf{Meaning}\\ \hline
+\endhead
+\pfield{schema_version} & \code{pilotproxy_runtime_weights_manifest_v1}.\\ \hline
+\pfield{weight_format} & \code{concatenated_int8_weight_profiles_v1}.\\ \hline
+\pfield{weight_profile_shape}, \pfield{weight_profile_dtype}, \pfield{weight_profile_nbytes} & \([3,K]\), \code{int8}, \(3K\).\\ \hline
+\pfield{weight_coordinate_system}, \pfield{input_coordinate_system}, \pfield{input_preprocessing} & As in \code{pilot_profiles.json}.\\ \hline
+\pfield{physical_channels}, \pfield{num_profiles} & The channels in the bank and their count.\\ \hline
+\pfield{receiver_profile_path}, \pfield{receiver_profile_hash} & File name and SHA-256 of the receiver profile used. Only the file name is kept, so the manifest holds no local paths.\\ \hline
+\pfield{detector_core_profile_path} & File name of the detector-core profile used.\\ \hline
+\pfield{weights_sha256} & SHA-256 of \code{weights.bin}.\\ \hline
+\pfield{detector_contract_sha256} & SHA-256 of the contract in canonical form.\\ \hline
+\pfield{target_reference_layout} & One object per channel with the placement of the target and reference cells: frequencies and offsets in Hz, offsets in detector bins, squared norms of each term, \code{null_power_ratio}, and flags for edge wrapping, DC collisions and adaptive placement. It is a record for review. The detector does not read it.\\ \hline
+\end{longtable}
+
+\subsection{\texorpdfstring{\code{detector_contract.json}}{detector\_contract.json}}
+
+The contract states the arithmetic the weights were made for. It does not depend on the telescope beyond the window size and the coordinate system. \code{test-bundle} reads \code{detector_window_samples} from it. The validator rejects a contract with a missing or unknown field, or with a locked value changed.
+
+\begin{longtable}{|L{0.33\linewidth}|L{0.59\linewidth}|}
+\caption{Main fields of \code{detector_contract.json}.}\label{tab:contract}\\
+\hline
+\textbf{Field} & \textbf{Meaning}\\ \hline
+\endfirsthead
+\hline
+\textbf{Field} & \textbf{Meaning}\\ \hline
+\endhead
+\pfield{schema_version} & \code{pilotproxy_detector_contract_v2}.\\ \hline
+\pfield{detector_window_samples} & \(K\): 128 for CHIME, 64 for CHORD.\\ \hline
+\pfield{num_weight_terms} & 3 (locked).\\ \hline
+\pfield{reference_offset_bins}, \pfield{skipped_guard_bins} & 2 and 1 (locked): the reference cells sit two detector bins from the target, with one bin skipped between.\\ \hline
+\pfield{sample_bits_per_component}, \pfield{input_format} & 4 (locked) and \code{complex_int4_packed_int8}.\\ \hline
+\pfield{power_accumulator}, \pfield{power_accumulator_bits} & \code{uint64} and 64 (locked).\\ \hline
+\pfield{combine_mode} & \code{all_rows_summed_before_ratio}: powers are summed over all inputs before any ratio.\\ \hline
+\pfield{coarse_power_ratio_definition}, \pfield{all_rows_coarse_power_ratio_definition} & Text definitions of the frame ratio from the fine powers.\\ \hline
+\pfield{mask_rule}, \pfield{equivalent_mask_rule}, \pfield{mask_source}, \pfield{valid_rule}, \pfield{threshold_mode}, \pfield{per_frequency_threshold} & The coarse positive-excess rule of the archive products. The Kotekan mask comes from the fine decision in \code{pilot_profiles.json} instead.\\ \hline
+\pfield{weight_coordinate_system}, \pfield{input_coordinate_system}, \pfield{input_preprocessing} & As in \code{pilot_profiles.json}.\\ \hline
+\pfield{reference_placement_summary} & Counts and lists of channels with adaptive, edge-wrapped or DC-shifted reference cells.\\ \hline
+\end{longtable}
+
+\subsection{\texorpdfstring{\code{sha256sums.txt}}{sha256sums.txt} and the Digests}
+\label{sec:checksums}
+
+\code{sha256sums.txt} has one line per file, in the format of \code{sha256sum}: the hex digest, two spaces, and the file name. It lists \code{detector_contract.json}, \code{pilot_profiles.json}, \code{weights.bin} and \code{weights.manifest.json}. A bundle is checked by hand with:
 \begin{lstlisting}[style=shell]
-threshold_data_shelf_snr_db       = -26.000
-threshold_pilot_excess_db         =  -4.364
-threshold_raw_pilot_excess=   0.3661
-threshold_coarse_power_ratio          =   1.3661
-threshold_half_float         =   0.68305
+cd <bundle> && sha256sum -c sha256sums.txt
+pilot-proxy validate-runtime-weight-bundle --bundle-dir <bundle>
 \end{lstlisting}
 
-The CHIME positive-excess path does not use this user-supplied shelf-SNR
-threshold. Int4 quantization makes the target and reference weight norms
-slightly unequal, so each weight row has a fixed null point
-\begin{equation}
-\mu_0=\frac{2\,\lVert w_t\rVert^2}
-{\lVert w_{r1}\rVert^2+\lVert w_{r2}\rVert^2}.
-\end{equation}
-The basic raw convention calls \(F>1\) positive excess. The implementation masks
-a valid frame when \(F>\mu_0\), with the inequality evaluated by integer cross
-multiplication. We compute \(\mu_0\) from the packed weights, and no mean is
-estimated from CANFAR data. This rule corrects the weight-normalization point,
-but it supplies neither an empirical false-positive rate nor an operational RFI
-severity threshold.
+Three kinds of digest appear in a bundle (Figure~\ref{fig:bundle_digests}).
+\begin{itemize}
+  \item \textbf{File digests.} \code{sha256sums.txt} holds the SHA-256 of the bytes of each of the four files. Any edit to a file breaks its line.
+  \item \textbf{Weight digest.} \code{weights_sha256} in \code{pilot_profiles.json} and in \code{weights.manifest.json} is the SHA-256 of \code{weights.bin}. It ties the profiles to the bank.
+  \item \textbf{Contract digest.} \code{detector_contract_sha256} is the SHA-256 of the contract serialized with sorted keys and no spaces (separators \code{,} and \code{:}). It is therefore not the digest of the file's bytes in \code{sha256sums.txt}. For \code{chime-first-56005bb7}, the file digest begins \code{650139c9} and the contract digest begins \code{db5badce}.
+\end{itemize}
 
-The rule is a recording convention and was not tuned as an operating point. The
-rational pair that implements it is per-channel bundle data, and
-\field{coarse_power_ratio} is stored for every frame, so a deployment or a later
-re-analysis may move the threshold with no kernel change. The adopted Kotekan
-deployment moves the decision itself to the fine designated-set CFAR computed
-in the kernel. The evaluated alternatives and the first survey calibration are
-recorded in the threshold section of the Data Sheet and in
-\code{docs/DESIGN_DECISIONS.md}.
+Table~\ref{tab:checks} shows which program checks which digest.
 
-\section{Standard and Calibrated Conversion}
+\begin{table}[H]
+\centering
+\caption{Digest checks.}
+\label{tab:checks}
+\small
+\begin{tabularx}{\linewidth}{|L{0.40\linewidth}|C{0.15\linewidth}|C{0.15\linewidth}|Y|}
+\hline
+\textbf{Check} & \textbf{Kotekan} & \textbf{Validator} & \textbf{Note}\\ \hline
+Four files listed and matching \code{sha256sums.txt} & \yes & \yes & Kotekan reads \code{pilot_profiles.json} and \code{weights.bin} at their configured paths.\\ \hline
+\code{weights_sha256} in both JSON files & \yes & \yes & \\ \hline
+\code{detector_contract_sha256} in both JSON files & \no & \yes & Canonical form.\\ \hline
+Schema, fields, offsets, fine calibration & part & \yes & Kotekan checks what it reads (Section~\ref{sec:startup}).\\ \hline
+\end{tabularx}
+\end{table}
 
-The standard synthetic conversion uses
-\begin{lstlisting}[style=shell]
---pilot-below-data-db 11.3
---bin-enbw-hz 3051.7578125
---pilot-capture-efficiency 1.0
---dtv-bandwidth-hz 6000000
-\end{lstlisting}
-The positive field \field{pilot_below_data_db} records how far the pilot power lies below the average data-shelf power. For example, an audit value of \field{measured_pilot_to_data_power_db=-11.9} corresponds to \field{measured_pilot_below_data_db=11.9}.
+\subsection{Naming}
 
-Calibrated mode is used only when a receiver measurement or model supports the overrides:
-\begin{lstlisting}[style=shell]
---pilot-below-data-db VALUE
---bin-enbw-hz VALUE
---pilot-capture-efficiency VALUE
-\end{lstlisting}
-The output report records the values used, so an analysis can reproduce the conversion.
+A bundle directory is named \code{<purpose>-<digest>}. The digest is the first 8 hex digits of the SHA-256 of \code{sha256sums.txt}. For example, \code{sha256sum sha256sums.txt} in \code{chime-first-56005bb7} begins \code{56005bb7}. Two bundles with the same name suffix therefore hold the same four files. \code{calibrate-bundle} writes the directory named by \code{--output-dir}, and the name is given when the bundle is added to Kotekan.
 
-\section{Fine Products and Interpretation}
-\label{sec:fineproducts}
+\subsection{Files Beside a Bundle}
 
-In the time-coherent front end, the windows are integrated coherently after the
-dot product, and only the feed sum stays incoherent. The coherent integration gains up to
-\ppCoherentGainDb~dB of deflection sensitivity over a reduction that is
-incoherent in every step. A per-frame fine spectrum is formed by the kernel
-from the exact \code{int32} row sums. First, the rows of each weight term are
-reshaped to \([N_{\mathrm{streams}},W]\) windows. The frozen fixed-point FFT
-(\code{fxfft256_v1}) is then applied along the window axis with
-\(\times\ppFinePadFactor\) zero padding, which gives \ppFineNumBins\ fine bins of
-\ppFineBinHz\ Hz. Finally, an incoherent sum over the streams yields the exact
-\code{uint64} fine powers \(S_n[b]\) and the fine-bin statistic
-\(F_2[b]=2S_t[b]/(S_{r1}[b]+S_{r2}[b])\). The coarse statistic is formed from
-the same spectrum. The frame powers are defined as the all-bin sums
-\(P_n=\sum_b S_n[b]\), so \(F\) is exactly the all-bin marginal of the fine
-spectrum, and no other coarse power path exists. That is, the coarse and fine
-statistics come from one set of fine powers. Every product stores both, and the
-readers check \(P_n=\sum_b S_n[b]\) exactly. The definitions and stored fields
-are given in the Data Sheet and in \code{docs/PRODUCT_SCHEMA.md}, and the CFAR
-calibration is stated in \code{docs/METHOD_SPEC.md}.
+\code{calibrate-bundle} writes records beside the bundle directory, not in it, so they are not part of the digests (Table~\ref{tab:sidefiles}).
 
-In CHIME archive products (\code{pilot-proxy chime-scan}), fine products are
-mandatory, because the frame powers are their sums. The option \code{--set
-fine_products} accepts only \code{on} (the default), and a library without the
-row-sum and fine-power entries fails at launch. The only product without fine
-terms is that of a pilot out of the measured band
-(\field{fine_status=not_applicable_pilot_out_of_band}).
+\begin{table}[H]
+\centering
+\caption{Records written beside a bundle \code{<dir>}.}
+\label{tab:sidefiles}
+\small
+\begin{tabularx}{\linewidth}{|L{0.30\linewidth}|Y|}
+\hline
+\textbf{File} & \textbf{Contents}\\ \hline
+\code{<dir>.report.json} & The calibration report (Table~\ref{tab:report}). \code{test-bundle} reads it for the predicted masked fractions, the calibration captures and the control record.\\ \hline
+\code{<dir>.decisions.json} & Only with \code{"threshold": "power_limit"}. The outcome of each channel in the form \code{compile-operating-policy} reads (schema \code{pilotproxy-power-decisions-v4}).\\ \hline
+test JSON (\code{--output-json}) & The \code{test-bundle} checks: \code{passed} and a list of \code{check}, \code{passed}, \code{detail}.\\ \hline
+\end{tabularx}
+\end{table}
+
+\subsection{Shipped Bundles}
+
+Kotekan ships its bundles in \code{config/chime/dtv_bundles/} and \code{config/chord/dtv_bundles/}, each with a \code{README.md}. \code{make install} copies the whole config tree to \code{<prefix>/etc/kotekan/}, so with the default prefix a bundle is at \code{/usr/local/etc/kotekan/<telescope>/dtv_bundles/<bundle>/}. With \code{CMAKE_INSTALL_PREFIX=/usr}, the tree goes to \code{/etc/kotekan/}.
+
+\begin{longtable}{|L{0.33\linewidth}|L{0.18\linewidth}|L{0.39\linewidth}|}
+\caption{Bundles shipped with Kotekan. All are detect-only and must never be used with \code{dtv_apply_mask}.}\label{tab:shipped}\\
+\hline
+\textbf{Bundle} & \textbf{Channels} & \textbf{Use and words}\\ \hline
+\endfirsthead
+\hline
+\textbf{Bundle} & \textbf{Channels} & \textbf{Use and words}\\ \hline
+\endhead
+\pfield{pathfinder-commissioning-b8026807} & 18, 24, 29 & Pathfinder detect-only runs. No control channel, so \code{plan-run} refuses its runs.\\ \hline
+\pfield{pathfinder-commissioning-e2e90219} & 18, 24, 29, control 37 & The same words as \code{b8026807} (\(W=122071\), \(\eta\approx1.863\), the floor from a control record), and records channel 37 for the next calibration. Default bundle of \code{pathfinder.j2}.\\ \hline
+\pfield{chime-hello-world-d1ed7815} & 29, 35 & First CHIME detect-only run. Words from the plan. No control channel.\\ \hline
+\pfield{chime-first-56005bb7} & 14 to 36, control 37 & Parameters only, to record the data for the first CHIME calibration. Every word is the simulated white-noise floor for 2048 inputs, \(W=72260\) (\(\eta\approx1.103\)). Added by Kotekan pull request \#1880.\\ \hline
+\end{longtable}
+
+%======================================================================
+\section{The Loop: Record, Calibrate, Test, Deploy}
+\label{sec:loop}
+
+The same loop makes a first bundle, a bundle for a new telescope, and a recalibration (Figure~\ref{fig:loop}). The word stays fixed during a run. The data of a run feed the next bundle, and each new bundle is tested before it is deployed.
 
 \begin{figure}[H]
 \centering
-\input{figures/detector_datapath.tikz}
-\caption{Detector datapath drawn as a filterbank. Stage 1 is a selected-bin DFT
-filterbank that produces the detector bins, and stage 2 is the padded
-window-axis FFT that produces the fine bins. The two stages form a standard
-two-stage zoom channelization that computes only the channels the detector
-needs.}
-\label{fig:detector_datapath}
+\begin{tikzpicture}[>=Latex,
+  stp/.style={rectangle,rounded corners,draw=PilotProxyRed,thick,fill=LightGray,minimum height=1.3cm,text width=3.4cm,align=center,font=\small}]
+  \node[stp] (rec) at (0,0) {\textbf{1. Record}\\ \scriptsize detect-only run with \code{dtv_calibration_mode}, or baseband captures};
+  \node[stp] (cal) at (4.4,0) {\textbf{2. Calibrate}\\ \scriptsize \code{calibrate-bundle}: anchors, floor, words; new bundle};
+  \node[stp] (tst) at (8.8,0) {\textbf{3. Test}\\ \scriptsize \code{test-bundle} on captures not used to calibrate};
+  \node[stp] (dep) at (13.2,0) {\textbf{4. Deploy}\\ \scriptsize Kotekan pull request; restart with the new bundle};
+  \draw[->,thick] (rec) -- (cal);
+  \draw[->,thick] (cal) -- (tst);
+  \draw[->,thick] (tst) -- (dep);
+  \draw[->,thick] (dep.south) -- ++(0,-0.6) -| (rec.south) node[pos=0.25,below,font=\scriptsize]{the run with the new bundle records the data for the next one};
+  \draw[decorate,decoration={brace,amplitude=5pt},thick] (-1.7,0.95) -- (10.5,0.95) node[midway,above=6pt,font=\scriptsize]{\code{process-run} does the split of step 1, then steps 2 and 3, plots and a summary};
+\end{tikzpicture}
+\caption{The bundle loop. The loop is repeated after a change to the gains or quantization, the inputs, or the frequency map of a node, and when a pilot moves or a new line appears in the bulk bins.}
+\label{fig:loop}
 \end{figure}
 
-In the products, designated bin 0 is the nominal ATSC pilot. A real transmitter
-is rarely exactly there. Full-power stations hold a \(\pm1\) kHz tolerance, and
-translator-class stations have no specified tolerance. A genuine pilot
-therefore typically appears as a persistent detected line at a fixed nonzero
-offset in the fine span (half a detector bin on either side of nominal), and
-the designated bin itself may rarely fire. The any-bin decision rule exists for
-this case. Two consequences follow. First, a transmitter is recognized by the
-stability of its offset over frames and epochs, and designated-bin hits are a
-poor guide. Second, on DTV-occupied channels the offset pilot lies in
-non-designated bins, so \field{fine_null_bulk_exceedance_fraction} can be high
-there. This field is the in-sample fraction of fitted null-bulk bins above the
-fitted threshold, and it is not an independently measured false-alarm rate. It
-is read together with the stored fine spectrum and the stability of the
-detected line over frames.
+\subsection{Step 1: Record}
+\label{sec:record}
 
-\section{C API Overview}
+Calibration reads the captures of each channel to be bound and of the control channel, channel 37. Three capture formats are accepted, named in the plan by \code{capture_format} (Table~\ref{tab:formats}).
 
-The public C API is declared in \code{cuda/pilotproxy_detector.h}. In this example, \code{d_in}, \code{d_fine_power_out}, and \code{d_power_out} are device pointers, and \code{host_weights} is a host pointer. A typical measurement call is
-\begin{lstlisting}[style=cstyle,language=C]
-int K, N, bits, ref_offset;
-PilotProxy_GetSpecs(&K, &N, &bits, &ref_offset);
+\begin{table}[H]
+\centering
+\caption{Capture formats.}
+\label{tab:formats}
+\small
+\begin{tabularx}{\linewidth}{|L{0.20\linewidth}|Y|}
+\hline
+\textbf{\code{capture_format}} & \textbf{Source}\\ \hline
+\code{dtv_fine_powers} & The \code{dtv_fine_powers*.h5} files of a detect-only Kotekan run with \code{dtv_calibration_mode}. Each file of 1024 blocks (about 43 s) is one capture. The channels and the control must be bound in the bundle of that run. Rows of zeros (not tested) and rows of \code{0xFF} bytes (a block missing from the window) are skipped.\\ \hline
+\code{chime_baseband} & CHIME baseband HDF5, one \code{freq_id} per file (attribute \code{freq_id}, dataset \code{baseband}).\\ \hline
+\code{chord_baseband} & CHORD baseband HDF5 (dataset \code{baseband_subset} with \code{coarse_freq}). Inputs whose \code{dish_label} starts with \code{RFI} are left out.\\ \hline
+\end{tabularx}
+\end{table}
 
-void* h = PilotProxy_Create(d_in, detector_rows_per_block);
-if (h == NULL) {
-    /* Read PilotProxy_LastError() and stop. */
-    return;
-}
-PilotProxy_Compute_FusedFine_U64(
-    h,
-    host_weights,
-    d_fine_power_out,   /* batch * N * 256 uint64: S_n[b] */
-    d_power_out,        /* batch * N uint64: P_n = sum_b S_n[b] */
-    NULL);              /* optional int32 row-sum debug tap */
-if (PilotProxy_LastError()[0] != 0) {
-    /* Handle the recorded CUDA/API error. */
-}
-PilotProxy_Destroy(h);
-\end{lstlisting}
-The compute call writes the three frame powers
-\begin{equation}
-  \mathrm{d\_power\_out}=(P_t,\;P_{r1},\;P_{r2}),\qquad P_n=\sum_b S_n[b],
-\end{equation}
-and host code then computes
-\begin{equation}
-  F=\frac{2P_t}{P_{r1}+P_{r2}}
-\end{equation}
-and the norm-corrected mask in exact integer arithmetic, so the library forms no
-ratio and no coarse mask. \(F\) is undefined for a zero denominator. In that
-case, the host marks the frame invalid and forces its mask to zero, so Python
-callers must inspect \field{p_ref_sum_u64} (or \field{valid}) before they
-interpret any conversion. The deployed mask bit comes from
-\apicode{PilotProxy_Compute_FusedFineMask_U64} or
-\apicode{PilotProxy_Compute_FusedFineMaskWithSupport_U64}.
-
-A capability probe guards the row-sum entry:
-\begin{lstlisting}[style=cstyle,language=C]
-if (PilotProxy_Supports_RowSums()) {
-    /* d_matched_filter_row_projections_out: device int32, batch * N * rows * 2 elements
-       (term-major, stream-major rows, interleaved re/im). */
-    PilotProxy_Compute_RowSums_I32(h, host_weights, d_matched_filter_row_projections_out);
-}
-\end{lstlisting}
-The values are exact integers and are the input of
-\apicode{PilotProxy_Compute_FinePowers_U64}. In the staged path, the fine powers
-of that stage are summed over bins on the host, and the frame powers obtained
-are bit for bit the same as those of the fused entry. Rows keep the
-stream-major order of the packer, so a term slice reshapes to
-\code{[num_streams, windows_per_stream]} with no gather.
-
-In deployment, only the per-frame \code{mask} (1 = reject) crosses the proposed
-interface, and the fine-power, frame-power, and row-sum readbacks feed the
-archive science products and diagnostics.
-
-\section{JSON Output Policy}
-
-JSON reports emit no NaN or infinity, and values that are not finite are serialized as \code{null}. CSV files may keep NaN text when the analysis software can represent it.
-
-Detector and synthetic SNR-evaluator JSON reports carry \field{result_schema} with \code{schema_version=pilotproxy_result_schema_v2}. This object records the statistic definition, layout, calibration constants, threshold conversion, fixed-point contract, and mask convention needed to interpret those reports. Audit, quantization, summary, injection, and CHIME products use their own documented top-level schemas. CHIME per-pilot archive products, for example, use \field{schema_version}=\texttt{\ppPerPilotSchema} as defined in \code{docs/PRODUCT_SCHEMA.md}.
-
-The statistic over summed blocks is:
-\begin{equation}
-F = \frac{2\sum_r P_{t,r}}{\sum_r P_{r1,r}+\sum_r P_{r2,r}},
-\end{equation}
-where \(r\) indexes the summed blocks and each \(P_{n,r}\) is a frame power,
-the all-bin sum of that block's fine powers. We sum powers first and form one
-ratio, since an average of per-block power ratios would define a different
-estimator.
-
-When a product averages masked data, rejected blocks are excluded from both the
-sum and the count, and no zero is filled in their place:
-\begin{equation}
-\bar{P}_{\mathrm{after}} =
-\frac{\sum_b P_b(1-M_b)}{\sum_b (1-M_b)}.
-\end{equation}
-Here, \(M_b=1\) excludes block \(b\).
-
-\section{Result Summaries}
-
-The summary helper reduces a result file to compact CSV and JSON statistics:
+The best source is the detector itself, since a detect-only run gives far more captures than baseband dumps. A merged Pathfinder baseband file is chunked over all frequencies, so a few channels are first copied to a small file:
 \begin{lstlisting}[style=shell]
-pilot-proxy summarize-results \
-  --input generated/dtv_snr_eval/dtv_snr_eval.json \
-  --output-dir generated/summary
+python3 tools/extract_baseband_channels.py --input baseband_subset.00000000.h5 \
+  --output day1.h5 --coarse-freq 2531 2715 2869 3115 --blocks 20
 \end{lstlisting}
-This command writes \code{summary.csv} and \code{summary.json}. For an SNR
-sweep, histograms are skipped, because the input mixes populations at different
-requested SNRs. A histogram is easier to interpret for repeated trials at one
-fixed SNR, and \code{--histograms always} is used only when the mixed
-distribution is meant to be part of the diagnostic.
 
+A knee needs at least 30 captures of a channel (\code{min_knee_captures}), and a floor at the 0.99 quantile needs enough control frames: calibration stops when the independent null scores times \(1-\)\code{null_quantile} is below 1. Calibration and test data are taken at different times. A run of 48 h, split by day, gives each part a whole day.
+
+A telescope with no data starts from its parameters. A plan with empty capture lists, \code{"control": null} and \code{"num_inputs"} gives a first bundle at the simulated white-noise floor for that number of inputs. This bundle is enough to record the data for the next one. \code{chime-first-56005bb7} was made this way with 2048 inputs.
+
+\subsection{Step 2: Calibrate}
+\label{sec:calibrate}
+
+\begin{lstlisting}[style=shell]
+pilot-proxy calibrate-bundle --plan calibrate.json --output-dir bundle
+\end{lstlisting}
+For each channel, \code{calibrate-bundle} exports the weights, computes the fine powers of every block with the deployed integer path, finds the anchor, sets the bulk and rank, finds the floor from the control, finds the knee, and picks the word. It then writes \code{bundle/}, validates it, and writes \code{bundle.report.json}. A bundle that fails validation is removed.
+
+A plan for a CHIME bundle from baseband captures:
+\begin{lstlisting}[style=shell]
+{
+  "receiver_profile": "configs/receiver_profiles/chime_dtv_fengine.json",
+  "detector_core_profile": "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json",
+  "capture_format": "chime_baseband",
+  "epoch": "2026-11 CHIME upgrade commissioning",
+  "null_quantile": 0.99,
+  "channels": {"35": ["capture_521.h5"], "29": ["capture_614.h5"]},
+  "control": {"channel": 37, "captures": ["capture_491.h5"]},
+  "exclude_bins": {"29": []}
+}
+\end{lstlisting}
+A first bundle with no captures:
+\begin{lstlisting}[style=shell]
+{
+  "receiver_profile": "configs/receiver_profiles/chord_pathfinder_dtv_fengine.json",
+  "detector_core_profile": "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json",
+  "capture_format": "dtv_fine_powers",
+  "epoch": "first bundle",
+  "channels": {"24": [], "37": []},
+  "control": null,
+  "num_inputs": 128
+}
+\end{lstlisting}
+
+\begin{longtable}{|L{0.25\linewidth}|L{0.67\linewidth}|}
+\caption{Keys of a calibration plan. Paths are relative to the plan file. Capture lists accept glob patterns.}\label{tab:plan}\\
+\hline
+\textbf{Key} & \textbf{Meaning}\\ \hline
+\endfirsthead
+\hline
+\textbf{Key} & \textbf{Meaning}\\ \hline
+\endhead
+\pfield{receiver_profile} & Receiver profile JSON. Required.\\ \hline
+\pfield{detector_core_profile} & Detector-core profile JSON. Required.\\ \hline
+\pfield{capture_format} & Table~\ref{tab:formats}.\\ \hline
+\pfield{epoch} & Text recorded in each profile's \code{provenance.epochs}.\\ \hline
+\pfield{channels} & Map from channel to a list of captures. An empty list gives the floor at the nominal anchor.\\ \hline
+\pfield{control} & \code{{"channel": 37, "captures": [...]}}, or \code{null}.\\ \hline
+\pfield{num_inputs} & Inputs summed, for the simulated floor. Required when \code{control} is \code{null}.\\ \hline
+\pfield{null_quantile} & Quantile of the floor, default 0.99.\\ \hline
+\pfield{exclude_bins} & Map from channel to fine bins left out of the bulk, for lines found near the pilot.\\ \hline
+\pfield{anchors} & Map from channel to a fixed anchor bin.\\ \hline
+\pfield{words} & Map from channel to a fixed word.\\ \hline
+\pfield{word_q16} & Sets the floor and the word of every channel.\\ \hline
+\pfield{min_knee_captures} & Fewest captures for a knee, default 30.\\ \hline
+\pfield{max_frames_per_capture} & Reads at most this many blocks of each capture.\\ \hline
+\pfield{weight_coordinate_system} & Default \code{post_nyquist_zone_normalization}.\\ \hline
+\pfield{threshold} & \code{knee} (default) or \code{power_limit} (Section~\ref{sec:threshold}).\\ \hline
+\pfield{power_limit} & Inputs of the power-limit threshold.\\ \hline
+\end{longtable}
+
+A word belongs to its geometry. A word copied from another record must come with its anchor, its bulk and its rank.
+
+\subsubsection{Anchor}
+
+The anchor starts at the nominal fine bin of the pilot. Calibration looks within 30 bins of it for the bin with the largest 0.9 quantile of the fine ratio. That bin becomes the anchor (\code{anchor_source: measured}) when the blocks above the floor are too many to come from the null. Otherwise the nominal bin is kept (\code{nominal}), and a plan \code{anchors} entry gives \code{plan}. A channel marked \code{nominal} showed no pilot in its captures, and a capture with the pilot on should replace it.
+
+\subsubsection{Word}
+
+The report gives the source of each channel's word in \code{word_source}:
+\begin{itemize}
+  \item \code{knee}: the pilot was seen, the channel had at least 30 captures, the pilot share was at most 0.9, and the knee lay above the floor;
+  \item \code{floor, no pilot}, \code{floor, <n> captures of 30}, \code{floor, pilot in nearly every frame}, \code{floor, knee below it}, \code{floor, no captures}: the floor, for the stated reason;
+  \item \code{plan}: from \code{words} or \code{word_q16};
+  \item \code{power limit}, or \code{floor, power limit: <reason>}: Section~\ref{sec:threshold}.
+\end{itemize}
+Every capture has equal total weight in the knee, so a long capture does not set the curve. A channel with a pilot in nearly every frame has no clean frames for the curve to bend from, so it gets the floor and is masked whenever the pilot is seen. A frame mask recovers little of such a channel.
+
+\begin{longtable}{|L{0.30\linewidth}|L{0.62\linewidth}|}
+\caption{Main fields of \code{<dir>.report.json}.}\label{tab:report}\\
+\hline
+\textbf{Field} & \textbf{Meaning}\\ \hline
+\endfirsthead
+\hline
+\textbf{Field} & \textbf{Meaning}\\ \hline
+\endhead
+\pfield{floor_word_q16}, \pfield{floor_eta} & The floor used, as a word and as \(\eta\).\\ \hline
+\pfield{measured_floor_q16} & The floor from the data or simulation, before any \code{word_q16}.\\ \hline
+\pfield{floor_source} & \code{control channel}, \code{white noise, <n> inputs}, or \code{the plan}.\\ \hline
+\pfield{null_quantile}, \pfield{null_scores} & The quantile, and the number of independent null scores behind it.\\ \hline
+\pfield{control} & The control record: channel, anchor, bulk, rank, weights and captures. \code{test-bundle} uses it.\\ \hline
+\pfield{calibration_captures} & Every capture used, as an absolute path.\\ \hline
+\pfield{channels.<ch>.anchor_bin}, \pfield{anchor_source}, \pfield{nominal_bin} & The anchor and where it came from.\\ \hline
+\pfield{channels.<ch>.word_q16}, \pfield{eta}, \pfield{word_source}, \pfield{knee_word_q16} & The word, its source, and the knee.\\ \hline
+\pfield{channels.<ch>.masked_fraction}, \pfield{masked_at_floor} & The share of blocks masked at the word and at the floor.\\ \hline
+\pfield{channels.<ch>.pilot_share}, \pfield{pilot_in_nearly_every_frame} & Estimated share of blocks with a pilot, and whether it is above 0.9.\\ \hline
+\pfield{channels.<ch>.knee_interval_q16} & 16th and 84th percentiles of the knee over resampled captures. A wide interval means more captures are needed.\\ \hline
+\pfield{channels.<ch>.masked_interval} & 2.5th and 97.5th percentiles of the masked fraction over resampled captures. \code{test-bundle} tests against it.\\ \hline
+\pfield{channels.<ch>.strongest_bin_median_ratio}, \pfield{strongest_bin_masked_fraction} & Median fine ratio at the anchor, and the share of blocks above the floor. These show faint lines.\\ \hline
+\end{longtable}
+
+\subsection{Choosing the Threshold}
+\label{sec:threshold}
+
+A plan takes one of two thresholds.
+\begin{itemize}
+  \item \code{"threshold": "knee"} (default) gives each channel the general word of the previous section.
+  \item \code{"threshold": "power_limit"} gives each channel the word that keeps the most blocks while the upper residual shelf power meets a checked limit. It needs a recorded control and takes no \code{words} or \code{word_q16}.
+\end{itemize}
+
+The power-limit plan names its inputs:
+\begin{lstlisting}[style=shell]
+{
+  "threshold": "power_limit",
+  "power_limit": {
+    "table": "channel_table.json",
+    "limits": "limits.json",
+    "coupling": {"29": 0.2},
+    "curvature": {"29": [1.0e-6, 1.0e-7]},
+    "margin": 1.0e-6
+  }
+}
+\end{lstlisting}
+\code{table} is the RFIsher channel table of this telescope and \code{limits} maps each channel to its checked power limit in mK\(^2\). Both are required. \code{coupling} is the fraction of the kept shelf power that reaches the map, 1 by default. \code{curvature} gives a passband correction and its standard error, and \code{margin} is added to the upper estimate. Both default to zero. \code{min_captures} defaults to 30. A channel with a passing word carries it with \code{word_source} \code{power limit}. A channel with no passing word holds the floor in the bundle, and the operating policy masks it whole. The outcomes go to \code{<dir>.decisions.json}, which \code{compile-operating-policy} reads (\code{docs/CHANNEL_OPERATING_POLICY.md}). This threshold holds the control in memory beside each channel. The meaning of the test is described in the Design Document.
+
+\code{plan-run} and \code{process-run} take \code{--threshold power_limit --power-limit inputs.json}, where the file holds the \code{power_limit} object.
+
+\subsection{Step 3: Test}
+\label{sec:test}
+
+\begin{lstlisting}[style=shell]
+pilot-proxy test-bundle --bundle-dir bundle --plan test.json --output-json bundle.test.json
+\end{lstlisting}
+The test plan names the captures of each channel and of the control:
+\begin{lstlisting}[style=shell]
+{
+  "capture_format": "chime_baseband",
+  "channels": {"35": ["other_521.h5"], "29": ["other_614.h5"]},
+  "control": ["other_491.h5"]
+}
+\end{lstlisting}
+Each check prints PASS or FAIL, and the exit status is 1 on any failure (Table~\ref{tab:testchecks}).
+
+\begin{longtable}{|L{0.34\linewidth}|L{0.58\linewidth}|}
+\caption{Checks of \code{test-bundle}.}\label{tab:testchecks}\\
+\hline
+\textbf{Check} & \textbf{Passes when}\\ \hline
+\endfirsthead
+\hline
+\textbf{Check} & \textbf{Passes when}\\ \hline
+\endhead
+structure and digests & \code{validate-runtime-weight-bundle} reports no errors.\\ \hline
+every bound channel has values & No profile is \code{pending_campaign}.\\ \hline
+test data differ from calibration data & No test capture is in the report's calibration or control captures.\\ \hline
+rank support on channel \(c\) & Every block of the channel has a valid test.\\ \hline
+masked fraction on channel \(c\) & The masked count is consistent with a rate inside the calibration's \code{masked_interval}.\\ \hline
+false alarms on the control channel & The control's masked count at the floor is consistent with the rate \(1-\)\code{null_quantile}.\\ \hline
+\end{longtable}
+
+The masked-fraction check only shows that the test data are masked like the calibration data. It passes a poor word. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is used.
+
+\subsection{Processing a Run in One Step}
+
+For a detect-only run with fine powers, \code{plan-run} writes the plans, and \code{process-run} does the whole of steps 2 and 3:
+\begin{lstlisting}[style=shell]
+pilot-proxy plan-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
+  --epoch "2026-11 Pathfinder shakedown" --calibration-share 0.5 --output-dir run1/plans
+pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
+  --epoch "2026-11 Pathfinder 48 h" --calibration-share 0.5 --output-dir run1
+\end{lstlisting}
+\code{plan-run} sorts the files of each bound channel by \code{fpga_seq_num} and gives the first \code{--calibration-share} of them (default 2/3) to calibration and the rest to the test. It needs at least two files per channel. The bundle of the run must have a control channel, because the run then gives the floor. \code{process-run} needs a new or empty output directory and writes:
+\begin{itemize}
+  \item \code{plans/calibrate.json} and \code{plans/test.json};
+  \item \code{bundle/}, \code{bundle.report.json}, and \code{bundle.decisions.json} for a power-limit run;
+  \item \code{test.json}, the \code{test-bundle} record;
+  \item \code{spectrograms/calibrate/} and \code{spectrograms/test/}, with one \code{spectrogram_ch<NN>.pdf} and \code{.npz} per channel and \code{masked_summary.csv};
+  \item \code{summary.md} and \code{summary.json}: per channel the anchor, the word and its source, the pilot share, the masked percent of each part, the longest masked stretch, and the test result.
+\end{itemize}
+
+\subsection{Step 4: Deploy}
+\label{sec:deploy}
+
+Kotekan reads the bundle from a local path once, at startup. A bundle changes only at a restart. A passing bundle is added by a Kotekan pull request to \code{config/chime/dtv_bundles/} or \code{config/chord/dtv_bundles/}, under its \code{<purpose>-<digest>} name, with a line in that directory's \code{README.md}. After \code{make install} on the node, the digests are checked in place with \code{sha256sum -c sha256sums.txt}, and \code{dtv_runtime_bundle_dir} is set to the installed path. On the Pathfinder, the default of \code{dtv_runtime_bundle_dir} in \code{pathfinder.j2} is changed by a pull request, or the variable is set for one run.
+
+%======================================================================
+\section{Running in Kotekan}
+\label{sec:kotekan}
+
+\subsection{Data Path}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex,node distance=0.5cm,
+  blk/.style={rectangle,rounded corners,draw=PilotProxyBlue,thick,fill=LightGray,minimum height=0.8cm,align=center,text width=4.2cm,font=\small},
+  prd/.style={rectangle,draw=MidGray,fill=white,align=left,text width=4.6cm,font=\scriptsize}]
+  \node[blk] (ring) {Voltage ring\\ \scriptsize\code{voltage} (CHORD), \code{xposed_voltage} (CHIME)};
+  \node[blk,below=0.9cm of ring] (det) {\code{cudaPilotProxyDetector}\\ \scriptsize reads \code{pilot_profiles.json}, \code{weights.bin}};
+  \node[blk,left=1.2cm of det] (bf) {Bad feed mask ring\\ \scriptsize \code{bufferBadInputs} (\code{bf_mask})};
+  \node[prd,right=0.8cm of det] (prod) {\code{dtv_mask} int8 [1,F]\\ \code{dtv_fine_support} int32 [1,F,2]\\ \code{dtv_powers} uint64 [1,F,3]\\ \code{dtv_fine_powers} uint64 [1,R,3,256]};
+  \node[blk,below=0.9cm of det] (merge) {\code{DtvRfiMask}\\ \scriptsize SK mask \code{rfi_RFImask} \(\to\) \code{dtv_RFImask}};
+  \node[blk,below=of merge] (n2) {n2k correlator, counts and \code{RfiMaskSum}};
+  \node[prd,right=0.8cm of merge,text width=4.6cm] (rec) {Pathfinder: sent to the recv node\\ CHIME: written under \code{dtv_output_dir}};
+  \draw[->,thick] (ring) -- (det);
+  \draw[->,thick] (bf) -- (det);
+  \draw[->,thick] (det) -- (prod);
+  \draw[->,thick,PilotProxyRed] (det) -- node[right,font=\scriptsize]{mask, support} (merge);
+  \draw[->,thick] (merge) -- (n2);
+  \draw[->,thick] (prod.south) -- (rec.north);
+\end{tikzpicture}
+\caption{The detector in a Kotekan node. \code{DtvRfiMask} runs only on CHORD. On the Pathfinder it always runs, and \code{/dtv_mask_enabled} decides whether it changes the mask. On CHIME the detector is detect-only, and no visibility or weight consumer reads its outputs.}
+\label{fig:kotekan}
+\end{figure}
+
+\subsection{Startup and Binding}
+\label{sec:startup}
+
+At startup, each detector instance loads the bundle. It checks the schema, the namespace, the digests, the weight offsets against the compiled core, and the fine calibration of every \code{calibrated} or \code{control} profile. Every node loads the bundle, even one with no pilot. At the first frame, the instance reads the \code{coarse_freq} metadata of the voltage ring and binds each profile whose \code{receiver_channel_id} is among them. The binding stays fixed for the run. A change of \code{coarse_freq} after binding stops the run. A node with no bound profile runs with the detector disabled and writes zero masks, which mean the blocks were not tested.
+
+\subsection{CHORD Pathfinder}
+\label{sec:pathfinder}
+
+\code{config/chord/pathfinder.j2} always includes \code{config/chord/dtv.j2}, so every node runs the detector and \code{DtvRfiMask}, and every node needs the bundle. The n2k correlator always reads \code{dtv_RFImask}, which is the SK mask while the DTV mask is off. The detector uses \code{detector_window_samples: 64} and the namespace \code{chord_freq_id}. These variables are set when \code{pathfinder.j2} and \code{config/chord/recv.j2} are rendered:
+\begin{lstlisting}[style=shell]
+dtv_runtime_bundle_dir: /usr/local/etc/kotekan/chord/dtv_bundles/<bundle>
+dtv_apply_mask: false
+dtv_write_enabled: false
+dtv_calibration_mode: true
+\end{lstlisting}
+
+\begin{longtable}{|L{0.27\linewidth}|L{0.17\linewidth}|L{0.48\linewidth}|}
+\caption{Pathfinder configuration variables.}\label{tab:pfkeys}\\
+\hline
+\textbf{Variable} & \textbf{Default} & \textbf{Effect}\\ \hline
+\endfirsthead
+\hline
+\textbf{Variable} & \textbf{Default} & \textbf{Effect}\\ \hline
+\endhead
+\pfield{dtv_runtime_bundle_dir} & \pfield{pathfinder-commissioning-e2e90219}, installed path & The bundle directory.\\ \hline
+\pfield{dtv_apply_mask} & false & Starting value of \code{/dtv_mask_enabled}: apply the DTV mask to N2.\\ \hline
+\pfield{dtv_write_enabled} & false & Starting value of \code{/dtv_write_enabled}: send the products to the recv node.\\ \hline
+\pfield{dtv_calibration_mode} & false & Template only. Without it only \code{dtv_mask} is sent. With it \code{dtv_powers}, \code{dtv_fine_support} and \code{dtv_fine_powers} (2 rows) are sent too. \code{recv.j2} must be rendered with the same value.\\ \hline
+\end{longtable}
+
+The two switches are changed over REST until the next restart:
+\begin{lstlisting}[style=shell]
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"enabled": true, "valid_at_time_ns": 0}' <node>:12048/dtv_mask_enabled
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"enabled": true}' <node>:12048/dtv_write_enabled
+\end{lstlisting}
+A \code{valid_at_time_ns} of 0 applies a mask change from the next frame. A nonzero value applies it from the first frame starting at or after that instrument time. A write change applies to whole frames. A POST sent before the stages start has no effect. The \code{DtvRfiMask} log line \code{DTV mask on} or \code{off} confirms a mask change. \code{N2Accumulate} records the fraction of each bin the mask was on, and \code{hdf5N2Write} writes it as \code{frac_dtv_mask_enabled}.
+
+Each X-engine half packs 1024 blocks (about 43 s) of each sent product into one frame and sends it to the recv node, on ports 11031 (mask), 11033 (powers), 11035 (fine support) and 11037 (fine powers). \code{recv.j2} writes each frame to its own file under \code{/mnt/cs00/data/dtv/acq_<start time>/}, named \code{dtv_<product>.<number>.h5}, with a new directory for each recv start. The numbers follow arrival order. The \code{coarse_freq} attribute identifies the half and \code{fpga_seq_num} gives the start of the window. A block missing from a window is a row of \code{0xFF} bytes.
+
+\subsection{CHIME Upgrade}
+
+\code{config/chime/chime_upgrade_2numa.j2} includes \code{config/chime/dtv.j2} in each NUMA domain when \code{dtv_enabled} is set, with one detector per GPU. It is detect-only: no visibility or weight consumer reads the outputs, and there is no \code{DtvRfiMask} and no REST switch. The detector uses \code{detector_window_samples: 128} and the namespace \code{chime_freq_id}, so the bundle must use \code{chime_freq_id}. The voltage metadata must carry the \code{coarse_freq} of each domain. The variables below are those of Kotekan pull request \#1880 (branch \code{chime-dtv-follow-up}).
+
+\begin{longtable}{|L{0.27\linewidth}|L{0.20\linewidth}|L{0.45\linewidth}|}
+\caption{CHIME configuration variables.}\label{tab:chimekeys}\\
+\hline
+\textbf{Variable} & \textbf{Default} & \textbf{Effect}\\ \hline
+\endfirsthead
+\hline
+\textbf{Variable} & \textbf{Default} & \textbf{Effect}\\ \hline
+\endhead
+\pfield{dtv_enabled} & false & Adds the detector to each NUMA domain.\\ \hline
+\pfield{dtv_runtime_bundle_dir} & \pfield{data/pilotproxy_bundle} & The bundle directory, for example \pfield{/usr/local/etc/kotekan/chime/dtv_bundles/chime-first-56005bb7}.\\ \hline
+\pfield{dtv_write_enabled} & false & Writes the products under \code{dtv_output_dir}. Without it the mask has no consumer and each frame is dropped.\\ \hline
+\pfield{dtv_output_dir} & \code{/scratch/dtv} & Output directory.\\ \hline
+\pfield{dtv_calibration_mode} & false & Adds \code{dtv_powers}, \code{dtv_fine_support} and \code{dtv_fine_powers}. The fine powers are HDF5, about 2.3 MB/s per NUMA domain.\\ \hline
+\pfield{dtv_fine_powers_rows} & \code{num_freq_gpu_buf} & Rows of \code{dtv_fine_powers}. A node that binds more channels than this stops at its first frame.\\ \hline
+\end{longtable}
+
+With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>} (and, in calibration mode, \code{dtv_powers<sfx>} and \code{dtv_fine_support<sfx>}) as \code{.raw} files of 1024 frames, and \code{hdf5FileWrite} writes \code{dtv_fine_powers<sfx>} with 1024 frames per file. The detector runs and writes from startup. It is removed by a restart without \code{dtv_enabled}.
+
+\subsection{CHORD F-engine Template}
+
+\code{config/fengine/chord.j2} includes \code{include/dtv_chord.j2} when \code{dtv_enabled} or \code{dtv_apply_mask} is true. This template also takes \code{dtv_permanent_mask_freq_ids} (receiver IDs skipped by the detector and, with \code{dtv_apply_mask}, fully masked) and \code{dtv_require_fine_freq_ids} (receiver IDs that must have a fine test in every block). The two lists hold receiver IDs, must not overlap, and must name IDs on the node. The Kotekan user module describes them.
+
+\subsection{Detect-only and Applying the Mask}
+\label{sec:applymask}
+
+In detect-only mode the detector records its decisions and the visibilities do not change. On the Pathfinder this is \code{/dtv_mask_enabled} off. On CHIME it is the only mode. With the mask on, \code{DtvRfiMask} clears every sample of a block at a frequency that the detector rejected, that has fine support \((0,n)\), or that is in the permanent-mask list. The visibilities and the valid-sample counts change together.
+
+No shipped bundle is qualified for masking. Masking needs words from a calibration campaign on the telescope, chosen against the science tolerance, and then the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md}. Only then is \code{dtv_apply_mask: true} set.
+
+\subsection{Bad Feeds}
+
+On both telescopes the detector reads the bad feed mask ring of \code{bufferBadInputs} (\code{bf_mask_name: bf_mask}), and a flagged input is packed as zero. On CHORD, \code{bufferBadInputs} also flags the elements outside the main array, so the detector drops the 16 RFI antennas. On CHIME this is part of pull request \#1880. \code{dtv_powers} and \code{dtv_fine_powers} fall as inputs are flagged. A word calibrated with one set of inputs is therefore read with care after a large change in the flagged inputs, and the loop is repeated.
+
+%======================================================================
+\section{Checking a Run}
+\label{sec:checkrun}
+
+\subsection{Log}
+
+The first check is the log at the first frame. Each bound pilot has a line
+\begin{lstlisting}[style=shell]
+PilotProxy: bound ATSC physical channel <ch> (pilot <MHz> MHz, receiver_channel_id <id>) to local frequency index <f>
+\end{lstlisting}
+which is checked against the frequency map of the node. A \code{reject-all limit} line marks a permanently masked ID. A \code{detector DISABLED} line means the node has no bundle pilot, and its zero masks mean the blocks were not tested. On the Pathfinder, \code{DTV mask on} or \code{off} logs a change of the mask switch.
+
+\subsection{Products}
+
+\begin{longtable}{|L{0.21\linewidth}|L{0.21\linewidth}|L{0.50\linewidth}|}
+\caption{Detector products per local frequency and block.}\label{tab:products}\\
+\hline
+\textbf{Product} & \textbf{Type} & \textbf{Content}\\ \hline
+\endfirsthead
+\hline
+\textbf{Product} & \textbf{Type} & \textbf{Content}\\ \hline
+\endhead
+\code{dtv_mask} & int8 [1,F] & 1 rejects the block. Zero for unbound frequencies and for the control.\\ \hline
+\code{dtv_fine_support} & int32 [1,F,2] & \((1,n)\) valid test over \(n\) bulk bins; \((0,n)\) too few bulk bins, and its mask of 0 does not mean clean; \((-1,-1)\) no test (no pilot, permanent mask, detector disabled, or the control).\\ \hline
+\code{dtv_powers} & uint64 [1,F,3] & Target, lower and upper frame powers, each the sum of 256 fine powers.\\ \hline
+\code{dtv_fine_powers} & uint64 [1,R,3,256] & Fine powers of the bound channels. Bound channel \(i\) is in row \(i\), and \code{coarse_freq} names each row (\(-1\) for an unused row).\\ \hline
+\end{longtable}
+
+A pilot that moves out of its designated set, or a new line in the bulk bins, shows in \code{dtv_powers} and in the spectrograms before the mask changes. Either one calls for a recalibration.
+
+\subsection{Spectrograms and Masked Percent}
+
+A run with \code{dtv_calibration_mode} gives a spectrogram of each bound channel, with and without the mask:
+\begin{lstlisting}[style=shell]
+pilot-proxy run-spectrogram --bundle-dir bundle \
+  --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
+  --channel 18 24 29 37 --output-dir spectrograms
+\end{lstlisting}
+The decision is recomputed from the fine powers and the bundle word, so the control shows what its word would remove. A block whose test is invalid counts as masked, as in \code{DtvRfiMask}. Chunks are 10 s by default (\code{--chunk-seconds}). A chunk with no kept blocks is grey. The time axis is recorded time, so a gap in the recording does not appear. The command also writes \code{masked_summary.csv} with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
+
+\subsection{Run Check Tools}
+
+\begin{lstlisting}[style=shell]
+python tools/check_pathfinder_dtv_run.py --dtv-dir /mnt/cs00/data/dtv --bundle-dir <bundle> \
+  --vis-dir <visibility acq dir> --output-dir check
+python tools/analyze_dtv_run.py --run-dir /scratch/dtv/<run> --bundle-dir <bundle>
+\end{lstlisting}
+\begin{itemize}
+  \item \code{check_pathfinder_dtv_run.py} reads the recv node's files. For each channel it reports windows and gaps, missing blocks, valid tests, the masked percent, the peak fine bin against the bundle anchor, and the visibilities' \code{frac_dtv_mask_enabled}.
+  \item \code{analyze_dtv_run.py} reads the raw CHIME products. It needs all three of \code{dtv_mask}, \code{dtv_powers} and \code{dtv_fine_support}, so the run must have \code{dtv_calibration_mode}. It checks equal frame counts, gaps in \code{fpga_seq_num}, the zero rows of unbound frequencies, rank support, and the masked fraction of each channel.
+  \item \code{pilot-proxy replay-fine-capture} compares the stage with the reference bit for bit, from a baseband dump taken during the run (\code{docs/CAPTURE_FINE_REPLAY.md}).
+\end{itemize}
+
+\subsection{Score Cache}
+
+To study the threshold of a CHORD channel by itself, \code{run-scores} writes each block's keeping word, its frame powers and its 10 s event:
+\begin{lstlisting}[style=shell]
+pilot-proxy run-scores --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
+  --channel 18 24 29 --jobs 32 --output-dir scores
+python tools/threshold_rule.py --scores scores --power-limits limits.json --out thresholds
+\end{lstlisting}
+\code{run-scores} assumes the Pathfinder block (8192 samples of 5.12\,\textmu s). The result of \code{threshold_rule.py} is in-sample, so it is checked on a later part of the run or on another run.
+
+%======================================================================
+\section{Standalone and Synthetic Use}
+
+The standalone testbench checks the detector core on a generated ATSC signal. It needs a GPU, the CUDA library, and GNU Radio for the generator. The steps are:
+\begin{lstlisting}[style=shell]
+pilot-proxy generate-atsc --gnuradio-python /usr/bin/python3 \
+  --output-iq generated/atsc/atsc_8vsb_complex64.cfile --num-iq-samples 600000
+pilot-proxy audit-atsc --input-iq generated/atsc/atsc_8vsb_complex64.cfile
+pilot-proxy quantize --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
+  --physical-channel 14 --frame-size-samples 16384
+pilot-proxy detect --input-detector-matrix generated/detector_input/detector_matrix_i4.npy
+pilot-proxy evaluate-snr --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
+  --physical-channel 14 --frame-size-samples 16384 --num-input-streams 1 \
+  --threshold-data-shelf-snr-db -26 --noise-trials 10 --noise-source python
+\end{lstlisting}
+\code{bash examples/quickstart.sh} runs the same chain. \code{generate-atsc} runs under the GNU Radio interpreter given by \code{--gnuradio-python}, which must be able to import PilotProxy from the checkout. \code{evaluate-snr --detector-backend cpu-reference} runs without a GPU. These commands use the shipped weight bank in \code{weights/} and the coarse frame ratio of the testbench, not a runtime bundle. Their options and outputs are described in \code{docs/USAGE.md}.
+
+A development bundle for every channel is exported, with no calibration, by:
+\begin{lstlisting}[style=shell]
+pilot-proxy export-runtime-weight-bundle \
+  --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
+  --weight-coordinate-system post_nyquist_zone_normalization \
+  --physical-channel-range 14:36 --output-dir dev_bundle
+\end{lstlisting}
+Every profile of such a bundle is \code{pending_campaign}, so Kotekan stops when it binds one. The Kotekan integration tests copy such a bundle and fill it with synthetic thresholds.
+
+The CHIME archive scan (\code{chime-survey}, \code{chime-scan}, \code{chime-combine}) reduces archived baseband data on CANFAR. It is described in \code{INTEGRATION.md} and \code{docs/CANFAR_RUNBOOK.md}.
+
+%======================================================================
+\section{Troubleshooting}
+
+\subsection{Kotekan Stops at Startup or at the First Frame}
+
+\begin{longtable}{|L{0.33\linewidth}|L{0.29\linewidth}|L{0.30\linewidth}|}
+\caption{Kotekan detector errors. Each one stops the whole instance, the correlator with it.}\label{tab:kotekanerrors}\\
+\hline
+\textbf{Message contains} & \textbf{Cause} & \textbf{Action}\\ \hline
+\endfirsthead
+\hline
+\textbf{Message contains} & \textbf{Cause} & \textbf{Action}\\ \hline
+\endhead
+\code{cannot open pilot_profiles_path} or \code{cannot open weights_path} & Wrong \code{dtv_runtime_bundle_dir}. & Check the installed path, for example under \code{/usr/local/etc/kotekan/}.\\ \hline
+\code{sha256 mismatch for} & A bundle file changed or was copied badly. & Copy the bundle again; check with \code{sha256sum -c}.\\ \hline
+\code{weights_sha256 in ... is} & Profiles and weights from different exports. & Use one bundle directory as made.\\ \hline
+\code{built without OpenSSL} & Kotekan has no SHA-256. & Rebuild Kotekan with OpenSSL.\\ \hline
+\code{receiver channel namespace mismatch} & Bundle for the other telescope. & Use a bundle of this telescope's receiver profile.\\ \hline
+\code{missing bundle receiver namespace} & Rows carry receiver IDs but the file has no top-level namespace. & Export the bundle again with the current tools.\\ \hline
+\code{weight_bank_nbytes ... does not match the compiled kernel contract} & Bundle for the other window size (\(K=64\) or 128). & Use a bundle of this telescope.\\ \hline
+\code{outside ATSC 14-37} or \code{only physical channel 37 can have status control} & Malformed profile, or a Kotekan build older than the control channel. & Check the bundle with the validator; update Kotekan.\\ \hline
+\code{fine calibration is not deployable} (first frame) & A bound profile is \code{pending_campaign}. & Calibrate that channel, drop it from the bundle, or list its ID in the permanent mask.\\ \hline
+\code{archive-review-only thresholds} (first frame) & A bound profile's word is for archive review only. & Use a bundle with qualified words.\\ \hline
+\code{does not carry coarse_freq} or \code{coarse_freq entries but num_frequencies} & Voltage metadata without the frequency map, or with the wrong count. & Fix the upstream metadata.\\ \hline
+\code{more than dtv_fine_powers_rows} & More bound channels on the node than fine-power rows. & Raise \code{dtv_fine_powers_rows} or bind fewer channels.\\ \hline
+\code{coarse_freq changed or disappeared after first-frame binding} & The frequency map changed during the run. & Restart.\\ \hline
+\code{DtvRfiMask ... mismatch} & Mask and detector products out of step in time, frequency or layout. & Check the stage configuration and the frame sizes.\\ \hline
+\end{longtable}
+
+\subsection{Symptoms During a Run}
+
+\begin{longtable}{|L{0.30\linewidth}|L{0.30\linewidth}|L{0.32\linewidth}|}
+\caption{Symptoms during a run.}\label{tab:symptoms}\\
+\hline
+\textbf{Symptom} & \textbf{Cause} & \textbf{Action}\\ \hline
+\endfirsthead
+\hline
+\textbf{Symptom} & \textbf{Cause} & \textbf{Action}\\ \hline
+\endhead
+\code{detector DISABLED}, all-zero masks & No bundle pilot on this node. & Check the node's frequency map against the bundle's receiver IDs.\\ \hline
+No \code{dtv_fine_powers} files & \code{dtv_calibration_mode} not set, or recording off. & Render with \code{dtv_calibration_mode: true}, and on the Pathfinder render \code{recv.j2} with the same value and enable \code{/dtv_write_enabled}.\\ \hline
+REST switch has no effect & POST sent before the stages started. & Send it again after startup.\\ \hline
+N2 falls behind & The detector holds the voltage ring. & Stop the detector and report its time per block from the stage's \code{/gpu_profile} endpoint.\\ \hline
+Many \((0,n)\) support rows & Too few usable bulk bins. & Check \code{dtv_powers} and the spectrogram for lines; add \code{exclude_bins} and recalibrate.\\ \hline
+\end{longtable}
+
+\subsection{PilotProxy Tools}
+
+\begin{longtable}{|L{0.38\linewidth}|L{0.54\linewidth}|}
+\caption{Common errors of the bundle tools.}\label{tab:toolerrors}\\
+\hline
+\textbf{Message contains} & \textbf{Action}\\ \hline
+\endfirsthead
+\hline
+\textbf{Message contains} & \textbf{Action}\\ \hline
+\endhead
+\code{exists; a bundle is never changed in place} & Give \code{calibrate-bundle} a new \code{--output-dir}.\\ \hline
+\code{needs a control channel or num_inputs} & Add \code{control}, or \code{"control": null} with \code{num_inputs}.\\ \hline
+\code{independent null scores are too few} & Add control captures, or lower \code{null_quantile}.\\ \hline
+\code{no complete blocks for channel} & The captures hold no block of that channel; check the receiver IDs and the file list.\\ \hline
+\code{the bundle has no control channel, so the run gives no floor} & \code{plan-run} needs a run whose bundle binds channel 37.\\ \hline
+\code{run files, and a split needs two} & The channel has fewer than two files in the run.\\ \hline
+\code{is not empty} & Give \code{process-run} a new or empty \code{--output-dir}.\\ \hline
+\code{the power_limit threshold needs} & Add the \code{power_limit} inputs and a recorded control.\\ \hline
+HDF5 filter error on a \code{dtv_fine_powers} file & Install \code{hdf5plugin} (the \code{n2} extra).\\ \hline
+Control false alarms fail in \code{test-bundle} & Floor too low, or a line on the control. Check the control spectrogram, then recalibrate with more epochs.\\ \hline
+Masked fraction fails in \code{test-bundle} & The test captures differ from the calibration captures. Read the report and the spectrogram, then recalibrate with captures that cover both. A pilot that fades during the run can fail on the last part.\\ \hline
+\end{longtable}
+
+%======================================================================
 \section{Known Limitations}
 
 \begin{itemize}
-  \item The synthetic testbench models GNU Radio ATSC 1.0 signals only. Other broadcast standards and telescope performance are not covered.
-  \item The CHIME real-data workflow (\code{chime-run}, \code{chime-scan}, and the HDF5 reader) is documented in \code{docs/CANFAR_RUNBOOK.md} and \code{docs/CHIME_RUN_WORKFLOW.md}.
-  \item The checked-in CHIME profile and stream map must still agree with the data product being processed. The 16384-sample frame is the planned F-engine upgrade profile used by this repository and makes no claim about the frame deployed today. \code{chime-run} uses its explicit override, and \code{chime-scan} uses the Pilot Proxy CHIME instrument \code{nfft}. Neither path discovers a universal HDF5 frame size.
-  \item Synthetic threshold tests accept a shelf-SNR threshold, while the CHIME path uses $F>\mu_0$, with \(\mu_0\) fixed by the weight norms. Neither rule is a telescope false-positive threshold calibrated on data.
-  \item Receiver profiles define an adapter contract. A profile does not show that a telescope pipeline has been deployed or validated.
-  \item Installed packages carry the weight bank and \code{configs/} resources, so default-resource commands can run from any directory. Repository-relative examples, helper scripts, second-interpreter subprocesses, and the CUDA build require a checkout or explicit paths. The CUDA kernel itself is not packaged and builds from the cloned source tree (\code{make build-kernel}).
-  \item Fine products are mandatory, because the frame powers are their all-bin sums. A library without the row-sum and fine-power entries fails at launch, and \code{fine_products} accepts only \code{on}.
+  \item No channel is qualified for masking. Every shipped bundle is detect-only, and every bundle made by \code{calibrate-bundle} is a detect-only commissioning bundle.
+  \item Kotekan does not read the detect-only note in a bundle. Keeping \code{dtv_apply_mask} off is the operator's job.
+  \item The knee is a generic starting point with no link to a science requirement. \code{test-bundle} checks consistency between two parts of the data, not the quality of a word.
+  \item A floor from simulated white noise is the lowest a floor can be. A real control can sit well above it, and a floor from a short capture is a lower limit.
+  \item The detector masks only the coarse frequency that holds each pilot. A whole DTV channel is removed with the permanent-mask list of the F-engine template.
+  \item A word depends on the set of summed inputs. A large change in the flagged inputs calls for a new calibration.
+  \item The CHIME detector is detect-only and its configuration is part of Kotekan pull request \#1880. It reads the voltages of every domain with no mask path.
+  \item \code{run-scores} assumes the Pathfinder block timing.
+  \item The fine support does not cover packet loss, input health, or calibration quality.
 \end{itemize}
-
-\section{Troubleshooting}
-
-\subsection{GNU Radio imports fail}
-The system GNU Radio Python, typically \code{/usr/bin/python3}, must be able to import PilotProxy from the editable checkout or through an explicit \code{PYTHONPATH}. A wheel installed only in the CUDA environment is not visible to it. \code{PYTHONNOUSERSITE=1} is set when user-site packages shadow the GNU Radio NumPy build.
-
-\subsection{CUDA shared library not found}
-The library is rebuilt with \code{make build-kernel SM=<target>}, and \code{LD_LIBRARY_PATH} must hold the CUDA driver path. On WSL, this path is commonly \code{/usr/lib/wsl/lib}, and it is verified on the target host. The staged cache copy under \code{~/.cache/pilot_proxy/} is preferred.
-
-\subsection{Wrong detector matrix shape}
-The packed detector matrix must have dtype \code{int8} and last dimension equal
-to the selected compiled detector window (64 or 128). \code{pilot-proxy quantize}
-builds the expected format.
-
-\subsection{No weights for channel}
-The shipped bank covers physical channels 14 through 36, and \code{pilot-proxy list-channels} lists the available targets.
-
-\subsection{PNR is null}
-If \(F\leq1\), the raw pilot-excess ratio is non-positive and \(10\log_{10}(F-1)\) is undefined. The JSON value is therefore \code{null}, which can occur for noise-only and weak-signal trials.
-
-\subsection{A scan fails at launch for want of fine powers}
-The loaded \code{libpilotproxy.so} lacks the row-sum or fine-power entry, or it
-is from another core major. The library is rebuilt and restaged with
-\code{make build-kernel}, \code{PilotProxy_Supports_RowSums()} and
-\code{PilotProxy_Supports_FinePowers()} are confirmed to return 1 (the
-kernel-load check in \code{scripts/setup_env.sh} prints the loaded version), and
-the scan is relaunched. No degraded mode exists, because the frame powers are
-the sums of the fine powers.
-
-\subsection{High null-bulk exceedance fraction on an occupied channel}
-\field{fine_null_bulk_exceedance_fraction} counts detections in non-designated bins. A real transmitter at a nonzero pilot offset occupies those bins persistently, so a high fraction on a DTV-occupied channel is the expected signal (see Section~\ref{sec:fineproducts}). The CFAR calibration is evaluated on channels without detected lines.
-
-\begin{thebibliography}{9}
-\bibitem{atsc_a53_part2_2011} Advanced Television Systems Committee, \emph{ATSC Digital Television Standard, Part 2: RF/Transmission System Characteristics}, A/53 Part 2:2011, 15 December 2011. \url{https://www.atsc.org/wp-content/uploads/2021/04/A53-Part-2-2011.pdf}
-\bibitem{ecfr_73603} Electronic Code of Federal Regulations, 47 CFR \S 73.603, \emph{Numerical designation of television channels}. \url{https://www.ecfr.gov/current/title-47/chapter-I/subchapter-C/part-73/subpart-E/section-73.603}
-\bibitem{gnuradio_dtv} GNU Radio Manual, \emph{DTV/ATSC module documentation}. \url{https://www.gnuradio.org/doc/sphinx-3.7.7.1/atsc/index.html}
-\bibitem{gnuradio_noise} GNU Radio Manual, \emph{gr::analog::noise\_source}, complex noise-source amplitude convention. \url{https://www.gnuradio.org/doc/doxygen/classgr_1_1analog_1_1noise__source.html}
-\end{thebibliography}
 
 \end{document}

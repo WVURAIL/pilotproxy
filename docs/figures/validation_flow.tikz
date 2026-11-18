@@ -1,6 +1,6 @@
 % Standalone validation flow.
-% This file is the one source of the diagram. It is \input by PilotProxy_DS001
-% (Data Sheet) and PilotProxy_UG001 (User Guide) and rendered to
+% This file is the one source of the diagram. It is \input by PilotProxy_DD001
+% (Design Document) and PilotProxy_UG001 (User Guide) and rendered to
 % validation_flow.svg for docs/USAGE.md. It needs the tikz libraries
 % arrows.meta and positioning, and the colors PilotProxyBlue (WVU blue) and
 % LightGray (WVU not-quite-white) defined by the host document, or by

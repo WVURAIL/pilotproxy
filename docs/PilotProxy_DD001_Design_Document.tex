@@ -1182,8 +1182,8 @@ telescope calibration, a passing \code{test-bundle} report with the control,
         \code{afe1c9d}, which predates the name
         \code{post_nyquist_zone_normalization} and so cannot validate the
         shipped bundles. A re-vendor at \code{54ae410}, whose \code{cuda/}
-        differs only in comments, is on the Kotekan branch
-        \code{pilotproxy-revendor-54ae410}. Re-vendor again at each change to
+        differs only in comments, is kotekan\#1905, which is open. Re-vendor
+        again at each change to
         the core, after the change is merged in PilotProxy.
   \item \textbf{CHIME has no voltage capture path} of its own on the upgrade,
         so first captures come from the CHIME/FRB baseband system.
@@ -1227,6 +1227,7 @@ kotekan\#1862, \#1877 & Merged. Detect-only bundles; Pathfinder bundle with a co
 kotekan\#1874 & Merged. Fine powers and the control channel.\\ \hline
 kotekan\#1878, \#1895 & Merged. Pathfinder products on the recv node; installed bundle path.\\ \hline
 kotekan\#1880 & Open. CHIME fine powers, bad feeds and the first CHIME bundle.\\ \hline
+kotekan\#1905 & Open. Re-vendor of the core at \code{54ae410}.\\ \hline
 kotekan\#1906 & Open. Masking refused with a detect-only bundle; summed-input warning.\\ \hline
 \end{longtable}
 

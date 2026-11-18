@@ -298,9 +298,9 @@ On CHIME, the detector is removed by a restart without `dtv_enabled`, and the re
 
 ## Bad feeds
 
-On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, as if it carried no signal, and `bufferBadInputs` also flags the RFI antennas (`bf_mask_name` in `config/chord/dtv.j2`). On CHIME, it sums every input until kotekan#1880 merges. A change in the flagged inputs changes the noise of the sum. When the plan gives `num_inputs`, each profile records it as `summed_inputs`, and the detector logs a warning while the count of good inputs differs from it by more than 10%. Recalibrate if the warning persists.
+On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, as if it carried no signal, and `bufferBadInputs` also flags the RFI antennas (`bf_mask_name` in `config/chord/dtv.j2`). On CHIME, it sums every input until kotekan#1880 merges. A change in the flagged inputs changes the noise of the sum. When the plan gives `num_inputs`, each profile records it as `summed_inputs`, and with kotekan#1906 the detector logs a warning while the count of good inputs differs from it by more than 10%. Recalibrate if the warning persists.
 
 
 ## Applying the mask
 
-Masking needs a calibration on the telescope, a passing `test-bundle` report with the control, `qualify-bundle`, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then `dtv_apply_mask: true`. Kotekan's `DtvRfiMask` refuses to start with the mask on unless every calibrated channel of the bundle is qualified, and a POST that switches the mask on with such a bundle stops Kotekan.
+Masking needs a calibration on the telescope, a passing `test-bundle` report with the control, `qualify-bundle`, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then `dtv_apply_mask: true`. With kotekan#1906, Kotekan's `DtvRfiMask` refuses to start with the mask on unless every calibrated channel of the bundle is qualified, and a POST that switches the mask on with such a bundle stops Kotekan.

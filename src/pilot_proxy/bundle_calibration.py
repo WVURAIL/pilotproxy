@@ -361,11 +361,14 @@ def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: i
                  note: str) -> dict[str, Any]:
     # the control is decided and recorded, and never reaches a mask
     status = "control" if channel == CONTROL_PHYSICAL_CHANNEL else "calibrated"
+    provenance = dict(epochs=[str(plan.get("epoch", "unstated"))], source_product_sha256=[],
+                      null_quantile=quantile, note=f"{note} Detect-only, not a calibration.")
+    # the word holds for this set of summed inputs, which Kotekan compares with the live set
+    if "num_inputs" in plan:
+        provenance["summed_inputs"] = int(plan["num_inputs"])
     return dict(status=status, decision_version=FINE_DECISION_VERSION, cfar_multiplier_q16=word,
                 anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, cfar_rank=rank,
-                bulk_mask_words_hex=[f"0x{w:016x}" for w in pack_bulk_mask(bulk)],
-                provenance=dict(epochs=[str(plan.get("epoch", "unstated"))], source_product_sha256=[],
-                                null_quantile=quantile, note=f"{note} Detect-only, not a calibration."))
+                bulk_mask_words_hex=[f"0x{w:016x}" for w in pack_bulk_mask(bulk)], provenance=provenance)
 
 
 def _shelf(plan: dict[str, Any], base: Path) -> float:
@@ -665,6 +668,7 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
     check("structure and digests", not errors, f"{len(errors)} errors")
     if errors:
         return _finish(checks, output_json)
+    digest = bundle_digest(bundle_dir)
 
     bundle = json.loads((bundle_dir / "pilot_profiles.json").read_text())
     bank = (bundle_dir / "weights.bin").read_bytes()
@@ -722,14 +726,75 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
               f"{hits} of {words.size} frames masked, target {rate:.3f}, tail probability {tail:.2g}")
     elif plan.get("control"):
         check("false alarms on the control channel", False, f"{report_path} is missing")
-    return _finish(checks, output_json)
+    else:
+        # without the control only the masked fractions are tested, and they pass a floor set too low
+        check("false alarms on the control channel", False, "the test plan has no control")
+    return _finish(checks, output_json, bundle_sha256sums=digest)
 
 
 test_bundle.__test__ = False
 
 
-def _finish(checks: list[dict[str, Any]], output_json: Path | None) -> dict[str, Any]:
+def _finish(checks: list[dict[str, Any]], output_json: Path | None,
+            bundle_sha256sums: str | None = None) -> dict[str, Any]:
     report = dict(passed=all(c["passed"] for c in checks), checks=checks)
+    if bundle_sha256sums is not None:
+        report["bundle_sha256sums"] = bundle_sha256sums
     if output_json is not None:
         write_json_strict(Path(output_json), report)
     return report
+
+
+def bundle_digest(bundle_dir: Path) -> str:
+    """Return the SHA256 of a bundle's sha256sums.txt, which names the bundle."""
+    return _sha256_text((Path(bundle_dir) / "sha256sums.txt").read_bytes())
+
+
+def qualify_bundle(*, bundle_dir: Path, test_report: Path, reviewer: str, output_dir: Path) -> dict[str, Any]:
+    """Write a copy of a bundle whose channels are qualified for masking, and return its summary.
+
+    A person runs this after reading a passing test report of the bundle. Each
+    channel other than the control gets a mask_qualification record that names
+    the report and the reviewer. Kotekan masks only with a bundle in which every
+    such channel has the record.
+    """
+    bundle_dir, test_report, output_dir = Path(bundle_dir), Path(test_report), Path(output_dir)
+    if output_dir.exists():
+        raise ValueError(f"{output_dir} exists; a bundle is never changed in place")
+    if not reviewer.strip():
+        raise ValueError("a reviewer must be named")
+    report_bytes = test_report.read_bytes()
+    report = json.loads(report_bytes)
+    if report.get("bundle_sha256sums") != bundle_digest(bundle_dir):
+        raise ValueError(f"{test_report} is not a test of {bundle_dir}")
+    if not report.get("passed"):
+        failed = [c["check"] for c in report.get("checks", []) if not c["passed"]]
+        raise ValueError(f"{test_report} did not pass: {failed}")
+    if not any(c["check"] == "false alarms on the control channel" and c["passed"] for c in report["checks"]):
+        raise ValueError(f"{test_report} has no passing control check")
+    validation = validate_runtime_weight_bundle(bundle_dir=bundle_dir)
+    if validation.get("errors"):
+        raise ValueError(f"{bundle_dir} failed validation: {validation['errors']}")
+    bundle = json.loads((bundle_dir / "pilot_profiles.json").read_text())
+    record = dict(test_report_sha256=_sha256_text(report_bytes), reviewer=reviewer.strip())
+    qualified = []
+    for row in bundle["profiles"]:
+        calibration = row["fine_calibration"]
+        if calibration["status"] == "control":
+            continue
+        if calibration["status"] != "calibrated":
+            raise ValueError(f"channel {row['physical_channel']} has status {calibration['status']}")
+        calibration["provenance"]["mask_qualification"] = dict(record)
+        qualified.append(int(row["physical_channel"]))
+    output_dir.mkdir(parents=True)
+    for name in BUNDLE_FILES:
+        if name != "pilot_profiles.json":
+            shutil.copyfile(bundle_dir / name, output_dir / name)
+    (output_dir / "pilot_profiles.json").write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+    _write_sha256sums(output_dir, BUNDLE_FILES)
+    validation = validate_runtime_weight_bundle(bundle_dir=output_dir)
+    if validation.get("errors"):
+        shutil.rmtree(output_dir)
+        raise ValueError(f"qualified bundle failed validation: {validation['errors']}")
+    return dict(bundle_dir=str(output_dir), source_bundle_sha256sums=report["bundle_sha256sums"],
+                bundle_sha256sums=bundle_digest(output_dir), qualified_channels=qualified, **record)

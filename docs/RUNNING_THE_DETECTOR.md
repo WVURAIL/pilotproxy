@@ -149,9 +149,18 @@ Each check prints PASS or FAIL, and the exit status is 1 on any failure.
 | Test data differ from calibration data | A word tested on its own data proves nothing |
 | Rank support on each channel | A frame with too few reference bins is not tested |
 | Masked fraction on each channel | The word masks other captures as it masked the calibration captures |
-| False alarms on the control | The floor gives the rate it claims |
+| False alarms on the control | The floor gives the rate it claims. A test plan without a control fails |
 
 Kotekan's `tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh` tests the code, and `test-bundle` tests the numbers. Both are needed after a change to the detector core.
+
+No check shows that a word catches weak pilots, since the captures do not say which blocks hold one. A person reads the report, each channel's `word_source` and `pilot_share`, and the spectrograms, and only then qualifies the bundle for masking:
+
+```bash
+pilot-proxy qualify-bundle --bundle-dir bundle --test-report bundle.test.json \
+  --reviewer "Name" --output-dir bundle-qualified
+```
+
+The command refuses a report that failed, has no passing control check, or is of another bundle. The new bundle names the report and the reviewer in each calibrated channel's `mask_qualification`, and has new digests and a new name.
 
 
 ## Step 4: Deploy and run
@@ -219,7 +228,7 @@ pilot-proxy test-bundle --bundle-dir run1/bundle --plan run1/plans/test.json --o
 
 Calibration holds the fine powers of one channel at a time, about 13 GB for a day. On a 90 min synthetic run of four channels, calibration took 18 s, the test 10 s and the spectrograms 15 s, and the time grows in proportion to the run.
 
-CHORD has no archive for the science rule of the threshold, so these runs set its words. A 48 h run calibrates on the first day and tests on the second, and a short run with the new bundle then confirms the masks on the nodes. `test-bundle` checks only that the second day is masked like the first, so it passes a poor word. Each channel's `word_source` and `pilot_share` in the report, and its spectrogram, are read before the bundle is used.
+CHORD has no archive for the science rule of the threshold, so these runs set its words. A 48 h run calibrates on the first day and tests on the second, and a short run with the new bundle then confirms the masks on the nodes. The bundle is qualified as in Step 3 before the mask is switched on.
 
 The bundle of the run must bind the control, or `plan-run` stops, because the run then gives no floor. A pilot that fades during the run can fail the masked fraction check on the last third, so a failure on a weak channel is read against its spectrogram before the word is changed.
 
@@ -289,9 +298,9 @@ On CHIME, the detector is removed by a restart without `dtv_enabled`, and the re
 
 ## Bad feeds
 
-On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, as if it carried no signal, and `bufferBadInputs` also flags the RFI antennas (`bf_mask_name` in `config/chord/dtv.j2`). On CHIME, it sums every input until kotekan#1880 merges. A change in the flagged inputs changes the noise of the sum, so a word calibrated with one set of inputs is read with care after a large change.
+On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, as if it carried no signal, and `bufferBadInputs` also flags the RFI antennas (`bf_mask_name` in `config/chord/dtv.j2`). On CHIME, it sums every input until kotekan#1880 merges. A change in the flagged inputs changes the noise of the sum. When the plan gives `num_inputs`, each profile records it as `summed_inputs`, and the detector logs a warning while the count of good inputs differs from it by more than 10%. Recalibrate if the warning persists.
 
 
 ## Applying the mask
 
-Masking needs thresholds from a calibration campaign on the telescope, chosen against the science tolerance, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then `dtv_apply_mask: true`.
+Masking needs a calibration on the telescope, a passing `test-bundle` report with the control, `qualify-bundle`, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then `dtv_apply_mask: true`. Kotekan's `DtvRfiMask` refuses to start with the mask on unless every calibrated channel of the bundle is qualified, and a POST that switches the mask on with such a bundle stops Kotekan.

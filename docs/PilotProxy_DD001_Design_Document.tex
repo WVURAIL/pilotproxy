@@ -782,20 +782,29 @@ support was added to Kotekan in kotekan\#1874.}
 \code{bufferBadInputs} as zero.}
 {A dead or noisy input would otherwise change the noise of the sum. On CHORD,
 \code{bufferBadInputs} also flags the RFI antennas.}
-{A change in the flagged set changes the noise of the sum, so a word
-calibrated with one set is read with care after a large change. On CHIME, the
-bad-feed mask is added by kotekan\#1880, which is open.}
+{A change in the flagged set changes the noise of the sum. The plan's
+\code{num_inputs} is recorded as \code{summed_inputs}, and the detector warns
+while the count of good inputs differs from it by more than 10\%. It warns
+rather than stops, because feeds are flagged and restored in normal running.
+On CHIME, the bad-feed mask is added by kotekan\#1880, which is open.}
 
 \subsection{Detect-only before masking}
 \choice{Every bundle made by \code{calibrate-bundle} is a detect-only
-commissioning bundle. The detector refuses words whose provenance carries
-\code{qualification: archive_review_only}.}
-{Masking needs thresholds from a calibration campaign on the telescope,
-chosen against the science tolerance, and a signed shadow acceptance
-(\code{docs/OPERATOR_HANDOFF.md}).}
+commissioning bundle. A bundle masks only when every \code{calibrated} channel
+carries a \code{mask_qualification} record, which \code{qualify-bundle} writes
+from a passing test report and the name of the person who read it.
+\code{DtvRfiMask} refuses to start with the mask on and a detect-only bundle,
+and a POST that switches the mask on stops Kotekan. The detector also refuses
+words whose provenance carries \code{qualification: archive_review_only}.}
+{The detect-only rule was a note in the bundle and the operator's care. A
+machine check reads the same file the detector loads. A person, not a tool,
+qualifies a bundle, because no test can show that a word catches weak pilots.
+Stopping on a POST keeps \code{N2Accumulate}, which records when the mask was
+on, from disagreeing with \code{DtvRfiMask}.}
 {A bound channel with status \code{pending_campaign} stops the whole Kotekan
 instance at its first frame. An uncalibrated channel is dropped from the
-bundle or listed in \code{permanent_mask_freq_ids}.}
+bundle or listed in \code{permanent_mask_freq_ids}. A mistaken POST ends the
+run.}
 
 \subsection{Stored fine surface is the exact terms}
 \choice{Products store \code{fine_power_u64} with shape
@@ -889,7 +898,7 @@ and a \code{fine_calibration} block:
 \code{cfar_rank} & Zero-based rank, below the bulk population.\\ \hline
 \code{cfar_multiplier_q16} & The word, in \([1,2^{64}-1]\).\\ \hline
 \code{marker_guard_bins} & Optional extra guard around the designated set.\\ \hline
-\code{provenance} & \code{epochs}, \code{source_product_sha256}, \code{null_quantile}, optional \code{note} and \code{threshold_selection}. A pending block has empty lists and a null quantile. A \code{threshold_selection} carries \code{qualification: archive_review_only}.\\ \hline
+\code{provenance} & \code{epochs}, \code{source_product_sha256}, \code{null_quantile}, optional \code{note}, \code{summed_inputs}, \code{mask_qualification} and \code{threshold_selection}. A pending block has empty lists and a null quantile. \code{mask_qualification} holds \code{test_report_sha256} and \code{reviewer}, and only a \code{calibrated} block may carry it. A \code{threshold_selection} carries \code{qualification: archive_review_only}.\\ \hline
 \end{longtable}
 
 The validator (\code{validate_runtime_weight_bundle} in
@@ -900,7 +909,8 @@ Kotekan command repeats the digest, range and status checks at startup.
 \notebox{The calibration blocks of the installed bundles say \code{calibrated}
 (or \code{control} on channel 37), but none is a calibration. The status
 means the values are filled in, so that Kotekan will bind the channel. It does
-not mean the channel is qualified for masking. The provenance
+not mean the channel is qualified for masking, which is the
+\code{mask_qualification} record, and no installed bundle has one. The provenance
 note of every row ends ``Detect-only, not a calibration.'' The Pathfinder
 words are the floor from a control channel on five spaced files of
 2026-10-29, fewer than the 30 captures a knee needs. The
@@ -952,7 +962,8 @@ the detector rejects, when rank support is invalid, or when the frequency is
 in \code{permanent_mask_freq_ids}. \code{require_fine_freq_ids} names
 frequencies that must carry an evaluated decision. Any mismatch of time,
 frequency, upchannelization or support identity stops the run. It accepts
-8192- and 16384-sample blocks.
+8192- and 16384-sample blocks. It reads \code{pilot_profiles_path} for the
+qualification check above.
 
 \subsection{Products}
 
@@ -1084,6 +1095,8 @@ them (\code{CHIME_DERIVED.md}).
   \item The fine decision does not decode ATSC and does not prove that an
         excess is DTV. Rank support does not cover packet loss, feed health or
         physical calibration.
+  \item No test shows that a word catches weak pilots. \code{test-bundle}
+        tests the floor on the control and the masked fractions.
   \item The power-limit word is in-sample, and its corrections use an
         assumed normalization from the RFIsher table.
 \end{itemize}
@@ -1134,7 +1147,7 @@ them (\code{CHIME_DERIVED.md}).
 \code{external/pilotproxy/} & Vendored core and \code{VENDOR.json}.\\ \hline
 \code{lib/cuda/cudaPilotProxyDetector.cpp} & Bundle loading, binding, launches.\\ \hline
 \code{lib/cuda/cudaPilotProxyPacker.cu} & Ring to detector matrix.\\ \hline
-\code{lib/stages/DtvRfiMask.cpp} & Mask fold into the RFImask.\\ \hline
+\code{lib/stages/DtvRfiMask.cpp} & Mask fold into the RFImask; qualification check.\\ \hline
 \code{config/chord/dtv.j2}, \code{recv.j2}, \code{pathfinder.j2} & CHORD Pathfinder graph.\\ \hline
 \code{config/chime/dtv.j2} & CHIME upgrade detector, detect only.\\ \hline
 \code{config/*/dtv_bundles/} & Installed bundles.\\ \hline
@@ -1151,9 +1164,10 @@ them (\code{CHIME_DERIVED.md}).
 \subsection{Status}
 
 \importantbox{No channel is qualified for masking. Every bundle in Kotekan is
-detect only. A bundle from \code{calibrate-bundle} is a commissioning bundle,
-never a release bundle. Applied masking needs telescope thresholds chosen
-against the science tolerance, the shadow acceptance of
+detect only, and Kotekan refuses to mask with it. A bundle from
+\code{calibrate-bundle} is a commissioning bundle. Applied masking needs a
+telescope calibration, a passing \code{test-bundle} report with the control,
+\code{qualify-bundle}, the shadow acceptance of
 \code{docs/OPERATOR_HANDOFF.md}, and only then \code{dtv_apply_mask: true}.}
 
 \subsection{Open work and known limitations}
@@ -1176,9 +1190,13 @@ against the science tolerance, the shadow acceptance of
   \item \textbf{First CHIME calibration.} Record a detect-only run with the
         control, calibrate, test on another day, and replace the simulated
         floor.
-  \item \textbf{Pathfinder thresholds.} A 48\,h run calibrates on the first
-        day and tests on the second. \code{test-bundle} checks only that the
-        second day is masked like the first, so it passes a poor word.
+  \item \textbf{Pathfinder thresholds.} A 48\,h run with the control
+        calibrates on the first day and tests on the second. A passing bundle
+        is then read and qualified with \code{qualify-bundle}.
+  \item \textbf{Kotekan qualification check.} The \code{DtvRfiMask}
+        refusal and the summed-input warning are on the Kotekan branch
+        \code{pilotproxy-mask-qualification}. Until it is merged, Kotekan
+        masks with any bundle when the mask is on.
   \item \textbf{Independent test of the 65-bin search} on a reserved campaign.
   \item \textbf{Response measurement.} The power-limit word uses an assumed
         normalization from the kept shelf power to the forecast covariance.
@@ -1209,6 +1227,7 @@ kotekan\#1862, \#1877 & Merged. Detect-only bundles; Pathfinder bundle with a co
 kotekan\#1874 & Merged. Fine powers and the control channel.\\ \hline
 kotekan\#1878, \#1895 & Merged. Pathfinder products on the recv node; installed bundle path.\\ \hline
 kotekan\#1880 & Open. CHIME fine powers, bad feeds and the first CHIME bundle.\\ \hline
+\code{pilotproxy-mask-qualification} & Kotekan branch. Masking refused with a detect-only bundle; summed-input warning.\\ \hline
 \end{longtable}
 
 \subsection{Dissertation}

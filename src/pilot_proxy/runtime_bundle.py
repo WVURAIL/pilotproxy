@@ -684,7 +684,8 @@ def _validate_fine_calibration_provenance(
             f"{provenance_field}.required_fields",
             f"missing required fields: {missing}",
         )
-    unknown = sorted(set(provenance) - required - {"note", "threshold_selection"})
+    unknown = sorted(set(provenance) - required - {"note", "threshold_selection", "summed_inputs",
+                                                   "mask_qualification"})
     if unknown:
         _add_error(
             errors,
@@ -721,6 +722,18 @@ def _validate_fine_calibration_provenance(
             f"{provenance_field}.note",
             "note must be a non-empty string when present",
         )
+
+    summed_inputs = provenance.get("summed_inputs")
+    if "summed_inputs" in provenance and (type(summed_inputs) is not int or summed_inputs <= 0):
+        _add_error(
+            errors,
+            f"{provenance_field}.summed_inputs",
+            "summed_inputs must be a positive integer when present",
+        )
+    if "mask_qualification" in provenance:
+        _validate_mask_qualification(
+            qualification=provenance["mask_qualification"], status=status,
+            field=f"{provenance_field}.mask_qualification", errors=errors)
 
     if status == FINE_CALIBRATION_STATUS_PENDING:
         if (epochs != [] or source_hashes != [] or null_quantile is not None
@@ -791,6 +804,31 @@ def _validate_fine_calibration_provenance(
             f"{provenance_field}.null_quantile",
             "calibrated null_quantile must be finite and strictly between 0 and 1",
         )
+
+
+MASK_QUALIFICATION_FIELDS = frozenset({"test_report_sha256", "reviewer"})
+
+
+def _validate_mask_qualification(*, qualification: object, status: str, field: str,
+                                 errors: list[dict[str, str]]) -> None:
+    """Check the record that a person qualified a calibrated channel for masking.
+
+    Kotekan masks with a bundle only when every channel other than the control
+    carries this record, which ``qualify-bundle`` writes from a passing test report.
+    """
+    if status != FINE_CALIBRATION_STATUS_CALIBRATED:
+        _add_error(errors, field, "only a calibrated channel can be qualified for masking")
+        return
+    if not isinstance(qualification, dict) or set(qualification) != MASK_QUALIFICATION_FIELDS:
+        _add_error(errors, field, f"fields must be {sorted(MASK_QUALIFICATION_FIELDS)}")
+        return
+    digest = qualification["test_report_sha256"]
+    if (not isinstance(digest, str) or len(digest) != 64
+            or any(c not in "0123456789abcdef" for c in digest)):
+        _add_error(errors, f"{field}.test_report_sha256", "must be a lowercase SHA256 hex digest")
+    reviewer = qualification["reviewer"]
+    if not isinstance(reviewer, str) or not reviewer.strip():
+        _add_error(errors, f"{field}.reviewer", "must be a non-empty string")
 
 
 def _default_fine_calibration_block() -> dict[str, Any]:

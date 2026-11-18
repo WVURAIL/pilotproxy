@@ -275,6 +275,21 @@ outcome, or reason. `r_hi` moves by at most `1.6e-5` relative on channels 14 to
 sign of the excess, and with it `reject_mask`, changes on 50 frames (18 of the
 40606 channel 37 frames), each no more than `7e-6` from the boundary.
 
+## The search is 65 bins
+
+`calibrate-bundle` writes a designated half-width of 32, so 65 designated bins
+(±381 Hz about the anchor). Every installed bundle uses it. The ±2-bin set
+quoted above, and `FINE_CALIBRATION_DEFAULT_HALF_WIDTH = 2` in
+`runtime_bundle.py`, belong to the archive characterization and to the
+placeholder block of an uncalibrated export. Calibration replaces that block.
+
+On the reserved captures of 19 September 2026, a copy of the channel 32 pilot
+lay 238 Hz from nominal, outside the five-bin search, and the frames that search
+kept carried the excess of the whole capture. The 65-bin search was adopted
+after those captures were inspected, so no independent data have tested it.
+Each added designated bin raises the largest ratio under noise, so the wider
+search costs some detection. The dissertation gives the cost per channel.
+
 ## Deferred work
 
 The following items are not part of the minimum detector result and remain

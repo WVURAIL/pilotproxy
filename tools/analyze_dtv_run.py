@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Read a detect-only run's raw products (dtv_mask, dtv_powers, dtv_fine_support written by
-config/include/dtv_chime_upgrade.j2) and apply the hello-world pass criteria.
+config/chime/dtv.j2 in Kotekan, run with dtv_calibration_mode) and apply the hello-world pass criteria.
 
     analyze_dtv_run.py --run-dir /scratch/dtv/<run> --bundle-dir <bundle> \
         [--strong 35] [--quiet 29] [--ranges analysis/archive_ranges.json] [--json out.json]

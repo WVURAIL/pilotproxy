@@ -1,6 +1,6 @@
 % Detector datapath in the two-stage channelizer (filterbank) view.
-% This file is the one source of the diagram. It is \input by PilotProxy_DS001
-% (Data Sheet) and PilotProxy_UG001 (User Guide), and
+% This file is the one source of the diagram. It is \input by PilotProxy_DD001
+% (Design Document) and PilotProxy_UG001 (User Guide), and
 % detector_datapath_standalone.tex renders it to detector_datapath.svg for
 % Markdown. It needs the tikz libraries arrows.meta, positioning, calc and
 % decorations.pathreplacing, and the colors PilotProxyBlue, PilotProxyRed,

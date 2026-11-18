@@ -15,5 +15,5 @@ bank is a binary and its adjacent manifest, built from a receiver profile in
 Each binary and its manifest form one immutable pair. When a bank is loaded,
 the SHA-256 digest of the binary is compared with `artifacts.weights_sha256` in
 the manifest, and a mismatch is an error. The 16-character digest prefixes in
-the data sheet are computed from the CHIME bank and its manifest by
+the design document are computed from the CHIME bank and its manifest by
 `tools/generate_doc_specs.py`.

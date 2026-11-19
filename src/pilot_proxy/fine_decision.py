@@ -323,3 +323,116 @@ def fine_mask_decision(
         rank_bin=rank_bin,
         fired_bin=fired_bin,
     )
+
+
+# Fine decision v2
+# ----------------
+#
+# Version 2 reads the target alone in the designated bins and takes the
+# reference level from the reference powers of the background bins:
+#
+#     num[b] * 2**16 > multiplier_q16 * den_r
+#
+# where den_r is the value of zero-based rank cfar_rank in the ascending
+# den[b] of the background bins (bulk_mask[b] set and den[b] > 0). The frame
+# is invalid, with mask zero, when fewer than cfar_rank + 1 such bins exist.
+# Version 1 above is unchanged.
+
+FINE_DECISION_V2_VERSION = "fine_decision_v2"
+
+
+def _v2_inputs(fine_powers, anchor_bin, designated_half_width, bulk_mask, cfar_rank):
+    S = np.asarray(fine_powers)
+    if S.shape != (3, FINE_BINS):
+        raise ValueError("fine_powers must have shape [3, 256].")
+    if S.dtype != np.dtype(np.uint64):
+        raise TypeError("fine_powers must have exact uint64 dtype.")
+    rank = _exact_integer(cfar_rank, field="cfar_rank")
+    if not 0 <= rank < FINE_BINS:
+        raise ValueError(f"cfar_rank must be in [0, {FINE_BINS - 1}].")
+    designated = [int(b) for b in designated_bins(anchor_bin, designated_half_width)]
+    if len(bulk_mask) == 4:
+        mask_arr = unpack_bulk_mask(bulk_mask)
+    else:
+        mask_arr = np.asarray(bulk_mask)
+        if mask_arr.dtype != np.dtype(bool):
+            raise TypeError("bulk mask entries must be booleans.")
+    if mask_arr.shape != (FINE_BINS,):
+        raise ValueError("bulk mask must describe exactly 256 bins.")
+    num = [2 * int(S[WEIGHT_TERM_TARGET, b]) for b in range(FINE_BINS)]
+    den = [
+        int(S[WEIGHT_TERM_REF_LOWER, b]) + int(S[WEIGHT_TERM_REF_UPPER, b])
+        for b in range(FINE_BINS)
+    ]
+    bulk = [b for b in range(FINE_BINS) if mask_arr[b] and den[b] > 0]
+    if rank >= len(bulk):
+        return num, den, designated, bulk, -1
+    value = sorted(den[b] for b in bulk)[rank]
+    # The smallest bin that holds the rank value represents it, as in v1.
+    return num, den, designated, bulk, next(b for b in bulk if den[b] == value)
+
+
+def fine_mask_decision_v2(
+    fine_powers: Any,
+    *,
+    anchor_bin: int,
+    designated_half_width: int,
+    bulk_mask: Sequence[bool] | Sequence[int],
+    cfar_rank: int,
+    multiplier_q16: int,
+) -> FineDecision:
+    """Return fine decision v2 for the exact fine powers of one frame.
+
+    The frame is rejected (mask = 1) when any designated bin satisfies
+    ``num[b] * 2**16 > multiplier_q16 * den_r``, where ``den_r`` is the
+    reference power of rank ``cfar_rank`` over the background bins.
+    """
+    mult = _exact_integer(multiplier_q16, field="multiplier_q16")
+    if not 0 < mult < (1 << 64):
+        raise ValueError("multiplier_q16 must be in [1, 2**64 - 1].")
+    num, den, designated, bulk, rank_bin = _v2_inputs(
+        fine_powers, anchor_bin, designated_half_width, bulk_mask, cfar_rank)
+    if rank_bin < 0:
+        return FineDecision(
+            mask=0, valid=False, n_bulk=len(bulk), rank_bin=-1, fired_bin=-1)
+    den_r = den[rank_bin]
+    fired_bin = next(
+        (b for b in designated if num[b] * MULTIPLIER_ONE > mult * den_r), -1)
+    return FineDecision(
+        mask=1 if fired_bin >= 0 else 0, valid=True, n_bulk=len(bulk),
+        rank_bin=rank_bin, fired_bin=fired_bin)
+
+
+def fine_required_multiplier_q16_v2(
+    fine_powers: Any,
+    *,
+    anchor_bin: int,
+    designated_half_width: int,
+    bulk_mask: Sequence[bool] | Sequence[int],
+    cfar_rank: int,
+) -> FineRequiredMultiplier:
+    """Return the exact Q16 keep boundary of fine decision v2 for one frame.
+
+    The boundary is the smallest multiplier at which no designated bin
+    fires. ``ALWAYS_MASKED_Q16`` marks a valid frame that no uint64
+    multiplier keeps, and ``None`` an invalid rank.
+    """
+    num, den, designated, bulk, rank_bin = _v2_inputs(
+        fine_powers, anchor_bin, designated_half_width, bulk_mask, cfar_rank)
+    if rank_bin < 0:
+        return FineRequiredMultiplier(
+            valid=False, n_bulk=len(bulk), rank_bin=-1, limiting_bin=-1,
+            multiplier_q16=None)
+    den_r = den[rank_bin]
+    required = 1
+    limiting_bin = -1
+    for b in designated:
+        boundary = (num[b] * MULTIPLIER_ONE + den_r - 1) // den_r
+        if boundary > required:
+            required = boundary
+            limiting_bin = b
+    if required > MAX_MULTIPLIER_Q16:
+        required = ALWAYS_MASKED_Q16
+    return FineRequiredMultiplier(
+        valid=True, n_bulk=len(bulk), rank_bin=rank_bin,
+        limiting_bin=limiting_bin, multiplier_q16=required)

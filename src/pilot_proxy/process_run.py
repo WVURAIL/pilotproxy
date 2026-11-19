@@ -76,7 +76,7 @@ def process_run(*, bundle_dir: Path, runs: Sequence[str], epoch: str, output_dir
                 calibration_share: float = CALIBRATION_SHARE, null_quantile: float = 0.99,
                 receiver_profile: Path | None = None, detector_core_profile: Path = Path(CORE_PROFILE),
                 chunk_seconds: float = 10.0, threshold: str = "knee", power_limit: Path | None = None,
-                log=print) -> dict[str, Any]:
+                decision_version: str | None = None, log=print) -> dict[str, Any]:
     """Split the run, calibrate a bundle on the first part, test it on the rest, and write the summary."""
     output_dir = Path(output_dir)
     if output_dir.exists() and any(output_dir.iterdir()):
@@ -84,7 +84,7 @@ def process_run(*, bundle_dir: Path, runs: Sequence[str], epoch: str, output_dir
     plans = write_run_plans(bundle_dir=bundle_dir, runs=list(runs), output_dir=output_dir / "plans", epoch=epoch,
                             receiver_profile=receiver_profile, detector_core_profile=detector_core_profile,
                             null_quantile=null_quantile, calibration_share=calibration_share, threshold=threshold,
-                            power_limit=power_limit)
+                            power_limit=power_limit, decision_version=decision_version)
     log("plans written")
     bundle = output_dir / "bundle"
     report = calibrate_bundle(plan_path=output_dir / "plans" / "calibrate.json", output_dir=bundle)

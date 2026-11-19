@@ -247,9 +247,10 @@ def test_pilot_in_every_capture_takes_the_floor(plans, tmp_path):
     assert channel["masked_fraction"] > 0.9
 
 
+@pytest.mark.parametrize("decision", ["fine_decision_v1", "fine_decision_v2"])
 @pytest.mark.parametrize("kind", ["noise", "ties", "dead bins", "near the top", "always masked"])
 @pytest.mark.parametrize("anchor", [100, 3])
-def test_fast_words_equal_the_exact_reference(kind, anchor):
+def test_fast_words_equal_the_exact_reference(kind, anchor, decision):
     rng = np.random.default_rng(len(kind) + anchor)
     n = 300
     if kind == "noise":
@@ -269,8 +270,8 @@ def test_fast_words_equal_the_exact_reference(kind, anchor):
     fines = np.asarray(fines).astype(np.uint64)
     bulk = _bulk(anchor)
     rank = default_rank(bulk)
-    exact = [_exact_word(f, anchor_bin=anchor, bulk=bulk, rank=rank) for f in fines]
-    assert required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank).tolist() == exact
+    exact = [_exact_word(f, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision) for f in fines]
+    assert required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision).tolist() == exact
 
 
 def test_knee_sits_at_the_end_of_the_clean_population():
@@ -465,13 +466,28 @@ def test_process_run_summarizes_a_run(plans, tmp_path):
         process_run(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic", output_dir=out)
 
 
-def test_first_bundle_needs_no_captures(plans, tmp_path):
+@pytest.mark.parametrize("decision, floor", [(None, 1.7), ("fine_decision_v1", 1.84)])
+def test_first_bundle_needs_no_captures(plans, tmp_path, decision, floor):
     plan = dict(plans["calibrate"], channels={"29": [], "37": []}, control=None, num_inputs=32, null_quantile=0.99)
+    if decision:
+        plan["decision_version"] = decision
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    assert report["floor_eta"] > 1.84
+    # a new bundle takes version 2 unless the plan names another
+    version = decision or "fine_decision_v2"
+    assert report["decision_version"] == version
+    assert report["floor_eta"] > floor
     assert report["channels"]["37"]["word_source"] == "floor, no captures"
+    rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    assert {row["fine_calibration"]["decision_version"] for row in rows} == {version}
+
+
+def test_unknown_decision_version_is_refused(plans, tmp_path):
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3")))
+    with pytest.raises(ValueError, match="decision_version"):
+        calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
 
 
 def test_control_channel_can_be_bound(plans, tmp_path):
@@ -504,10 +520,19 @@ def test_existing_output_is_refused(plans):
 
 
 def test_simulated_word_falls_with_input_count():
-    few = np.quantile(simulated_null_scores(32, frames=200), 0.99) / 65536
-    many = np.quantile(simulated_null_scores(256, frames=200), 0.99) / 65536
+    few = np.quantile(simulated_null_scores(32, frames=200, decision_version="fine_decision_v1"), 0.99) / 65536
+    many = np.quantile(simulated_null_scores(256, frames=200, decision_version="fine_decision_v1"), 0.99) / 65536
     assert few > 1.84
     assert many < few
+
+
+def test_median_reference_floor_lies_below_the_bin_ratio_floor():
+    # the reference pooled over the background is less noisy than the reference of each bin
+    floors = {v: [np.quantile(simulated_null_scores(n, frames=200, decision_version=v), 0.99) / 65536 for n in (32, 256)]
+              for v in ("fine_decision_v1", "fine_decision_v2")}
+    assert floors["fine_decision_v2"][1] < floors["fine_decision_v2"][0]
+    assert all(a < b for a, b in zip(floors["fine_decision_v2"], floors["fine_decision_v1"]))
+    assert all(f > 1 for f in floors["fine_decision_v2"])
 
 
 def test_nominal_bin_matches_pathfinder_control():

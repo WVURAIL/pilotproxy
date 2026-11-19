@@ -1,7 +1,7 @@
 """Score profiles and trial populations for fine-score measurements.
 
 A score profile records the receiver, weights, producer, and fine
-geometry of a frozen fine_decision_v1 detector. Its population lists the
+geometry of a frozen fine decision, version 1 or 2. Its population lists the
 minimum keeping Q16 word of each trial. These records are written and
 checked by capture replay.
 
@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 
 from pilot_proxy.fine_decision import (
-    FINE_DECISION_VERSION,
+    FINE_DECISION_VERSIONS,
     unpack_bulk_mask,
 )
 
@@ -107,7 +107,7 @@ def validate_score_profile(profile):
     )
     _text(profile.get("profile_id"), "profile_id")
     _require(
-        profile.get("decision_version") == FINE_DECISION_VERSION,
+        profile.get("decision_version") in FINE_DECISION_VERSIONS,
         "Wrong decision version",
     )
     _require(profile.get("score_encoding") == SCORE_ENCODING, "Wrong score encoding")

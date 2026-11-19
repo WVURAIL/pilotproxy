@@ -42,7 +42,7 @@ from pathlib import Path
 from pilot_proxy import runtime_calibration as calibration
 from pilot_proxy.atsc_channels import physical_channel_to_lower_edge_hz
 from pilot_proxy.config.project import default_project
-from pilot_proxy.fine_decision import FINE_DECISION_VERSION, MAX_MULTIPLIER_Q16
+from pilot_proxy.fine_decision import MAX_MULTIPLIER_Q16
 from pilot_proxy.integration.receiver_profile import (
     load_receiver_profile,
     receiver_profile_hash_matches,
@@ -169,7 +169,7 @@ def _binding(channel, freq, eta, bound, status="calibrated"):
     _require(fine["cfar_multiplier_q16"] == eta, f"channel {channel}: the bundle's word differs from the decided word")
     return {
         "physical_channel": channel, "receiver_channel_id": freq, "eta_q16": str(eta),
-        "decision_version": FINE_DECISION_VERSION, "cfar_rank": fine["cfar_rank"], "anchor_bin": fine["anchor_bin"],
+        "decision_version": fine["decision_version"], "cfar_rank": fine["cfar_rank"], "anchor_bin": fine["anchor_bin"],
         "designated_half_width": fine["designated_half_width"], "bulk_mask_words_hex": fine["bulk_mask_words_hex"],
         **({"marker_guard_bins": fine["marker_guard_bins"]} if "marker_guard_bins" in fine else {}),
     }

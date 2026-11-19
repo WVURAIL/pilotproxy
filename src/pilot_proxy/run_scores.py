@@ -25,7 +25,8 @@ SAMPLE_NS = 5120
 MISSING = np.iinfo(np.uint64).max
 
 
-def _file_scores(path: str, channel_id: int, anchor: int, bulk: np.ndarray, rank: int) -> dict[str, np.ndarray]:
+def _file_scores(path: str, channel_id: int, anchor: int, bulk: np.ndarray, rank: int,
+                 decision_version: str) -> dict[str, np.ndarray]:
     """Return the words, frame powers and times of one channel's frames in one file."""
     import h5py
 
@@ -49,7 +50,7 @@ def _file_scores(path: str, channel_id: int, anchor: int, bulk: np.ndarray, rank
     # zeros were not tested, and 0xFF fills a block missing from the concat window
     present = np.flatnonzero(rows.any(axis=(1, 2)) & ~(rows == MISSING).all(axis=(1, 2)))
     rows = rows[present]
-    return dict(words=required_words(rows, anchor_bin=anchor, bulk=bulk, rank=rank),
+    return dict(words=required_words(rows, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision_version),
                 powers=rows.sum(axis=2, dtype=np.uint64),
                 time=(start_ns + present * block_samples * sample_ns) * 1e-9)
 
@@ -67,7 +68,8 @@ def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, out
     bulk = unpack_bulk_mask([int(w, 16) for w in calibration["bulk_mask_words_hex"]])
     rank = int(calibration["cfar_rank"])
     paths = _expand(runs)
-    args = [(p, int(row["receiver_channel_id"]), anchor, bulk, rank) for p in paths]
+    decision = calibration["decision_version"]
+    args = [(p, int(row["receiver_channel_id"]), anchor, bulk, rank, decision) for p in paths]
     if jobs > 1:
         with ProcessPoolExecutor(jobs, mp_context=multiprocessing.get_context("spawn")) as pool:
             parts = list(pool.map(_file_scores, *zip(*args)))
@@ -102,6 +104,7 @@ def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, out
                   original_product_identity=dict(path=product_path.name, bytes=product_path.stat().st_size,
                                                  sha256=sha(product_path)),
                   score_geometry=dict(anchor_bin=anchor, cfar_rank=rank, bulk_bins=int(bulk.sum())),
+                  fine_decision=decision,
                   current_threshold={"kind": "finite", "eta_q16": str(word)},
                   frames=len(words), events=int(event.max()) + 1, event_seconds=event_seconds,
                   supported_frames=int(supported.sum()), masked_percent=round(

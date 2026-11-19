@@ -533,7 +533,7 @@ int PilotProxy_Supports_FusedFineMaskWithSupport(void);
  *
  * The acceptance test is bit-equality of the mask with
  * pilot_proxy.fine_decision.fine_mask_decision_v2 over the same exact powers
- * (tests/kernel/test_fused_mask_v2_gpu.py).
+ * (tests/kernel/test_fused_mask_median_reference_gpu.py).
  */
 void PilotProxy_Compute_FusedFineMaskV2_U64(
     void* handle,

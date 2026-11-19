@@ -24,10 +24,9 @@ from typing import Any, Sequence
 import numpy as np
 
 from pilot_proxy.fine_decision import (
-    FINE_DECISION_VERSION,
+    FINE_DECISION_VERSIONS,
     FineRequiredMultiplier,
-    fine_mask_decision,
-    fine_required_multiplier_q16,
+    decision_functions,
 )
 from pilot_proxy.fxfft import fine_power_fx
 
@@ -407,8 +406,9 @@ def expected_products(
             decisions.append(None)
             continue
         calibration = profile["fine_calibration"]
-        if calibration.get("status") != "calibrated" or calibration.get("decision_version") != FINE_DECISION_VERSION:
-            raise ValueError("bound profile requires calibrated fine_decision_v1; leave an uncalibrated channel unbound")
+        if calibration.get("status") != "calibrated" or calibration.get("decision_version") not in FINE_DECISION_VERSIONS:
+            raise ValueError("bound profile requires a calibrated decision version; leave an uncalibrated channel unbound")
+        decide, boundary = decision_functions(calibration["decision_version"])
         offset = _integer(profile["weight_bank_offset_bytes"], "weight_bank_offset_bytes")
         nbytes = _integer(profile["weight_bank_nbytes"], "weight_bank_nbytes", 1)
         if nbytes != 3 * geometry.k or offset + nbytes > len(weight_bank):
@@ -426,8 +426,8 @@ def expected_products(
             "bulk_mask": [int(word, 16) for word in words],
             "cfar_rank": calibration["cfar_rank"],
         }
-        decision = fine_mask_decision(fine, multiplier_q16=calibration["cfar_multiplier_q16"], **args)
-        required = fine_required_multiplier_q16(fine, **args)
+        decision = decide(fine, multiplier_q16=calibration["cfar_multiplier_q16"], **args)
+        required = boundary(fine, **args)
         masks[index] = decision.mask
         decisions.append(required)
     masks.flags.writeable = False

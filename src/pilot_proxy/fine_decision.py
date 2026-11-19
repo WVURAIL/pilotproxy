@@ -436,3 +436,17 @@ def fine_required_multiplier_q16_v2(
     return FineRequiredMultiplier(
         valid=True, n_bulk=len(bulk), rank_bin=rank_bin,
         limiting_bin=limiting_bin, multiplier_q16=required)
+
+
+FINE_DECISION_VERSIONS = (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION)
+# New calibrations write version 2. A bundle of either version stays valid.
+CALIBRATION_DECISION_VERSION = FINE_DECISION_V2_VERSION
+
+
+def decision_functions(version: str):
+    """Return the mask decision and the exact keep boundary of a decision version."""
+    if version == FINE_DECISION_VERSION:
+        return fine_mask_decision, fine_required_multiplier_q16
+    if version == FINE_DECISION_V2_VERSION:
+        return fine_mask_decision_v2, fine_required_multiplier_q16_v2
+    raise ValueError(f"unknown decision_version {version!r}, expected one of {FINE_DECISION_VERSIONS}")

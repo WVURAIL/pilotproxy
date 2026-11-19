@@ -326,7 +326,7 @@ def replay_capture(plan_path):
         profile = {
             "schema_version": PROFILE_SCHEMA,
             "profile_id": by_channel[channel]["profile_id"],
-            "decision_version": fine_decision.FINE_DECISION_VERSION,
+            "decision_version": calibration["decision_version"],
             "score_encoding": SCORE_ENCODING,
             "support_rule": SUPPORT_RULE,
             "physical_channel": channel,

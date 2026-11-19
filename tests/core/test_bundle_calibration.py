@@ -422,6 +422,13 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     assert result["calibrate"]["control"] == dict(channel=37, captures=first)
     assert result["test"]["control"] == last
     assert json.loads((tmp_path / "out" / "test.json").read_text()) == result["test"]
+    # the calibration default unless a decision version is named, as for a Kotekan stage without v2
+    assert "decision_version" not in result["calibrate"]
+    old = write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "v1",
+                          epoch="synthetic", receiver_profile=Path(plans["calibrate"]["receiver_profile"]),
+                          decision_version="fine_decision_v1")
+    assert json.loads((tmp_path / "v1" / "calibrate.json").read_text())["decision_version"] == "fine_decision_v1"
+    assert old["calibrate"]["channels"] == result["calibrate"]["channels"]
     # a half with no bound channel drops coarse_freq, and half the files split a run by day
     with h5py.File(tmp_path / "run_idle.h5", "w") as handle:
         handle["dtv_fine_powers"] = frames[:, None].repeat(2, axis=1)

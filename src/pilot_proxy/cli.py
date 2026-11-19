@@ -32,6 +32,7 @@ from pilot_proxy.dtv_units import (
     PILOT_BELOW_DATA_DB,
     PILOT_CAPTURE_EFFICIENCY,
 )
+from pilot_proxy.fine_decision import FINE_DECISION_VERSIONS
 from pilot_proxy.integration import (
     DEFAULT_CHIME_DTV_RECEIVER_PROFILE,
     DEFAULT_CHIME_STREAM_MAP,
@@ -692,13 +693,17 @@ def _add_threshold_arguments(parser: argparse.ArgumentParser) -> None:
                         help="Word of each channel: its knee, or the word that keeps the most frames under a checked power limit.")
     parser.add_argument("--power-limit", type=Path, default=None,
                         help="For --threshold power_limit: JSON naming the response table and the checked power limits.")
+    parser.add_argument("--decision-version", choices=FINE_DECISION_VERSIONS, default=None,
+                        help="Test the words are set for (default: the calibration default). "
+                             "fine_decision_v1 for a Kotekan stage that runs only that test.")
 
 
 def _cmd_plan_run(args: argparse.Namespace) -> None:
     plans = write_run_plans(bundle_dir=args.bundle_dir, runs=args.run, output_dir=args.output_dir, epoch=args.epoch,
                             receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
                             null_quantile=args.null_quantile, calibration_share=args.calibration_share,
-                            threshold=args.threshold, power_limit=args.power_limit)
+                            threshold=args.threshold, power_limit=args.power_limit,
+                            decision_version=args.decision_version)
     for channel, paths in plans["calibrate"]["channels"].items():
         print(f"channel {channel}: {len(paths)} files to calibrate, {len(plans['test']['channels'][channel])} to test")
 
@@ -708,7 +713,7 @@ def _cmd_process_run(args: argparse.Namespace) -> None:
                           calibration_share=args.calibration_share, null_quantile=args.null_quantile,
                           receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
                           chunk_seconds=args.chunk_seconds, threshold=args.threshold, power_limit=args.power_limit,
-                          log=lambda line: print(line, flush=True))
+                          decision_version=args.decision_version, log=lambda line: print(line, flush=True))
     print((args.output_dir / "summary.md").read_text(), end="")
     if not summary["passed"]:
         raise SystemExit(1)

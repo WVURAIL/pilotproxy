@@ -38,8 +38,12 @@ def _limit_plan(path: Path | None) -> dict[str, Any]:
 def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoch: str, receiver_profile: Path | None = None,
                     detector_core_profile: Path = Path(CORE_PROFILE), null_quantile: float = 0.99,
                     calibration_share: float = CALIBRATION_SHARE, threshold: str = "knee",
-                    power_limit: Path | None = None) -> dict[str, Any]:
-    """Split the files of each bound channel in time, and write calibrate.json and test.json."""
+                    power_limit: Path | None = None, decision_version: str | None = None) -> dict[str, Any]:
+    """Split the files of each bound channel in time, and write calibrate.json and test.json.
+
+    decision_version, when given, names the test the words are set for, in place of the calibration
+    default: fine_decision_v1 for a Kotekan stage that runs only that test.
+    """
     if not 0.0 < calibration_share < 1.0:
         raise ValueError("calibration_share must lie between 0 and 1")
     bundle = json.loads((Path(bundle_dir) / "pilot_profiles.json").read_text())
@@ -63,6 +67,8 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
                      control=dict(channel=control, captures=first[str(control)]))
     if threshold != "knee":
         calibrate.update(threshold=threshold, power_limit=_limit_plan(power_limit))
+    if decision_version is not None:
+        calibrate["decision_version"] = decision_version
     test = dict(capture_format="dtv_fine_powers", channels=last, control=last[str(control)])
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

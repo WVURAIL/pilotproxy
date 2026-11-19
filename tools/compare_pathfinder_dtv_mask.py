@@ -99,12 +99,14 @@ def read_vis(vis_dir, freq_ids):
                 row["time_ns"].append(time_ns)
                 row["added"].append(handle["frames_added"][f].astype(bool))
                 row["power"].append(power)
-                for name in ("frac_dtv_mask_enabled", "frac_rfi", "frac_lost"):
+                for name in ("frac_dtv_mask_enabled", "frac_rfi"):
                     row[name].append(handle[name][f].astype(np.float64))
     out = {}
     for freq_id, row in rows.items():
         arrays = {k: np.concatenate(v) for k, v in row.items()}
-        keep = arrays["added"] & (arrays["frac_lost"] < 1.0) & (arrays["length"] > 0)
+        # frames_added marks a received bin. frac_lost also counts excision, so a bin the mask
+        # removed whole has frac_lost 1 and is kept, with no power.
+        keep = arrays["added"] & (arrays["length"] > 0)
         # a bin excised whole holds no data
         arrays["power"][arrays["frac_rfi"] >= 0.99] = np.nan
         order = np.argsort(arrays["start"][keep], kind="stable")
@@ -180,7 +182,7 @@ def compare(freq_id, bins, seqs, mask):
         "excised ignores the detector with the mask off (slope below 0.5)":
             off_report["excised_slope"] < 0.5 if off_report["excised_slope"] is not None else None,
     }
-    return report, dict(detector=detector, share=share, on=on, off=off)
+    return report, dict(detector=detector, share=share, on=on, off=off, covered=coverage >= MIN_COVERAGE)
 
 
 def plot(freq_id, bins, flags, path):
@@ -188,6 +190,12 @@ def plot(freq_id, bins, flags, path):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    # only the bins the dtv_mask files cover; the visibility acquisition may run much longer
+    covered = flags["covered"]
+    if not covered.any():
+        return
+    bins = {k: v[covered] for k, v in bins.items()}
+    flags = {k: v[covered] for k, v in flags.items()}
     minutes = (bins["time_ns"] - bins["time_ns"][0]) / 60e9
     fig = plt.figure(figsize=(13, 5.5))
     grid = fig.add_gridspec(2, 2, width_ratios=(2.2, 1))

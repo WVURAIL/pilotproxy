@@ -97,15 +97,17 @@ def check_channel(channel, masks, supports, fines, anchor, chunk_blocks):
     if not target.size:
         return report, None
     mean = target.mean(axis=0)
+    mean_kept = target[keep].mean(axis=0) if keep.any() else np.full(target.shape[1], np.nan)
     peak = int(np.argmax(mean))
     # near 1 on a channel with no pilot, where the peak bin is noise
     report.update(peak_bin=peak, peak_over_median=round(float(mean[peak] / np.median(mean)), 2), anchor_bin=anchor,
-                  peak_minus_anchor=None if anchor is None else peak - anchor)
+                  peak_minus_anchor=None if anchor is None else peak - anchor,
+                  kept_peak_over_median=round(float(mean_kept[peak] / np.median(mean_kept)), 2) if keep.any() else None)
     chunks = range(0, len(target), chunk_blocks)
     every = np.stack([target[i:i + chunk_blocks].mean(axis=0) for i in chunks])
     kept = np.stack([target[i:i + chunk_blocks][keep[i:i + chunk_blocks]].mean(axis=0)
                      if keep[i:i + chunk_blocks].any() else np.full(target.shape[1], np.nan) for i in chunks])
-    return report, (every, kept)
+    return report, (every, kept, mean, mean_kept)
 
 
 def plot(channel, spectra, anchor, chunk_seconds, path):
@@ -113,18 +115,31 @@ def plot(channel, spectra, anchor, chunk_seconds, path):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    every, kept = spectra
+    every, kept, mean, mean_kept = spectra
     span = [0, every.shape[1], every.shape[0] * chunk_seconds / 60, 0]
     low, high = np.nanpercentile(np.log10(every[every > 0]), [1, 99.5])
-    fig, axes = plt.subplots(1, 2, figsize=(10, 6), sharey=True)
-    for ax, data, title in zip(axes, (every, kept), ("all blocks", "kept blocks")):
+    fig = plt.figure(figsize=(10, 9))
+    grid = fig.add_gridspec(2, 2, height_ratios=(2.2, 1))
+    axes = [fig.add_subplot(grid[0, 0])]
+    axes.append(fig.add_subplot(grid[0, 1], sharex=axes[0], sharey=axes[0]))
+    for ax, data, title in zip(axes, (every, kept), ("all blocks (no mask)", "kept blocks (mask applied)")):
         with np.errstate(divide="ignore"):
             ax.imshow(np.log10(data), aspect="auto", extent=span, vmin=low, vmax=high, interpolation="nearest")
         if anchor is not None:
             ax.plot(anchor + 0.5, 0, "rv", clip_on=False)
         ax.set(title=title, xlabel="fine bin")
     axes[0].set_ylabel("minutes")
+    # the time average of each: what the mask removes from the spectrum
+    average = fig.add_subplot(grid[1, :])
+    bins = np.arange(mean.size) + 0.5
+    average.semilogy(bins, mean, color="#1f77b4", label="all blocks (no mask)")
+    average.semilogy(bins, mean_kept, color="#ff7f0e", label="kept blocks (mask applied)")
+    if anchor is not None:
+        average.axvline(anchor + 0.5, color="r", lw=0.8, ls=":", label="bundle anchor")
+    average.set(xlim=(0, mean.size), xlabel="fine bin", ylabel="mean target fine power")
+    average.legend(loc="best", fontsize=8)
     fig.suptitle(f"freq_id {channel} (ATSC {PILOTS.get(channel, '?')}), log10 target fine power")
+    fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
 

@@ -15,10 +15,13 @@ and for the pilot frequencies, the two states are compared on:
             must be at least the share of the bin that the detector masked, and it rises one for
             one with that share (slope 1). With the mask off it does not follow it (slope 0).
   power     the median autocorrelation over the good inputs, in bins where the detector masked
-            nothing and in bins where it masked some blocks. With the mask off, the masked blocks
-            add their power to the bin. With it on, they are excised.
+            under 5% of the bin and in bins where it masked over half, and its slope against the
+            masked share. With the mask off, the masked blocks add their power to the bin, so it
+            rises with the share. With it on, they are excised, so it stays flat. A bin excised
+            whole holds no data and has no power.
 
-Writes compare.json and, with matplotlib, one figure per frequency. Needs numpy, h5py and hdf5plugin.
+Writes compare.json and, with matplotlib, one figure per frequency: the power and the fractions
+against time, and the power against the masked share in each state. Needs numpy, h5py and hdf5plugin.
 """
 import argparse
 import glob
@@ -36,6 +39,7 @@ FREQ_WIDTH_MHZ = 0.1953125
 PILOTS = {2531: 18, 2715: 24, 2869: 29, 3115: 37}
 ON, OFF = 0.999, 0.001
 MIN_COVERAGE = 0.9
+QUIET, BUSY = 0.05, 0.5
 
 
 def atsc_channel(freq_id):
@@ -101,6 +105,8 @@ def read_vis(vis_dir, freq_ids):
     for freq_id, row in rows.items():
         arrays = {k: np.concatenate(v) for k, v in row.items()}
         keep = arrays["added"] & (arrays["frac_lost"] < 1.0) & (arrays["length"] > 0)
+        # a bin excised whole holds no data
+        arrays["power"][arrays["frac_rfi"] >= 0.99] = np.nan
         order = np.argsort(arrays["start"][keep], kind="stable")
         out[freq_id] = {k: v[keep][order] for k, v in arrays.items()}
     return out
@@ -133,18 +139,23 @@ def summarize(bins, detector, share, sel, tol):
         x = x[np.isfinite(x)]
         return float(np.median(x)) if x.size else None
 
+    def slope(x, y, use):
+        use = use & np.isfinite(y)
+        if np.count_nonzero(use) < 3 or np.ptp(x[use]) == 0:
+            return None
+        return round(float(np.polyfit(x[use], y[use], 1)[0]), 4)
+
     hit = sel & (detector > 0)
-    excised = bins["frac_rfi"]
-    # excised per detector-masked share of the bin: 1 when the mask is applied, 0 when it is not
-    slope = None
-    if np.count_nonzero(sel) >= 3 and np.ptp(share[sel]) > 0:
-        slope = round(float(np.polyfit(share[sel], excised[sel], 1)[0]), 3)
+    excised, power = bins["frac_rfi"], bins["power"]
     return dict(
         bins=int(sel.sum()), bins_with_detector_masks=int(hit.sum()),
-        detector_masked=mean(detector[sel]), excised=mean(excised[sel]), excised_slope=slope,
+        detector_masked=mean(detector[sel]), excised=mean(excised[sel]),
+        # excised per detector-masked share of the bin: 1 when the mask is applied, 0 when it is not
+        excised_slope=slope(share, excised, sel),
         excised_below_detector=int(np.count_nonzero(excised[hit] < share[hit] - tol[hit])),
-        power_without_detector_masks=median(bins["power"][sel & (detector == 0)]),
-        power_with_detector_masks=median(bins["power"][hit]))
+        power_detector_under_5_percent=median(power[sel & (share < QUIET)]),
+        power_detector_over_50_percent=median(power[sel & (share >= BUSY)]),
+        power_slope=slope(share, power, sel))
 
 
 def compare(freq_id, bins, seqs, mask):
@@ -178,13 +189,20 @@ def plot(freq_id, bins, flags, path):
     import matplotlib.pyplot as plt
 
     minutes = (bins["time_ns"] - bins["time_ns"][0]) / 60e9
-    fig, (top, bottom) = plt.subplots(2, 1, sharex=True, figsize=(9, 5.5))
+    fig = plt.figure(figsize=(13, 5.5))
+    grid = fig.add_gridspec(2, 2, width_ratios=(2.2, 1))
+    top = fig.add_subplot(grid[0, 0])
+    bottom = fig.add_subplot(grid[1, 0], sharex=top)
+    side = fig.add_subplot(grid[:, 1], sharey=top)
     for sel, label, color in ((flags["off"], "mask off", "#1f77b4"), (flags["on"], "mask on", "#ff7f0e")):
         top.plot(minutes[sel], bins["power"][sel], "o", ms=3, color=color, label=label)
+        side.plot(flags["share"][sel], bins["power"][sel], "o", ms=3, color=color, label=label)
     other = ~flags["on"] & ~flags["off"]
     top.plot(minutes[other], bins["power"][other], "o", ms=3, color="0.6", label="left out")
     top.set_ylabel("median autocorrelation")
     top.legend(loc="best", fontsize=8)
+    side.set(xlabel="share of the bin the detector masked", title="power against the detector's share")
+    side.legend(loc="best", fontsize=8)
     bottom.plot(minutes, flags["share"], color="#2ca02c", label="detector masked")
     bottom.plot(minutes, bins["frac_rfi"], color="#d62728", label="excised (frac_rfi)")
     bottom.plot(minutes, bins["frac_dtv_mask_enabled"], color="0.4", lw=0.8, ls="--", label="mask enabled")
@@ -227,12 +245,13 @@ def main():
                 plot(freq_id, vis[freq_id], flags, os.path.join(args.output_dir, f"compare_{freq_id}.png"))
             except ImportError:
                 pass
-        on, off = report["mask_on"], report["mask_off"]
-        print(f"{freq_id} ch{report['atsc_channel']}: on {on['bins']} bins (detector {on['detector_masked']}, "
-              f"excised {on['excised']}, power {on['power_without_detector_masks']} / "
-              f"{on['power_with_detector_masks']}); off {off['bins']} bins (detector {off['detector_masked']}, "
-              f"excised {off['excised']}, power {off['power_without_detector_masks']} / "
-              f"{off['power_with_detector_masks']}); {report['checks']}")
+        line = [f"{freq_id} ch{report['atsc_channel']}:"]
+        for state in ("mask_on", "mask_off"):
+            s = report[state]
+            line.append(f"{state} {s['bins']} bins, detector {s['detector_masked']}, excised {s['excised']} "
+                        f"(slope {s['excised_slope']}), power {s['power_detector_under_5_percent']} quiet / "
+                        f"{s['power_detector_over_50_percent']} busy (slope {s['power_slope']});")
+        print(" ".join(line), report["checks"])
     if args.output_dir:
         with open(os.path.join(args.output_dir, "compare.json"), "w") as out:
             json.dump(dict(dtv_dir=args.dtv_dir, vis_dir=args.vis_dir, frequencies=reports), out, indent=1)

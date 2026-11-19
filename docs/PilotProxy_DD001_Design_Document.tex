@@ -182,7 +182,7 @@ procedures for running the detector are in the PilotProxy-UG001 User Guide
 \multicolumn{2}{|c|}{\bfseries Versions}\\ \hline
 Package & \ppPackageVersion \\ \hline
 Detector core & \ppKernelCoreVersion \\ \hline
-Fine decision & \code{fine_decision_v1} \\ \hline
+Fine decision & \code{fine_decision_v2}, \code{fine_decision_v1} accepted \\ \hline
 Product schema & per-pilot product v6 \\ \hline
 Detector contract & revision 2 \\ \hline
 \multicolumn{2}{|c|}{\bfseries Geometry}\\ \hline
@@ -891,7 +891,7 @@ and a \code{fine_calibration} block:
 \textbf{Field} & \textbf{Meaning}\\ \hline
 \endhead
 \code{status} & \code{pending_campaign}, \code{calibrated}, or \code{control} (channel 37 only).\\ \hline
-\code{decision_version} & \code{fine_decision_v1}.\\ \hline
+\code{decision_version} & \code{fine_decision_v2}, or \code{fine_decision_v1} in an earlier bundle.\\ \hline
 \code{anchor_bin} & Fine bin of the pilot, 0 to 255.\\ \hline
 \code{designated_half_width} & \(h\). Designated bins are \(a\pm h\) modulo 256.\\ \hline
 \code{bulk_mask_words_hex} & Four \code{0x}-prefixed uint64 words. Bin \(b\) is bit \(b\bmod64\) of word \(\lfloor b/64\rfloor\).\\ \hline

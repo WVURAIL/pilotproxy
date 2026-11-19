@@ -5,6 +5,10 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Runtime bundles carry fine decision v2. `calibrate-bundle` writes `fine_decision_v2` unless
+  the plan names `decision_version`, and its words, floor and null scores follow that version.
+  The bundle validator, `test-bundle`, the run scores, the capture reference and replay, and the
+  operating policy read each channel's version. Bundles of `fine_decision_v1` stay valid.
 - Fine decision v2 is added beside v1. It reads the largest target bin of the search
   against the median of the reference powers of the background bins,
   `2 S_t[b] * 2**16 > multiplier_q16 * den_r`. The Python reference is

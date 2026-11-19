@@ -20,8 +20,11 @@ import numpy as np
 from pilot_proxy.capture_reference import expected_matched_filter_row_projections
 from pilot_proxy.detectors.narrowband_marker.anchors import WINDOW_HALF_WIDTH, bulk_mask
 from pilot_proxy.fine_decision import (
+    CALIBRATION_DECISION_VERSION,
+    FINE_DECISION_V2_VERSION,
     FINE_DECISION_VERSION,
-    fine_required_multiplier_q16,
+    FINE_DECISION_VERSIONS,
+    decision_functions,
     pack_bulk_mask,
     unpack_bulk_mask,
 )
@@ -163,17 +166,20 @@ def default_rank(bulk: np.ndarray) -> int:
     return (int(np.count_nonzero(bulk)) - 1) // 2
 
 
-def _exact_word(fine: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> int:
-    result = fine_required_multiplier_q16(
+def _exact_word(fine: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int, decision_version: str) -> int:
+    _, required = decision_functions(decision_version)
+    result = required(
         np.ascontiguousarray(fine), anchor_bin=anchor_bin, designated_half_width=SEARCH_HALF_WIDTH,
         bulk_mask=bulk, cfar_rank=rank)
     return -1 if not result.valid or result.multiplier_q16 is None else min(int(result.multiplier_q16), MAX_SCORE)
 
 
-def _float_words(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> tuple[np.ndarray, np.ndarray]:
-    """Return the words of fine_required_multiplier_q16 from float ratios, and the frames too close to call."""
+def _float_words(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int,
+                 decision_version: str) -> tuple[np.ndarray, np.ndarray]:
+    """Return the keep words of a decision version from float powers, and the frames too close to call."""
+    unchecked = _float_words_v2_unchecked if decision_version == FINE_DECISION_V2_VERSION else _float_words_unchecked
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        return _float_words_unchecked(fines, anchor_bin=anchor_bin, bulk=bulk, rank=rank)
+        return unchecked(fines, anchor_bin=anchor_bin, bulk=bulk, rank=rank)
 
 
 def _float_words_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> tuple[np.ndarray, np.ndarray]:
@@ -208,19 +214,52 @@ def _float_words_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarr
     return out, close & valid
 
 
-def required_words(fines: Sequence[np.ndarray] | np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> np.ndarray:
+def _float_words_v2_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray,
+                              rank: int) -> tuple[np.ndarray, np.ndarray]:
+    """Version 2: the largest target in the search over the reference of rank `rank` in the background."""
+    num = 2.0 * fines[:, 0].astype(np.float64)
+    den = fines[:, 1].astype(np.float64) + fines[:, 2].astype(np.float64)
+    usable = den > 0
+    # a background bin with no reference power holds no rank
+    background = np.sort(np.where(usable, den, np.inf)[:, np.flatnonzero(bulk)], axis=1)
+    valid = rank < np.count_nonzero(usable[:, bulk], axis=1)
+    r = background[:, rank]
+    close = np.zeros(len(fines), bool)
+    if rank > 0:
+        close |= background[:, rank] - background[:, rank - 1] <= FLOAT_MARGIN * r
+    if rank + 1 < background.shape[1]:
+        close |= background[:, rank + 1] - r <= FLOAT_MARGIN * r
+
+    search = (anchor_bin + np.arange(-SEARCH_HALF_WIDTH, SEARCH_HALF_WIDTH + 1)) % FINE_BINS
+    x = num[:, search].max(axis=1) * Q16 / np.where(valid, r, 1.0)
+    huge = x > 2.0**63 * (1 + FLOAT_MARGIN)
+    # the ceiling of a value this close to an integer needs the exact products
+    close |= ~huge & (np.abs(x - np.rint(x)) <= FLOAT_MARGIN * x)
+    words = np.maximum(np.ceil(np.where(huge, 1.0, x)), 1.0)
+    huge |= words >= 2.0**63
+    out = np.where(huge, MAX_SCORE, np.where(huge, 1.0, words).astype(np.int64))
+    out = np.where(valid, out, -1)
+    return out, close & valid
+
+
+def required_words(fines: Sequence[np.ndarray] | np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int,
+                   decision_version: str) -> np.ndarray:
     """Return each frame's smallest keeping word, -1 where the rank has too little support.
 
-    Equal to fine_required_multiplier_q16 on every frame. Float ratios score most frames, and a frame
-    whose rank value or word falls within FLOAT_MARGIN of a tie or an integer is scored exactly.
+    Equal to the exact keep boundary of the decision version on every frame. Float powers score
+    most frames, and a frame whose rank value or word falls within FLOAT_MARGIN of a tie or an
+    integer is scored exactly.
     """
+    decision_functions(decision_version)
     bulk = np.asarray(bulk, dtype=bool)
     words = np.empty(len(fines), dtype=np.int64)
     for lo in range(0, len(fines), WORD_CHUNK):
         chunk = np.asarray(fines[lo:lo + WORD_CHUNK], dtype=np.uint64).reshape(-1, 3, FINE_BINS)
-        part, close = _float_words(chunk, anchor_bin=anchor_bin, bulk=bulk, rank=rank)
+        part, close = _float_words(chunk, anchor_bin=anchor_bin, bulk=bulk, rank=rank,
+                                   decision_version=decision_version)
         for i in np.flatnonzero(close):
-            part[i] = _exact_word(chunk[i], anchor_bin=anchor_bin, bulk=bulk, rank=rank)
+            part[i] = _exact_word(chunk[i], anchor_bin=anchor_bin, bulk=bulk, rank=rank,
+                                  decision_version=decision_version)
         words[lo:lo + len(chunk)] = part
     return words
 
@@ -262,10 +301,23 @@ def bootstrap_captures(words: np.ndarray, captures: np.ndarray, word: int, seed:
                 masked_interval=[float(q) for q in np.quantile(masked, [0.025, 0.975])])
 
 
-def null_scores(ratios: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int) -> np.ndarray:
-    """Return Q16 null scores at pseudo-searches over the bins clear of the real search of each frame."""
+def null_scores(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int,
+                decision_version: str) -> np.ndarray:
+    """Return Q16 null scores at pseudo-searches over the bins clear of the real search of each frame.
+
+    Version 1 scores the bin ratio against the ratio of rank `rank` in the background, and version 2
+    scores the target alone against the reference of that rank.
+    """
+    decision_functions(decision_version)
     bins = np.flatnonzero(bulk)
-    reference = np.sort(ratios[:, bins], axis=1)[:, rank]
+    if decision_version == FINE_DECISION_V2_VERSION:
+        fines = np.asarray(fines, dtype=np.float64)
+        ratios = 2.0 * fines[:, 0]
+        den = fines[:, 1] + fines[:, 2]
+        reference = np.sort(np.where(den > 0, den, np.inf)[:, bins], axis=1)[:, rank]
+    else:
+        ratios = fine_ratio(fines)
+        reference = np.sort(ratios[:, bins], axis=1)[:, rank]
     width = 2 * SEARCH_HALF_WIDTH + 1
     # overlapping, so a short control fills the tail, but only clear_searches() of them are independent
     markers = (anchor_bin + np.arange(width, FINE_BINS - width + 1, 2)) % FINE_BINS
@@ -279,17 +331,17 @@ def clear_searches() -> int:
     return FINE_BINS // (2 * SEARCH_HALF_WIDTH + 1) - 1
 
 
-def simulated_null_scores(num_inputs: int, frames: int = MIN_SIMULATED_FRAMES, seed: int = 20261105) -> np.ndarray:
+def simulated_null_scores(num_inputs: int, frames: int = MIN_SIMULATED_FRAMES, seed: int = 20261105, *,
+                          decision_version: str) -> np.ndarray:
     """Return null scores for white noise summed over num_inputs streams."""
     rng = np.random.default_rng(seed)
     bulk = _bulk(0)
     rank = default_rank(bulk)
-    ratios = np.empty((frames, FINE_BINS))
+    powers = np.empty((frames, 3, FINE_BINS))
     for frame in range(frames):
         z = rng.standard_normal((3, num_inputs, WINDOWS, 2), dtype=np.float32).view(np.complex64)[..., 0]
-        power = np.abs(np.fft.fft(z, FINE_BINS, axis=2)) ** 2
-        ratios[frame] = fine_ratio(power.sum(axis=1))
-    return null_scores(ratios, anchor_bin=0, bulk=bulk, rank=rank)
+        powers[frame] = (np.abs(np.fft.fft(z, FINE_BINS, axis=2)) ** 2).sum(axis=1)
+    return null_scores(powers, anchor_bin=0, bulk=bulk, rank=rank, decision_version=decision_version)
 
 
 def _bulk(anchor: int, excluded: Sequence[int] = ()) -> np.ndarray:
@@ -358,7 +410,7 @@ def _bin_list(bulk: np.ndarray) -> list[int]:
 
 
 def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: int, plan: dict[str, Any], quantile: float,
-                 note: str) -> dict[str, Any]:
+                 note: str, decision_version: str) -> dict[str, Any]:
     # the control is decided and recorded, and never reaches a mask
     status = "control" if channel == CONTROL_PHYSICAL_CHANNEL else "calibrated"
     provenance = dict(epochs=[str(plan.get("epoch", "unstated"))], source_product_sha256=[],
@@ -366,7 +418,7 @@ def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: i
     # the word holds for this set of summed inputs, which Kotekan compares with the live set
     if "num_inputs" in plan:
         provenance["summed_inputs"] = int(plan["num_inputs"])
-    return dict(status=status, decision_version=FINE_DECISION_VERSION, cfar_multiplier_q16=word,
+    return dict(status=status, decision_version=decision_version, cfar_multiplier_q16=word,
                 anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, cfar_rank=rank,
                 bulk_mask_words_hex=[f"0x{w:016x}" for w in pack_bulk_mask(bulk)], provenance=provenance)
 
@@ -407,7 +459,7 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
 
 
 def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: np.ndarray, control, *, anchor: int,
-                 bulk: np.ndarray, rank: int, inputs: dict[str, Any]) -> dict[str, Any]:
+                 bulk: np.ndarray, rank: int, inputs: dict[str, Any], decision_version: str) -> dict[str, Any]:
     """Return the power-limit test of one channel. The control is read with no corrections, as `control=None`."""
     from pilot_proxy.characterization import threshold_rule
 
@@ -421,7 +473,7 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
         np.where(good, excess, 0.0)), shelf=shelf)
     offset, shift, margin, measured = 0.0, 0.0, 0.0, None
     if control is not None:
-        words = required_words(control[0], anchor_bin=anchor, bulk=bulk, rank=rank)
+        words = required_words(control[0], anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision_version)
         control_excess = median_excess(control[0], bulk, rank)
         good = (words >= 0) & np.isfinite(control_excess)
         if not good.any():
@@ -471,6 +523,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
     inputs = _limit_inputs(plan, base) if threshold == "power_limit" else None
     fmt = plan.get("capture_format")
     max_frames = plan.get("max_frames_per_capture")
+    decision = plan.get("decision_version", CALIBRATION_DECISION_VERSION)
+    if decision not in FINE_DECISION_VERSIONS:
+        raise ValueError(f"decision_version must be one of {FINE_DECISION_VERSIONS}, got {decision!r}")
 
     with tempfile.TemporaryDirectory() as temp:
         wanted = sorted({*channels, *([int(control["channel"])] if control else [])})
@@ -487,7 +542,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             control_frames = (fines, control_captures) if inputs else None
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
-                null_scores(fine_ratio(fines[lo:lo + NULL_CHUNK]), anchor_bin=anchor, bulk=bulk, rank=default_rank(bulk))
+                null_scores(fines[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=default_rank(bulk),
+                            decision_version=decision)
                 for lo in range(0, len(fines), NULL_CHUNK)])
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=default_rank(bulk),
@@ -495,7 +551,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                                   captures=[str(Path(p).resolve()) for p in _expand(control["captures"])])
             source = "control channel"
         else:
-            scores = simulated_null_scores(int(plan["num_inputs"]))
+            scores = simulated_null_scores(int(plan["num_inputs"]), decision_version=decision)
             control_record = None
             source = f"white noise, {int(plan['num_inputs'])} inputs"
         independent = (len(fines) if control else MIN_SIMULATED_FRAMES) * clear_searches()
@@ -519,7 +575,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 anchor = int(plan.get("anchors", {}).get(str(channel), nominal))
                 bulk = _bulk(anchor, excluded)
                 values[channel] = _fine_values(channel, anchor, default_rank(bulk), bulk, floor, plan, quantile,
-                                               f"Word from the floor, no captures, floor from {source}.")
+                                               f"Word from the floor, no captures, floor from {source}.", decision)
                 report_channels[str(channel)] = dict(
                     anchor_bin=anchor, anchor_source="nominal", nominal_bin=nominal, frames=0, captures=0,
                     word_q16=floor, eta=floor / Q16, word_source="floor, no captures")
@@ -532,7 +588,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             given = plan.get("anchors", {}).get(str(channel))
             bulk = _bulk(anchor, excluded)
             rank = default_rank(bulk)
-            seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank)
+            seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
             hits = int(np.count_nonzero(seen > floor))
             fraction = hits / seen.size
             measured = binomial_upper_tail(hits, seen.size, 1.0 - quantile) < MAX_LINE_TAIL
@@ -544,7 +600,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 origin = "nominal" if given is None else "plan"
                 bulk = _bulk(anchor, excluded)
                 rank = default_rank(bulk)
-                seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank)
+                seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
 
             supported = seen >= 0
             if not supported.any():
@@ -560,7 +616,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             tested = None
             if inputs and (not is_control or (channel in inputs["rows"] and channel in inputs["limits"])):
                 tested = _limit_channel(channel, fines, captures, seen, None if is_control else control_frames,
-                                      anchor=anchor, bulk=bulk, rank=rank, inputs=inputs)
+                                      anchor=anchor, bulk=bulk, rank=rank, inputs=inputs, decision_version=decision)
                 if origin == "nominal" and not is_control:
                     # with no pilot in the run the estimate reads only noise, which is no pass
                     tested = dict({key: value for key, value in tested.items() if key not in PASSING_FIELDS},
@@ -584,7 +640,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             masked = float(np.sum(weights[seen[supported] > word]))
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
             values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile,
-                                           f"Word from {word_source}, floor from {source}.")
+                                           f"Word from {word_source}, floor from {source}.", decision)
             report_channels[str(channel)] = dict(
                 anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines), captures=count,
                 word_q16=word, eta=word / Q16, word_source=word_source, knee_word_q16=knee,
@@ -606,7 +662,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         shutil.rmtree(output_dir)
         raise ValueError(f"bundle failed validation: {validation['errors']}")
 
-    report = dict(threshold=threshold, floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
+    report = dict(threshold=threshold, decision_version=decision, floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
                   null_quantile=quantile, floor_source=source, search_half_width=SEARCH_HALF_WIDTH,
                   null_scores=int(independent), channels=report_channels, control=control_record,
                   calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values()
@@ -696,7 +752,8 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
         fine_cal = rows[channel]["fine_calibration"]
         bulk = unpack_bulk_mask([int(w, 16) for w in fine_cal["bulk_mask_words_hex"]])
         fines, _ = _load_fines(paths, fmt, rows[channel], bank, k, reverse, max_frames)
-        words = required_words(fines, anchor_bin=fine_cal["anchor_bin"], bulk=bulk, rank=fine_cal["cfar_rank"])
+        words = required_words(fines, anchor_bin=fine_cal["anchor_bin"], bulk=bulk, rank=fine_cal["cfar_rank"],
+                               decision_version=fine_cal["decision_version"])
         valid = words >= 0
         check(f"rank support on channel {channel}", valid.all(), f"{int(valid.sum())} of {words.size} frames")
         if str(channel) not in predicted:
@@ -717,7 +774,9 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
         bulk = np.zeros(FINE_BINS, dtype=bool)
         bulk[record["bulk_bins"]] = True
         fines, _ = _load_fines(plan["control"], fmt, row, bytes.fromhex(record["weights_hex"]), k, reverse, max_frames)
-        words = required_words(fines, anchor_bin=record["anchor_bin"], bulk=bulk, rank=record["cfar_rank"])
+        # a report written before version 2 calibrated version 1
+        words = required_words(fines, anchor_bin=record["anchor_bin"], bulk=bulk, rank=record["cfar_rank"],
+                               decision_version=calibration.get("decision_version", FINE_DECISION_VERSION))
         word = int(calibration["floor_word_q16"])
         rate = 1.0 - float(calibration["null_quantile"])
         hits = int(np.count_nonzero(words > word))

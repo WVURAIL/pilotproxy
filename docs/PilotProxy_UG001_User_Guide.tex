@@ -208,6 +208,12 @@ The bundle gives each channel an \emph{anchor bin} \(a\), a half-width \(w\), a 
 \end{equation}
 The kernel evaluates this test with exact integer cross products. When the bulk has \(r\) or fewer usable bins, the test is invalid: the mask bit is 0 and the fine support row is \((0,n)\). The threshold \(\eta=W/2^{16}\) is the word on a Q16 grid. Calibration currently uses \(w=32\) (65 designated bins) and the bulk median as the rank.
 
+This is version 1 of the test, \code{fine_decision_v1}. Version 2, \code{fine_decision_v2}, reads the target alone. Its reference value \(D\) is the reference power \(S_l[b]+S_u[b]\) of rank \(r\) among the bulk bins with nonzero reference power, and the block is rejected when
+\begin{equation}
+  \max_{b\in a\pm w} 2\,S_t[b] \;>\; \frac{W}{2^{16}}\,D .
+\end{equation}
+Its kernel entry points carry \code{V2} in their names. Calibration writes version 2, and a bundle of version 1 stays valid.
+
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[x=0.052cm,y=1cm,>=Latex]
@@ -424,7 +430,7 @@ This file is the one an operator reads most. It holds the receiver binding and t
 \textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
 \endhead
 \pfield{status} & \code{pending_campaign} (exported, no values), \code{calibrated}, or \code{control}. Only channel 37 may be \code{control}, and channel 37 must be. A bound \code{pending_campaign} channel stops Kotekan at the first frame. \code{calibrated} means the values are filled in, not that the channel is qualified for masking. & \yes\\ \hline
-\pfield{decision_version} & \code{fine_decision_v1}, the integer test of Section~\ref{sec:definitions}. & \yes\\ \hline
+\pfield{decision_version} & \code{fine_decision_v2}, or \code{fine_decision_v1} in an earlier bundle: the integer test of Section~\ref{sec:definitions}. & \yes\\ \hline
 \pfield{cfar_multiplier_q16} & The word \(W\). \(\eta=W/65536\). Must be positive. & \yes\\ \hline
 \pfield{anchor_bin} & The anchor \(a\), 0 to 255. & \yes\\ \hline
 \pfield{designated_half_width} & The half-width \(w\), below 128. Calibration writes 32. & \yes\\ \hline

@@ -25,8 +25,7 @@ from pilot_proxy.capture_reference import (
 )
 from pilot_proxy.fine_decision import (
     ALWAYS_MASKED_Q16,
-    fine_mask_decision,
-    fine_required_multiplier_q16,
+    decision_functions,
 )
 from pilot_proxy.fxfft import fxfft256_scalar
 
@@ -220,13 +219,13 @@ def test_whole_blocks_and_complete_counts_required(tmp_path, geometry):
         validate_frames(*frames, True, geometry=geometry)
 
 
-def bundle(k, *, reverse=False, rank=1):
+def bundle(k, *, reverse=False, rank=1, version="fine_decision_v1"):
     return {
         "input_preprocessing": {"time_reverse_detector_windows_before_kernel": reverse},
         "profiles": [{
             "chord_channel_id": 2408, "weight_bank_offset_bytes": 0, "weight_bank_nbytes": 3 * k,
             "fine_calibration": {
-                "status": "calibrated", "decision_version": "fine_decision_v1",
+                "status": "calibrated", "decision_version": version,
                 "anchor_bin": 255, "designated_half_width": 1,
                 "bulk_mask_words_hex": ["000000000000001c", "0", "0", "0"],
                 "cfar_rank": rank, "cfar_multiplier_q16": 65536,
@@ -235,9 +234,10 @@ def bundle(k, *, reverse=False, rank=1):
     }
 
 
+@pytest.mark.parametrize("version", ["fine_decision_v1", "fine_decision_v2"])
 @pytest.mark.parametrize("k", [64, 128])
 @pytest.mark.parametrize("reverse", [False, True])
-def test_exact_reference_matches_scalar_projection_and_fft(k, reverse):
+def test_exact_reference_matches_scalar_projection_and_fft(k, reverse, version):
     g = CaptureGeometry(k * 128, k, (2408, 1600), 1)
     rng = np.random.default_rng(504)
     raw = rng.integers(0, 256, g.block_samples * g.num_freq * g.num_streams, dtype=np.uint8)
@@ -267,10 +267,11 @@ def test_exact_reference_matches_scalar_projection_and_fft(k, reverse):
         for stream in range(2):
             transformed = fxfft256_scalar(oracle[term, stream * 128:(stream + 1) * 128])
             fine[term] += np.array([r * r + i * i for r, i in transformed], dtype=np.uint64)
-    result = expected_products(raw, bundle(k, reverse=reverse), weights, geometry=g)
+    result = expected_products(raw, bundle(k, reverse=reverse, version=version), weights, geometry=g)
     args = dict(anchor_bin=255, designated_half_width=1, bulk_mask=[28, 0, 0, 0], cfar_rank=1)
-    assert result.decisions[0] == fine_required_multiplier_q16(fine, **args)
-    assert result.masks[0] == fine_mask_decision(fine, multiplier_q16=65536, **args).mask
+    decide, boundary = decision_functions(version)
+    assert result.decisions[0] == boundary(fine, **args)
+    assert result.masks[0] == decide(fine, multiplier_q16=65536, **args).mask
     assert result.decisions[0].valid
     np.testing.assert_array_equal(result.powers[0], fine.sum(axis=1, dtype=np.uint64))
     assert result.decisions[1] is None and result.masks[1] == 0

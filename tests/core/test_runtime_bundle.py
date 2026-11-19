@@ -298,7 +298,7 @@ def _refresh_sha256sum(outputs, key: str) -> None:
     )
 
 
-def _calibrated_fine_block(anchor: int = 62) -> tuple[dict, object]:
+def _calibrated_fine_block(anchor: int = 62, version: str = "fine_decision_v1") -> tuple[dict, object]:
     from pilot_proxy.fine_decision import pack_bulk_mask
     from pilot_proxy.fine_reduction import independent_bin_mask
 
@@ -311,7 +311,7 @@ def _calibrated_fine_block(anchor: int = 62) -> tuple[dict, object]:
     return (
         {
             "status": "calibrated",
-            "decision_version": "fine_decision_v1",
+            "decision_version": version,
             "anchor_bin": anchor,
             "designated_half_width": half_width,
             "bulk_mask_words_hex": [f"0x{word:016x}" for word in words],
@@ -386,7 +386,7 @@ def test_exported_bundle_carries_pending_fine_calibration(tmp_path) -> None:
     for row in profiles["profiles"]:
         block = row["fine_calibration"]
         assert block["status"] == "pending_campaign"
-        assert block["decision_version"] == "fine_decision_v1"
+        assert block["decision_version"] == "fine_decision_v2"
         assert block["anchor_bin"] is None
         assert block["designated_half_width"] == 2
         assert block["cfar_rank"] is None
@@ -570,11 +570,12 @@ def test_bundle_reports_nonfinite_manifest_profile_size_without_crashing(
     assert "weights_manifest.weight_profile_nbytes" in checks
 
 
+@pytest.mark.parametrize("version", ["fine_decision_v1", "fine_decision_v2"])
 @pytest.mark.parametrize("anchor", [62, 63])
-def test_calibrated_fine_block_validates_when_consistent(tmp_path, anchor) -> None:
+def test_calibrated_fine_block_validates_when_consistent(tmp_path, anchor, version) -> None:
     output_dir, outputs = _export_reference_bundle(tmp_path)
     profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
-    block, _bulk = _calibrated_fine_block(anchor)
+    block, _bulk = _calibrated_fine_block(anchor, version)
     profiles["profiles"][0]["fine_calibration"] = block
     _rewrite_profiles(outputs, profiles)
     report = validate_runtime_weight_bundle(bundle_dir=output_dir)
@@ -656,7 +657,7 @@ def test_calibrated_fine_block_rejects_inconsistencies(tmp_path) -> None:
     profiles["profiles"][0]["fine_calibration"] = dict(base)
     profiles["profiles"][1]["fine_calibration"] = {
         "status": "unheard_of",
-        "decision_version": "fine_decision_v2",
+        "decision_version": "fine_decision_v3",
     }
     _rewrite_profiles(outputs, profiles)
     report = validate_runtime_weight_bundle(bundle_dir=output_dir)

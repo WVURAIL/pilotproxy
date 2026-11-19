@@ -43,7 +43,8 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
         # the mask is recomputed so the control, whose stage mask stays zero, can be shown too
         block = np.stack(pending)
         # DtvRfiMask masks a block whose rank has too little support (-1)
-        words = required_words(pending, anchor_bin=anchor, bulk=bulk, rank=rank)
+        words = required_words(pending, anchor_bin=anchor, bulk=bulk, rank=rank,
+                               decision_version=calibration["decision_version"])
         keep = (words >= 0) & (words <= word)
         target = block[:, TARGET_ROW].astype(np.float64)
         every.append(target.mean(axis=0))

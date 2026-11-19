@@ -24,7 +24,11 @@ from pilot_proxy.detector_contract import (
     OLD_INPUT_COORDINATE_NAMES,
     OLD_WEIGHT_COORDINATE_NAMES,
 )
-from pilot_proxy.fine_decision import FINE_DECISION_VERSION, pack_bulk_mask
+from pilot_proxy.fine_decision import (
+    FINE_DECISION_VERSION,
+    FINE_DECISION_VERSIONS,
+    pack_bulk_mask,
+)
 from pilot_proxy.runtime_bundle import (
     CONTROL_PHYSICAL_CHANNEL,
     FINE_CALIBRATION_STATUS_CONTROL,
@@ -92,7 +96,10 @@ def _metadata_geometry(meta, channel):
              for i in range(-exclusion, exclusion + 1)), "Frozen rank or guard is not runtime compatible")
     mask = np.zeros(256, dtype=bool)
     mask[bins] = True
-    result = {"status": "calibrated", "decision_version": FINE_DECISION_VERSION,
+    # a score cache states the decision that scored it, at the top or as rebuilt; one that does not is version 1
+    version = meta.get("fine_decision") or (meta.get("rebuilt") or {}).get("fine_decision") or FINE_DECISION_VERSION
+    _REQUIRE(version in FINE_DECISION_VERSIONS, "Unknown fine decision of the score cache")
+    result = {"status": "calibrated", "decision_version": version,
               "anchor_bin": anchor, "designated_half_width": width, "cfar_rank": rank,
               "bulk_mask_words_hex": [f"0x{int(w):016x}" for w in pack_bulk_mask(mask)]}
     if "marker_guard_bins" in g:

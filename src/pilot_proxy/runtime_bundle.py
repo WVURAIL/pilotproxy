@@ -24,7 +24,10 @@ from pilot_proxy.detector_contract import (
     validate_detector_contract,
     weight_term_norms_sq,
 )
-from pilot_proxy.fine_decision import FINE_DECISION_VERSION
+from pilot_proxy.fine_decision import (
+    CALIBRATION_DECISION_VERSION,
+    FINE_DECISION_VERSIONS,
+)
 from pilot_proxy.fine_reduction import (
     CFAR_DEFAULT_GUARD_FINE_BINS,
     FINE_PAD_FACTOR,
@@ -834,18 +837,20 @@ def _validate_mask_qualification(*, qualification: object, status: str, field: s
 def _default_fine_calibration_block() -> dict[str, Any]:
     """Return the per-channel fine decision calibration, exported as pending_campaign.
 
-    These values are passed as runtime arguments to the fused entry points
-    ``PilotProxy_Compute_FusedFineMask_U64`` and
-    ``PilotProxy_Compute_FusedFineMaskWithSupport_U64``. The second is called
-    by kotekan when its support buffer is bound. The decision arithmetic is
-    frozen (``fine_decision_v1``), and the operating point is bundle data.
+    These values are passed as runtime arguments to the fused entry points of
+    the block's decision version: ``PilotProxy_Compute_FusedFineMask_U64`` and
+    ``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` for ``fine_decision_v1``,
+    and their ``V2`` forms for ``fine_decision_v2``. The ``WithSupport`` entry
+    is called by kotekan when its support buffer is bound. The arithmetic of
+    each version is frozen, and the operating point is bundle data. New blocks
+    take version 2.
     The calibration campaign fills the null fields, sets
     ``status`` to ``calibrated``, and records the provenance. Until then, a
     consumer must treat the channel's fine mask path as not deployable.
     """
     return {
         "status": FINE_CALIBRATION_STATUS_PENDING,
-        "decision_version": FINE_DECISION_VERSION,
+        "decision_version": CALIBRATION_DECISION_VERSION,
         "anchor_bin": None,
         "designated_half_width": FINE_CALIBRATION_DEFAULT_HALF_WIDTH,
         "bulk_mask_words_hex": None,
@@ -919,7 +924,7 @@ def _validate_fine_calibration(
 ) -> None:
     """Validate the required ``fine_calibration`` block of each profile.
 
-    Each block must declare the frozen decision version and a known status. A
+    Each block must declare a known decision version and a known status. A
     ``calibrated`` or ``control`` block must carry complete, range-checked
     values. Its bulk mask must exclude the designated set, the optional
     ``marker_guard_bins`` guard band, and the anchor's guard, and it must hold
@@ -958,12 +963,12 @@ def _validate_fine_calibration(
                 f"{field}.required_fields",
                 f"missing required fields: {missing_fields}",
             )
-        if block.get("decision_version") != FINE_DECISION_VERSION:
+        if block.get("decision_version") not in FINE_DECISION_VERSIONS:
             _add_error(
                 errors,
                 f"{field}.decision_version",
-                f"decision_version {block.get('decision_version')!r} does "
-                f"not match {FINE_DECISION_VERSION!r}",
+                f"decision_version {block.get('decision_version')!r} is "
+                f"not one of {list(FINE_DECISION_VERSIONS)!r}",
             )
         status = block.get("status")
         if status not in (

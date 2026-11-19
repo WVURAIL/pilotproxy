@@ -29,6 +29,7 @@ import numpy as np
 from pilot_proxy.characterization import histogram_frames as coarse
 from pilot_proxy.products import reader
 from pilot_proxy.products.reader import FINE_BINS, HEALTH_GATE_SCHEMA, NFFT, Product
+from pilot_proxy.rank_scores import required_multipliers_by_rank_v2
 
 from . import anchors, scores
 
@@ -38,15 +39,20 @@ SCHEMA = "fine-histogram-frame-export-v1"
 MANIFEST_SCHEMA = "fine-histogram-frames-manifest-v1"
 
 
-def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask, designated_half_width=WIDTH, rho=None):
+def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask, designated_half_width=WIDTH, rho=None,
+                       decision_version=1):
     """Return the score arrays over all frames, with unselected frames left uncomputed.
 
     The exact keep boundaries come from the production scorer. The
     unquantized ratio is ordered and divided in exact rational arithmetic and
     converted to float64 only at the end. With ``rho`` None, the geometry of
     record is required (h = 2 and a 125- or 126-bin bulk, rank 63). Otherwise
-    ``rho`` is the one-based rank.
+    ``rho`` is the one-based rank. With ``decision_version`` 2, the boundary
+    and the score are those of fine decision v2: the largest designated
+    target over the reference power of the rank.
     """
+    if decision_version not in (1, 2):
+        raise ValueError("decision_version must be 1 or 2")
     powers = np.asarray(powers)
     selected = np.asarray(selected)
     bulk = np.asarray(bulk_mask)
@@ -85,6 +91,14 @@ def final_score_arrays(powers, selected, *, anchor_bin, bulk_mask, designated_ha
             always[row] = True
             continue
         rank_valid[row] = True
+        if decision_version == 2:
+            boundary = required_multipliers_by_rank_v2(frame, designated=designated, bulk_mask=bulk)[rho - 1]
+            always[row] = boundary == scores.ALWAYS_MASKED_Q16
+            if not always[row]:
+                required[row] = boundary
+            reference = sorted(denominator[b] for b in usable_bulk)[rho - 1]
+            z[row] = float(Fraction(max(2 * int(frame[0, b]) for b in designated), reference))
+            continue
         boundary = scores.required_eta_q16_by_rank(
             frame, anchor_bin=anchor_bin, designated_half_width=designated_half_width, bulk_mask=bulk)[rho - 1]
         always[row] = boundary == scores.ALWAYS_MASKED_Q16

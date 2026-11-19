@@ -106,3 +106,50 @@ def required_multipliers_by_rank(
             boundaries.append(ALWAYS_MASKED_Q16 if boundary > MAX_MULTIPLIER_Q16
                               else max(1, boundary))
     return tuple(boundaries)
+
+
+def required_multipliers_by_rank_v2(
+    fine_powers: np.ndarray,
+    *,
+    designated: Sequence[int],
+    bulk_mask: Sequence[bool],
+) -> tuple[int, ...]:
+    """Return the smallest keeping Q16 multiplier of fine decision v2 at every bulk rank.
+
+    The bulk bins with a positive denominator are sorted by the reference
+    power ``S_l[b] + S_u[b]``. For each rank, the boundary is the smallest
+    Q16 multiplier m such that (m / 2**16) times the reference power of the
+    rank is at least the largest designated-bin target ``2 S_t[b]``.
+    ``ALWAYS_MASKED_Q16`` marks a rank where no uint64 multiplier keeps the
+    frame. Arguments are those of :func:`required_multipliers_by_rank`.
+    """
+    powers = np.asarray(fine_powers)
+    if powers.shape != (3, FINE_BINS) or powers.dtype != np.dtype(np.uint64):
+        raise ValueError("fine_powers must be exact uint64 with shape [3, 256].")
+    mask = np.asarray(bulk_mask)
+    if mask.shape != (FINE_BINS,) or mask.dtype != np.dtype(bool):
+        raise ValueError("bulk_mask must be an explicit boolean vector of length 256.")
+    bins = list(designated)
+    if not bins:
+        raise ValueError("the designated set must not be empty.")
+    if any(isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral)
+           for value in bins):
+        raise ValueError("designated bins must be integers.")
+    bins = [int(value) for value in bins]
+    if any(not 0 <= value < FINE_BINS for value in bins):
+        raise ValueError("designated bins must lie in [0, 256).")
+    if mask[bins].any():
+        raise ValueError("the bulk mask must exclude every designated bin.")
+
+    peak = max(2 * int(powers[0, index]) for index in bins)
+    reference = sorted(
+        value for value in (int(powers[1, index]) + int(powers[2, index])
+                            for index in np.flatnonzero(mask)) if value > 0)
+    if not reference:
+        raise ValueError("the declared bulk has no bin with a positive denominator.")
+    boundaries = []
+    for value in reference:
+        boundary = max(1, (peak * MULTIPLIER_ONE + value - 1) // value)
+        boundaries.append(ALWAYS_MASKED_Q16 if boundary > MAX_MULTIPLIER_Q16
+                          else boundary)
+    return tuple(boundaries)

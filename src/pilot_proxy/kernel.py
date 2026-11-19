@@ -364,6 +364,22 @@ class PilotProxyKernel:
         if self._has_supports_fused_fine_mask_with_support:
             self._lib.PilotProxy_Supports_FusedFineMaskWithSupport.argtypes = []
             self._lib.PilotProxy_Supports_FusedFineMaskWithSupport.restype = ctypes.c_int
+        self._has_fused_fine_mask_v2 = all(
+            _has_symbol(self._lib, name) for name in (
+                "PilotProxy_Compute_FusedFineMaskV2_U64",
+                "PilotProxy_Compute_FusedFineMaskV2WithSupport_U64",
+                "PilotProxy_Supports_FusedFineMaskV2",
+            )
+        )
+        if self._has_fused_fine_mask_v2:
+            self._lib.PilotProxy_Compute_FusedFineMaskV2_U64.argtypes = (
+                self._lib.PilotProxy_Compute_FusedFineMask_U64.argtypes)
+            self._lib.PilotProxy_Compute_FusedFineMaskV2_U64.restype = None
+            self._lib.PilotProxy_Compute_FusedFineMaskV2WithSupport_U64.argtypes = (
+                self._lib.PilotProxy_Compute_FusedFineMaskWithSupport_U64.argtypes)
+            self._lib.PilotProxy_Compute_FusedFineMaskV2WithSupport_U64.restype = None
+            self._lib.PilotProxy_Supports_FusedFineMaskV2.argtypes = []
+            self._lib.PilotProxy_Supports_FusedFineMaskV2.restype = ctypes.c_int
         self._has_get_fine_specs = _has_symbol(self._lib, "PilotProxy_GetFineSpecs")
         if self._has_get_fine_specs:
             self._lib.PilotProxy_GetFineSpecs.argtypes = [
@@ -750,6 +766,39 @@ class PilotProxyKernel:
             row_projections_tap_ptr, support=support,
         )
 
+    def supports_fused_fine_mask_v2(self) -> bool:
+        """Return True when the fine decision v2 entry points are available."""
+        return bool(getattr(self, "_has_fused_fine_mask_v2", False)
+                    and int(self._lib.PilotProxy_Supports_FusedFineMaskV2()) == 1)
+
+    def compute_fused_fine_mask_v2_u64(
+        self, handle, weights_ptr, anchor_bin, designated_half_width, bulk_mask_words,
+        cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, powers_ptr=0,
+        row_projections_tap_ptr=0,
+    ):
+        """Compute the fine decision v2 mask, with the arguments of the v1 call."""
+        self._compute_fused_fine_mask_u64(
+            handle, weights_ptr, anchor_bin, designated_half_width, bulk_mask_words,
+            cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, powers_ptr,
+            row_projections_tap_ptr, version=2,
+        )
+
+    def compute_fused_fine_mask_v2_with_support_u64(
+        self, handle, weights_ptr, anchor_bin, designated_half_width, bulk_mask_words,
+        cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, rank_valid_ptr,
+        n_bulk_ptr, powers_ptr=0, row_projections_tap_ptr=0,
+    ):
+        """Compute the fine decision v2 mask with the rank-support outputs."""
+        support = (
+            _checked_uint64(rank_valid_ptr, field="rank_valid_ptr", positive=True),
+            _checked_uint64(n_bulk_ptr, field="n_bulk_ptr", positive=True),
+        )
+        self._compute_fused_fine_mask_u64(
+            handle, weights_ptr, anchor_bin, designated_half_width, bulk_mask_words,
+            cfar_rank, multiplier_q16, fine_powers_ptr, mask_ptr, powers_ptr,
+            row_projections_tap_ptr, support=support, version=2,
+        )
+
     def _compute_fused_fine_mask_u64(
         self,
         handle,
@@ -765,6 +814,7 @@ class PilotProxyKernel:
         row_projections_tap_ptr: int = 0,
         *,
         support: tuple[int, int] | None = None,
+        version: int = 1,
     ):
         """Run the deployed fused form of the fine decision (kernel core 2.3.0).
 
@@ -789,6 +839,11 @@ class PilotProxyKernel:
         """
         symbol = "PilotProxy_Compute_FusedFineMaskWithSupport_U64" if support is not None else "PilotProxy_Compute_FusedFineMask_U64"
         feature = "_has_fused_fine_mask_with_support_u64" if support is not None else "_has_fused_fine_mask_u64"
+        if version == 2:
+            symbol = symbol.replace("FusedFineMask", "FusedFineMaskV2")
+            feature = "_has_fused_fine_mask_v2"
+        elif version != 1:
+            raise ValueError("version must be 1 or 2.")
         if not getattr(self, feature, False):
             raise RuntimeError(
                 f"Kernel library does not expose {symbol}."

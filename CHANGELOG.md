@@ -5,6 +5,14 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Fine decision v2 is added beside v1. It reads the largest target bin of the search
+  against the median of the reference powers of the background bins,
+  `2 S_t[b] * 2**16 > multiplier_q16 * den_r`. The Python reference is
+  `fine_mask_decision_v2`, `fine_required_multiplier_q16_v2` and
+  `required_multipliers_by_rank_v2`, the kernel entry points are
+  `PilotProxy_Compute_FusedFineMaskV2_U64` and its `WithSupport` form, and
+  `final_score_arrays` takes `decision_version=2`. Fine decision v1, the bundles and the
+  detector contract are unchanged.
 - `calibrate-bundle`, `plan-run` and `process-run` take a threshold choice. `knee` is
   the default. `power_limit` gives each channel the word that keeps the most frames
   under a checked residual power, the BAO acceptance test with the RFIsher table. It

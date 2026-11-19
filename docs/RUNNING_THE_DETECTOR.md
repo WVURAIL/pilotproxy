@@ -162,6 +162,8 @@ pilot-proxy qualify-bundle --bundle-dir bundle --test-report bundle.test.json \
 
 The command refuses a report that failed, has no passing control check, or is of another bundle. The new bundle names the report and the reviewer in each calibrated channel's `mask_qualification`, and has new digests and a new name.
 
+After `process-run`, the test report is `run1/test.json`. Kotekan names a bundle directory `<purpose>-<first 8 hex digits of the SHA-256 of sha256sums.txt>`, and `sha256sum bundle-qualified/sha256sums.txt | cut -c1-8` gives the digits for the qualified bundle.
+
 
 ## Step 4: Deploy and run
 
@@ -203,6 +205,13 @@ curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true}' <node>:1
 ```
 
 A POST sent before the stages start has no effect. A `valid_at_time_ns` of 0 applies the mask from the next frame.
+
+On the live Pathfinder, the site control system choco stores both switches and pushes its values back to the nodes, so a POST sent straight to a node can be undone. There, switch them from the choco host, for every X-engine (`cx`) or one node (`cx/cx47`):
+
+```bash
+choco set cx dtv_mask_enabled '{"enabled": true, "valid_at_time_ns": 0}'
+choco set cx dtv_write_enabled '{"enabled": true}'
+```
 
 The recv node writes the products under `/mnt/cs00/data/dtv/acq_<start time>/`, with a new directory for each recv start, and one file for each half and window of about 43 s. The `coarse_freq` and `fpga_seq_num` attributes identify the half and the window. A block missing from a window is a row of 0xFF bytes, and the reader skips it.
 

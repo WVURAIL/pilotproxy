@@ -7,7 +7,9 @@
 For each channel: windows and gaps, missing blocks, valid tests, masked percent, the peak
 fine bin against the bundle anchor, and the visibilities' frac_dtv_mask_enabled. With
 matplotlib and the fine powers, it also plots the target fine powers in chunks, over all
-blocks and over the kept blocks. Needs numpy, h5py and hdf5plugin.
+blocks and over the kept blocks. The masked percent of every channel by UTC hour, from the
+window times recv writes (fpga_seq_time_nsec), goes to masked_by_hour.csv and a figure.
+Needs numpy, h5py and hdf5plugin.
 """
 import argparse
 import glob
@@ -42,6 +44,50 @@ def collect(dtv_dir, product, channels):
             if channel in coarse:
                 found[channel][seq] = data[:, coarse.index(channel)]
     return found
+
+
+def window_times(dtv_dir):
+    """Return {window seq: UNIX ns of its first block} from the dtv_mask files that record it."""
+    times = {}
+    for path in glob.glob(os.path.join(dtv_dir, "**", "dtv_mask.*.h5"), recursive=True):
+        with h5py.File(path, "r") as handle:
+            attrs = handle[next(iter(handle))].attrs
+            if "fpga_seq_time_nsec" in attrs:
+                times[int(attrs["fpga_seq_num"])] = int(attrs["fpga_seq_time_nsec"])
+    return times
+
+
+def masked_by_hour(masks, times):
+    """Return {utc hour: (masked blocks, present blocks)} for one channel."""
+    counts = defaultdict(lambda: [0, 0])
+    for seq, mask in masks.items():
+        if seq not in times:
+            continue
+        hours = ((times[seq] + np.arange(mask.size) * BLOCK_SAMPLES * SAMPLE_NS) // 3_600_000_000_000) % 24
+        present = mask != -1
+        for hour in np.unique(hours[present]):
+            at = present & (hours == hour)
+            counts[int(hour)][0] += int(np.count_nonzero(mask[at] == 1))
+            counts[int(hour)][1] += int(np.count_nonzero(at))
+    return {hour: tuple(value) for hour, value in sorted(counts.items())}
+
+
+def plot_by_hour(by_hour, path):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    for channel, counts in by_hour.items():
+        if counts:
+            hours = list(counts)
+            ax.plot(hours, [100.0 * m / p for m, p in counts.values()], "o-", ms=4,
+                    label=f"freq_id {channel} (ATSC {PILOTS.get(channel, '?')})")
+    ax.set(xlabel="UTC hour", ylabel="masked percent", xlim=(-0.5, 23.5), ylim=(-2, 102), xticks=range(0, 24, 2))
+    ax.legend(loc="best", fontsize=8)
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
 
 
 def anchors(bundle_dir):
@@ -178,9 +224,25 @@ def main():
                      os.path.join(args.output_dir, f"spectrogram_{channel}.png"))
             except ImportError:
                 pass
+    times = window_times(args.dtv_dir)
+    by_hour = {channel: masked_by_hour(masks.get(channel, {}), times) for channel in args.channels}
+    for report in reports:
+        counts = by_hour[report["channel"]]
+        if counts:
+            report["masked_percent_by_utc_hour"] = {h: round(100.0 * m / p, 3) for h, (m, p) in counts.items()}
     if args.output_dir:
         with open(os.path.join(args.output_dir, "check.json"), "w") as out:
             json.dump(reports, out, indent=1)
+        with open(os.path.join(args.output_dir, "masked_by_hour.csv"), "w") as out:
+            out.write("freq_id,atsc_channel,utc_hour,blocks,masked_percent\n")
+            for channel, counts in by_hour.items():
+                for hour, (masked, present) in counts.items():
+                    out.write(f"{channel},{PILOTS.get(channel, '')},{hour},{present},{100.0 * masked / present:.3f}\n")
+        if any(by_hour.values()):
+            try:
+                plot_by_hour(by_hour, os.path.join(args.output_dir, "masked_by_hour.png"))
+            except ImportError:
+                pass
 
 
 if __name__ == "__main__":

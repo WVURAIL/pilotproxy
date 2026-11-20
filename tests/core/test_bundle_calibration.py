@@ -31,7 +31,7 @@ from pilot_proxy.bundle_calibration import (
 from pilot_proxy.characterization import threshold_rule
 from pilot_proxy.runtime_bundle import _write_sha256sums, validate_runtime_weight_bundle
 from pilot_proxy.process_run import process_run
-from pilot_proxy.run_plans import write_run_plans
+from pilot_proxy.run_plans import ordered_run_files, write_run_plans
 from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
 
@@ -309,6 +309,31 @@ def test_run_frames_skip_untested_and_missing_blocks(tmp_path):
     with h5py.File(tmp_path / "idle.h5", "w") as handle:
         handle["dtv_fine_powers"] = np.zeros((3, 2, 3, 256), dtype=np.uint64)
     assert not list(iter_run_frames(tmp_path / "idle.h5", 521))
+
+
+def test_run_files_keep_recording_order_across_restarts(tmp_path):
+    """An F-engine restart resets fpga_seq_num; the files stay in order by their first frame's time."""
+    frames = np.ones((2, 3, 256), dtype=np.uint64)
+    # (acquisition directory, fpga_seq_num, time in s): the counter starts again in the second acquisition
+    layout = [("acq_20261121_000000_000000000", 900, 10), ("acq_20261121_000000_000000000", 1000, 20),
+              ("acq_20261121_020000_000000000", 100, 7230), ("acq_20261121_020000_000000000", 200, 7240)]
+    for timed in (True, False):
+        paths = []
+        for index, (acq, seq, seconds) in enumerate(layout):
+            (tmp_path / str(timed) / acq).mkdir(parents=True, exist_ok=True)
+            path = write_run_file(tmp_path / str(timed) / acq / f"dtv_fine_powers.{index:08d}.h5", [521, 614], frames)
+            with h5py.File(path, "a") as handle:
+                handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = seq
+                if timed:
+                    handle["dtv_fine_powers_n0"].attrs["fpga_seq_time_nsec"] = seconds * 10**9
+            paths.append(path)
+        # an idle file records neither attribute and does not change the order
+        with h5py.File(tmp_path / str(timed) / layout[0][0] / "dtv_fine_powers.idle.h5", "w") as handle:
+            handle["dtv_fine_powers_n0"] = np.zeros((2, 2, 3, 256), dtype=np.uint64)
+        ordered = [path for _, coarse, path in ordered_run_files([str(tmp_path / str(timed) / "acq_*" / "*.h5")]) if coarse]
+        assert ordered == paths
+        times = [time_ns for time_ns, coarse, _ in ordered_run_files(paths)]
+        assert times == ([s * 10**9 for _, _, s in layout] if timed else [None] * 4)
 
 
 def test_detector_run_gives_the_bundle_of_its_captures(plans, tmp_path):

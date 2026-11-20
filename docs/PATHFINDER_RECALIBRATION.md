@@ -42,18 +42,23 @@ choco set cx dtv_write_enabled '{"enabled": true}'
 ```
 
 recv1 writes under `/mnt/cs00/data/dtv/acq_<start>/`, about 27 GB a day (1.14 GB in a calibration-mode
-hour, 2026-11-20). Record for longer than the calibration and test could need. At the end, set
-`dtv_write_enabled` back to false and ask for calibration mode to be switched off again.
+hour, 2026-11-20). Record for longer than the calibration and test could need. Interruptions are fine:
+each Kotekan restart opens a new `acq_<start>/`, and the tools order the files by the time of their first
+frame. Keep the build and the configuration the same across restarts, with calibration mode and recording
+on, and note when and why each interruption happened. A change to the gains, the inputs or the F-engines
+splits the recording for calibration. At the end, set `dtv_write_enabled` back to false and ask for
+calibration mode to be switched off again.
 
 ## 3. Find how long the calibration must be
 
 ```bash
 ~/pp-venv/bin/python tools/calibration_length.py --bundle-dir <bundle of the run> \
-    --run "/mnt/cs00/data/dtv/acq_<start>/dtv_fine_powers*.h5" --hours 3 6 12 24 48 --output-dir length
+    --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --hours 3 6 12 24 48 --output-dir length
 ```
 
-Each length calibrates on the first part and tests on the rest. Take the shortest length whose words still
-pass. Conditions change within a day, so expect at least one: on 2026-11-20 one hour gave channel 29's knee
+Each length calibrates on the first part and tests on the rest. Lengths are clock hours from the first
+capture, so a gap leaves its hours empty; the tool prints each gap. Take the shortest length whose words
+still pass, and its `calibration_share` in `length/length.json`. Conditions change within a day, so expect at least one: on 2026-11-20 one hour gave channel 29's knee
 as eta 3.90 from its first half and 2.22 from its second. `--block-hours 4` shows how each word follows the
 time of day.
 
@@ -62,7 +67,7 @@ time of day.
 ```bash
 ~/pp-venv/bin/pilot-proxy process-run --bundle-dir <bundle of the run> \
     --run "/mnt/cs00/data/dtv/acq_<start>/dtv_fine_powers*.h5" --epoch "<date> Pathfinder" \
-    --calibration-share <length / recording> --output-dir run1
+    --calibration-share <calibration_share of the chosen length> --output-dir run1
 ```
 
 kotekan#1914 is in `develop` since 2026-11-20. Add `--decision-version fine_decision_v1` only for a stage
@@ -112,4 +117,5 @@ rescored offline.
 ~/pp-venv/bin/python tools/make_pathfinder_mock_run.py mock --windows 252 --burst-blocks 100 800 --gzip
 ```
 
-writes three hours of synthetic recv files, on which steps 3 and 4 run as on real data.
+writes three hours of synthetic recv files, on which steps 3 and 4 run as on real data. Add
+`--gap 100 40 --reset-seq` to leave out half an hour with a Kotekan and F-engine restart in it.

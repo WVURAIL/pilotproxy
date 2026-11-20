@@ -17,8 +17,10 @@ is the checklist; [RUNNING_THE_DETECTOR.md](RUNNING_THE_DETECTOR.md) explains ea
   git clone https://github.com/WVURAIL/pilotproxy.git ~/pilotproxy && cd ~/pilotproxy
   ```
 
-- From the X-engine configuration's owner: `dtv_calibration_mode` on in the X-engine configs, and any DTV
-  subtraction off for the pilot frequencies. recv1 takes `dtv_calibration_mode: true` from choco's `vars.yaml`.
+- The X-engines on a Kotekan build from `develop`, with no other DTV stage: a development branch can change
+  the voltages before the detector reads them. Agree the time with the operators.
+- `dtv_calibration_mode` on in the X-engine configs. recv1 takes `dtv_calibration_mode: true` from choco's
+  `vars.yaml`.
 
 ## 1. Check the nodes
 
@@ -26,9 +28,8 @@ is the checklist; [RUNNING_THE_DETECTOR.md](RUNNING_THE_DETECTOR.md) explains ea
 ~/pp-venv/bin/python tools/pathfinder_preflight.py --nodes cx47 cx42 --recv recv1
 ```
 
-It reads each node's configuration and changes nothing. A subtraction switched off by other means still
-shows in the configuration, so confirm that check against the data: the pilot's autocorrelation rises once
-the subtraction is off.
+It reads each node's version and configuration and changes nothing. It fails on a branch other than
+`develop` (`--branches` adds others) or on a DTV subtraction.
 
 ## 2. Record several days, mask off
 

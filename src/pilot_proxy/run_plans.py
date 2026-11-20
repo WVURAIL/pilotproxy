@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -13,15 +14,34 @@ CORE_PROFILE = str(CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_refere
 CALIBRATION_SHARE = 2.0 / 3.0
 
 
-def _file_info(path: str) -> tuple[int, list[int]]:
-    """Return the first FPGA sequence number and the coarse channels of one run file."""
+@lru_cache(maxsize=None)
+def _file_info(path: str) -> tuple[int, int | None, list[int]]:
+    """Return the first FPGA sequence number, its time in ns (None if not recorded) and the coarse channels of one run file."""
     import h5py
 
     with h5py.File(path, "r") as handle:
         data = handle[next(name for name in handle if name.startswith("dtv_fine_powers"))]
+        # the attributes are dropped when every row is unused (-1)
         start = int(data.attrs.get("fpga_seq_num", 0))
-        # the attribute is dropped when every row is unused (-1)
-        return start, [int(c) for c in data.attrs.get("coarse_freq", [])]
+        time_ns = data.attrs.get("fpga_seq_time_nsec")
+        return start, None if time_ns is None else int(time_ns), [int(c) for c in data.attrs.get("coarse_freq", [])]
+
+
+def ordered_run_files(runs: list[str]) -> list[tuple[int | None, list[int], str]]:
+    """Return (first frame time in ns or None, coarse channels, path) of each run file, in recording order.
+
+    The order is by the first frame's time when every file with data records it, so a recording that an
+    F-engine restart split, which resets fpga_seq_num, keeps its order. Otherwise it is by acquisition
+    directory, whose name holds the start time of its Kotekan run, then by fpga_seq_num.
+    """
+    infos = [(*_file_info(path), path) for path in _expand(runs)]
+    if all(time_ns is not None for _, time_ns, coarse, _ in infos if coarse):
+        def key(item):
+            return (-1 if item[1] is None else item[1], item[3])
+    else:
+        def key(item):
+            return (str(Path(item[3]).parent), item[0], item[3])
+    return [(time_ns, coarse, path) for _, time_ns, coarse, path in sorted(infos, key=key)]
 
 
 def _limit_plan(path: Path | None) -> dict[str, Any]:
@@ -48,7 +68,7 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
         raise ValueError("calibration_share must lie between 0 and 1")
     bundle = json.loads((Path(bundle_dir) / "pilot_profiles.json").read_text())
     receiver = receiver_profile or CONFIGS_DIR / "receiver_profiles" / f"{bundle['receiver_profile_id']}.json"
-    files = sorted(((*_file_info(path), path) for path in _expand(runs)), key=lambda item: (item[0], item[2]))
+    files = ordered_run_files(runs)
     first: dict[str, list[str]] = {}
     last: dict[str, list[str]] = {}
     control = None

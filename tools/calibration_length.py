@@ -5,24 +5,29 @@
         --hours 3 6 12 24 48 --output-dir length
     calibration_length.py --bundle-dir bundle --run "..." --block-hours 4 --output-dir blocks
 
-With --hours, each length L calibrates on the first L hours of the recording and tests the words on the
-rest, as process-run does with the matching --calibration-share. The table gives the floor, each
-channel's word and its source, the masked fraction on the calibration part, and the failed test checks.
-The calibration length is the shortest L whose words still pass. With --block-hours, consecutive blocks
-of that length are calibrated on their own, which shows how each word follows the time of day.
+With --hours, each length L calibrates on the captures of the first L hours of the recording and tests the
+words on the rest. The table gives the floor, each channel's word and its source, the masked fraction on the
+calibration part, the failed test checks, and the share of captures to give process-run as
+--calibration-share for the same split. The calibration length is the shortest L whose words still pass.
+With --block-hours, consecutive blocks of that length are calibrated on their own, which shows how each
+word follows the time of day.
 
-Each capture is one dtv_fine_powers file of about 43 s, and a knee needs 30 of them. Writes length.json
-or blocks.json, with a plan and bundle for each case, and prints the table.
+Hours are clock hours from the first capture, read from each file's fpga_seq_time_nsec, so a recording
+with interruptions keeps its times: a gap leaves its hours without captures, and a block that falls in one
+is skipped. Files that record no time (the mock run) count one capture every 43 s. Each capture is one
+dtv_fine_powers file of about 43 s, and a knee needs 30 of them. Writes length.json or blocks.json, with a
+plan and bundle for each case, and prints the table and the gaps.
 """
 import argparse
 import contextlib
 import io
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
 from pilot_proxy.fine_decision import FINE_DECISION_VERSIONS
-from pilot_proxy.run_plans import write_run_plans
+from pilot_proxy.run_plans import ordered_run_files, write_run_plans
 
 CAPTURE_SECONDS = 1024 * 8192 * 5.12e-6     # 1024 detector blocks; the same on CHIME (16384 x 2.56 us)
 KNEE_CAPTURES = 30
@@ -38,21 +43,40 @@ def ordered_files(args, work):
     return calibrate, files, str(calibrate["control"]["channel"])
 
 
-def calibrate_on(template, files, control, index, out):
-    """Calibrate on the captures at index of every channel, and return the report."""
-    plan = dict(template, channels={ch: [paths[i] for i in index] for ch, paths in files.items()},
-                control=dict(channel=int(control), captures=[files[control][i] for i in index]))
+def capture_hours(runs, files):
+    """Return each channel's capture start times in hours from the first capture, and the first time in ns.
+
+    The first time is None for files that record no time, which are then spaced CAPTURE_SECONDS apart.
+    """
+    clock = {path: time_ns for time_ns, _, path in ordered_run_files(runs)}
+    if all(clock.get(path) is not None for paths in files.values() for path in paths):
+        first = min(clock[paths[0]] for paths in files.values())
+        return {ch: [(clock[path] - first) / 3.6e12 for path in paths] for ch, paths in files.items()}, first
+    return {ch: [i * CAPTURE_SECONDS / 3600 for i in range(len(paths))] for ch, paths in files.items()}, None
+
+
+def gaps(hours, capture=CAPTURE_SECONDS / 3600):
+    """Return (start, length) in hours of each interruption longer than two captures."""
+    return [(a + capture, b - a - capture) for a, b in zip(hours, hours[1:]) if b - a > 2 * capture]
+
+
+def select(files, hours, start, stop):
+    """Return each channel's files whose captures start in [start, stop) hours."""
+    return {ch: [path for path, h in zip(paths, hours[ch]) if start <= h < stop] for ch, paths in files.items()}
+
+
+def calibrate_on(template, chosen, control, out):
+    """Calibrate on the chosen captures of every channel, and return the report."""
+    plan = dict(template, channels=chosen, control=dict(channel=int(control), captures=chosen[control]))
     out.mkdir(parents=True, exist_ok=True)
     (out / "calibrate.json").write_text(json.dumps(plan, indent=1) + "\n")
     with contextlib.redirect_stdout(io.StringIO()):
         return calibrate_bundle(plan_path=out / "calibrate.json", output_dir=out / "bundle")
 
 
-def test_on(template, files, control, index, out):
-    """Test the bundle in out on the captures at index, and return the test record."""
-    plan = dict(capture_format=template["capture_format"],
-                channels={ch: [paths[i] for i in index] for ch, paths in files.items()},
-                control=[files[control][i] for i in index])
+def test_on(template, chosen, control, out):
+    """Test the bundle in out on the chosen captures, and return the test record."""
+    plan = dict(capture_format=template["capture_format"], channels=chosen, control=chosen[control])
     (out / "test.json").write_text(json.dumps(plan, indent=1) + "\n")
     with contextlib.redirect_stdout(io.StringIO()):
         return test_bundle(bundle_dir=out / "bundle", plan_path=out / "test.json", output_json=out / "test.record.json")
@@ -61,6 +85,10 @@ def test_on(template, files, control, index, out):
 def summary(report):
     return {ch: dict(eta=round(c["eta"], 4), source=c["word_source"], anchor=c["anchor_bin"],
                      masked=round(c["masked_fraction"], 4)) for ch, c in report["channels"].items()}
+
+
+def utc(first_ns, hours):
+    return None if first_ns is None else datetime.fromtimestamp(first_ns / 1e9 + hours * 3600, timezone.utc).isoformat(timespec="minutes")
 
 
 def main():
@@ -78,39 +106,56 @@ def main():
         raise SystemExit(f"{args.output_dir} is not empty")
 
     template, files, control = ordered_files(args, args.output_dir / "all")
+    hours, first_ns = capture_hours(args.run, files)
     n = min(len(paths) for paths in files.values())
-    print(f"{n} captures per channel, {n * CAPTURE_SECONDS / 3600:.2f} h")
+    span = max(h[-1] for h in hours.values()) + CAPTURE_SECONDS / 3600
+    print(f"{n} captures per channel ({n * CAPTURE_SECONDS / 3600:.2f} h of data) over {span:.2f} h"
+          + ("" if first_ns is None else f" from {utc(first_ns, 0)}"))
+    interruptions = gaps(hours[control])
+    for start, length in interruptions:
+        print(f"gap of {length:.2f} h from {start:.2f} h" + ("" if first_ns is None else f" ({utc(first_ns, start)})"))
     rows = []
     if args.hours:
-        for hours in sorted(args.hours):
-            k = round(hours * 3600 / CAPTURE_SECONDS)
+        for length in sorted(args.hours):
+            chosen, rest = select(files, hours, 0, length), select(files, hours, length, float("inf"))
+            k, m = min(len(v) for v in chosen.values()), min(len(v) for v in rest.values())
             # the test needs as many captures as a knee, or its masked fractions say little
-            if k < KNEE_CAPTURES or n - k < KNEE_CAPTURES:
-                print(f"{hours:g} h: {k} captures, needs {KNEE_CAPTURES} to {n - KNEE_CAPTURES}; skipped")
+            if k < KNEE_CAPTURES or m < KNEE_CAPTURES:
+                print(f"{length:g} h: {k} captures to calibrate and {m} to test, each needs {KNEE_CAPTURES}; skipped")
                 continue
-            out = args.output_dir / f"{hours:g}h"
-            report = calibrate_on(template, files, control, range(k), out)
-            record = test_on(template, files, control, range(k, n), out)
+            out = args.output_dir / f"{length:g}h"
+            report = calibrate_on(template, chosen, control, out)
+            record = test_on(template, rest, control, out)
             failed = [c["check"] + (f": {c['detail']}" if c.get("detail") else "")
                       for c in record["checks"] if not c["passed"]]
-            rows.append(dict(hours=hours, captures=k, floor_eta=round(report["floor_eta"], 4),
-                             channels=summary(report), test_passed=record["passed"], failed=failed))
+            share = round(len(chosen[control]) / len(files[control]), 4)
+            rows.append(dict(hours=length, captures=k, test_captures=m, calibration_share=share,
+                             floor_eta=round(report["floor_eta"], 4), channels=summary(report),
+                             test_passed=record["passed"], failed=failed))
             line = ", ".join(f"ch{ch} {c['eta']} ({c['source'].split(',')[0]}, {100 * c['masked']:.1f}%)"
                              for ch, c in rows[-1]["channels"].items())
-            print(f"{hours:g} h ({k} captures): floor {rows[-1]['floor_eta']}; {line}; "
+            print(f"{length:g} h ({k} captures, share {share}): floor {rows[-1]['floor_eta']}; {line}; "
                   f"test {'passed' if record['passed'] else 'FAILED: ' + '; '.join(failed)}")
         name = "length.json"
     else:
-        k = round(args.block_hours * 3600 / CAPTURE_SECONDS)
-        if k < KNEE_CAPTURES:
-            raise SystemExit(f"a block of {args.block_hours:g} h has {k} captures; a knee needs {KNEE_CAPTURES}")
-        for b, start in enumerate(range(0, n - k + 1, k)):
-            report = calibrate_on(template, files, control, range(start, start + k), args.output_dir / f"block{b}")
-            rows.append(dict(block=b, start_hours=round(start * CAPTURE_SECONDS / 3600, 3), captures=k,
-                             floor_eta=round(report["floor_eta"], 4), channels=summary(report)))
+        size = args.block_hours
+        if round(size * 3600 / CAPTURE_SECONDS) < KNEE_CAPTURES:
+            raise SystemExit(f"a block of {size:g} h has fewer than {KNEE_CAPTURES} captures, which a knee needs")
+        for b in range(int(span // size + 1e-9)):
+            start = b * size
+            chosen = select(files, hours, start, start + size)
+            k = min(len(v) for v in chosen.values())
+            row = dict(block=b, start_hours=round(start, 3), start_utc=utc(first_ns, start), captures=k)
+            if k < KNEE_CAPTURES:
+                rows.append(dict(row, skipped=f"{k} captures, a knee needs {KNEE_CAPTURES}"))
+                print(f"block {b} from {start:g} h: {k} captures; skipped")
+                continue
+            report = calibrate_on(template, chosen, control, args.output_dir / f"block{b}")
+            rows.append(dict(row, floor_eta=round(report["floor_eta"], 4), channels=summary(report)))
             line = ", ".join(f"ch{ch} {c['eta']} ({c['source'].split(',')[0]}, {100 * c['masked']:.1f}%)"
                              for ch, c in rows[-1]["channels"].items())
-            print(f"block {b} from {rows[-1]['start_hours']} h: floor {rows[-1]['floor_eta']}; {line}")
+            print(f"block {b} from {start:g} h" + ("" if first_ns is None else f" ({row['start_utc']})")
+                  + f": floor {rows[-1]['floor_eta']}; {line}")
         name = "blocks.json"
     (args.output_dir / name).write_text(json.dumps(rows, indent=1) + "\n")
 

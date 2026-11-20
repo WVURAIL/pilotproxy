@@ -793,7 +793,7 @@ pilot-proxy plan-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fin
 pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
   --epoch "2026-11 Pathfinder commissioning" --calibration-share 0.5 --output-dir run1
 \end{lstlisting}
-\code{plan-run} sorts the files of each bound channel by \code{fpga_seq_num} and gives the first \code{--calibration-share} of them (default 2/3) to calibration and the rest to the test. It needs at least two files per channel. The bundle of the run must have a control channel, because the run then gives the floor. \code{process-run} needs a new or empty output directory and writes:
+\code{plan-run} sorts the files of each bound channel by the time of their first frame (\code{fpga_seq_time_nsec}), so a recording split by restarts keeps its order, and gives the first \code{--calibration-share} of them (default 2/3) to calibration and the rest to the test. It needs at least two files per channel. The bundle of the run must have a control channel, because the run then gives the floor. \code{process-run} needs a new or empty output directory and writes:
 \begin{itemize}
   \item \code{plans/calibrate.json} and \code{plans/test.json};
   \item \code{bundle/}, \code{bundle.report.json}, and \code{bundle.decisions.json} for a power-limit run;

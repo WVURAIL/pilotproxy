@@ -65,7 +65,8 @@ time of day.
     --calibration-share <length / recording> --output-dir run1
 ```
 
-Add `--decision-version fine_decision_v1` while the stage on the nodes lacks kotekan#1914. Read
+kotekan#1914 is in `develop` since 2026-11-20. Add `--decision-version fine_decision_v1` only for a stage
+built without it. Read
 `run1/summary.md` and the spectrograms, then qualify the bundle with the test report `run1/test.json`
 (Step 3 of the run guide).
 
@@ -76,23 +77,27 @@ For commissioning and debugging, the X-engines can read the bundle from the site
 through a pull request under `config/chord/dtv_bundles/<purpose>-<first 8 hex of sha256(sha256sums.txt)>`.
 With kotekan#1906, the stage refuses to switch the mask on with a bundle that has not been qualified.
 
-## 6. Characterize with the mask on and off
+## 6. Characterize with the mask on
 
 With calibration mode on and `dtv_mask_control: true` (kotekan#1915, so the control is masked like a
-pilot), alternate the mask from the choco host, in tmux. One day of 10-minute blocks:
+pilot), switch the mask on from the choco host and keep it on for at least a day:
 
 ```bash
-BLOCK=600 BLOCKS=144 bash tools/pathfinder_mask_schedule.sh 2>&1 | tee -a mask_schedule.log
+choco set cx dtv_mask_enabled '{"enabled": true, "valid_at_time_ns": 0}'
+choco set cx dtv_write_enabled '{"enabled": true}'
 ```
 
-Afterwards:
+The detector decides on every frame whatever the switch, so the spectra of all frames and of kept frames
+come from the same frames. Afterwards, `tools/check_pathfinder_dtv_run.py --dtv-dir <acq> --bundle-dir
+<bundle> --output-dir check` gives those spectrograms with the integrated spectrum, and the masked percent
+by UTC hour. At the end, set `dtv_write_enabled` back to false and ask for calibration mode to be switched
+off again.
 
-- `tools/check_pathfinder_dtv_run.py --dtv-dir <acq> --bundle-dir <bundle> --output-dir check`: spectrograms
-  of all frames and kept frames with the integrated spectrum, and the masked percent by UTC hour;
-- `tools/compare_pathfinder_dtv_mask.py --dtv-dir <acq> --vis-dir <visibility acq> --output-dir compare`: the
-  visibilities with and without the mask, with the control as the null.
-
-A visibility file still being written sits in the acquisition's `.partial/`; once its recv has stopped it is
+Visibilities with and without the mask wait for a second correlation of the pilot frequencies without the
+DTV mask, so that both come from the same frames. Switching the mask in blocks
+(`tools/pathfinder_mask_schedule.sh`) gives the two from different blocks, so use it only to check the mask
+path; `tools/compare_pathfinder_dtv_mask.py --dtv-dir <acq> --vis-dir <visibility acq>` reads such a run. A
+visibility file still being written sits in the acquisition's `.partial/`; once its recv has stopped it is
 readable there.
 
 ## Not possible yet

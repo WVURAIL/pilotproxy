@@ -7,6 +7,9 @@ Every node is checked before any POST, so a bad host changes nothing. The mask s
 at the first frame at or after now + --lead seconds, read from this machine's clock, so the
 clock must be synchronised. Recording switches at the next whole frame. The script then
 reads /config back from each node. Standard library only.
+
+On the live site, choco keeps these switches and pushes them back to the nodes, so switch them with
+`choco set` from the choco host (pathfinder_mask_schedule.sh); this script is for nodes choco does not manage.
 """
 import argparse
 import json

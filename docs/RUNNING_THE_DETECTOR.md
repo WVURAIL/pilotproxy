@@ -218,12 +218,12 @@ The recv node writes the products under `/mnt/cs00/data/dtv/acq_<start time>/`, 
 After a run, one command does every step below and writes a summary of each channel to `summary.md`: the anchor, the word and its source, the pilot share, the masked percent on each part under the new bundle, the longest masked stretch, and the test result. It also writes the plans, the bundle and its report, the test record, and the spectrograms of each part:
 
 ```bash
-pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "2026-11 Pathfinder 48 h" --calibration-share 0.5 --output-dir run1
+pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "Pathfinder commissioning" --calibration-share 0.25 --output-dir run1
 ```
 
 New bundles are written for fine decision v2. A Kotekan stage that runs only v1 refuses them, so until kotekan#1914 is on the nodes, add `--decision-version fine_decision_v1` to `process-run` or `plan-run`.
 
-The steps can also be run one at a time. `plan-run` splits the files in time, with the first two thirds for calibration and the rest for the test. On a 48 h run, `--calibration-share 0.5` calibrates on the first day and tests on the second, so each covers a whole day:
+The steps can also be run one at a time. `plan-run` splits the files in time, with the first two thirds for calibration and the rest for the test. `--calibration-share` moves the split. On a recording of several days, a share that ends the calibration on a whole day keeps a full day in each part, as 0.25 does on four days:
 
 ```bash
 pilot-proxy plan-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "2026-11 Pathfinder shakedown" --calibration-share 0.5 --output-dir run1/plans
@@ -239,7 +239,7 @@ pilot-proxy test-bundle --bundle-dir run1/bundle --plan run1/plans/test.json --o
 
 Calibration holds the fine powers of one channel at a time, about 13 GB for a day. On a 90 min synthetic run of four channels, calibration took 18 s, the test 10 s and the spectrograms 15 s, and the time grows in proportion to the run.
 
-These runs set the deployed words on every telescope; the archive values characterize the method and are not deployed. A 48 h run calibrates on the first day and tests on the second, and a short run with the new bundle then confirms the masks on the nodes. The bundle is qualified as in Step 3 before the mask is switched on.
+These runs set the deployed words on every telescope; the archive values characterize the method and are not deployed. A detect-only recording of several days calibrates on its first part and tests on the days after. The recording also sets how long the calibration must be. Run `process-run` with `--calibration-share` at increasing first parts, and take the shortest whose words still pass on the rest. The first part is at least a day, since conditions change within one: on the Pathfinder, one hour gave a channel-29 knee of eta 3.90 from its first half and 2.22 from its second. A run of at least a day with the new bundle then switches the mask on and off and confirms the masks on the nodes. The bundle is qualified as in Step 3 before the mask is switched on.
 
 The bundle of the run must bind the control, or `plan-run` stops, because the run then gives no floor. A pilot that fades during the run can fail the masked fraction check on the last third, so a failure on a weak channel is read against its spectrogram before the word is changed.
 

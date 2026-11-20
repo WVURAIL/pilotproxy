@@ -53,15 +53,25 @@ calibration mode to be switched off again.
 ## 3. Find how long the calibration must be
 
 ```bash
+V=/mnt/cs00/data/kotekan_vis_files/subset
+~/pp-venv/bin/python tools/pathfinder_input_counts.py --vis "$V/acq_<run>*/vis_*.h5" "$V/acq_<run>*/.partial/vis_*.h5" \
+    --output inputs.npz
 ~/pp-venv/bin/python tools/calibration_length.py --bundle-dir <bundle of the run> \
-    --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --hours 3 6 12 24 48 --output-dir length
+    --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --hours 3 6 12 24 48 --input-counts inputs.npz \
+    --output-dir length
 ```
+
+The bad-input mask changes as the operators' script flags feeds: on 2026-11-20 it moved between 111 and
+113 good inputs of 128 about every 14 minutes. `pathfinder_input_counts.py` reads it from the visibility
+files of the run's acquisitions and prints each change. The detector sums only the good inputs, so
+`--input-counts` adds each channel's good inputs to every row.
 
 Each length calibrates on the first part and tests on the rest. Lengths are clock hours from the first
 capture, so a gap leaves its hours empty; the tool prints each gap. Take the shortest length whose words
-still pass, and its `calibration_share` in `length/length.json`. Conditions change within a day, so expect at least one: on 2026-11-20 one hour gave channel 29's knee
-as eta 3.90 from its first half and 2.22 from its second. `--block-hours 4` shows how each word follows the
-time of day.
+still pass, and its `calibration_share` in `length/length.json`. Conditions change within a day, so expect
+at least one: on 2026-11-20 one hour gave channel 29's knee as eta 3.90 from its first half and 2.22 from
+its second. `--block-hours 4` shows how each word follows the time of day, and with `--input-counts` how
+it follows the good inputs.
 
 ## 4. Calibrate, test and qualify
 

@@ -18,5 +18,6 @@ Run each command with --help. Store new outputs separately from existing data.
   pathfinder_preflight.py (read-only check of the nodes before a calibration-mode run),
   pathfinder_mask_schedule.sh (the mask switched in blocks through choco),
   calibration_length.py (how long a calibration must be, from one long recording),
+  pathfinder_input_counts.py (good inputs the detector summed, from the visibility files' bad feed mask),
   make_pathfinder_mock_run.py (synthetic recv files for rehearsals).
   The checklist is docs/PATHFINDER_RECALIBRATION.md.

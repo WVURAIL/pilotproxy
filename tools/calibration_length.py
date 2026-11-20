@@ -17,6 +17,9 @@ with interruptions keeps its times: a gap leaves its hours without captures, and
 is skipped. Files that record no time (the mock run) count one capture every 43 s. Each capture is one
 dtv_fine_powers file of about 43 s, and a knee needs 30 of them. Writes length.json or blocks.json, with a
 plan and bundle for each case, and prints the table and the gaps.
+
+With --input-counts (from pathfinder_input_counts.py), each row also gives each channel's good inputs over
+its captures (min, median and max), and the blocks end with how each channel's word follows that count.
 """
 import argparse
 import contextlib
@@ -25,8 +28,11 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
+import numpy as np
+
+from pilot_proxy.bundle_calibration import _rows, calibrate_bundle, test_bundle
 from pilot_proxy.fine_decision import FINE_DECISION_VERSIONS
+from pilot_proxy.input_counts import load_good_inputs, span_counts
 from pilot_proxy.run_plans import ordered_run_files, write_run_plans
 
 CAPTURE_SECONDS = 1024 * 8192 * 5.12e-6     # 1024 detector blocks; the same on CHIME (16384 x 2.56 us)
@@ -65,6 +71,48 @@ def select(files, hours, start, stop):
     return {ch: [path for path, h in zip(paths, hours[ch]) if start <= h < stop] for ch, paths in files.items()}
 
 
+def input_ranges(hours, first_ns, counts, freq_of, start, stop):
+    """Return each channel's (min, median, max) good inputs over its captures in [start, stop) hours."""
+    out = {}
+    for ch, values in hours.items():
+        if freq_of.get(ch) not in counts:
+            continue
+        times, good = counts[freq_of[ch]]
+        spans = [span_counts(times, good, int(first_ns + h * 3.6e12), int(first_ns + h * 3.6e12 + CAPTURE_SECONDS * 1e9))
+                 for h in values if start <= h < stop]
+        spans = [s for s in spans if s]
+        if spans:
+            out[ch] = [min(s[0] for s in spans), int(np.median([s[1] for s in spans])), max(s[2] for s in spans)]
+    return out
+
+
+def with_inputs(channels, inputs):
+    """Add each channel's good-input range to its summary."""
+    return {ch: dict(c, inputs=inputs[ch]) if ch in inputs else c for ch, c in channels.items()}
+
+
+def describe(channels):
+    return ", ".join(f"ch{ch} {c['eta']} ({c['source'].split(',')[0]}, {100 * c['masked']:.1f}%"
+                     + (f", {c['inputs'][0]}-{c['inputs'][2]} inputs" if "inputs" in c else "") + ")"
+                     for ch, c in channels.items())
+
+
+def follow(rows):
+    """Print how each channel's word follows its median good inputs over the blocks."""
+    for ch in sorted({ch for r in rows for ch in r.get("channels", {})}, key=int):
+        pairs = [(r["channels"][ch]["inputs"][1], r["channels"][ch]["eta"]) for r in rows
+                 if ch in r.get("channels", {}) and "inputs" in r["channels"][ch]]
+        if len(pairs) < 3:
+            continue
+        inputs, eta = np.array(pairs, dtype=float).T
+        if np.ptp(inputs) == 0 or np.ptp(eta) == 0:
+            print(f"ch{ch}: inputs {int(inputs.min())}-{int(inputs.max())}, eta {eta.min():g}-{eta.max():g}; one of them constant")
+            continue
+        r = float(np.corrcoef(inputs, eta)[0, 1])
+        print(f"ch{ch}: inputs {int(inputs.min())}-{int(inputs.max())}, eta {eta.min():g}-{eta.max():g}, "
+              f"correlation {r:+.2f} over {len(pairs)} blocks")
+
+
 def calibrate_on(template, chosen, control, out):
     """Calibrate on the chosen captures of every channel, and return the report."""
     plan = dict(template, channels=chosen, control=dict(channel=int(control), captures=chosen[control]))
@@ -100,6 +148,7 @@ def main():
     mode.add_argument("--block-hours", type=float, help="Calibrate consecutive blocks of this length on their own.")
     parser.add_argument("--decision-version", choices=FINE_DECISION_VERSIONS, default=None)
     parser.add_argument("--epoch", default="calibration length study")
+    parser.add_argument("--input-counts", type=Path, help="Good-input counts from pathfinder_input_counts.py.")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     if args.output_dir.exists() and any(args.output_dir.iterdir()):
@@ -107,6 +156,13 @@ def main():
 
     template, files, control = ordered_files(args, args.output_dir / "all")
     hours, first_ns = capture_hours(args.run, files)
+    counts, freq_of = {}, {}
+    if args.input_counts:
+        if first_ns is None:
+            raise SystemExit("the run files record no times, so they cannot be matched to the input counts")
+        counts = load_good_inputs(args.input_counts)
+        bundle = json.loads((args.bundle_dir / "pilot_profiles.json").read_text())
+        freq_of = {str(ch): int(row["receiver_channel_id"]) for ch, row in _rows(bundle).items()}
     n = min(len(paths) for paths in files.values())
     span = max(h[-1] for h in hours.values()) + CAPTURE_SECONDS / 3600
     print(f"{n} captures per channel ({n * CAPTURE_SECONDS / 3600:.2f} h of data) over {span:.2f} h"
@@ -129,11 +185,11 @@ def main():
             failed = [c["check"] + (f": {c['detail']}" if c.get("detail") else "")
                       for c in record["checks"] if not c["passed"]]
             share = round(len(chosen[control]) / len(files[control]), 4)
+            inputs = input_ranges(hours, first_ns, counts, freq_of, 0, length)
             rows.append(dict(hours=length, captures=k, test_captures=m, calibration_share=share,
-                             floor_eta=round(report["floor_eta"], 4), channels=summary(report),
+                             floor_eta=round(report["floor_eta"], 4), channels=with_inputs(summary(report), inputs),
                              test_passed=record["passed"], failed=failed))
-            line = ", ".join(f"ch{ch} {c['eta']} ({c['source'].split(',')[0]}, {100 * c['masked']:.1f}%)"
-                             for ch, c in rows[-1]["channels"].items())
+            line = describe(rows[-1]["channels"])
             print(f"{length:g} h ({k} captures, share {share}): floor {rows[-1]['floor_eta']}; {line}; "
                   f"test {'passed' if record['passed'] else 'FAILED: ' + '; '.join(failed)}")
         name = "length.json"
@@ -151,11 +207,13 @@ def main():
                 print(f"block {b} from {start:g} h: {k} captures; skipped")
                 continue
             report = calibrate_on(template, chosen, control, args.output_dir / f"block{b}")
-            rows.append(dict(row, floor_eta=round(report["floor_eta"], 4), channels=summary(report)))
-            line = ", ".join(f"ch{ch} {c['eta']} ({c['source'].split(',')[0]}, {100 * c['masked']:.1f}%)"
-                             for ch, c in rows[-1]["channels"].items())
+            inputs = input_ranges(hours, first_ns, counts, freq_of, start, start + size)
+            rows.append(dict(row, floor_eta=round(report["floor_eta"], 4),
+                             channels=with_inputs(summary(report), inputs)))
             print(f"block {b} from {start:g} h" + ("" if first_ns is None else f" ({row['start_utc']})")
-                  + f": floor {rows[-1]['floor_eta']}; {line}")
+                  + f": floor {rows[-1]['floor_eta']}; {describe(rows[-1]['channels'])}")
+        if counts:
+            follow(rows)
         name = "blocks.json"
     (args.output_dir / name).write_text(json.dumps(rows, indent=1) + "\n")
 

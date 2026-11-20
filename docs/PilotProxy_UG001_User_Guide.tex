@@ -314,7 +314,7 @@ pilot-proxy validate-runtime-weight-bundle --bundle-dir "$B"
 \begin{lstlisting}[style=shell]
 pilot-proxy process-run --bundle-dir "$B" \
   --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
-  --epoch "2026-11 Pathfinder 48 h" --calibration-share 0.5 \
+  --epoch "2026-11 Pathfinder commissioning" --calibration-share 0.5 \
   --output-dir run1
 \end{lstlisting}
   \item Read \code{run1/summary.md} and the spectrograms under \code{run1/spectrograms/}. If the new bundle in \code{run1/bundle/} is to be deployed, add it to Kotekan by a pull request (Section~\ref{sec:deploy}).
@@ -619,7 +619,7 @@ python3 tools/extract_baseband_channels.py --input baseband_subset.00000000.h5 \
   --output day1.h5 --coarse-freq 2531 2715 2869 3115 --blocks 20
 \end{lstlisting}
 
-A knee needs at least 30 captures of a channel (\code{min_knee_captures}), and a floor at the 0.99 quantile needs enough control frames: calibration stops when the independent null scores times \(1-\)\code{null_quantile} is below 1. Calibration and test data are taken at different times. A run of 48 h, split by day, gives each part a whole day. Every deployed word comes from such a run on the telescope where it is used. The archive values characterize the method and are not deployed.
+A knee needs at least 30 captures of a channel (\code{min_knee_captures}), and a floor at the 0.99 quantile needs enough control frames: calibration stops when the independent null scores times \(1-\)\code{null_quantile} is below 1. Calibration and test data are taken at different times. A detect-only recording of several days calibrates on its first part and tests on the days after. \code{tools/calibration_length.py} finds the shortest first part whose words still pass on the rest, and it is at least a day, since conditions change within one. Every deployed word comes from such a recording on the telescope where it is used. The archive values characterize the method and are not deployed.
 
 A telescope with no data starts from its parameters. A plan with empty capture lists, \code{"control": null} and \code{"num_inputs"} gives a first bundle at the simulated white-noise floor for that number of inputs. This bundle is enough to record the data for the next one. \code{chime-first-56005bb7} was made this way with 2048 inputs.
 
@@ -791,7 +791,7 @@ For a detect-only run with fine powers, \code{plan-run} writes the plans, and \c
 pilot-proxy plan-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
   --epoch "2026-11 Pathfinder shakedown" --calibration-share 0.5 --output-dir run1/plans
 pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
-  --epoch "2026-11 Pathfinder 48 h" --calibration-share 0.5 --output-dir run1
+  --epoch "2026-11 Pathfinder commissioning" --calibration-share 0.5 --output-dir run1
 \end{lstlisting}
 \code{plan-run} sorts the files of each bound channel by \code{fpga_seq_num} and gives the first \code{--calibration-share} of them (default 2/3) to calibration and the rest to the test. It needs at least two files per channel. The bundle of the run must have a control channel, because the run then gives the floor. \code{process-run} needs a new or empty output directory and writes:
 \begin{itemize}
@@ -915,7 +915,7 @@ With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>} (
 
 In detect-only mode the detector records its decisions and the visibilities do not change. On the Pathfinder this is \code{/dtv_mask_enabled} off. On CHIME it is the only mode. With the mask on, \code{DtvRfiMask} clears every sample of a block at a frequency that the detector rejected, that has fine support \((0,n)\), or that is in the permanent-mask list. The visibilities and the valid-sample counts change together.
 
-With Kotekan pull request \#1906, which is open, \code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. The control and \code{pending_campaign} channels never reach a mask and need no record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before \code{dtv_apply_mask: true} is set.
+Since Kotekan pull request \#1906, merged into \code{develop} through \#1914 on 20 November 2026, \code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. The control and \code{pending_campaign} channels never reach a mask and need no record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before \code{dtv_apply_mask: true} is set.
 
 \subsection{Bad Feeds}
 

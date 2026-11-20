@@ -646,7 +646,7 @@ probability near 1 but discards 48.5\% of verified-quiet time by construction.
 Products record their rule in \code{mask_rule}.}
 
 \subsection{The fine designated-set CFAR is the deployed decision}
-\choice{The deployed decision is fine decision v1 (Section~\ref{ssec:fine_decision}).}
+\choice{The deployed decision is the fine decision (Section~\ref{ssec:fine_decision}). The bundles shipped in Kotekan run v1. New calibrations write v2, which Kotekan \code{develop} runs since kotekan\#1914.}
 {The receiver operating characteristic was measured on the archive. The
 coarse null bulk and the weak-signal bulk overlap almost completely, so each
 coarse operating point either discards about half the clean time or misses
@@ -1173,25 +1173,20 @@ telescope calibration, a passing \code{test-bundle} report with the control,
 \subsection{Open work and known limitations}
 
 \begin{itemize}
-  \item \textbf{Vendored core.} Kotekan vendors PilotProxy commit
-        \code{afe1c9d}, which predates the name
-        \code{post_nyquist_zone_normalization} and so cannot validate the
-        shipped bundles. A re-vendor at \code{54ae410}, whose \code{cuda/}
-        differs only in comments, is kotekan\#1905, which is open. Re-vendor
-        again at each change to
-        the core, after the change is merged in PilotProxy.
+  \item \textbf{Vendored core.} Kotekan \code{develop} vendors PilotProxy
+        commit \code{d34ae7d} (kotekan\#1914, merged 2026-11-20, which also
+        carried the re-vendor of kotekan\#1905). Re-vendor again at each change
+        to the core, after the change is merged in PilotProxy.
   \item \textbf{CHIME has no voltage capture path} of its own on the upgrade,
         so first captures come from the CHIME/FRB baseband system.
   \item \textbf{First CHIME calibration.} Record a detect-only run with the
         control, calibrate, test on another day, and replace the simulated
         floor.
-  \item \textbf{Pathfinder thresholds.} A 48\,h run with the control
-        calibrates on the first day and tests on the second. A passing bundle
-        is then read and qualified with \code{qualify-bundle}.
-  \item \textbf{Kotekan qualification check.} The \code{DtvRfiMask}
-        refusal and the summed-input warning are in kotekan\#1906, which is
-        open. Until it is merged, Kotekan masks with any bundle when the mask
-        is on.
+  \item \textbf{Pathfinder thresholds.} A detect-only recording of several
+        days with the control calibrates on its first part and tests on the
+        days after, and sets how long the calibration must be. A passing bundle
+        is then read and qualified with \code{qualify-bundle}, and a run of at
+        least a day with the mask on throughout characterizes it.
   \item \textbf{Independent test of the 65-bin search} on a reserved campaign.
   \item \textbf{Response measurement.} The power-limit word uses an assumed
         normalization from the kept shelf power to the forecast covariance.
@@ -1222,8 +1217,10 @@ kotekan\#1862, \#1877 & Merged. Detect-only bundles; Pathfinder bundle with a co
 kotekan\#1874 & Merged. Fine powers and the control channel.\\ \hline
 kotekan\#1878, \#1895 & Merged. Pathfinder products on the recv node; installed bundle path.\\ \hline
 kotekan\#1880 & Merged. CHIME fine powers, bad feeds, calibration mode and the first CHIME bundle.\\ \hline
-kotekan\#1905 & Open. Re-vendor of the core at \code{54ae410}.\\ \hline
-kotekan\#1906 & Open. Masking refused with a detect-only bundle; summed-input warning.\\ \hline
+kotekan\#1894, \#1896 & Merged. Only the mask sent outside calibration mode; per-run acquisition directory.\\ \hline
+kotekan\#1905, \#1906 & Merged through \#1914. Re-vendor of the core at \code{54ae410}; masking refused with a detect-only bundle; summed-input warning.\\ \hline
+kotekan\#1914 & Merged 2026-11-20. Fine decision v2 where the bundle names it; core vendored at \code{d34ae7d}.\\ \hline
+kotekan\#1915 & Merged 2026-11-20. \code{dtv_mask_control}: the control channel masked like a pilot.\\ \hline
 \end{longtable}
 
 \subsection{Dissertation}

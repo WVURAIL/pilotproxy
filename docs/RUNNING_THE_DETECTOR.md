@@ -223,7 +223,7 @@ After a run, one command does every step below and writes a summary of each chan
 pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "Pathfinder commissioning" --calibration-share 0.25 --output-dir run1
 ```
 
-New bundles are written for fine decision v2. A Kotekan stage that runs only v1 refuses them, so until kotekan#1914 is on the nodes, add `--decision-version fine_decision_v1` to `process-run` or `plan-run`.
+New bundles are written for fine decision v2. A Kotekan stage that runs only v1 refuses them, so on nodes whose build lacks kotekan#1914 (in `develop` since 2026-11-20), add `--decision-version fine_decision_v1` to `process-run` or `plan-run`.
 
 The steps can also be run one at a time. `plan-run` splits the files in time, with the first two thirds for calibration and the rest for the test. `--calibration-share` moves the split. On a recording of several days, a share that ends the calibration on a whole day keeps a full day in each part, as 0.25 does on four days:
 

@@ -17,8 +17,9 @@ is the checklist; [RUNNING_THE_DETECTOR.md](RUNNING_THE_DETECTOR.md) explains ea
   git clone https://github.com/WVURAIL/pilotproxy.git ~/pilotproxy && cd ~/pilotproxy
   ```
 
-- The X-engines on a Kotekan build from `develop`, with no other DTV stage: a development branch can change
-  the voltages before the detector reads them. Agree the time with the operators.
+- The X-engines on a Kotekan build from `chord` (develop plus the CHORD changes) or `develop`, with no other
+  DTV stage: a development branch can change the voltages before the detector reads them. Agree the time
+  with the operators, and ask them to keep the digital gains fixed for the recording.
 - `dtv_calibration_mode` on in the X-engine configs. recv1 takes `dtv_calibration_mode: true` from choco's
   `vars.yaml`.
 
@@ -29,7 +30,7 @@ is the checklist; [RUNNING_THE_DETECTOR.md](RUNNING_THE_DETECTOR.md) explains ea
 ```
 
 It reads each node's version and configuration and changes nothing. It fails on a branch other than
-`develop` (`--branches` adds others) or on a DTV subtraction.
+`chord` or `develop` (`--branches` sets the list) or on a DTV subtraction.
 
 ## 2. Record several days, mask off
 

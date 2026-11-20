@@ -4,7 +4,8 @@
     pathfinder_preflight.py --nodes cx47 cx42 --recv recv1
 
 Run it on a host that reaches the nodes' REST port (cx50). On each X-engine it checks that Kotekan was
-built from an allowed branch (develop by default, which has no DTV subtraction or GNSS correlator), that
+built from an allowed branch (develop or chord by default: chord is develop plus the CHORD changes, and
+neither has a DTV subtraction or GNSS correlator), that
 no cudaDtvSubtract runs, that the detector writes fine powers and that the node sends the mask, powers,
 fine support and fine powers (dtv_calibration_mode); it prints the mask and recording switches. On recv
 it checks that the same four products are received and written. Exit status 0 when every check passes.
@@ -32,7 +33,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--nodes", nargs="+", default=["cx47", "cx42"], help="X-engine nodes holding the pilots.")
     parser.add_argument("--recv", default="recv1")
-    parser.add_argument("--branches", nargs="+", default=["develop"],
+    parser.add_argument("--branches", nargs="+", default=["develop", "chord"],
                         help="Kotekan branches allowed on the X-engines.")
     parser.add_argument("--port", type=int, default=12048)
     args = parser.parse_args()

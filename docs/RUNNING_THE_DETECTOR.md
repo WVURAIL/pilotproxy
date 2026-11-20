@@ -185,6 +185,8 @@ With `CMAKE_INSTALL_PREFIX=/usr`, the configs go to `/etc/kotekan/` instead, and
 
 ### CHORD Pathfinder
 
+[PATHFINDER_RECALIBRATION.md](PATHFINDER_RECALIBRATION.md) is the checklist for the steps below, with the commands.
+
 The detector always runs in `config/chord/pathfinder.j2`. With kotekan#1895, its bundle defaults to the installed `pathfinder-commissioning-e2e90219`. A new bundle is named in that default by a Kotekan pull request, or set for one run. These variables are set when `pathfinder.j2` and `config/chord/recv.j2` are rendered:
 
 ```yaml

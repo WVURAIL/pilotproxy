@@ -10,6 +10,7 @@ every half that carries a coarse channel, with the windows in recording order an
 fpga_seq_time_nsec kept, and reads every window back against its source. The PilotProxy run tools and
 check_pathfinder_dtv_run.py read the combined files as they read the per-window ones, a window being
 "<file>#<index>". The per-window files are not changed; delete them only once the combined ones are checked.
+Files of several frames with per-frame metadata (kotekan#1925) need no combining and are left out.
 An acquisition with a file changed in the last --settle-minutes (10) is taken as still being written and skipped,
 so the run's current acquisition is left for later. Writes combine.json beside each one.
 """

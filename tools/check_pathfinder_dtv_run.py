@@ -31,7 +31,7 @@ PILOTS = {2531: 18, 2715: 24, 2869: 29, 3115: 37}
 
 
 def product_files(dtv_dir, product):
-    """The per-window and combined files of one product under dtv_dir."""
+    """The recv files (one frame or several) and combined files of one product under dtv_dir."""
     return sorted(glob.glob(os.path.join(dtv_dir, "**", f"dtv_{product}.*.h5"), recursive=True))
 
 

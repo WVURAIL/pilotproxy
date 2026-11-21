@@ -5,6 +5,8 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Kernel core 4.1.1 allocates the completion counter of `PilotProxy_Compute_FineStatV3_U64` in
+  `PilotProxy_Create`, so that no compute entry allocates device memory.
 - Fine decision v3 is added beside v1 and v2, as kernel core 4.1.0. The kernel writes the
   statistic `[n_peak, d_rho]` per frame in place of a mask: `n_peak` is the largest
   `2 S_t[b]` of the search and `d_rho` the median reference power `S_lo + S_up` of the 128 even

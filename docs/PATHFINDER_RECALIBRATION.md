@@ -50,6 +50,20 @@ on, and note when and why each interruption happened. A change to the gains, the
 splits the recording for calibration. At the end, set `dtv_write_enabled` back to false and ask for
 calibration mode to be switched off again.
 
+recv writes one file per half, product and 43 s window, about 56 000 a day, and each takes about 25 ms to
+open over NFS. Combine each closed acquisition into one file per half and product:
+
+```bash
+~/pp-venv/bin/python tools/combine_pathfinder_dtv_run.py --acq "/mnt/cs00/data/dtv/acq_*" --out <combined dir>
+```
+
+Every window is read back against its source, and `<combined dir>/acq_<start>/combine.json` lists the files
+and their checksums. An acquisition with a file changed in the last 10 minutes is skipped as still open, and
+one already combined is skipped. On 2026-11-21 a 2.9 h acquisition went from 6712 files to 27 in 167 s. The
+tools below take `"<combined dir>/acq_*/dtv_fine_powers*.h5"` in place of the recv paths, with the same
+result; read cold, its calibration took 37 s against 45 s from the recv files. Delete the recv files only
+once every acquisition is combined and verified.
+
 ## 3. Find how long the calibration must be
 
 ```bash

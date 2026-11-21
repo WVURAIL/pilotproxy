@@ -10,7 +10,8 @@ every half that carries a coarse channel, with the windows in recording order an
 fpga_seq_time_nsec kept, and reads every window back against its source. The PilotProxy run tools and
 check_pathfinder_dtv_run.py read the combined files as they read the per-window ones, a window being
 "<file>#<index>". The per-window files are not changed; delete them only once the combined ones are checked.
-An acquisition still being written should be combined after it closes. Writes combine.json beside each one.
+An acquisition with a file changed in the last --settle-minutes (10) is taken as still being written and skipped,
+so the run's current acquisition is left for later. Writes combine.json beside each one.
 """
 import argparse
 import glob
@@ -29,6 +30,8 @@ def main():
     parser.add_argument("--out", type=Path, required=True, help="Directory for the combined acquisitions.")
     parser.add_argument("--products", nargs="+", default=PRODUCTS, choices=PRODUCTS)
     parser.add_argument("--no-verify", action="store_true", help="Skip reading the windows back.")
+    parser.add_argument("--settle-minutes", type=float, default=10.0,
+                        help="Skip an acquisition with a file changed this recently, as still being written.")
     args = parser.parse_args()
     dirs = sorted({Path(p) for pattern in args.acq for p in glob.glob(pattern)} | {Path(p) for p in args.acq
                    if not glob.has_magic(p)})
@@ -36,6 +39,11 @@ def main():
         out = args.out / acq.name
         if (out / "combine.json").exists():
             print(f"{acq.name}: already combined; skipped", flush=True)
+            continue
+        newest = max((p.stat().st_mtime for p in acq.glob("dtv_*.h5")), default=0.0)
+        if time.time() - newest < 60 * args.settle_minutes:
+            print(f"{acq.name}: a file changed in the last {args.settle_minutes:g} min, so still being written; skipped",
+                  flush=True)
             continue
         start, summary = time.monotonic(), []
         for product in args.products:

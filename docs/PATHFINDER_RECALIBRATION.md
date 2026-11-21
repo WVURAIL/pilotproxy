@@ -64,6 +64,10 @@ tools below take `"<combined dir>/acq_*/dtv_fine_powers*.h5"` in place of the re
 result; read cold, its calibration took 37 s against 45 s from the recv files. Delete the recv files only
 once every acquisition is combined and verified.
 
+With kotekan#1925 (`record_per_frame_metadata`), recv writes the frames of every half to files of several
+frames, with each frame's metadata in `frame_metadata`. The tools read those files as they are, and the
+combine tool leaves them out.
+
 ## 3. Find how long the calibration must be
 
 ```bash

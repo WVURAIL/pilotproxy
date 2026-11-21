@@ -93,6 +93,7 @@ def run(tmp_path):
 
 
 def test_compare_tool_decides_v3_channels_from_the_statistic(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
     tool = _tool("compare_pathfinder_dtv_mask")
     masks = tool.read_masks(str(run["dtv"]), v3_words(run["bundle"]))
     assert masks[V3][1].tolist() == [1] * 6 + [-1] + [0] * (BLOCKS - 7)
@@ -102,6 +103,7 @@ def test_compare_tool_decides_v3_channels_from_the_statistic(run):
 
 
 def test_check_tool_reports_v3_decisions(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
     out = run["tmp"] / "check"
     subprocess.run([sys.executable, str(ROOT / "tools" / "check_pathfinder_dtv_run.py"), "--dtv-dir", str(run["dtv"]),
                     "--bundle-dir", str(run["bundle"]), "--channels", str(V3), str(V1), "--output-dir", str(out)],

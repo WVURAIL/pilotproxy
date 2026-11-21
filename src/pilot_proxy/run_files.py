@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -42,29 +43,37 @@ def split(spec: str | Path) -> tuple[str, int | None]:
     return str(spec), None
 
 
+@lru_cache(maxsize=64)
+def _combined(path: str):
+    """Keep a combined file open, with its dataset, static attributes and per-window attributes.
+
+    Opening a file over NFS costs about 25 ms, so a combined file is opened once per process, not per window.
+    """
+    handle = _h5py().File(path, "r")
+    data = handle[_product(handle)]
+    return handle, data, dict(data.attrs), {name: handle[name][()] for name in WINDOW_ATTRS if name in handle}
+
+
 def windows(path: str | Path) -> list[str]:
     """Return the window names of a combined file, or the path itself for a per-window file."""
     path = str(path)
     if not path.endswith(COMBINED):
         return [path]
-    with _h5py().File(path, "r") as handle:
-        return [f"{path}#{i}" for i in range(handle[_product(handle)].shape[0])]
+    return [f"{path}#{i}" for i in range(_combined(path)[1].shape[0])]
 
 
 def read_attrs(spec: str | Path) -> dict[str, Any]:
     """Return the dataset attributes of one window, with its own fpga_seq_num and fpga_seq_time_nsec."""
     path, index = split(spec)
-    with _h5py().File(path, "r") as handle:
-        data = handle[_product(handle)]
-        attrs = dict(data.attrs)
-        if index is not None:
-            for name in WINDOW_ATTRS:
-                if name in handle:
-                    value = int(handle[name][index])
-                    # -1 marks a window whose source file recorded no such attribute
-                    attrs.pop(name, None)
-                    if value >= 0:
-                        attrs[name] = value
+    if index is None:
+        with _h5py().File(path, "r") as handle:
+            return dict(handle[_product(handle)].attrs)
+    _, _, static, per_window = _combined(path)
+    attrs = dict(static)
+    for name, values in per_window.items():
+        # -1 marks a window whose source file recorded no such attribute
+        if int(values[index]) >= 0:
+            attrs[name] = int(values[index])
     return attrs
 
 
@@ -79,10 +88,10 @@ def read_rows(spec: str | Path, channel_id: int, max_frames: int | None = None) 
     coarse = [int(c) for c in attrs.get("coarse_freq", [])]
     if channel_id not in coarse:
         return None, attrs
+    if index is not None:
+        return _combined(path)[1][index, :max_frames, coarse.index(channel_id)], attrs
     with _h5py().File(path, "r") as handle:
-        data = handle[_product(handle)]
-        rows = data[:max_frames, coarse.index(channel_id)] if index is None \
-            else data[index, :max_frames, coarse.index(channel_id)]
+        rows = handle[_product(handle)][:max_frames, coarse.index(channel_id)]
     return rows, attrs
 
 
@@ -90,9 +99,11 @@ def iter_windows(path: str | Path) -> Iterator[tuple[dict[str, Any], np.ndarray]
     """Yield (attributes, data) of every window of a per-window or combined file."""
     for spec in windows(path):
         file, index = split(spec)
-        with _h5py().File(file, "r") as handle:
-            data = handle[_product(handle)]
-            block = data[()] if index is None else data[index]
+        if index is not None:
+            block = _combined(file)[1][index]
+        else:
+            with _h5py().File(file, "r") as handle:
+                block = handle[_product(handle)][()]
         yield read_attrs(spec), block
 
 

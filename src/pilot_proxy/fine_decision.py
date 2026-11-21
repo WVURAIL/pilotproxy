@@ -477,11 +477,12 @@ def fine_stat_v3(fine_powers: Any, *, anchor_bin: int, designated_half_width: in
                     rank_bin=next(b for b in V3_REFERENCE_BINS if den[b] == d_rho))
 
 
-def fine_masked_v3(n_peak: int, d_rho: int, multiplier_q16: int) -> int | None:
-    """Return 1 to mask, 0 to keep, or None when ``d_rho`` is zero (no decision).
+def fine_keep_v3(n_peak: int, d_rho: int, multiplier_q16: int) -> int | None:
+    """Return 1 to keep, 0 to flag, or None when ``d_rho`` is zero (no decision).
 
-    The test is ``multiplier_q16 * d_rho < n_peak * 2**16``, the counterpart of
-    pilotproxy_v3_decision in cuda/pilotproxy_decision.h.
+    The frame is kept when ``n_peak * 2**16 <= multiplier_q16 * d_rho``. As in
+    Kotekan's RFI mask, 1 keeps. This is pilotproxy_v3_keep in
+    cuda/pilotproxy_decision.h.
     """
     mult = _exact_integer(multiplier_q16, field="multiplier_q16")
     if not 0 < mult < (1 << 64):
@@ -489,7 +490,7 @@ def fine_masked_v3(n_peak: int, d_rho: int, multiplier_q16: int) -> int | None:
     n, d = _exact_integer(n_peak, field="n_peak"), _exact_integer(d_rho, field="d_rho")
     if d == 0:
         return None
-    return int(mult * d < n * MULTIPLIER_ONE)
+    return int(n * MULTIPLIER_ONE <= mult * d)
 
 
 def fine_keep_word_v3(n_peak: int, d_rho: int) -> int | None:

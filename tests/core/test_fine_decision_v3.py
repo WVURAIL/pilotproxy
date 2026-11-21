@@ -3,7 +3,8 @@
 
 The oracle is a direct computation with ``fractions.Fraction``: the reference
 powers of the 128 even bins are sorted, the median of rank 63 is taken, and the
-largest designated target is compared with the word times that median.
+largest designated target is compared with the word times that median. As in
+Kotekan's RFI mask, 1 keeps and 0 flags.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from pilot_proxy.fine_decision import (
     designated_bins,
     fine_keep_word_v3,
     fine_mask_decision_v2,
-    fine_masked_v3,
+    fine_keep_v3,
     fine_stat_v3,
 )
 
@@ -73,7 +74,7 @@ def test_half_the_even_bins_zero_means_no_decision():
     powers[1:, np.arange(0, FINE_BINS, 2)[:64]] = 0
     stat = fine_stat_v3(powers, anchor_bin=ANCHOR, designated_half_width=HALF)
     assert stat.d_rho == 0
-    assert fine_masked_v3(stat.n_peak, stat.d_rho, MULTIPLIER_ONE) is None
+    assert fine_keep_v3(stat.n_peak, stat.d_rho, MULTIPLIER_ONE) is None
     assert fine_keep_word_v3(stat.n_peak, stat.d_rho) is None
 
 
@@ -81,11 +82,11 @@ def test_half_the_even_bins_zero_means_no_decision():
 def test_keep_word_is_the_change_point(n, d):
     word = fine_keep_word_v3(n, d)
     if word == ALWAYS_MASKED_Q16:
-        assert fine_masked_v3(n, d, 2**64 - 1) == 1
+        assert fine_keep_v3(n, d, 2**64 - 1) == 0
         return
-    assert fine_masked_v3(n, d, word) == 0
+    assert fine_keep_v3(n, d, word) == 1
     if word > 1:
-        assert fine_masked_v3(n, d, word - 1) == 1
+        assert fine_keep_v3(n, d, word - 1) == 0
     assert Fraction(word, MULTIPLIER_ONE) >= Fraction(n, d)
 
 
@@ -98,11 +99,11 @@ def test_decision_equals_v2_over_the_even_bins(seed):
     for mult in (word - 1, word, word + 1, 1, 3 * MULTIPLIER_ONE):
         v2 = fine_mask_decision_v2(powers, anchor_bin=ANCHOR, designated_half_width=HALF,
                                    bulk_mask=even, cfar_rank=V3_RANK, multiplier_q16=mult)
-        assert fine_masked_v3(stat.n_peak, stat.d_rho, mult) == v2.mask
+        assert fine_keep_v3(stat.n_peak, stat.d_rho, mult) == 1 - v2.mask   # 1 keeps, as in the RFI mask
 
 
 def test_rejects_bad_word():
     with pytest.raises(ValueError):
-        fine_masked_v3(1, 1, 0)
+        fine_keep_v3(1, 1, 0)
     with pytest.raises(ValueError):
-        fine_masked_v3(1, 1, 2**64)
+        fine_keep_v3(1, 1, 2**64)

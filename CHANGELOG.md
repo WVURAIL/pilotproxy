@@ -9,10 +9,11 @@ All notable changes to PilotProxy are recorded here. The project follows
   statistic `[n_peak, d_rho]` per frame in place of a mask: `n_peak` is the largest
   `2 S_t[b]` of the search and `d_rho` the median reference power `S_lo + S_up` of the 128 even
   bins (rank 63, zeros included), with no bulk mask or rank. The consumer applies its word with
-  `pilotproxy_v3_decision` (`cuda/pilotproxy_decision.h`), `word * d_rho < n_peak * 2**16` in
-  exact 128-bit products; `d_rho = 0` means no decision. The entry point is
+  `pilotproxy_v3_keep` (`cuda/pilotproxy_decision.h`), which keeps a frame when
+  `n_peak * 2**16 <= word * d_rho` in exact 128-bit products and returns 1 to keep and 0 to flag,
+  as Kotekan's RFI mask does; `d_rho = 0` means no decision. The entry point is
   `PilotProxy_Compute_FineStatV3_U64`, and the Python reference is `fine_stat_v3`,
-  `fine_masked_v3` and `fine_keep_word_v3`. Bundles do not carry v3 yet.
+  `fine_keep_v3` and `fine_keep_word_v3`. Bundles do not carry v3 yet.
 - Runtime bundles carry fine decision v2. `calibrate-bundle` writes `fine_decision_v2` unless
   the plan names `decision_version`, and its words, floor and null scores follow that version.
   The bundle validator, `test-bundle`, the run scores, the capture reference and replay, and the

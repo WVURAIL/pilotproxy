@@ -3,14 +3,14 @@
  * consumer of the detector's [n_peak, d_rho] statistic.
  *
  * Header only, plain C11 or C++, and usable in CUDA device code. A block is
- * masked when
+ * kept when
  *
- *     word / 2^16 < n_peak / d_rho,  evaluated as  word * d_rho < n_peak * 2^16,
+ *     n_peak / d_rho <= word / 2^16,  evaluated as  n_peak * 2^16 <= word * d_rho,
  *
  * with both products formed exactly in 128 bits. This is the test of fine
  * decision v2 (pilotproxy_frac_less in the kernel epilogue) applied to the
- * largest target bin. pilot_proxy.fine_decision.fine_masked_v3 is the Python
- * counterpart.
+ * largest target bin. As in Kotekan's RFI mask, 1 keeps and 0 flags.
+ * pilot_proxy.fine_decision.fine_keep_v3 is the Python counterpart.
  */
 #ifndef PILOTPROXY_DECISION_H
 #define PILOTPROXY_DECISION_H
@@ -36,10 +36,10 @@ PILOTPROXY_DECISION_FN void pilotproxy_mul_64x64(uint64_t a, uint64_t b, uint64_
 
 /*
  * Fine decision v3 of one channel and block, from the detector's pair and a Q16
- * threshold word in [1, 2^64 - 1]. Returns 1 to mask, 0 to keep, and -1 when
+ * threshold word in [1, 2^64 - 1]. Returns 1 to keep, 0 to flag, and -1 when
  * d_rho is zero and the block has no decision.
  */
-PILOTPROXY_DECISION_FN int pilotproxy_v3_decision(uint64_t n_peak, uint64_t d_rho, uint64_t word)
+PILOTPROXY_DECISION_FN int pilotproxy_v3_keep(uint64_t n_peak, uint64_t d_rho, uint64_t word)
 {
     uint64_t lhs_hi, lhs_lo;
     if (d_rho == 0) {
@@ -50,7 +50,8 @@ PILOTPROXY_DECISION_FN int pilotproxy_v3_decision(uint64_t n_peak, uint64_t d_rh
     {
         const uint64_t rhs_hi = n_peak >> 48;
         const uint64_t rhs_lo = n_peak << 16;
-        return (lhs_hi < rhs_hi) || (lhs_hi == rhs_hi && lhs_lo < rhs_lo);
+        /* keep unless word * d_rho < n_peak * 2^16 */
+        return !((lhs_hi < rhs_hi) || (lhs_hi == rhs_hi && lhs_lo < rhs_lo));
     }
 }
 

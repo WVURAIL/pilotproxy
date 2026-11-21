@@ -920,7 +920,7 @@ class PilotProxyKernel:
 
         ``stat_ptr`` must address ``2 * batch`` uint64 on the device, and
         ``fine_powers_ptr`` the exact fine powers, as for the v1 and v2 calls.
-        The consumer applies its word with ``fine_decision.fine_masked_v3``.
+        The consumer applies its word with ``fine_decision.fine_keep_v3``.
         """
         symbol = "PilotProxy_Compute_FineStatV3_U64"
         if not getattr(self, "_has_fine_stat_v3", False):

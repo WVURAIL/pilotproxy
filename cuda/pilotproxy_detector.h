@@ -582,7 +582,7 @@ int PilotProxy_Supports_FusedFineMaskV2(void);
  *     d_rho  = den of zero-based rank PILOTPROXY_V3_RANK (63) over the 128 even
  *              bins, zeros included.
  *
- * The consumer decides with pilotproxy_v3_decision() (pilotproxy_decision.h).
+ * The consumer decides with pilotproxy_v3_keep() (pilotproxy_decision.h).
  * d_rho is zero only when at least half of the even bins have den = 0, and the
  * block then has no decision. d_stat_out holds 2 * batch values. The
  * acceptance test is equality with pilot_proxy.fine_decision.fine_stat_v3 over

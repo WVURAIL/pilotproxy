@@ -14,7 +14,7 @@ import pytest
 from pilot_proxy.fine_decision import (
     V3_RANK,
     fine_keep_word_v3,
-    fine_masked_v3,
+    fine_keep_v3,
     fine_stat_v3,
     pack_bulk_mask,
 )
@@ -104,9 +104,9 @@ def test_v3_decision_equals_v2_mask_over_the_even_bins():
     for mult in sorted({w + delta for w in words for delta in (-1, 0)} | {1, 65536, 3 * 65536}):
         _, mask = _mask_v2(cp, kernel, packed, weights, streams, mult)
         for b in range(batch):
-            decided = fine_masked_v3(int(stat[b, 0]), int(stat[b, 1]), mult)
-            assert decided == int(mask[b]) == int(mult < words[b]), (mult, b)
-            seen.add(decided)
+            keep = fine_keep_v3(int(stat[b, 0]), int(stat[b, 1]), mult)
+            assert keep == 1 - int(mask[b]) == int(mult >= words[b]), (mult, b)   # 1 keeps
+            seen.add(keep)
     assert seen == {0, 1}
 
 
@@ -118,4 +118,4 @@ def test_v3_zero_input_has_no_decision():
     weights = np.random.default_rng(3).integers(0, 256, size=(TERMS, 128), dtype=np.uint8).astype(np.int8)
     _, stat = _stat(cp, kernel, packed, weights, streams)
     assert stat.tolist() == [[0, 0], [0, 0]]
-    assert fine_masked_v3(0, 0, 65536) is None
+    assert fine_keep_v3(0, 0, 65536) is None

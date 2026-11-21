@@ -305,7 +305,7 @@ static void run_fine_reference_checks()
     }
 }
 
-// pilotproxy_v3_decision against unsigned __int128, at each keep boundary,
+// pilotproxy_v3_keep against unsigned __int128, at each keep boundary,
 // one word on either side, zero references and operands near 2^64.
 static void assert_v3_decision_is_exact()
 {
@@ -323,12 +323,12 @@ static void assert_v3_decision_is_exact()
         const unsigned __int128 candidates[] = {1, keep - 1, keep, keep + 1, big};
         for (unsigned __int128 w : candidates) {
             if (w < 1 || w > big) continue;
-            const int want = static_cast<unsigned __int128>(static_cast<uint64_t>(w)) * d < rhs;
-            assert(pilotproxy_v3_decision(n, d, static_cast<uint64_t>(w)) == want);
+            const int keep_want = !(static_cast<unsigned __int128>(static_cast<uint64_t>(w)) * d < rhs);
+            assert(pilotproxy_v3_keep(n, d, static_cast<uint64_t>(w)) == keep_want);
         }
     }
-    assert(pilotproxy_v3_decision(5, 0, 1) == -1);
-    assert(pilotproxy_v3_decision(0, 0, big) == -1);
+    assert(pilotproxy_v3_keep(5, 0, 1) == -1);
+    assert(pilotproxy_v3_keep(0, 0, big) == -1);
 }
 
 int main()

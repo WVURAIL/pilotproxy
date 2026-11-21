@@ -34,7 +34,7 @@ void test_pilotproxy_c_header(void)
         0, 0, 0, 0, 0, 0, 1ULL, 0, 0, 0, 0, 0, 0);
     (void)PilotProxy_Supports_FineStatV3();
     PilotProxy_Compute_FineStatV3_U64(0, 0, 0, 0, 0, 0, 0, 0);
-    (void)pilotproxy_v3_decision(1, 1, 1);
+    (void)pilotproxy_v3_keep(1, 1, 1);
     pilotproxy_ref_fine_powers_u64(0, 0, fine);
     pilotproxy_ref_powers_from_fine_u64(fine, powers);
 }

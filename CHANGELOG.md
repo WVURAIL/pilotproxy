@@ -5,6 +5,8 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `combine_pathfinder_dtv_run.py` also combines `dtv_stat`, the `[n_peak, d_rho]` rows that a fine decision v3 run records,
+  so a v3 run can be combined like the others.
 - Fine decision v3 has no anchor or search width (kernel core 4.2.0). `n_peak` is the largest `2 S_t[b]` of
   all 256 fine bins, so the padded bins catch a pilot between two independent bins, and `d_rho` stays the median
   reference of the 128 even bins. `PilotProxy_Compute_FineStatV3_U64` loses its `anchor_bin` and

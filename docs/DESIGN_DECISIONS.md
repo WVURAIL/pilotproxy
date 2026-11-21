@@ -226,6 +226,41 @@ per 2048-stream frame, a margin of 55 times against the 41.9 ms cadence. The
 mask form takes 0.895 ms, a margin of 47 times or about 2% of the frame
 cadence, and the decision epilogue adds 0.127 ms of this.
 
+## Fine decision v3 publishes the statistic, and each consumer decides
+
+Fine decision v3 (core 4.1) keeps the arithmetic of v2 and changes two things.
+
+The reference `d_rho` is the median of the reference powers `S_l[b] + S_u[b]`
+over the 128 even fine bins, rank 63, with no bulk mask, guard, census list or
+bundle rank. Zero padding makes the odd bins interpolations of the even ones,
+so the even bins are the independent samples, and their median is an
+order-statistic CFAR reference in the standard sense. The median ignores lines,
+pilot leakage into the references and stray bins while fewer than half of the
+bins carry them, so no bin is excluded. Zero reference powers count, and a
+frame whose median is zero (lost packets or every input flagged) has no
+decision.
+
+The kernel writes the pair `[n_peak, d_rho]`, where `n_peak` is the largest
+`2 S_t[b]` of the search, in place of a mask. Each consumer applies its own Q16
+word with `pilotproxy_v3_keep` in `cuda/pilotproxy_decision.h`: it keeps when
+`n_peak * 2^16 <= word * d_rho`, formed exactly in 128 bits, and returns 1 to
+keep and 0 to flag, as Kotekan's RFI mask does. `fine_keep_v3` is its Python
+counterpart. On the same frames, the pair and this test give exactly the v2
+mask over the even bins at rank 63 (`tests/kernel/test_fine_stat_gpu.py`), so
+the split itself changes no decision.
+
+The threshold belongs to the consumer because the backends tolerate different
+residuals. N2 needs the strict word that the power-limit test sets, and the FRB
+and baseband backends would lose good data at it. A v3 bundle carries the
+default word `cfar_multiplier_q16` (the knee or floor) for a backend with no
+word of its own, and `power_limit_multiplier_q16` where the power-limit test
+set one. Kotekan's `DtvRfiMask` applies the power-limit word, or the default
+word when there is none. A backend can set its own word from its own residual
+analysis.
+
+On an RTX 5000 Ada at 2048 inputs, the v3 entry takes 7% less time than the v2
+mask for one channel and 1 to 3% less for 16 channels in one call.
+
 ## The source stamp is memoized per process
 
 `detector_version` embeds a hash of every `*.py` under `src/pilot_proxy`. The
@@ -298,7 +333,6 @@ open tasks:
 - tone catalog and intermodulation classification;
 - LimeSDR loopback;
 - a `K = 256` implementation;
-- production integration of additional threshold modes;
 - a common-mode power veto; and
 - threshold fitting from CANFAR-measured means.
 

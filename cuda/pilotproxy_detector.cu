@@ -1389,7 +1389,7 @@ struct PilotProxyHandle {
     bool       weights_cached; ///< Host cache validity for avoiding repeated uploads
     InputType  h_weight_cache[PILOTPROXY_WEIGHT_COUNT]; ///< Last packed weights supplied by caller
     cudaStream_t stream;   ///< Stream for all device work (0 = legacy default stream)
-    int*       d_completion; ///< [batch] block counters of the v3 entry, allocated on first use
+    int*       d_completion; ///< [batch] block counters of the v3 entry
 };
 
 #if PILOTPROXY_USE_DP4A
@@ -1588,6 +1588,18 @@ static PilotProxyHandle* pilotproxy_create(
         return nullptr;
     }
     #endif
+
+    /* Allocated here, so that no compute entry allocates device memory. */
+    if (!record_cuda_error(cudaMalloc(
+            &h->d_completion,
+            static_cast<size_t>(batch) * sizeof(int)),
+            __FILE__,
+            __LINE__)) {
+        if (h->d_weights) cudaFree(h->d_weights);
+        if (h->d_weight_lanes) cudaFree(h->d_weight_lanes);
+        delete h;
+        return nullptr;
+    }
 
     return h;
 }
@@ -2145,14 +2157,6 @@ void PilotProxy_Compute_FineStatV3_U64(
         record_api_error("block size must divide the window count.");
         return;
     }
-    if (h->d_completion == nullptr
-        && !record_cuda_error(cudaMalloc(&h->d_completion,
-                                         static_cast<size_t>(h->batch) * sizeof(int)),
-                              __FILE__, __LINE__)) {
-        h->d_completion = nullptr;
-        return;
-    }
-
     if (!pilotproxy_upload_weights(h, w_in)) return;
 
     const int num_streams =

@@ -119,3 +119,24 @@ def test_frames_of_an_idle_half_have_no_channels(tmp_path):
     path = str(write_frames_file(idle, tmp_path / "dtv_fine_powers.00000000.h5"))
     assert all("coarse_freq" not in read_attrs(spec) for spec in windows(path))
     assert run_rows(f"{path}#0", 3115).shape == (0, 3, 256)
+
+
+def test_file_left_open_by_kotekan_is_read(tmp_path):
+    """Kotekan writes in SWMR mode; a file it had open when killed opens only in SWMR mode."""
+    frames = [write_half(tmp_path / f"a{w}.h5", [2715, 3115], 10**9 + w * 4 * 8192, w + 1) for w in range(2)]
+    path = str(write_frames_file(frames, tmp_path / "dtv_fine_powers.00000000.h5", left_open=True))
+    with pytest.raises(OSError):
+        h5py.File(path, "r")
+    assert windows(path) == [f"{path}#0", f"{path}#1"]
+    assert np.array_equal(run_rows(f"{path}#1", 3115), run_rows(frames[1], 3115))
+
+
+def test_frame_whose_rows_are_not_written_yet_is_left_out(tmp_path):
+    frames = [write_half(tmp_path / f"a{w}.h5", [2715, 3115], 10**9 + w * 4 * 8192, w + 1) for w in range(2)]
+    path = str(write_frames_file(frames, tmp_path / "dtv_fine_powers.00000000.h5"))
+    with h5py.File(path, "a") as handle:
+        for name in ("dim", "FPGA_SEQ_NUM", "COARSE_FREQ"):
+            values = handle["frame_metadata"][name][()]
+            del handle["frame_metadata"][name]
+            handle["frame_metadata"][name] = np.concatenate([values, values[-1:]])
+    assert windows(path) == [f"{path}#0", f"{path}#1"]

@@ -31,6 +31,18 @@ def _h5py():
     return h5py
 
 
+def _codec() -> dict[str, Any]:
+    """Byte shuffle and zstd, or gzip where hdf5plugin is not installed; Kotekan's files need it to be read.
+
+    bitshuffle, as in Kotekan's files, cannot write under HDF5 2.0 with hdf5plugin 7.1 (cx50).
+    """
+    try:
+        import hdf5plugin
+    except ImportError:
+        return dict(shuffle=True, compression="gzip", compression_opts=1)
+    return dict(shuffle=True, **hdf5plugin.Zstd())
+
+
 def _product(handle) -> str:
     return next(name for name in handle if name.startswith("dtv_"))
 
@@ -123,8 +135,6 @@ def combine(acq_dir: str | Path, out_dir: str | Path, product: str, verify: bool
     With verify, every window is read back and compared with its source. Returns one summary per file written.
     """
     h5py = _h5py()
-    import hdf5plugin
-
     acq_dir, out_dir = Path(acq_dir), Path(out_dir)
     sources = sorted(p for p in acq_dir.glob(f"dtv_{product}.*.h5") if not p.name.endswith(COMBINED))
     groups: dict[tuple[int, ...], list[tuple[int, int, Path]]] = defaultdict(list)
@@ -150,11 +160,10 @@ def combine(acq_dir: str | Path, out_dir: str | Path, product: str, verify: bool
             data0 = first[_product(first)]
             shape, dtype, static = data0.shape, data0.dtype, {k: v for k, v in data0.attrs.items() if k not in WINDOW_ATTRS}
         with h5py.File(tmp, "w") as out:
-            # byte shuffle and zstd: bitshuffle cannot write under HDF5 2.0 with hdf5plugin 7.1 (cx50). Fine
-            # powers are read one row (bound channel) at a time, so each row of a window is its own chunk.
+            # fine powers are read one row (bound channel) at a time, so each row of a window is its own chunk
             rows = (1, shape[0], 1, *shape[2:]) if product == "fine_powers" else (1, *shape)
             data = out.create_dataset(f"dtv_{product}", shape=(len(members), *shape), dtype=dtype,
-                                      chunks=rows, shuffle=True, **hdf5plugin.Zstd())
+                                      chunks=rows, **_codec())
             for key, value in static.items():
                 data.attrs[key] = value
             out["fpga_seq_num"] = np.array([s for _, s, _ in members], np.int64)

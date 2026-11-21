@@ -28,25 +28,17 @@ MISSING = np.iinfo(np.uint64).max
 def _file_scores(path: str, channel_id: int, anchor: int, bulk: np.ndarray, rank: int,
                  decision_version: str) -> dict[str, np.ndarray]:
     """Return the words, frame powers and times of one channel's frames in one file."""
-    import h5py
+    from pilot_proxy.run_files import read_rows
 
-    try:
-        import hdf5plugin  # noqa: F401  (registers the bitshuffle filter)
-    except ImportError:
-        pass
-    with h5py.File(path, "r") as handle:
-        data = handle[next(name for name in handle if name.startswith("dtv_fine_powers"))]
-        coarse = [int(c) for c in data.attrs.get("coarse_freq", [])]
-        if channel_id not in coarse:
-            return {}
-        rows = data[:, coarse.index(channel_id)]
-        # Kotekan writes the sample period with the telescope metadata and the samples per
-        # frame as the first dim scaling: 2560 ns and 16384 on CHIME, 5120 ns and 8192 on
-        # the Pathfinder
-        sample_ns = int(data.attrs.get("seq_length_nsec", handle.attrs.get("seq_length_nsec", SAMPLE_NS)))
-        scalings = data.attrs.get("dim_scalings")
-        block_samples = int(scalings[0]) if scalings is not None and len(scalings) else BLOCK_SAMPLES
-        start_ns = int(data.attrs.get("fpga_seq_time_nsec", int(data.attrs["fpga_seq_num"]) * sample_ns))
+    rows, attrs = read_rows(path, channel_id)
+    if rows is None:
+        return {}
+    # Kotekan writes the sample period with the telescope metadata and the samples per frame
+    # as the first dim scaling: 2560 ns and 16384 on CHIME, 5120 ns and 8192 on the Pathfinder
+    sample_ns = int(attrs.get("seq_length_nsec", SAMPLE_NS))
+    scalings = attrs.get("dim_scalings")
+    block_samples = int(scalings[0]) if scalings is not None and len(scalings) else BLOCK_SAMPLES
+    start_ns = int(attrs.get("fpga_seq_time_nsec", int(attrs["fpga_seq_num"]) * sample_ns))
     # zeros were not tested, and 0xFF fills a block missing from the concat window
     present = np.flatnonzero(rows.any(axis=(1, 2)) & ~(rows == MISSING).all(axis=(1, 2)))
     rows = rows[present]

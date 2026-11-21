@@ -33,6 +33,8 @@ import h5py
 import hdf5plugin  # noqa: F401  (registers the bitshuffle filter of the recv files)
 import numpy as np
 
+from pilot_proxy.run_files import iter_windows
+
 BLOCK_SAMPLES = 8192
 FREQ_WIDTH_MHZ = 0.1953125
 # freq_id: ATSC channel
@@ -49,17 +51,13 @@ def atsc_channel(freq_id):
 
 
 def read_masks(dtv_dir):
-    """Return {freq_id: (block start sequences, mask)} from the dtv_mask files, in time order."""
+    """Return {freq_id: (block start sequences, mask)} from the dtv_mask files, per-window or combined, in time order."""
     parts = defaultdict(list)
     for path in sorted(glob.glob(os.path.join(dtv_dir, "**", "dtv_mask.*.h5"), recursive=True)):
-        with h5py.File(path, "r") as handle:
-            data = handle[next(iter(handle))]
-            seq0 = int(data.attrs["fpga_seq_num"])
-            coarse = [int(c) for c in data.attrs["coarse_freq"]]
-            mask = data[()]
-        seqs = seq0 + BLOCK_SAMPLES * np.arange(mask.shape[0], dtype=np.int64)
-        for column, freq_id in enumerate(coarse):
-            parts[freq_id].append((seqs, mask[:, column]))
+        for attrs, mask in iter_windows(path):
+            seqs = int(attrs["fpga_seq_num"]) + BLOCK_SAMPLES * np.arange(mask.shape[0], dtype=np.int64)
+            for column, freq_id in enumerate(int(c) for c in attrs["coarse_freq"]):
+                parts[freq_id].append((seqs, mask[:, column]))
     masks = {}
     for freq_id, chunks in parts.items():
         seqs = np.concatenate([c[0] for c in chunks])

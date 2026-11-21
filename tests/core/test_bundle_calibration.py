@@ -32,6 +32,7 @@ from pilot_proxy.characterization import threshold_rule
 from pilot_proxy.runtime_bundle import _write_sha256sums, validate_runtime_weight_bundle
 from pilot_proxy.process_run import process_run
 from pilot_proxy.run_plans import ordered_run_files, write_run_plans
+from pilot_proxy.run_files import combine
 from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
 
@@ -357,6 +358,34 @@ def test_detector_run_gives_the_bundle_of_its_captures(plans, tmp_path):
     for key in ("anchor_bin", "knee_word_q16", "frames", "captures", "masked_fraction"):
         assert other["channels"]["35"][key] == base["channels"]["35"][key]
     assert other["calibration_captures"] == sorted(files)
+
+
+def test_combined_run_gives_the_bundle_of_its_windows(plans, tmp_path):
+    """A run combined into one file per half calibrates as its per-window files do."""
+    bundle = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())
+    bank = (plans["bundle"] / "weights.bin").read_bytes()
+    reverse = bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"])
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    acq = tmp_path / "acq_1"
+    acq.mkdir()
+    for index, capture in enumerate(plans["calibrate"]["channels"]["35"]):
+        fines, _ = _load_fines([capture], "chime_baseband", row, bank, 128, reverse, None)
+        path = write_run_file(acq / f"dtv_fine_powers.{index:08d}.h5", [521, 614], fines)
+        with h5py.File(path, "a") as handle:
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 1024 * 8192
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_time_nsec"] = 10**18 + index * 43 * 10**9
+    summary = combine(acq, tmp_path / "combined", "fine_powers")
+    assert [r["windows"] for r in summary] == [len(plans["calibrate"]["channels"]["35"])]
+    reports = {}
+    for name, pattern in (("windows", str(acq / "dtv_fine_powers.*.h5")),
+                          ("combined", str(tmp_path / "combined" / "*.combined.h5"))):
+        run = dict(plans["calibrate"], capture_format="dtv_fine_powers", channels={"35": [pattern]},
+                   control=None, num_inputs=INPUTS, word_q16=plans["report"]["floor_word_q16"])
+        (tmp_path / f"{name}.json").write_text(json.dumps(run))
+        reports[name] = calibrate_bundle(plan_path=tmp_path / f"{name}.json", output_dir=tmp_path / f"bundle-{name}")
+    for key in ("anchor_bin", "knee_word_q16", "frames", "captures", "masked_fraction"):
+        assert reports["combined"]["channels"]["35"][key] == reports["windows"]["channels"]["35"][key]
+    assert all("#" in c for c in reports["combined"]["calibration_captures"])
 
 
 def test_spectrogram_removes_masked_frames(plans, tmp_path):

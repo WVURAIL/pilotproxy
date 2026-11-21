@@ -119,19 +119,11 @@ def iter_run_frames(path: str | Path, channel_id: int, max_frames: int | None = 
 
 def run_rows(path: str | Path, channel_id: int, max_frames: int | None = None) -> np.ndarray:
     """Return the uint64 [N, 3, 256] tested fine powers of one channel from a dtv_fine_powers file."""
-    import h5py
+    from pilot_proxy.run_files import read_rows
 
-    try:
-        import hdf5plugin  # noqa: F401  (registers the bitshuffle filter)
-    except ImportError:
-        pass
-    with h5py.File(path, "r") as handle:
-        data = handle[next(name for name in handle if name.startswith("dtv_fine_powers"))]
-        # the attribute is dropped when every row is unused (-1)
-        coarse = [int(c) for c in data.attrs.get("coarse_freq", [])]
-        if channel_id not in coarse:
-            return np.empty((0, 3, FINE_BINS), np.uint64)
-        rows = data[:max_frames, coarse.index(channel_id)]
+    rows, _ = read_rows(path, channel_id, max_frames)
+    if rows is None:
+        return np.empty((0, 3, FINE_BINS), np.uint64)
     # zeros were not tested, and 0xFF fills a block missing from the concat window
     missing = np.iinfo(np.uint64).max
     return rows[rows.any(axis=(1, 2)) & ~(rows == missing).all(axis=(1, 2))]
@@ -402,10 +394,13 @@ def _weights(row: dict[str, Any], bank: bytes) -> bytes:
 
 
 def _expand(paths: Sequence[str]) -> list[str]:
-    """Return the paths with any glob patterns expanded, in sorted order."""
+    """Return the paths with any glob patterns expanded, in sorted order, and combined run files as their windows."""
+    from pilot_proxy.run_files import windows
+
     found = []
     for path in paths:
-        found += sorted(glob.glob(path, recursive=True)) if glob.has_magic(path) else [path]
+        for match in (sorted(glob.glob(path, recursive=True)) if glob.has_magic(path) else [path]):
+            found += windows(match)
     return found
 
 

@@ -9,7 +9,7 @@ fine bin against the bundle anchor, and the visibilities' frac_dtv_mask_enabled.
 matplotlib and the fine powers, it also plots the target fine powers in chunks, over all
 blocks and over the kept blocks. The masked percent of every channel by UTC hour, from the
 window times recv writes (fpga_seq_time_nsec), goes to masked_by_hour.csv and a figure.
-Needs numpy, h5py and hdf5plugin.
+Reads per-window or combined files (combine_pathfinder_dtv_run.py). Needs numpy, h5py, hdf5plugin and pilot-proxy.
 """
 import argparse
 import glob
@@ -21,6 +21,8 @@ import h5py
 import hdf5plugin  # noqa: F401  (registers the bitshuffle filter)
 import numpy as np
 
+from pilot_proxy.run_files import iter_windows, read_attrs, windows
+
 SAMPLE_NS = 5120
 BLOCK_SAMPLES = 8192
 FREQ_WIDTH_MHZ = 0.1953125
@@ -28,30 +30,29 @@ FREQ_WIDTH_MHZ = 0.1953125
 PILOTS = {2531: 18, 2715: 24, 2869: 29, 3115: 37}
 
 
-def read(path):
-    with h5py.File(path, "r") as handle:
-        data = handle[next(iter(handle))]
-        coarse = [int(c) for c in data.attrs.get("coarse_freq", [])]
-        return int(data.attrs["fpga_seq_num"]), coarse, data[()]
+def product_files(dtv_dir, product):
+    """The per-window and combined files of one product under dtv_dir."""
+    return sorted(glob.glob(os.path.join(dtv_dir, "**", f"dtv_{product}.*.h5"), recursive=True))
 
 
 def collect(dtv_dir, product, channels):
     """Return {channel: {window seq: per-block array}} for one product."""
     found = defaultdict(dict)
-    for path in sorted(glob.glob(os.path.join(dtv_dir, "**", f"dtv_{product}.*.h5"), recursive=True)):
-        seq, coarse, data = read(path)
-        for channel in channels:
-            if channel in coarse:
-                found[channel][seq] = data[:, coarse.index(channel)]
+    for path in product_files(dtv_dir, product):
+        for attrs, data in iter_windows(path):
+            coarse = [int(c) for c in attrs.get("coarse_freq", [])]
+            for channel in channels:
+                if channel in coarse:
+                    found[channel][int(attrs["fpga_seq_num"])] = data[:, coarse.index(channel)]
     return found
 
 
 def window_times(dtv_dir):
     """Return {window seq: UNIX ns of its first block} from the dtv_mask files that record it."""
     times = {}
-    for path in glob.glob(os.path.join(dtv_dir, "**", "dtv_mask.*.h5"), recursive=True):
-        with h5py.File(path, "r") as handle:
-            attrs = handle[next(iter(handle))].attrs
+    for path in product_files(dtv_dir, "mask"):
+        for spec in windows(path):
+            attrs = read_attrs(spec)
             if "fpga_seq_time_nsec" in attrs:
                 times[int(attrs["fpga_seq_num"])] = int(attrs["fpga_seq_time_nsec"])
     return times

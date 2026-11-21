@@ -139,8 +139,9 @@ def combine(acq_dir: str | Path, out_dir: str | Path, product: str, verify: bool
             data0 = first[_product(first)]
             shape, dtype, static = data0.shape, data0.dtype, {k: v for k, v in data0.attrs.items() if k not in WINDOW_ATTRS}
         with h5py.File(tmp, "w") as out:
+            # byte shuffle and zstd: bitshuffle cannot write under HDF5 2.0 with hdf5plugin 7.1 (cx50)
             data = out.create_dataset(f"dtv_{product}", shape=(len(members), *shape), dtype=dtype,
-                                      chunks=(1, *shape), **hdf5plugin.Bitshuffle(cname="zstd"))
+                                      chunks=(1, *shape), shuffle=True, **hdf5plugin.Zstd())
             for key, value in static.items():
                 data.attrs[key] = value
             out["fpga_seq_num"] = np.array([s for _, s, _ in members], np.int64)

@@ -9,7 +9,8 @@ off (pathfinder_dtv_switch.py). Each visibility bin is labelled by frac_dtv_mask
 off (0), or switched inside the bin (left out). For each frequency the detector masks at least once,
 and for the pilot frequencies, the two states are compared on:
 
-  detector  the fraction of the bin's blocks that the detector masked, from the dtv_mask files.
+  detector  the fraction of the bin's blocks that the detector masked, from the dtv_mask files, or for
+            a fine_decision_v3 channel of --bundle-dir from its dtv_stat rows at the word N2 applies.
             It should not depend on the state.
   excised   frac_rfi, the fraction of the bin that the correlator excised. With the mask on it
             must be at least the share of the bin that the detector masked, and it rises one for
@@ -33,7 +34,8 @@ import h5py
 import hdf5plugin  # noqa: F401  (registers the bitshuffle filter of the recv files)
 import numpy as np
 
-from pilot_proxy.run_files import iter_windows
+from pilot_proxy.fine_decision import masks_from_stat
+from pilot_proxy.run_files import iter_windows, v3_words
 
 BLOCK_SAMPLES = 8192
 FREQ_WIDTH_MHZ = 0.1953125
@@ -50,14 +52,22 @@ def atsc_channel(freq_id):
     return 14 + int((mhz - 470.0) // 6.0) if 470.0 <= mhz < 614.0 else None
 
 
-def read_masks(dtv_dir):
-    """Return {freq_id: (block start sequences, mask)} from the dtv_mask files, per-window or combined, in time order."""
+def read_masks(dtv_dir, words=None):
+    """Return {freq_id: (block start sequences, mask)} from the dtv_mask files, per-window or combined, in time order.
+
+    A freq_id in `words` (a fine_decision_v3 channel) is decided from its dtv_stat rows at its word instead.
+    """
+    words = words or {}
     parts = defaultdict(list)
-    for path in sorted(glob.glob(os.path.join(dtv_dir, "**", "dtv_mask.*.h5"), recursive=True)):
-        for attrs, mask in iter_windows(path):
-            seqs = int(attrs["fpga_seq_num"]) + BLOCK_SAMPLES * np.arange(mask.shape[0], dtype=np.int64)
-            for column, freq_id in enumerate(int(c) for c in attrs["coarse_freq"]):
-                parts[freq_id].append((seqs, mask[:, column]))
+    for product in ("mask", "stat") if words else ("mask",):
+        for path in sorted(glob.glob(os.path.join(dtv_dir, "**", f"dtv_{product}.*.h5"), recursive=True)):
+            for attrs, data in iter_windows(path):
+                seqs = int(attrs["fpga_seq_num"]) + BLOCK_SAMPLES * np.arange(data.shape[0], dtype=np.int64)
+                for column, freq_id in enumerate(int(c) for c in attrs["coarse_freq"]):
+                    if (freq_id in words) != (product == "stat"):
+                        continue
+                    rows = data[:, column]
+                    parts[freq_id].append((seqs, masks_from_stat(rows, words[freq_id]) if product == "stat" else rows))
     masks = {}
     for freq_id, chunks in parts.items():
         seqs = np.concatenate([c[0] for c in chunks])
@@ -228,10 +238,13 @@ def main():
     parser.add_argument("--vis-dir", required=True, help="Visibility acquisition of the run.")
     parser.add_argument("--freq-ids", type=int, nargs="+",
                         help="Default: every freq_id the detector masks at least once, and the pilots.")
+    parser.add_argument("--bundle-dir", help="Bundle of the run: its fine_decision_v3 channels are read from dtv_stat.")
+    parser.add_argument("--mask-control", action="store_true",
+                        help="The run set dtv_mask_control, so the v3 control is decided like a pilot.")
     parser.add_argument("--output-dir")
     args = parser.parse_args()
 
-    masks = read_masks(args.dtv_dir)
+    masks = read_masks(args.dtv_dir, v3_words(args.bundle_dir, mask_control=args.mask_control))
     if not masks:
         raise SystemExit(f"no dtv_mask files in {args.dtv_dir}")
     freq_ids = args.freq_ids or sorted({f for f, (_, m) in masks.items() if np.any(m == 1)}

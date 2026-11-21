@@ -551,6 +551,47 @@ def fine_required_multiplier_q16_v3(
                                   limiting_bin=stat.peak_bin if word > 1 else -1, multiplier_q16=word)
 
 
+UNEVALUATED_V3 = (0, (1 << 64) - 1)  # a row the detector did not evaluate; every word keeps it
+MISSING_ROW = (1 << 64) - 1          # a block missing from a recorded window is all 0xFF bytes
+
+
+def v3_word(calibration: dict) -> int:
+    """Return the word that N2 (Kotekan's DtvRfiMask) applies to a fine_decision_v3 channel.
+
+    The power-limit word where calibration wrote one, and the default word otherwise.
+    """
+    return int(calibration.get("power_limit_multiplier_q16", calibration["cfar_multiplier_q16"]))
+
+
+def masks_from_stat(stat: Any, multiplier_q16: int) -> np.ndarray:
+    """Return the per-block decisions of recorded ``[n_peak, d_rho]`` rows as a dtv_mask would hold them.
+
+    1 rejects, 0 keeps and -1 marks a missing block. A row the detector did not evaluate is kept, and a
+    row with ``d_rho = 0`` has no decision and is rejected, as in DtvRfiMask. The test is exact:
+    floats decide every row clear of the keep boundary, and the rows near it are compared as integers.
+    """
+    stat = np.asarray(stat, dtype=np.uint64)
+    if stat.shape[-1] != 2:
+        raise ValueError("stat rows must end in [n_peak, d_rho]")
+    word = _exact_integer(multiplier_q16, field="multiplier_q16")
+    if not 0 < word < (1 << 64):
+        raise ValueError("multiplier_q16 must be in [1, 2**64 - 1].")
+    n, d = stat[..., 0], stat[..., 1]
+    missing = (n == np.uint64(MISSING_ROW)) & (d == np.uint64(MISSING_ROW))
+    unevaluated = (n == np.uint64(0)) & (d == np.uint64(MISSING_ROW))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        lhs = n.astype(np.float64) * MULTIPLIER_ONE
+        rhs = float(word) * d.astype(np.float64)
+        reject = lhs > rhs
+        near = np.abs(lhs - rhs) <= 1e-9 * np.maximum(lhs, rhs)
+    for index in zip(*np.nonzero(near)):
+        reject[index] = int(n[index]) * MULTIPLIER_ONE > word * int(d[index])
+    out = np.where(reject | (d == np.uint64(0)), 1, 0).astype(np.int8)
+    out[unevaluated] = 0
+    out[missing] = -1
+    return out
+
+
 def v3_geometry() -> tuple[np.ndarray, int]:
     """Return the reference bins of fine decision v3 as a 256-bin mask, and its rank."""
     mask = np.zeros(FINE_BINS, dtype=bool)

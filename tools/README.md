@@ -21,4 +21,6 @@ Run each command with --help. Store new outputs separately from existing data.
   calibration_length.py (how long a calibration must be, from one long recording),
   pathfinder_input_counts.py (good inputs the detector summed, from the visibility files' bad feed mask),
   make_pathfinder_mock_run.py (synthetic recv files for rehearsals).
+  With a fine_decision_v3 bundle (--bundle-dir), check_pathfinder_dtv_run.py, compare_pathfinder_dtv_mask.py and
+  analyze_dtv_run.py decide the v3 channels from their dtv_stat rows at the word N2 applies.
   The checklist is docs/PATHFINDER_RECALIBRATION.md.

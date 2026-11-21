@@ -5,6 +5,11 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The Pathfinder tools read fine decision v3 runs. `fine_decision.masks_from_stat` turns recorded
+  `[n_peak, d_rho]` rows into dtv_mask decisions at a word (exact at the keep boundary; unevaluated rows are kept,
+  missing blocks are -1, `d_rho = 0` is rejected), and `run_files.v3_words` gives each v3 channel's N2 word. With
+  `--bundle-dir`, `check_pathfinder_dtv_run.py`, `compare_pathfinder_dtv_mask.py` (with `--mask-control` for the
+  control) and `analyze_dtv_run.py` decide the v3 channels from `dtv_stat`, whose dtv_mask rows hold 0.
 - Kernel core 4.1.1 allocates the completion counter of `PilotProxy_Compute_FineStatV3_U64` in
   `PilotProxy_Create`, so that no compute entry allocates device memory.
 - Fine decision v3 is added beside v1 and v2, as kernel core 4.1.0. The kernel writes the

@@ -76,6 +76,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from pilot_proxy.fine_reduction import (
+    FINE_PAD_FACTOR,
     WEIGHT_TERM_REF_LOWER,
     WEIGHT_TERM_REF_UPPER,
     WEIGHT_TERM_TARGET,
@@ -436,6 +437,72 @@ def fine_required_multiplier_q16_v2(
     return FineRequiredMultiplier(
         valid=True, n_bulk=len(bulk), rank_bin=rank_bin,
         limiting_bin=limiting_bin, multiplier_q16=required)
+
+
+FINE_DECISION_V3_VERSION = "fine_decision_v3"
+# Fine decision v3 takes the reference median over the even bins, which zero
+# padding leaves as the independent samples of the unpadded transform.
+V3_REFERENCE_BINS = tuple(range(0, FINE_BINS, FINE_PAD_FACTOR))
+V3_RANK = (len(V3_REFERENCE_BINS) - 1) // 2
+
+
+@dataclass(frozen=True)
+class FineStat:
+    """The statistic of fine decision v3 for one frame (kernel d_stat_out)."""
+
+    n_peak: int        # largest num[b] = 2 S_target[b] over the designated set
+    d_rho: int         # den of rank V3_RANK over the even bins, zeros included
+    peak_bin: int      # first designated bin holding n_peak
+    rank_bin: int      # lowest even bin holding d_rho
+
+
+def fine_stat_v3(fine_powers: Any, *, anchor_bin: int, designated_half_width: int) -> FineStat:
+    """Return the fine decision v3 statistic of one frame's exact fine powers.
+
+    The GPU entry PilotProxy_Compute_FineStatV3_U64 must return the same
+    ``[n_peak, d_rho]``. ``d_rho`` is zero when at least half of the even bins
+    have no reference power, and the frame then has no decision.
+    """
+    S = np.asarray(fine_powers)
+    if S.shape != (3, FINE_BINS):
+        raise ValueError("fine_powers must have shape [3, 256].")
+    if S.dtype != np.dtype(np.uint64):
+        raise TypeError("fine_powers must have exact uint64 dtype.")
+    designated = [int(b) for b in designated_bins(anchor_bin, designated_half_width)]
+    num = [2 * int(S[WEIGHT_TERM_TARGET, b]) for b in range(FINE_BINS)]
+    den = [int(S[WEIGHT_TERM_REF_LOWER, b]) + int(S[WEIGHT_TERM_REF_UPPER, b]) for b in range(FINE_BINS)]
+    d_rho = sorted(den[b] for b in V3_REFERENCE_BINS)[V3_RANK]
+    n_peak = max(num[b] for b in designated)
+    return FineStat(n_peak=n_peak, d_rho=d_rho, peak_bin=next(b for b in designated if num[b] == n_peak),
+                    rank_bin=next(b for b in V3_REFERENCE_BINS if den[b] == d_rho))
+
+
+def fine_masked_v3(n_peak: int, d_rho: int, multiplier_q16: int) -> int | None:
+    """Return 1 to mask, 0 to keep, or None when ``d_rho`` is zero (no decision).
+
+    The test is ``multiplier_q16 * d_rho < n_peak * 2**16``, the counterpart of
+    pilotproxy_v3_decision in cuda/pilotproxy_decision.h.
+    """
+    mult = _exact_integer(multiplier_q16, field="multiplier_q16")
+    if not 0 < mult < (1 << 64):
+        raise ValueError("multiplier_q16 must be in [1, 2**64 - 1].")
+    n, d = _exact_integer(n_peak, field="n_peak"), _exact_integer(d_rho, field="d_rho")
+    if d == 0:
+        return None
+    return int(mult * d < n * MULTIPLIER_ONE)
+
+
+def fine_keep_word_v3(n_peak: int, d_rho: int) -> int | None:
+    """Return the smallest Q16 word that keeps the frame.
+
+    ``ALWAYS_MASKED_Q16`` marks a frame that no uint64 word keeps, and ``None``
+    a frame with no decision (``d_rho`` zero).
+    """
+    n, d = _exact_integer(n_peak, field="n_peak"), _exact_integer(d_rho, field="d_rho")
+    if d == 0:
+        return None
+    word = max(1, (n * MULTIPLIER_ONE + d - 1) // d)
+    return ALWAYS_MASKED_Q16 if word > MAX_MULTIPLIER_Q16 else word
 
 
 FINE_DECISION_VERSIONS = (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION)

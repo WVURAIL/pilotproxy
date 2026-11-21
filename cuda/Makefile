@@ -71,7 +71,7 @@ SOURCES           := pilotproxy_detector.cu
 HEADERS           := pilotproxy_detector.h config.h fxfft_master_twiddle.h
 REF_TEST          := test_pilotproxy_reference
 REF_TEST_SOURCES  := pilotproxy_reference.cpp tests/test_pilotproxy_reference.cpp
-REF_TEST_HEADERS  := pilotproxy_detector.h pilotproxy_reference.h config.h fxfft256_ref.c
+REF_TEST_HEADERS  := pilotproxy_detector.h pilotproxy_reference.h pilotproxy_decision.h config.h fxfft256_ref.c
 C_HEADER_TEST_OBJ := test_c_header.o
 CUDA_TEST         := test_pilotproxy_cuda
 CUDA_TEST_SOURCES := tests/test_pilotproxy_cuda.cpp pilotproxy_reference.cpp
@@ -137,7 +137,7 @@ $(REF_TEST): $(REF_TEST_SOURCES) $(REF_TEST_HEADERS) $(RELEASE_CONFIG_STAMP)
 	$(CXX) -std=c++14 -O2 -Wall $(CONFIG_DEFS) -I. -o $@ $(REF_TEST_SOURCES)
 	@echo "Built $(REF_TEST)"
 
-$(C_HEADER_TEST_OBJ): tests/test_c_header.c pilotproxy_detector.h config.h $(RELEASE_CONFIG_STAMP)
+$(C_HEADER_TEST_OBJ): tests/test_c_header.c pilotproxy_detector.h pilotproxy_decision.h config.h $(RELEASE_CONFIG_STAMP)
 	$(CC) -std=c11 -Wall $(CONFIG_DEFS) -I. -c tests/test_c_header.c -o $@
 	@echo "Compiled C header smoke test"
 

@@ -1,5 +1,6 @@
 #include "pilotproxy_detector.h"
 #include "pilotproxy_reference.h"
+#include "pilotproxy_decision.h"
 
 #include <cassert>
 #include <cmath>
@@ -304,8 +305,35 @@ static void run_fine_reference_checks()
     }
 }
 
+// pilotproxy_v3_decision against unsigned __int128, at each keep boundary,
+// one word on either side, zero references and operands near 2^64.
+static void assert_v3_decision_is_exact()
+{
+    const uint64_t big = ~0ULL;
+    const uint64_t pairs[][2] = {
+        {0, 1}, {1, 1}, {5, 1}, {1ULL << 56, 3}, {(1ULL << 57) - 1, 1ULL << 40},
+        {big, big}, {big, 1}, {1, big}, {123456789ULL, 987654321ULL},
+    };
+    for (const auto& p : pairs) {
+        const uint64_t n = p[0], d = p[1];
+        const unsigned __int128 rhs = static_cast<unsigned __int128>(n) << 16;
+        // smallest word that keeps: ceil(n 2^16 / d), at least 1
+        unsigned __int128 keep = (rhs + d - 1) / d;
+        if (keep < 1) keep = 1;
+        const unsigned __int128 candidates[] = {1, keep - 1, keep, keep + 1, big};
+        for (unsigned __int128 w : candidates) {
+            if (w < 1 || w > big) continue;
+            const int want = static_cast<unsigned __int128>(static_cast<uint64_t>(w)) * d < rhs;
+            assert(pilotproxy_v3_decision(n, d, static_cast<uint64_t>(w)) == want);
+        }
+    }
+    assert(pilotproxy_v3_decision(5, 0, 1) == -1);
+    assert(pilotproxy_v3_decision(0, 0, big) == -1);
+}
+
 int main()
 {
+    assert_v3_decision_is_exact();
     run_row_sums_reference_checks();
     run_fine_reference_checks();
     assert(pilotproxy_ref_sign_extend_i4(INT4_ZERO_CODE) == INT4_ZERO_VALUE);

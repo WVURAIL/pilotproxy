@@ -17,14 +17,13 @@ CALIBRATION_SHARE = 2.0 / 3.0
 @lru_cache(maxsize=None)
 def _file_info(path: str) -> tuple[int, int | None, list[int]]:
     """Return the first FPGA sequence number, its time in ns (None if not recorded) and the coarse channels of one run file."""
-    import h5py
+    from pilot_proxy.run_files import read_attrs
 
-    with h5py.File(path, "r") as handle:
-        data = handle[next(name for name in handle if name.startswith("dtv_fine_powers"))]
-        # the attributes are dropped when every row is unused (-1)
-        start = int(data.attrs.get("fpga_seq_num", 0))
-        time_ns = data.attrs.get("fpga_seq_time_nsec")
-        return start, None if time_ns is None else int(time_ns), [int(c) for c in data.attrs.get("coarse_freq", [])]
+    attrs = read_attrs(path)
+    # the attributes are dropped when every row is unused (-1)
+    start = int(attrs.get("fpga_seq_num", 0))
+    time_ns = attrs.get("fpga_seq_time_nsec")
+    return start, None if time_ns is None else int(time_ns), [int(c) for c in attrs.get("coarse_freq", [])]
 
 
 def ordered_run_files(runs: list[str]) -> list[tuple[int | None, list[int], str]]:

@@ -348,7 +348,8 @@ def replay_capture(plan_path):
             "windows_per_stream": geometry.windows_per_stream,
             "frame_size_samples": geometry.block_samples,
             "fine_bins": 256,
-            **{key: calibration[key] for key in ("anchor_bin", "designated_half_width")},
+            # v3 has no anchor or search width: it searches every bin
+            **{key: calibration[key] for key in ("anchor_bin", "designated_half_width") if key in calibration},
             **_score_geometry(calibration),
         }
         validate_score_profile(profile)

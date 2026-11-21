@@ -795,7 +795,7 @@ def test_v3_bundle_names_no_reference_bins(v3_plans):
     for row in rows:
         fine = row["fine_calibration"]
         assert fine["decision_version"] == "fine_decision_v3"
-        assert "bulk_mask_words_hex" not in fine and "cfar_rank" not in fine
+        assert not {"bulk_mask_words_hex", "cfar_rank", "anchor_bin", "designated_half_width"} & set(fine)
         assert fine["cfar_multiplier_q16"] >= 1
     # the report keeps the geometry the words were scored on
     assert v3_plans["report"]["control"]["cfar_rank"] == 63
@@ -809,7 +809,12 @@ def test_v3_bundle_passes_on_other_captures(plans, v3_plans):
 
 def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     path = limit_plan(plans, tmp_path, 1e-3)
-    path.write_text(json.dumps(dict(json.loads(path.read_text()), decision_version="fine_decision_v3")))
+    # v3 searches all 256 bins, whose noise peak on these few-input captures lies above that of the 65-bin
+    # search, so 12 frames are too few for the pilot to pass the seen test; 36 are enough
+    mixed = [write_capture(tmp_path / f"c35_{i}.h5", 35, 6, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    plan = json.loads(path.read_text())
+    plan["channels"] = dict(plan["channels"], **{"35": mixed})
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     channel = report["channels"]["35"]
     tested = channel["power_limit"]

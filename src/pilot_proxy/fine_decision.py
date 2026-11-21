@@ -450,30 +450,31 @@ V3_RANK = (len(V3_REFERENCE_BINS) - 1) // 2
 class FineStat:
     """The statistic of fine decision v3 for one frame (kernel d_stat_out)."""
 
-    n_peak: int        # largest num[b] = 2 S_target[b] over the designated set
+    n_peak: int        # largest num[b] = 2 S_target[b] over all 256 bins
     d_rho: int         # den of rank V3_RANK over the even bins, zeros included
-    peak_bin: int      # first designated bin holding n_peak
+    peak_bin: int      # lowest bin holding n_peak
     rank_bin: int      # lowest even bin holding d_rho
 
 
-def fine_stat_v3(fine_powers: Any, *, anchor_bin: int, designated_half_width: int) -> FineStat:
+def fine_stat_v3(fine_powers: Any) -> FineStat:
     """Return the fine decision v3 statistic of one frame's exact fine powers.
 
-    The GPU entry PilotProxy_Compute_FineStatV3_U64 must return the same
-    ``[n_peak, d_rho]``. ``d_rho`` is zero when at least half of the even bins
-    have no reference power, and the frame then has no decision.
+    ``n_peak`` is the largest target over all 256 bins, so the padded bins catch a pilot between two
+    independent bins, and ``d_rho`` the median reference over the 128 even bins, the independent samples.
+    There is no anchor or search width. The GPU entry PilotProxy_Compute_FineStatV3_U64 must return the
+    same ``[n_peak, d_rho]``. ``d_rho`` is zero when at least half of the even bins have no reference
+    power, and the frame then has no decision.
     """
     S = np.asarray(fine_powers)
     if S.shape != (3, FINE_BINS):
         raise ValueError("fine_powers must have shape [3, 256].")
     if S.dtype != np.dtype(np.uint64):
         raise TypeError("fine_powers must have exact uint64 dtype.")
-    designated = [int(b) for b in designated_bins(anchor_bin, designated_half_width)]
     num = [2 * int(S[WEIGHT_TERM_TARGET, b]) for b in range(FINE_BINS)]
     den = [int(S[WEIGHT_TERM_REF_LOWER, b]) + int(S[WEIGHT_TERM_REF_UPPER, b]) for b in range(FINE_BINS)]
     d_rho = sorted(den[b] for b in V3_REFERENCE_BINS)[V3_RANK]
-    n_peak = max(num[b] for b in designated)
-    return FineStat(n_peak=n_peak, d_rho=d_rho, peak_bin=next(b for b in designated if num[b] == n_peak),
+    n_peak = max(num)
+    return FineStat(n_peak=n_peak, d_rho=d_rho, peak_bin=num.index(n_peak),
                     rank_bin=next(b for b in V3_REFERENCE_BINS if den[b] == d_rho))
 
 
@@ -509,18 +510,18 @@ def fine_keep_word_v3(n_peak: int, d_rho: int) -> int | None:
 def fine_mask_decision_v3(
     fine_powers: Any,
     *,
-    anchor_bin: int,
-    designated_half_width: int,
     multiplier_q16: int,
+    anchor_bin: Any = None,
+    designated_half_width: Any = None,
     bulk_mask: Any = None,
     cfar_rank: Any = None,
 ) -> FineDecision:
     """Return fine decision v3 in the form of the v1 and v2 decisions (``mask`` = 1 rejects).
 
-    ``bulk_mask`` and ``cfar_rank`` are accepted for a common call and not used:
-    v3 fixes the even bins and rank 63. A frame with ``d_rho = 0`` is invalid.
+    The geometry arguments of v1 and v2 are accepted for a common call and not used: v3 searches every
+    bin and takes the median of the even bins at rank 63. A frame with ``d_rho = 0`` is invalid.
     """
-    stat = fine_stat_v3(fine_powers, anchor_bin=anchor_bin, designated_half_width=designated_half_width)
+    stat = fine_stat_v3(fine_powers)
     keep = fine_keep_v3(stat.n_peak, stat.d_rho, multiplier_q16)
     n_bulk = len(V3_REFERENCE_BINS)
     if keep is None:
@@ -532,17 +533,17 @@ def fine_mask_decision_v3(
 def fine_required_multiplier_q16_v3(
     fine_powers: Any,
     *,
-    anchor_bin: int,
-    designated_half_width: int,
+    anchor_bin: Any = None,
+    designated_half_width: Any = None,
     bulk_mask: Any = None,
     cfar_rank: Any = None,
 ) -> FineRequiredMultiplier:
     """Return the exact Q16 keep boundary of fine decision v3 for one frame.
 
     As for v2, ``ALWAYS_MASKED_Q16`` marks a frame no uint64 word keeps and
-    ``None`` a frame with no decision. ``bulk_mask`` and ``cfar_rank`` are not used.
+    ``None`` a frame with no decision. The geometry arguments are not used.
     """
-    stat = fine_stat_v3(fine_powers, anchor_bin=anchor_bin, designated_half_width=designated_half_width)
+    stat = fine_stat_v3(fine_powers)
     word = fine_keep_word_v3(stat.n_peak, stat.d_rho)
     n_bulk = len(V3_REFERENCE_BINS)
     if word is None:

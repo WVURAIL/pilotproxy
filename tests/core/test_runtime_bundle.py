@@ -907,8 +907,8 @@ def test_marker_guard_bins_must_be_an_integer_in_range(tmp_path, guard) -> None:
 
 def _v3_block(**changes) -> dict:
     block, _ = _calibrated_fine_block(62, "fine_decision_v3")
-    del block["bulk_mask_words_hex"], block["cfar_rank"]
-    block.update(designated_half_width=32, power_limit_multiplier_q16=int(1.2 * 65536))
+    del block["bulk_mask_words_hex"], block["cfar_rank"], block["anchor_bin"], block["designated_half_width"]
+    block.update(power_limit_multiplier_q16=int(1.2 * 65536))
     block.update(changes)
     return block
 
@@ -930,7 +930,8 @@ def test_v3_block_validates_without_reference_bins(tmp_path) -> None:
 
 
 @pytest.mark.parametrize("key, value", [("bulk_mask_words_hex", ["0x0"] * 4), ("cfar_rank", 63),
-                                        ("marker_guard_bins", 1)])
+                                        ("marker_guard_bins", 1), ("anchor_bin", 141),
+                                        ("designated_half_width", 32)])
 def test_v3_block_refuses_reference_bins(tmp_path, key, value) -> None:
     checks = _fine_checks(tmp_path, _v3_block(**{key: value}))
     assert any(key in c for c in checks), checks

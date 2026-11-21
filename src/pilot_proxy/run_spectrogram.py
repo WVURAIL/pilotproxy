@@ -28,7 +28,8 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
     if channel not in rows:
         raise ValueError(f"channel {channel} is not in the bundle")
     calibration = rows[channel]["fine_calibration"]
-    anchor, word = int(calibration["anchor_bin"]), int(calibration["cfar_multiplier_q16"])
+    # v3 searches every bin and has no anchor; its spectrogram is drawn from bin 0
+    anchor, word = int(calibration.get("anchor_bin", 0)), int(calibration["cfar_multiplier_q16"])
     bulk, rank = calibration_geometry(calibration)
     channel_id = int(rows[channel]["receiver_channel_id"])
     per_chunk = max(1, round(chunk_seconds / FRAME_SECONDS))

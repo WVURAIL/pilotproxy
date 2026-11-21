@@ -56,7 +56,8 @@ def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, out
         raise ValueError(f"channel {channel} is not in the bundle")
     row = rows[channel]
     calibration = row["fine_calibration"]
-    anchor, word = int(calibration["anchor_bin"]), int(calibration["cfar_multiplier_q16"])
+    # v3 searches every bin and has no anchor
+    anchor, word = int(calibration.get("anchor_bin", 0)), int(calibration["cfar_multiplier_q16"])
     bulk, rank = calibration_geometry(calibration)
     paths = _expand(runs)
     decision = calibration["decision_version"]

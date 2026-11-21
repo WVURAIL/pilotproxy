@@ -239,10 +239,10 @@ def _float_words_v2_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.nd
 
 def _float_words_v3_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray,
                               rank: int) -> tuple[np.ndarray, np.ndarray]:
-    """Version 3: the largest target in the search over the median reference of the even bins.
+    """Version 3: the largest target of all 256 bins over the median reference of the even bins.
 
-    The even bins and rank 63 are fixed, zeros included, so `bulk` and `rank` are not read.
-    A frame whose median reference is zero has no decision.
+    Every bin is searched and the median takes the even bins at rank 63, zeros included, so `anchor_bin`,
+    `bulk` and `rank` are not read. A frame whose median reference is zero has no decision.
     """
     even, rank = v3_geometry()
     num = 2.0 * fines[:, 0].astype(np.float64)
@@ -253,8 +253,7 @@ def _float_words_v3_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.nd
     close = (background[:, rank] - background[:, rank - 1] <= FLOAT_MARGIN * r)
     close |= background[:, rank + 1] - r <= FLOAT_MARGIN * r
 
-    search = (anchor_bin + np.arange(-SEARCH_HALF_WIDTH, SEARCH_HALF_WIDTH + 1)) % FINE_BINS
-    x = num[:, search].max(axis=1) * Q16 / np.where(valid, r, 1.0)
+    x = num.max(axis=1) * Q16 / np.where(valid, r, 1.0)
     huge = x > 2.0**63 * (1 + FLOAT_MARGIN)
     # the ceiling of a value this close to an integer needs the exact products
     close |= ~huge & (np.abs(x - np.rint(x)) <= FLOAT_MARGIN * x)
@@ -329,8 +328,9 @@ def null_scores(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: i
     """Return Q16 null scores at pseudo-searches over the bins clear of the real search of each frame.
 
     Version 1 scores the bin ratio against the ratio of rank `rank` in the background, and version 2
-    scores the target alone against the reference of that rank. Version 3 scores the target against the
-    median reference of the even bins, and reads neither `bulk` nor `rank`.
+    scores the target alone against the reference of that rank. Version 3 searches every bin, so it
+    gives one score per frame, the largest target over the median reference of the even bins, and reads
+    neither `anchor_bin`, `bulk` nor `rank`.
     """
     decision_functions(decision_version)
     if decision_version == FINE_DECISION_V3_VERSION:
@@ -340,8 +340,9 @@ def null_scores(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: i
         fines = np.asarray(fines, dtype=np.float64)
         ratios = 2.0 * fines[:, 0]
         reference = np.sort((fines[:, 1] + fines[:, 2])[:, bins], axis=1)[:, rank]
-        # a frame with a zero median reference has no decision, and no score
-        ratios, reference = ratios[reference > 0], reference[reference > 0]
+        # v3 searches every bin, so each frame gives one null score; one with a zero median gives none
+        good = reference > 0
+        return ratios[good].max(axis=1) / reference[good] * Q16
     elif decision_version == FINE_DECISION_V2_VERSION:
         fines = np.asarray(fines, dtype=np.float64)
         ratios = 2.0 * fines[:, 0]
@@ -461,9 +462,9 @@ def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: i
     if "num_inputs" in plan:
         provenance["summed_inputs"] = int(plan["num_inputs"])
     if decision_version == FINE_DECISION_V3_VERSION:
-        # v3 fixes its reference bins, and carries the power-limit word beside the default one
+        # v3 has no geometry (every bin searched, the even bins' median), and carries the power-limit word
         values = dict(status=status, decision_version=decision_version, cfar_multiplier_q16=word,
-                      anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, provenance=provenance)
+                      provenance=provenance)
         if power_limit_word is not None:
             values["power_limit_multiplier_q16"] = int(power_limit_word)
         return values
@@ -603,7 +604,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             scores = simulated_null_scores(int(plan["num_inputs"]), decision_version=decision)
             control_record = None
             source = f"white noise, {int(plan['num_inputs'])} inputs"
-        independent = (len(fines) if control else MIN_SIMULATED_FRAMES) * clear_searches()
+        # v3 searches every bin, so a frame holds one independent null score, not clear_searches()
+        per_frame = 1 if decision == FINE_DECISION_V3_VERSION else clear_searches()
+        independent = (len(fines) if control else MIN_SIMULATED_FRAMES) * per_frame
         if independent * (1.0 - quantile) < 1:
             raise ValueError(f"{independent} independent null scores are too few for quantile {quantile}")
         measured_word = int(math.ceil(float(np.quantile(scores, quantile))))
@@ -807,7 +810,7 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
         fine_cal = rows[channel]["fine_calibration"]
         bulk, rank = calibration_geometry(fine_cal)
         fines, _ = _load_fines(paths, fmt, rows[channel], bank, k, reverse, max_frames)
-        words = required_words(fines, anchor_bin=fine_cal["anchor_bin"], bulk=bulk, rank=rank,
+        words = required_words(fines, anchor_bin=fine_cal.get("anchor_bin", 0), bulk=bulk, rank=rank,
                                decision_version=fine_cal["decision_version"])
         valid = words >= 0
         check(f"rank support on channel {channel}", valid.all(), f"{int(valid.sum())} of {words.size} frames")

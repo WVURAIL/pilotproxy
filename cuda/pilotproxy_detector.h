@@ -586,7 +586,7 @@ int PilotProxy_Supports_FusedFineMaskV2(void);
  * d_rho is zero only when at least half of the even bins have den = 0, and the
  * block then has no decision. d_stat_out holds 2 * batch values. The
  * acceptance test is equality with pilot_proxy.fine_decision.fine_stat_v3 over
- * the same exact powers (tests/kernel/test_fine_stat_v3_gpu.py).
+ * the same exact powers (tests/kernel/test_fine_stat_gpu.py).
  */
 void PilotProxy_Compute_FineStatV3_U64(
     void* handle,

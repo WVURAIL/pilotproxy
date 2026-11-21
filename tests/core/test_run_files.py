@@ -6,6 +6,8 @@ from pilot_proxy.bundle_calibration import _expand, run_rows
 from pilot_proxy.run_files import combine, iter_windows, read_attrs, split, windows
 from pilot_proxy.run_plans import ordered_run_files
 
+from kotekan_files import write_frames_file
+
 
 def write_window(path, coarse, seq, time_ns, fill):
     data = np.full((4, len(coarse), 3, 256), fill, dtype=np.uint64)
@@ -57,3 +59,63 @@ def test_combine_refuses_a_window_of_another_shape(tmp_path):
                                                fpga_seq_time_nsec=20)
     with pytest.raises(ValueError, match="shape"):
         combine(acq, tmp_path / "out", "fine_powers")
+
+
+def write_half(path, coarse, seq, fill, t0=10**18):
+    """One frame of 4 rows of one half, with the attributes recv writes; time is linear in fpga_seq_num."""
+    write_window(path, coarse, seq, t0 + seq * 5120, fill)
+    with h5py.File(path, "a") as handle:
+        handle["dtv_fine_powers"].attrs.update(dim_scalings=np.array([8192, 1, 1, 1]), time_downsampling_fpga=8192)
+    return path
+
+
+def test_several_frame_file_reads_as_its_frames(tmp_path):
+    """A kotekan#1925 file: frames of two halves in arrival order, one arriving after a later window's."""
+    window = 4 * 8192
+    seq = [10**9 + w * window for w in range(3)]
+    sources = {}
+    for w in range(3):
+        sources["a", w] = write_half(tmp_path / f"a{w}.h5", [2715, 3115], seq[w], w + 1)
+        sources["b", w] = write_half(tmp_path / f"b{w}.h5", [2869, -1], seq[w], 10 + w)
+    order = [("a", 1), ("a", 0), ("b", 1), ("b", 0), ("a", 2), ("b", 2)]
+    acq = tmp_path / "acq_1"
+    acq.mkdir()
+    path = str(write_frames_file([sources[k] for k in order], acq / "dtv_fine_powers.00000000.h5"))
+    specs = windows(path)
+    assert specs == [f"{path}#{i}" for i in range(6)]
+    for spec, key in zip(specs, order):
+        source = str(sources[key])
+        got, want = read_attrs(spec), read_attrs(source)
+        for name in ("fpga_seq_num", "fpga_seq_time_nsec", "time_downsampling_fpga", "seq_length_nsec"):
+            assert got[name] == want[name], name
+        assert list(got["coarse_freq"]) == list(want["coarse_freq"])
+        assert np.array_equal(run_rows(spec, 3115), run_rows(source, 3115))
+        assert np.array_equal(run_rows(spec, 2869), run_rows(source, 2869))
+    assert [int(a["fpga_seq_num"]) for a, _ in iter_windows(path)] == [seq[w] for _, w in order]
+    # recording order is by time, whatever the arrival order
+    times = [t for t, _, _ in ordered_run_files([path])]
+    assert times == sorted(read_attrs(sources[k])["fpga_seq_time_nsec"] for k in order)
+    assert _expand([str(acq / "*.h5")]) == specs
+    with pytest.raises(ValueError, match="several frames"):
+        read_attrs(path)
+    assert combine(acq, tmp_path / "out", "fine_powers") == [
+        {"product": "fine_powers", "skipped_several_frame_files": 1}]
+    assert not list((tmp_path / "out").glob("*.h5"))
+
+
+def test_frame_after_an_f_engine_restart_has_no_time(tmp_path):
+    first = write_half(tmp_path / "a0.h5", [2715, 3115], 10**9, 1)
+    restarted = write_half(tmp_path / "a1.h5", [2715, 3115], 4096, 2, t0=2 * 10**18)
+    path = str(write_frames_file([first, restarted], tmp_path / "dtv_fine_powers.00000000.h5"))
+    assert "fpga_seq_time_nsec" not in read_attrs(f"{path}#1")
+    assert read_attrs(f"{path}#1")["fpga_seq_num"] == 4096
+    # a time recorded with each frame is taken as it is
+    path = str(write_frames_file([first, restarted], tmp_path / "dtv_fine_powers.00000002.h5", per_frame_time=True))
+    assert read_attrs(f"{path}#1")["fpga_seq_time_nsec"] == read_attrs(restarted)["fpga_seq_time_nsec"]
+
+
+def test_frames_of_an_idle_half_have_no_channels(tmp_path):
+    idle = [write_half(tmp_path / f"i{w}.h5", [-1, -1], 10**9 + w * 4 * 8192, 0) for w in range(2)]
+    path = str(write_frames_file(idle, tmp_path / "dtv_fine_powers.00000000.h5"))
+    assert all("coarse_freq" not in read_attrs(spec) for spec in windows(path))
+    assert run_rows(f"{path}#0", 3115).shape == (0, 3, 256)

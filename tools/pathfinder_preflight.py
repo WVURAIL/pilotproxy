@@ -8,12 +8,15 @@ built from an allowed branch (develop or chord by default: chord is develop plus
 neither has a DTV subtraction or GNSS correlator), that
 no cudaDtvSubtract runs, that the detector writes fine powers and that the node sends the mask, powers,
 fine support and fine powers (dtv_calibration_mode); it prints the mask and recording switches. On recv
-it checks that the same four products are received and written. Exit status 0 when every check passes.
-Standard library only.
+it checks that the same four products are received and written. A node that does not answer, or answers
+without a running pipeline (a 404 on /config), fails its check, and the others are still checked. Exit
+status 0 when every check passes. Standard library only.
 """
 import argparse
+import http.client
 import json
 import sys
+import urllib.error
 import urllib.request
 
 PRODUCTS = ("mask", "powers", "fine_support", "fine_powers")
@@ -22,6 +25,19 @@ PRODUCTS = ("mask", "powers", "fine_support", "fine_powers")
 def get(host, port, path):
     with urllib.request.urlopen(f"http://{host}:{port}{path}", timeout=10) as reply:
         return json.loads(reply.read().decode())
+
+
+def fetch(host, port, *paths):
+    """Return the JSON replies of the paths, or None and the reason one has none."""
+    replies = []
+    for path in paths:
+        try:
+            replies.append(get(host, port, path))
+        except urllib.error.HTTPError as error:
+            return None, f"{path}: HTTP {error.code} {error.reason}"
+        except (OSError, http.client.HTTPException, ValueError) as error:
+            return None, f"{path}: {str(getattr(error, 'reason', error)).strip()}"
+    return replies, None
 
 
 def gpu_commands(config, stage):
@@ -45,7 +61,12 @@ def main():
             failed.append(text)
 
     for host in args.nodes:
-        config, version = get(host, args.port, "/config"), get(host, args.port, "/version")
+        replies, problem = fetch(host, args.port, "/config", "/version")
+        if replies is None:
+            print(f"== {host}")
+            check(False, f"{host}: Kotekan answers with a running pipeline ({problem})")
+            continue
+        config, version = replies
         print(f"== {host} ({version.get('kotekan_version')}, {version.get('git_commit_hash')})")
         check(version.get("branch") in args.branches,
               f"{host}: Kotekan built from {' or '.join(args.branches)} (is {version.get('branch')})")
@@ -60,11 +81,16 @@ def main():
         print(f"     switches: mask {config.get('dtv_mask_enabled', {}).get('enabled')}, "
               f"recording {config.get('dtv_write_enabled', {}).get('enabled')}")
 
-    recv = get(args.recv, args.port, "/config")
-    print(f"== {args.recv} ({get(args.recv, args.port, '/version').get('kotekan_version')})")
-    received, written = sorted(recv.get("buffer_recv_dtv", {})), sorted(recv.get("write_dtv", {}))
-    check(all(p in received for p in PRODUCTS), f"{args.recv}: receives {', '.join(PRODUCTS)} (has {received})")
-    check(all(p in written for p in PRODUCTS), f"{args.recv}: writes {', '.join(PRODUCTS)} (has {written})")
+    replies, problem = fetch(args.recv, args.port, "/config", "/version")
+    if replies is None:
+        print(f"== {args.recv}")
+        check(False, f"{args.recv}: Kotekan answers with a running pipeline ({problem})")
+    else:
+        recv, version = replies
+        print(f"== {args.recv} ({version.get('kotekan_version')})")
+        received, written = sorted(recv.get("buffer_recv_dtv", {})), sorted(recv.get("write_dtv", {}))
+        check(all(p in received for p in PRODUCTS), f"{args.recv}: receives {', '.join(PRODUCTS)} (has {received})")
+        check(all(p in written for p in PRODUCTS), f"{args.recv}: writes {', '.join(PRODUCTS)} (has {written})")
     print("ready" if not failed else f"NOT ready: {len(failed)} check(s) failed")
     sys.exit(1 if failed else 0)
 

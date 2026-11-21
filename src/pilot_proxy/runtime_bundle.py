@@ -26,6 +26,7 @@ from pilot_proxy.detector_contract import (
 )
 from pilot_proxy.fine_decision import (
     CALIBRATION_DECISION_VERSION,
+    FINE_DECISION_V3_VERSION,
     FINE_DECISION_VERSIONS,
 )
 from pilot_proxy.fine_reduction import (
@@ -956,6 +957,14 @@ def _validate_fine_calibration(
             "cfar_multiplier_q16",
             "provenance",
         }
+        is_v3 = block.get("decision_version") == FINE_DECISION_V3_VERSION
+        if is_v3:
+            # v3 fixes its reference bins (the 128 even bins at rank 63), so a block names none
+            required_fields -= {"bulk_mask_words_hex", "cfar_rank"}
+            for key in ("bulk_mask_words_hex", "cfar_rank", "marker_guard_bins"):
+                if key in block:
+                    _add_error(errors, f"{field}.{key}",
+                               f"{FINE_DECISION_V3_VERSION} fixes its reference bins and takes no {key}")
         missing_fields = sorted(required_fields - set(block))
         if missing_fields:
             _add_error(
@@ -1001,6 +1010,9 @@ def _validate_fine_calibration(
             multiplier_q16=block.get("cfar_multiplier_q16"),
         )
         if status == FINE_CALIBRATION_STATUS_PENDING:
+            continue
+        if is_v3:
+            _validate_v3_fine_calibration(block=block, field=field, errors=errors)
             continue
         anchor = _fine_calibration_int(
             block=block,
@@ -1084,6 +1096,21 @@ def _validate_fine_calibration(
                             f"designated/guard bin {b} is set in the bulk mask",
                         )
                         break
+
+
+def _validate_v3_fine_calibration(*, block: dict, field: str, errors: list[dict[str, str]]) -> None:
+    """Check the anchor, the search and the words of a fine_decision_v3 block."""
+    anchor = _fine_calibration_int(block=block, key="anchor_bin", field=field, errors=errors)
+    half_width = _fine_calibration_int(block=block, key="designated_half_width", field=field, errors=errors)
+    if anchor is not None and not 0 <= anchor < FINE_CALIBRATION_NUM_BINS:
+        _add_error(errors, f"{field}.anchor_bin", f"out of range: {anchor}")
+    if half_width is not None and not 0 <= half_width < FINE_CALIBRATION_NUM_BINS // 2:
+        _add_error(errors, f"{field}.designated_half_width", f"out of range: {half_width}")
+    keys = ["cfar_multiplier_q16"] + (["power_limit_multiplier_q16"] if "power_limit_multiplier_q16" in block else [])
+    for key in keys:
+        word = _fine_calibration_int(block=block, key=key, field=field, errors=errors)
+        if word is not None and not 0 < word < (1 << 64):
+            _add_error(errors, f"{field}.{key}", f"must be in uint64 range [1, {(1 << 64) - 1}]: {word}")
 
 
 def _coerce_int_metadata(value: object, *, field: str) -> int:

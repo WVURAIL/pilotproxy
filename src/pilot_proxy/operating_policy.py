@@ -42,7 +42,7 @@ from pathlib import Path
 from pilot_proxy import runtime_calibration as calibration
 from pilot_proxy.atsc_channels import physical_channel_to_lower_edge_hz
 from pilot_proxy.config.project import default_project
-from pilot_proxy.fine_decision import MAX_MULTIPLIER_Q16
+from pilot_proxy.fine_decision import FINE_DECISION_V3_VERSION, MAX_MULTIPLIER_Q16
 from pilot_proxy.integration.receiver_profile import (
     load_receiver_profile,
     receiver_profile_hash_matches,
@@ -166,11 +166,15 @@ def _binding(channel, freq, eta, bound, status="calibrated"):
     fine = bound["fine_calibration"]
     if fine["status"] != status:
         return None
-    _require(fine["cfar_multiplier_q16"] == eta, f"channel {channel}: the bundle's word differs from the decided word")
+    # the decided word is the power-limit word, which v3 carries beside its default word
+    v3 = fine["decision_version"] == FINE_DECISION_V3_VERSION
+    word_key = "power_limit_multiplier_q16" if v3 else "cfar_multiplier_q16"
+    _require(fine.get(word_key) == eta, f"channel {channel}: the bundle's word differs from the decided word")
+    geometry = {} if v3 else {"cfar_rank": fine["cfar_rank"], "bulk_mask_words_hex": fine["bulk_mask_words_hex"]}
     return {
         "physical_channel": channel, "receiver_channel_id": freq, "eta_q16": str(eta),
-        "decision_version": fine["decision_version"], "cfar_rank": fine["cfar_rank"], "anchor_bin": fine["anchor_bin"],
-        "designated_half_width": fine["designated_half_width"], "bulk_mask_words_hex": fine["bulk_mask_words_hex"],
+        "decision_version": fine["decision_version"], "anchor_bin": fine["anchor_bin"],
+        "designated_half_width": fine["designated_half_width"], **geometry,
         **({"marker_guard_bins": fine["marker_guard_bins"]} if "marker_guard_bins" in fine else {}),
     }
 

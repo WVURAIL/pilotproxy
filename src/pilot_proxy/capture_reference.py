@@ -24,8 +24,10 @@ from typing import Any, Sequence
 import numpy as np
 
 from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
     FINE_DECISION_VERSIONS,
     FineRequiredMultiplier,
+    calibration_geometry,
     decision_functions,
 )
 from pilot_proxy.fxfft import fine_power_fx
@@ -417,14 +419,16 @@ def expected_products(
         projections = expected_matched_filter_row_projections(real, imag, weight_bank[offset:offset + nbytes])
         fine = fine_power_fx(projections, num_streams=geometry.num_streams)
         powers[index] = fine.sum(axis=1, dtype=np.uint64)
-        words = calibration["bulk_mask_words_hex"]
-        if not isinstance(words, list) or len(words) != 4 or any(not isinstance(word, str) for word in words):
-            raise ValueError("bulk_mask_words_hex must contain four hexadecimal strings")
+        if calibration["decision_version"] != FINE_DECISION_V3_VERSION:
+            words = calibration["bulk_mask_words_hex"]
+            if not isinstance(words, list) or len(words) != 4 or any(not isinstance(word, str) for word in words):
+                raise ValueError("bulk_mask_words_hex must contain four hexadecimal strings")
+        bulk, rank = calibration_geometry(calibration)
         args = {
             "anchor_bin": calibration["anchor_bin"],
             "designated_half_width": calibration["designated_half_width"],
-            "bulk_mask": [int(word, 16) for word in words],
-            "cfar_rank": calibration["cfar_rank"],
+            "bulk_mask": bulk,
+            "cfar_rank": rank,
         }
         decision = decide(fine, multiplier_q16=calibration["cfar_multiplier_q16"], **args)
         required = boundary(fine, **args)

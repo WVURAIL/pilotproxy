@@ -25,6 +25,7 @@ from pilot_proxy.detector_contract import (
     OLD_WEIGHT_COORDINATE_NAMES,
 )
 from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
     FINE_DECISION_VERSION,
     FINE_DECISION_VERSIONS,
     pack_bulk_mask,
@@ -99,6 +100,8 @@ def _metadata_geometry(meta, channel):
     # a score cache states the decision that scored it, at the top or as rebuilt; one that does not is version 1
     version = meta.get("fine_decision") or (meta.get("rebuilt") or {}).get("fine_decision") or FINE_DECISION_VERSION
     _REQUIRE(version in FINE_DECISION_VERSIONS, "Unknown fine decision of the score cache")
+    # a score cache is scored over a frozen background, which fine_decision_v3 does not have
+    _REQUIRE(version != FINE_DECISION_V3_VERSION, "A fine_decision_v3 bundle is calibrated with calibrate-bundle")
     result = {"status": "calibrated", "decision_version": version,
               "anchor_bin": anchor, "designated_half_width": width, "cfar_rank": rank,
               "bulk_mask_words_hex": [f"0x{int(w):016x}" for w in pack_bulk_mask(mask)]}

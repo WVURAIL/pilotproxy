@@ -1,5 +1,6 @@
 #include "pilotproxy_detector.h"
 #include "pilotproxy_reference.h"
+#include "pilotproxy_decision.h"
 
 /* Compile-only smoke test. The public header and the reference header must
  * compile as plain C11, and each call below must match the prototype that
@@ -31,6 +32,9 @@ void test_pilotproxy_c_header(void)
     (void)PilotProxy_Supports_FusedFineMaskWithSupport();
     PilotProxy_Compute_FusedFineMaskWithSupport_U64(
         0, 0, 0, 0, 0, 0, 1ULL, 0, 0, 0, 0, 0, 0);
+    (void)PilotProxy_Supports_FineStatV3();
+    PilotProxy_Compute_FineStatV3_U64(0, 0, 0, 0, 0, 0, 0, 0);
+    (void)pilotproxy_v3_keep(1, 1, 1);
     pilotproxy_ref_fine_powers_u64(0, 0, fine);
     pilotproxy_ref_powers_from_fine_u64(fine, powers);
 }

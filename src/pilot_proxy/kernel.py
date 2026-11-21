@@ -380,6 +380,18 @@ class PilotProxyKernel:
             self._lib.PilotProxy_Compute_FusedFineMaskV2WithSupport_U64.restype = None
             self._lib.PilotProxy_Supports_FusedFineMaskV2.argtypes = []
             self._lib.PilotProxy_Supports_FusedFineMaskV2.restype = ctypes.c_int
+        self._has_fine_stat_v3 = all(
+            _has_symbol(self._lib, name)
+            for name in ("PilotProxy_Compute_FineStatV3_U64", "PilotProxy_Supports_FineStatV3")
+        )
+        if self._has_fine_stat_v3:
+            self._lib.PilotProxy_Compute_FineStatV3_U64.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+            ]
+            self._lib.PilotProxy_Compute_FineStatV3_U64.restype = None
+            self._lib.PilotProxy_Supports_FineStatV3.argtypes = []
+            self._lib.PilotProxy_Supports_FineStatV3.restype = ctypes.c_int
         self._has_get_fine_specs = _has_symbol(self._lib, "PilotProxy_GetFineSpecs")
         if self._has_get_fine_specs:
             self._lib.PilotProxy_GetFineSpecs.argtypes = [
@@ -890,6 +902,36 @@ class PilotProxyKernel:
             fine_powers_ptr,
             mask_ptr,
             *(support or ()),
+            powers_ptr if powers_ptr else None,
+            row_projections_tap_ptr if row_projections_tap_ptr else None,
+        )
+        self._check_call(symbol)
+
+    def supports_fine_stat_v3(self) -> bool:
+        """Return True when the fine decision v3 entry point is available."""
+        return bool(getattr(self, "_has_fine_stat_v3", False)
+                    and int(self._lib.PilotProxy_Supports_FineStatV3()) == 1)
+
+    def compute_fine_stat_v3_u64(
+        self, handle, weights_ptr, anchor_bin, designated_half_width, fine_powers_ptr,
+        stat_ptr, powers_ptr=0, row_projections_tap_ptr=0,
+    ):
+        """Compute the fine decision v3 statistic ``[n_peak, d_rho]`` of every batch entry.
+
+        ``stat_ptr`` must address ``2 * batch`` uint64 on the device, and
+        ``fine_powers_ptr`` the exact fine powers, as for the v1 and v2 calls.
+        The consumer applies its word with ``fine_decision.fine_keep_v3``.
+        """
+        symbol = "PilotProxy_Compute_FineStatV3_U64"
+        if not getattr(self, "_has_fine_stat_v3", False):
+            raise RuntimeError(f"Kernel library does not expose {symbol}.")
+        anchor = _checked_c_int(anchor_bin, field="anchor_bin", minimum=0, maximum=255)
+        half_width = _checked_c_int(designated_half_width, field="designated_half_width", minimum=0,
+                                    maximum=127)
+        self._lib.PilotProxy_Compute_FineStatV3_U64(
+            handle, weights_ptr, anchor, half_width,
+            _checked_uint64(fine_powers_ptr, field="fine_powers_ptr", positive=True),
+            _checked_uint64(stat_ptr, field="stat_ptr", positive=True),
             powers_ptr if powers_ptr else None,
             row_projections_tap_ptr if row_projections_tap_ptr else None,
         )

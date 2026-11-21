@@ -247,7 +247,7 @@ def test_pilot_in_every_capture_takes_the_floor(plans, tmp_path):
     assert channel["masked_fraction"] > 0.9
 
 
-@pytest.mark.parametrize("decision", ["fine_decision_v1", "fine_decision_v2"])
+@pytest.mark.parametrize("decision", ["fine_decision_v1", "fine_decision_v2", "fine_decision_v3"])
 @pytest.mark.parametrize("kind", ["noise", "ties", "dead bins", "near the top", "always masked"])
 @pytest.mark.parametrize("anchor", [100, 3])
 def test_fast_words_equal_the_exact_reference(kind, anchor, decision):
@@ -517,7 +517,7 @@ def test_first_bundle_needs_no_captures(plans, tmp_path, decision, floor):
 
 def test_unknown_decision_version_is_refused(plans, tmp_path):
     path = tmp_path / "plan.json"
-    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3")))
+    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v9")))
     with pytest.raises(ValueError, match="decision_version"):
         calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
 
@@ -743,3 +743,47 @@ def test_process_run_takes_the_power_limit_threshold(plans, tmp_path):
     assert (tmp_path / "out" / "bundle.decisions.json").exists()
     with pytest.raises(ValueError, match="needs a JSON file"):
         process_run(output_dir=tmp_path / "none", threshold="power_limit", **common)
+
+
+@pytest.fixture(scope="module")
+def v3_plans(plans):
+    path = plans["tmp"] / "calibrate_v3.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3")))
+    bundle = plans["tmp"] / "bundle_v3"
+    return dict(bundle=bundle, report=calibrate_bundle(plan_path=path, output_dir=bundle))
+
+
+def test_v3_bundle_names_no_reference_bins(v3_plans):
+    assert v3_plans["report"]["decision_version"] == "fine_decision_v3"
+    rows = json.loads((v3_plans["bundle"] / "pilot_profiles.json").read_text())["profiles"]
+    for row in rows:
+        fine = row["fine_calibration"]
+        assert fine["decision_version"] == "fine_decision_v3"
+        assert "bulk_mask_words_hex" not in fine and "cfar_rank" not in fine
+        assert fine["cfar_multiplier_q16"] >= 1
+    # the report keeps the geometry the words were scored on
+    assert v3_plans["report"]["control"]["cfar_rank"] == 63
+    assert v3_plans["report"]["control"]["bulk_bins"] == list(range(0, 256, 2))
+
+
+def test_v3_bundle_passes_on_other_captures(plans, v3_plans):
+    result = run_bundle_test(bundle_dir=v3_plans["bundle"], plan_path=plans["test_path"])
+    assert result["passed"], result
+
+
+def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
+    path = limit_plan(plans, tmp_path, 1e-3)
+    path.write_text(json.dumps(dict(json.loads(path.read_text()), decision_version="fine_decision_v3")))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    channel = report["channels"]["35"]
+    tested = channel["power_limit"]
+    assert tested["outcome"] == "useful"
+    assert channel["power_limit_word_q16"] == tested["word"] and channel["power_limit_word_source"] == "power limit"
+    # the default word follows the knee rule, as without a power limit
+    assert channel["word_source"] != "power limit"
+    fine = {p["physical_channel"]: p["fine_calibration"]
+            for p in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
+    assert fine[35]["power_limit_multiplier_q16"] == tested["word"]
+    assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
+    # a channel with no passing word holds the floor as its power-limit word
+    assert fine[29]["power_limit_multiplier_q16"] == report["floor_word_q16"]

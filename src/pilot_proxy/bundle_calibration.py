@@ -22,11 +22,13 @@ from pilot_proxy.detectors.narrowband_marker.anchors import WINDOW_HALF_WIDTH, b
 from pilot_proxy.fine_decision import (
     CALIBRATION_DECISION_VERSION,
     FINE_DECISION_V2_VERSION,
+    FINE_DECISION_V3_VERSION,
     FINE_DECISION_VERSION,
     FINE_DECISION_VERSIONS,
+    calibration_geometry,
     decision_functions,
     pack_bulk_mask,
-    unpack_bulk_mask,
+    v3_geometry,
 )
 from pilot_proxy.fxfft import fine_power_fx
 from pilot_proxy.json_utils import write_json_strict
@@ -177,7 +179,8 @@ def _exact_word(fine: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: in
 def _float_words(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int,
                  decision_version: str) -> tuple[np.ndarray, np.ndarray]:
     """Return the keep words of a decision version from float powers, and the frames too close to call."""
-    unchecked = _float_words_v2_unchecked if decision_version == FINE_DECISION_V2_VERSION else _float_words_unchecked
+    unchecked = {FINE_DECISION_V2_VERSION: _float_words_v2_unchecked,
+                 FINE_DECISION_V3_VERSION: _float_words_v3_unchecked}.get(decision_version, _float_words_unchecked)
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         return unchecked(fines, anchor_bin=anchor_bin, bulk=bulk, rank=rank)
 
@@ -229,6 +232,34 @@ def _float_words_v2_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.nd
         close |= background[:, rank] - background[:, rank - 1] <= FLOAT_MARGIN * r
     if rank + 1 < background.shape[1]:
         close |= background[:, rank + 1] - r <= FLOAT_MARGIN * r
+
+    search = (anchor_bin + np.arange(-SEARCH_HALF_WIDTH, SEARCH_HALF_WIDTH + 1)) % FINE_BINS
+    x = num[:, search].max(axis=1) * Q16 / np.where(valid, r, 1.0)
+    huge = x > 2.0**63 * (1 + FLOAT_MARGIN)
+    # the ceiling of a value this close to an integer needs the exact products
+    close |= ~huge & (np.abs(x - np.rint(x)) <= FLOAT_MARGIN * x)
+    words = np.maximum(np.ceil(np.where(huge, 1.0, x)), 1.0)
+    huge |= words >= 2.0**63
+    out = np.where(huge, MAX_SCORE, np.where(huge, 1.0, words).astype(np.int64))
+    out = np.where(valid, out, -1)
+    return out, close & valid
+
+
+def _float_words_v3_unchecked(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray,
+                              rank: int) -> tuple[np.ndarray, np.ndarray]:
+    """Version 3: the largest target in the search over the median reference of the even bins.
+
+    The even bins and rank 63 are fixed, zeros included, so `bulk` and `rank` are not read.
+    A frame whose median reference is zero has no decision.
+    """
+    even, rank = v3_geometry()
+    num = 2.0 * fines[:, 0].astype(np.float64)
+    den = fines[:, 1].astype(np.float64) + fines[:, 2].astype(np.float64)
+    background = np.sort(den[:, np.flatnonzero(even)], axis=1)
+    r = background[:, rank]
+    valid = r > 0
+    close = (background[:, rank] - background[:, rank - 1] <= FLOAT_MARGIN * r)
+    close |= background[:, rank + 1] - r <= FLOAT_MARGIN * r
 
     search = (anchor_bin + np.arange(-SEARCH_HALF_WIDTH, SEARCH_HALF_WIDTH + 1)) % FINE_BINS
     x = num[:, search].max(axis=1) * Q16 / np.where(valid, r, 1.0)
@@ -306,11 +337,20 @@ def null_scores(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: i
     """Return Q16 null scores at pseudo-searches over the bins clear of the real search of each frame.
 
     Version 1 scores the bin ratio against the ratio of rank `rank` in the background, and version 2
-    scores the target alone against the reference of that rank.
+    scores the target alone against the reference of that rank. Version 3 scores the target against the
+    median reference of the even bins, and reads neither `bulk` nor `rank`.
     """
     decision_functions(decision_version)
+    if decision_version == FINE_DECISION_V3_VERSION:
+        bulk, rank = v3_geometry()
     bins = np.flatnonzero(bulk)
-    if decision_version == FINE_DECISION_V2_VERSION:
+    if decision_version == FINE_DECISION_V3_VERSION:
+        fines = np.asarray(fines, dtype=np.float64)
+        ratios = 2.0 * fines[:, 0]
+        reference = np.sort((fines[:, 1] + fines[:, 2])[:, bins], axis=1)[:, rank]
+        # a frame with a zero median reference has no decision, and no score
+        ratios, reference = ratios[reference > 0], reference[reference > 0]
+    elif decision_version == FINE_DECISION_V2_VERSION:
         fines = np.asarray(fines, dtype=np.float64)
         ratios = 2.0 * fines[:, 0]
         den = fines[:, 1] + fines[:, 2]
@@ -335,13 +375,20 @@ def simulated_null_scores(num_inputs: int, frames: int = MIN_SIMULATED_FRAMES, s
                           decision_version: str) -> np.ndarray:
     """Return null scores for white noise summed over num_inputs streams."""
     rng = np.random.default_rng(seed)
-    bulk = _bulk(0)
-    rank = default_rank(bulk)
+    bulk, rank = _geometry(0, (), decision_version)
     powers = np.empty((frames, 3, FINE_BINS))
     for frame in range(frames):
         z = rng.standard_normal((3, num_inputs, WINDOWS, 2), dtype=np.float32).view(np.complex64)[..., 0]
         powers[frame] = (np.abs(np.fft.fft(z, FINE_BINS, axis=2)) ** 2).sum(axis=1)
     return null_scores(powers, anchor_bin=0, bulk=bulk, rank=rank, decision_version=decision_version)
+
+
+def _geometry(anchor: int, excluded: Sequence[int], decision_version: str) -> tuple[np.ndarray, int]:
+    """Return the reference bins and rank: the guarded background for v1 and v2, the even bins for v3."""
+    if decision_version == FINE_DECISION_V3_VERSION:
+        return v3_geometry()
+    bulk = _bulk(anchor, excluded)
+    return bulk, default_rank(bulk)
 
 
 def _bulk(anchor: int, excluded: Sequence[int] = ()) -> np.ndarray:
@@ -410,7 +457,7 @@ def _bin_list(bulk: np.ndarray) -> list[int]:
 
 
 def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: int, plan: dict[str, Any], quantile: float,
-                 note: str, decision_version: str) -> dict[str, Any]:
+                 note: str, decision_version: str, power_limit_word: int | None = None) -> dict[str, Any]:
     # the control is decided and recorded, and never reaches a mask
     status = "control" if channel == CONTROL_PHYSICAL_CHANNEL else "calibrated"
     provenance = dict(epochs=[str(plan.get("epoch", "unstated"))], source_product_sha256=[],
@@ -418,6 +465,13 @@ def _fine_values(channel: int, anchor: int, rank: int, bulk: np.ndarray, word: i
     # the word holds for this set of summed inputs, which Kotekan compares with the live set
     if "num_inputs" in plan:
         provenance["summed_inputs"] = int(plan["num_inputs"])
+    if decision_version == FINE_DECISION_V3_VERSION:
+        # v3 fixes its reference bins, and carries the power-limit word beside the default one
+        values = dict(status=status, decision_version=decision_version, cfar_multiplier_q16=word,
+                      anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, provenance=provenance)
+        if power_limit_word is not None:
+            values["power_limit_multiplier_q16"] = int(power_limit_word)
+        return values
     return dict(status=status, decision_version=decision_version, cfar_multiplier_q16=word,
                 anchor_bin=anchor, designated_half_width=SEARCH_HALF_WIDTH, cfar_rank=rank,
                 bulk_mask_words_hex=[f"0x{w:016x}" for w in pack_bulk_mask(bulk)], provenance=provenance)
@@ -536,17 +590,17 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         if control:
             row = rows[int(control["channel"])]
             anchor = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
-            bulk = _bulk(anchor)
+            bulk, control_rank = _geometry(anchor, (), decision)
             fines, control_captures = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
             # the corrections of the power-limit test read the control again under the geometry of each channel
             control_frames = (fines, control_captures) if inputs else None
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
-                null_scores(fines[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=default_rank(bulk),
+                null_scores(fines[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=control_rank,
                             decision_version=decision)
                 for lo in range(0, len(fines), NULL_CHUNK)])
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
-                                  anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=default_rank(bulk),
+                                  anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=control_rank,
                                   weights_hex=_weights(row, bank).hex(), frames=len(fines),
                                   captures=[str(Path(p).resolve()) for p in _expand(control["captures"])])
             source = "control channel"
@@ -573,8 +627,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             if not paths:
                 # a first bundle, so the detector can record the data for the next one
                 anchor = int(plan.get("anchors", {}).get(str(channel), nominal))
-                bulk = _bulk(anchor, excluded)
-                values[channel] = _fine_values(channel, anchor, default_rank(bulk), bulk, floor, plan, quantile,
+                bulk, rank = _geometry(anchor, excluded, decision)
+                values[channel] = _fine_values(channel, anchor, rank, bulk, floor, plan, quantile,
                                                f"Word from the floor, no captures, floor from {source}.", decision)
                 report_channels[str(channel)] = dict(
                     anchor_bin=anchor, anchor_source="nominal", nominal_bin=nominal, frames=0, captures=0,
@@ -586,8 +640,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             upper = np.quantile(fine_ratio(fines[:, :, window]), 0.9, axis=0)
             anchor = int(window[np.argmax(upper)])
             given = plan.get("anchors", {}).get(str(channel))
-            bulk = _bulk(anchor, excluded)
-            rank = default_rank(bulk)
+            bulk, rank = _geometry(anchor, excluded, decision)
             seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
             hits = int(np.count_nonzero(seen > floor))
             fraction = hits / seen.size
@@ -598,8 +651,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 # noise peak in the window, so fall back to the expected bin
                 anchor = nominal if given is None else int(given)
                 origin = "nominal" if given is None else "plan"
-                bulk = _bulk(anchor, excluded)
-                rank = default_rank(bulk)
+                bulk, rank = _geometry(anchor, excluded, decision)
                 seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
 
             supported = seen >= 0
@@ -621,9 +673,13 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                     # with no pilot in the run the estimate reads only noise, which is no pass
                     tested = dict({key: value for key, value in tested.items() if key not in PASSING_FIELDS},
                                   outcome="not useful", reason="pilot not seen")
+            limited = None
+            if decision == FINE_DECISION_V3_VERSION and tested is not None and not is_control:
+                # v3 keeps the power-limit word apart, and the default word follows the knee rule
+                limited = (tested["word"], "power limit") if tested["outcome"] == "useful" else (floor, f"floor, power limit: {tested['reason']}")
             if given_word is not None or "word_q16" in plan:
                 word, word_source = int(floor if given_word is None else given_word), "plan"
-            elif tested is not None and not is_control:
+            elif tested is not None and not is_control and limited is None:
                 # a channel with no passing word is masked whole by the operating policy, and holds the floor here
                 word, word_source = (tested["word"], "power limit") if tested["outcome"] == "useful" else (floor, f"floor, power limit: {tested['reason']}")
             elif origin == "nominal":
@@ -639,11 +695,15 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 word, word_source = knee, "knee"
             masked = float(np.sum(weights[seen[supported] > word]))
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
-            values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile,
-                                           f"Word from {word_source}, floor from {source}.", decision)
+            note = f"Word from {word_source}, floor from {source}."
+            if limited is not None:
+                note += f" Power-limit word from {limited[1]}."
+            values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile, note, decision,
+                                           power_limit_word=None if limited is None else limited[0])
             report_channels[str(channel)] = dict(
                 anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines), captures=count,
                 word_q16=word, eta=word / Q16, word_source=word_source, knee_word_q16=knee,
+                **({"power_limit_word_q16": limited[0], "power_limit_word_source": limited[1]} if limited else {}),
                 masked_fraction=masked, masked_at_floor=at_floor, pilot_share=share,
                 pilot_in_nearly_every_frame=bool(share > ALWAYS_ON_SHARE),
                 strongest_bin_median_ratio=peak, strongest_bin_masked_fraction=fraction, **intervals,
@@ -750,9 +810,9 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
             check(f"channel {channel}", False, "channel is not in the bundle")
             continue
         fine_cal = rows[channel]["fine_calibration"]
-        bulk = unpack_bulk_mask([int(w, 16) for w in fine_cal["bulk_mask_words_hex"]])
+        bulk, rank = calibration_geometry(fine_cal)
         fines, _ = _load_fines(paths, fmt, rows[channel], bank, k, reverse, max_frames)
-        words = required_words(fines, anchor_bin=fine_cal["anchor_bin"], bulk=bulk, rank=fine_cal["cfar_rank"],
+        words = required_words(fines, anchor_bin=fine_cal["anchor_bin"], bulk=bulk, rank=rank,
                                decision_version=fine_cal["decision_version"])
         valid = words >= 0
         check(f"rank support on channel {channel}", valid.all(), f"{int(valid.sum())} of {words.size} frames")

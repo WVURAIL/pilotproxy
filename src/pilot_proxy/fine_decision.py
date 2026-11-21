@@ -76,6 +76,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from pilot_proxy.fine_reduction import (
+    FINE_PAD_FACTOR,
     WEIGHT_TERM_REF_LOWER,
     WEIGHT_TERM_REF_UPPER,
     WEIGHT_TERM_TARGET,
@@ -438,8 +439,139 @@ def fine_required_multiplier_q16_v2(
         limiting_bin=limiting_bin, multiplier_q16=required)
 
 
-FINE_DECISION_VERSIONS = (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION)
-# New calibrations write version 2. A bundle of either version stays valid.
+FINE_DECISION_V3_VERSION = "fine_decision_v3"
+# Fine decision v3 takes the reference median over the even bins, which zero
+# padding leaves as the independent samples of the unpadded transform.
+V3_REFERENCE_BINS = tuple(range(0, FINE_BINS, FINE_PAD_FACTOR))
+V3_RANK = (len(V3_REFERENCE_BINS) - 1) // 2
+
+
+@dataclass(frozen=True)
+class FineStat:
+    """The statistic of fine decision v3 for one frame (kernel d_stat_out)."""
+
+    n_peak: int        # largest num[b] = 2 S_target[b] over the designated set
+    d_rho: int         # den of rank V3_RANK over the even bins, zeros included
+    peak_bin: int      # first designated bin holding n_peak
+    rank_bin: int      # lowest even bin holding d_rho
+
+
+def fine_stat_v3(fine_powers: Any, *, anchor_bin: int, designated_half_width: int) -> FineStat:
+    """Return the fine decision v3 statistic of one frame's exact fine powers.
+
+    The GPU entry PilotProxy_Compute_FineStatV3_U64 must return the same
+    ``[n_peak, d_rho]``. ``d_rho`` is zero when at least half of the even bins
+    have no reference power, and the frame then has no decision.
+    """
+    S = np.asarray(fine_powers)
+    if S.shape != (3, FINE_BINS):
+        raise ValueError("fine_powers must have shape [3, 256].")
+    if S.dtype != np.dtype(np.uint64):
+        raise TypeError("fine_powers must have exact uint64 dtype.")
+    designated = [int(b) for b in designated_bins(anchor_bin, designated_half_width)]
+    num = [2 * int(S[WEIGHT_TERM_TARGET, b]) for b in range(FINE_BINS)]
+    den = [int(S[WEIGHT_TERM_REF_LOWER, b]) + int(S[WEIGHT_TERM_REF_UPPER, b]) for b in range(FINE_BINS)]
+    d_rho = sorted(den[b] for b in V3_REFERENCE_BINS)[V3_RANK]
+    n_peak = max(num[b] for b in designated)
+    return FineStat(n_peak=n_peak, d_rho=d_rho, peak_bin=next(b for b in designated if num[b] == n_peak),
+                    rank_bin=next(b for b in V3_REFERENCE_BINS if den[b] == d_rho))
+
+
+def fine_keep_v3(n_peak: int, d_rho: int, multiplier_q16: int) -> int | None:
+    """Return 1 to keep, 0 to flag, or None when ``d_rho`` is zero (no decision).
+
+    The frame is kept when ``n_peak * 2**16 <= multiplier_q16 * d_rho``. As in
+    Kotekan's RFI mask, 1 keeps. This is pilotproxy_v3_keep in
+    cuda/pilotproxy_decision.h.
+    """
+    mult = _exact_integer(multiplier_q16, field="multiplier_q16")
+    if not 0 < mult < (1 << 64):
+        raise ValueError("multiplier_q16 must be in [1, 2**64 - 1].")
+    n, d = _exact_integer(n_peak, field="n_peak"), _exact_integer(d_rho, field="d_rho")
+    if d == 0:
+        return None
+    return int(n * MULTIPLIER_ONE <= mult * d)
+
+
+def fine_keep_word_v3(n_peak: int, d_rho: int) -> int | None:
+    """Return the smallest Q16 word that keeps the frame.
+
+    ``ALWAYS_MASKED_Q16`` marks a frame that no uint64 word keeps, and ``None``
+    a frame with no decision (``d_rho`` zero).
+    """
+    n, d = _exact_integer(n_peak, field="n_peak"), _exact_integer(d_rho, field="d_rho")
+    if d == 0:
+        return None
+    word = max(1, (n * MULTIPLIER_ONE + d - 1) // d)
+    return ALWAYS_MASKED_Q16 if word > MAX_MULTIPLIER_Q16 else word
+
+
+def fine_mask_decision_v3(
+    fine_powers: Any,
+    *,
+    anchor_bin: int,
+    designated_half_width: int,
+    multiplier_q16: int,
+    bulk_mask: Any = None,
+    cfar_rank: Any = None,
+) -> FineDecision:
+    """Return fine decision v3 in the form of the v1 and v2 decisions (``mask`` = 1 rejects).
+
+    ``bulk_mask`` and ``cfar_rank`` are accepted for a common call and not used:
+    v3 fixes the even bins and rank 63. A frame with ``d_rho = 0`` is invalid.
+    """
+    stat = fine_stat_v3(fine_powers, anchor_bin=anchor_bin, designated_half_width=designated_half_width)
+    keep = fine_keep_v3(stat.n_peak, stat.d_rho, multiplier_q16)
+    n_bulk = len(V3_REFERENCE_BINS)
+    if keep is None:
+        return FineDecision(mask=0, valid=False, n_bulk=n_bulk, rank_bin=-1, fired_bin=-1)
+    return FineDecision(mask=1 - keep, valid=True, n_bulk=n_bulk, rank_bin=stat.rank_bin,
+                        fired_bin=-1 if keep else stat.peak_bin)
+
+
+def fine_required_multiplier_q16_v3(
+    fine_powers: Any,
+    *,
+    anchor_bin: int,
+    designated_half_width: int,
+    bulk_mask: Any = None,
+    cfar_rank: Any = None,
+) -> FineRequiredMultiplier:
+    """Return the exact Q16 keep boundary of fine decision v3 for one frame.
+
+    As for v2, ``ALWAYS_MASKED_Q16`` marks a frame no uint64 word keeps and
+    ``None`` a frame with no decision. ``bulk_mask`` and ``cfar_rank`` are not used.
+    """
+    stat = fine_stat_v3(fine_powers, anchor_bin=anchor_bin, designated_half_width=designated_half_width)
+    word = fine_keep_word_v3(stat.n_peak, stat.d_rho)
+    n_bulk = len(V3_REFERENCE_BINS)
+    if word is None:
+        return FineRequiredMultiplier(valid=False, n_bulk=n_bulk, rank_bin=-1, limiting_bin=-1, multiplier_q16=None)
+    return FineRequiredMultiplier(valid=True, n_bulk=n_bulk, rank_bin=stat.rank_bin,
+                                  limiting_bin=stat.peak_bin if word > 1 else -1, multiplier_q16=word)
+
+
+def v3_geometry() -> tuple[np.ndarray, int]:
+    """Return the reference bins of fine decision v3 as a 256-bin mask, and its rank."""
+    mask = np.zeros(FINE_BINS, dtype=bool)
+    mask[list(V3_REFERENCE_BINS)] = True
+    return mask, V3_RANK
+
+
+def calibration_geometry(calibration: dict) -> tuple[np.ndarray, int]:
+    """Return the reference-bin mask and rank of a bundle's fine_calibration block.
+
+    Versions 1 and 2 carry them as ``bulk_mask_words_hex`` and ``cfar_rank``.
+    Version 3 carries neither, and uses the even bins at rank 63.
+    """
+    if calibration.get("decision_version") == FINE_DECISION_V3_VERSION:
+        return v3_geometry()
+    words = calibration["bulk_mask_words_hex"]
+    return unpack_bulk_mask([int(w, 16) for w in words]), _exact_integer(calibration["cfar_rank"], field="cfar_rank")
+
+
+FINE_DECISION_VERSIONS = (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION, FINE_DECISION_V3_VERSION)
+# New calibrations write version 2 until Kotekan runs version 3; a bundle of any version stays valid.
 CALIBRATION_DECISION_VERSION = FINE_DECISION_V2_VERSION
 
 
@@ -449,4 +581,6 @@ def decision_functions(version: str):
         return fine_mask_decision, fine_required_multiplier_q16
     if version == FINE_DECISION_V2_VERSION:
         return fine_mask_decision_v2, fine_required_multiplier_q16_v2
+    if version == FINE_DECISION_V3_VERSION:
+        return fine_mask_decision_v3, fine_required_multiplier_q16_v3
     raise ValueError(f"unknown decision_version {version!r}, expected one of {FINE_DECISION_VERSIONS}")

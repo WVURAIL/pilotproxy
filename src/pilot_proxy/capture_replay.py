@@ -29,6 +29,7 @@ from pilot_proxy.detector_geometry import (
     frequency_axis_nyquist_zone,
     nyquist_zone_is_mirrored,
 )
+from pilot_proxy.fine_decision import calibration_geometry, pack_bulk_mask
 from pilot_proxy.integration.receiver_profile import (
     load_receiver_profile,
     receiver_profile_hash_matches,
@@ -61,6 +62,12 @@ PACKING_SCHEMA = "pilotproxy_capture_packing_v1"
 INPUT_SCHEMA = "pilotproxy_capture_input_state_v1"
 PRODUCER_SCHEMA = "pilotproxy_capture_producer_v1"
 
+
+
+def _score_geometry(calibration: dict) -> dict:
+    """Return the reference-bin mask and rank of a bundle block as a score profile states them."""
+    bulk, rank = calibration_geometry(calibration)
+    return {"bulk_mask_words_hex": [f"0x{w:016x}" for w in pack_bulk_mask(bulk)], "cfar_rank": rank}
 
 def _fraction(value, name, positive=False):
     _require(type(value) in (str, int, float), f"{name} must be a finite decimal")
@@ -341,7 +348,8 @@ def replay_capture(plan_path):
             "windows_per_stream": geometry.windows_per_stream,
             "frame_size_samples": geometry.block_samples,
             "fine_bins": 256,
-            **{key: calibration[key] for key in ("anchor_bin", "designated_half_width", "bulk_mask_words_hex", "cfar_rank")},
+            **{key: calibration[key] for key in ("anchor_bin", "designated_half_width")},
+            **_score_geometry(calibration),
         }
         validate_score_profile(profile)
         profiles[channel] = profile

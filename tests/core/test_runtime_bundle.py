@@ -657,7 +657,7 @@ def test_calibrated_fine_block_rejects_inconsistencies(tmp_path) -> None:
     profiles["profiles"][0]["fine_calibration"] = dict(base)
     profiles["profiles"][1]["fine_calibration"] = {
         "status": "unheard_of",
-        "decision_version": "fine_decision_v3",
+        "decision_version": "fine_decision_v9",
     }
     _rewrite_profiles(outputs, profiles)
     report = validate_runtime_weight_bundle(bundle_dir=output_dir)
@@ -903,3 +903,40 @@ def test_marker_guard_bins_must_be_an_integer_in_range(tmp_path, guard) -> None:
     _refresh_sha256sum(outputs, "pilot_profiles")
     checks = {e["check"] for e in _fine_errors(validate_runtime_weight_bundle(bundle_dir=output_dir))}
     assert "pilot_profiles.fine_calibration[0].marker_guard_bins" in checks
+
+
+def _v3_block(**changes) -> dict:
+    block, _ = _calibrated_fine_block(62, "fine_decision_v3")
+    del block["bulk_mask_words_hex"], block["cfar_rank"]
+    block.update(designated_half_width=32, power_limit_multiplier_q16=int(1.2 * 65536))
+    block.update(changes)
+    return block
+
+
+def _fine_checks(tmp_path, block) -> set[str]:
+    output_dir, outputs = _export_reference_bundle(tmp_path)
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    profiles["profiles"][0]["fine_calibration"] = block
+    _rewrite_profiles(outputs, profiles)
+    report = validate_runtime_weight_bundle(bundle_dir=output_dir)
+    return {e["check"] for e in report["errors"] if "fine_calibration" in e["check"]}
+
+
+def test_v3_block_validates_without_reference_bins(tmp_path) -> None:
+    assert _fine_checks(tmp_path, _v3_block()) == set()
+    block = _v3_block()
+    del block["power_limit_multiplier_q16"]          # the power-limit word is optional
+    assert _fine_checks(tmp_path, block) == set()
+
+
+@pytest.mark.parametrize("key, value", [("bulk_mask_words_hex", ["0x0"] * 4), ("cfar_rank", 63),
+                                        ("marker_guard_bins", 1)])
+def test_v3_block_refuses_reference_bins(tmp_path, key, value) -> None:
+    checks = _fine_checks(tmp_path, _v3_block(**{key: value}))
+    assert any(key in c for c in checks), checks
+
+
+@pytest.mark.parametrize("key", ["cfar_multiplier_q16", "power_limit_multiplier_q16"])
+def test_v3_words_must_be_uint64(tmp_path, key) -> None:
+    checks = _fine_checks(tmp_path, _v3_block(**{key: 0}))
+    assert any(key in c for c in checks), checks

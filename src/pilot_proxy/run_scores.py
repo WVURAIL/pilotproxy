@@ -17,7 +17,7 @@ import numpy as np
 
 from pilot_proxy.bundle_calibration import _expand, _rows, required_words
 from pilot_proxy.characterization.score_cache import sha, write_json
-from pilot_proxy.fine_decision import unpack_bulk_mask
+from pilot_proxy.fine_decision import calibration_geometry
 
 # Pathfinder timing, used when a file does not state its own
 BLOCK_SAMPLES = 8192
@@ -65,8 +65,7 @@ def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, out
     row = rows[channel]
     calibration = row["fine_calibration"]
     anchor, word = int(calibration["anchor_bin"]), int(calibration["cfar_multiplier_q16"])
-    bulk = unpack_bulk_mask([int(w, 16) for w in calibration["bulk_mask_words_hex"]])
-    rank = int(calibration["cfar_rank"])
+    bulk, rank = calibration_geometry(calibration)
     paths = _expand(runs)
     decision = calibration["decision_version"]
     args = [(p, int(row["receiver_channel_id"]), anchor, bulk, rank, decision) for p in paths]

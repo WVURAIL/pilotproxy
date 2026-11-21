@@ -506,8 +506,72 @@ def fine_keep_word_v3(n_peak: int, d_rho: int) -> int | None:
     return ALWAYS_MASKED_Q16 if word > MAX_MULTIPLIER_Q16 else word
 
 
-FINE_DECISION_VERSIONS = (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION)
-# New calibrations write version 2. A bundle of either version stays valid.
+def fine_mask_decision_v3(
+    fine_powers: Any,
+    *,
+    anchor_bin: int,
+    designated_half_width: int,
+    multiplier_q16: int,
+    bulk_mask: Any = None,
+    cfar_rank: Any = None,
+) -> FineDecision:
+    """Return fine decision v3 in the form of the v1 and v2 decisions (``mask`` = 1 rejects).
+
+    ``bulk_mask`` and ``cfar_rank`` are accepted for a common call and not used:
+    v3 fixes the even bins and rank 63. A frame with ``d_rho = 0`` is invalid.
+    """
+    stat = fine_stat_v3(fine_powers, anchor_bin=anchor_bin, designated_half_width=designated_half_width)
+    keep = fine_keep_v3(stat.n_peak, stat.d_rho, multiplier_q16)
+    n_bulk = len(V3_REFERENCE_BINS)
+    if keep is None:
+        return FineDecision(mask=0, valid=False, n_bulk=n_bulk, rank_bin=-1, fired_bin=-1)
+    return FineDecision(mask=1 - keep, valid=True, n_bulk=n_bulk, rank_bin=stat.rank_bin,
+                        fired_bin=-1 if keep else stat.peak_bin)
+
+
+def fine_required_multiplier_q16_v3(
+    fine_powers: Any,
+    *,
+    anchor_bin: int,
+    designated_half_width: int,
+    bulk_mask: Any = None,
+    cfar_rank: Any = None,
+) -> FineRequiredMultiplier:
+    """Return the exact Q16 keep boundary of fine decision v3 for one frame.
+
+    As for v2, ``ALWAYS_MASKED_Q16`` marks a frame no uint64 word keeps and
+    ``None`` a frame with no decision. ``bulk_mask`` and ``cfar_rank`` are not used.
+    """
+    stat = fine_stat_v3(fine_powers, anchor_bin=anchor_bin, designated_half_width=designated_half_width)
+    word = fine_keep_word_v3(stat.n_peak, stat.d_rho)
+    n_bulk = len(V3_REFERENCE_BINS)
+    if word is None:
+        return FineRequiredMultiplier(valid=False, n_bulk=n_bulk, rank_bin=-1, limiting_bin=-1, multiplier_q16=None)
+    return FineRequiredMultiplier(valid=True, n_bulk=n_bulk, rank_bin=stat.rank_bin,
+                                  limiting_bin=stat.peak_bin if word > 1 else -1, multiplier_q16=word)
+
+
+def v3_geometry() -> tuple[np.ndarray, int]:
+    """Return the reference bins of fine decision v3 as a 256-bin mask, and its rank."""
+    mask = np.zeros(FINE_BINS, dtype=bool)
+    mask[list(V3_REFERENCE_BINS)] = True
+    return mask, V3_RANK
+
+
+def calibration_geometry(calibration: dict) -> tuple[np.ndarray, int]:
+    """Return the reference-bin mask and rank of a bundle's fine_calibration block.
+
+    Versions 1 and 2 carry them as ``bulk_mask_words_hex`` and ``cfar_rank``.
+    Version 3 carries neither, and uses the even bins at rank 63.
+    """
+    if calibration.get("decision_version") == FINE_DECISION_V3_VERSION:
+        return v3_geometry()
+    words = calibration["bulk_mask_words_hex"]
+    return unpack_bulk_mask([int(w, 16) for w in words]), _exact_integer(calibration["cfar_rank"], field="cfar_rank")
+
+
+FINE_DECISION_VERSIONS = (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION, FINE_DECISION_V3_VERSION)
+# New calibrations write version 2 until Kotekan runs version 3; a bundle of any version stays valid.
 CALIBRATION_DECISION_VERSION = FINE_DECISION_V2_VERSION
 
 
@@ -517,4 +581,6 @@ def decision_functions(version: str):
         return fine_mask_decision, fine_required_multiplier_q16
     if version == FINE_DECISION_V2_VERSION:
         return fine_mask_decision_v2, fine_required_multiplier_q16_v2
+    if version == FINE_DECISION_V3_VERSION:
+        return fine_mask_decision_v3, fine_required_multiplier_q16_v3
     raise ValueError(f"unknown decision_version {version!r}, expected one of {FINE_DECISION_VERSIONS}")

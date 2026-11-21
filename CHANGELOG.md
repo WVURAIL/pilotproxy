@@ -13,7 +13,15 @@ All notable changes to PilotProxy are recorded here. The project follows
   `n_peak * 2**16 <= word * d_rho` in exact 128-bit products and returns 1 to keep and 0 to flag,
   as Kotekan's RFI mask does; `d_rho = 0` means no decision. The entry point is
   `PilotProxy_Compute_FineStatV3_U64`, and the Python reference is `fine_stat_v3`,
-  `fine_keep_v3` and `fine_keep_word_v3`. Bundles do not carry v3 yet.
+  `fine_keep_v3` and `fine_keep_word_v3`.
+- Runtime bundles can carry fine decision v3. A `fine_decision_v3` block names no
+  `bulk_mask_words_hex`, `cfar_rank` or `marker_guard_bins`, and the validator refuses them. It carries
+  `cfar_multiplier_q16`, the default word, and may carry `power_limit_multiplier_q16`. `calibrate-bundle`
+  writes v3 when the plan or `--decision-version` names it: with the `power_limit` threshold the tested
+  word becomes the power-limit word and the default word follows the knee rule. `test-bundle`, the run
+  scores, the spectrogram, the capture reference and replay and the operating policy read the v3 geometry
+  with `calibration_geometry`, and the operating policy checks the power-limit word. New calibrations still
+  write v2 until Kotekan runs v3.
 - Runtime bundles carry fine decision v2. `calibrate-bundle` writes `fine_decision_v2` unless
   the plan names `decision_version`, and its words, floor and null scores follow that version.
   The bundle validator, `test-bundle`, the run scores, the capture reference and replay, and the

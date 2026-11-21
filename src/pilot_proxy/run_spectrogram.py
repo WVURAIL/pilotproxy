@@ -14,7 +14,7 @@ from pilot_proxy.bundle_calibration import (
     iter_run_frames,
     required_words,
 )
-from pilot_proxy.fine_decision import unpack_bulk_mask
+from pilot_proxy.fine_decision import calibration_geometry
 
 # 8192 samples on the Pathfinder and 16384 on CHIME give the same block
 FRAME_SECONDS = 0.04194304
@@ -29,8 +29,7 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
         raise ValueError(f"channel {channel} is not in the bundle")
     calibration = rows[channel]["fine_calibration"]
     anchor, word = int(calibration["anchor_bin"]), int(calibration["cfar_multiplier_q16"])
-    bulk = unpack_bulk_mask([int(w, 16) for w in calibration["bulk_mask_words_hex"]])
-    rank = int(calibration["cfar_rank"])
+    bulk, rank = calibration_geometry(calibration)
     channel_id = int(rows[channel]["receiver_channel_id"])
     per_chunk = max(1, round(chunk_seconds / FRAME_SECONDS))
 

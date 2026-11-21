@@ -18,9 +18,13 @@ import json
 import re
 from pathlib import Path
 
+import numpy as np
+
 from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
     FINE_DECISION_VERSIONS,
     unpack_bulk_mask,
+    v3_geometry,
 )
 
 PROFILE_SCHEMA = "pilotproxy_fine_score_profile_v1"
@@ -159,6 +163,12 @@ def validate_score_profile(profile):
     population = int(mask.sum())
     rank = _integer(profile.get("cfar_rank"), "cfar_rank", 0, 255)
     _require(rank < population, "Rank has insufficient frozen reference support")
+    if profile.get("decision_version") == FINE_DECISION_V3_VERSION:
+        # v3 takes the median of the even bins, the search included
+        even, v3_rank = v3_geometry()
+        _require(bool(np.array_equal(mask, even)) and rank == v3_rank,
+                 "fine_decision_v3 uses the 128 even bins at rank 63")
+        return population
     guard = max(width, 2)
     _require(
         not any(

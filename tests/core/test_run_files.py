@@ -140,3 +140,25 @@ def test_frame_whose_rows_are_not_written_yet_is_left_out(tmp_path):
             del handle["frame_metadata"][name]
             handle["frame_metadata"][name] = np.concatenate([values, values[-1:]])
     assert windows(path) == [f"{path}#0", f"{path}#1"]
+
+
+def test_combined_v3_stat_reads_as_its_windows(tmp_path):
+    """dtv_stat, the [n_peak, d_rho] pair of fine decision v3, combines like the other products."""
+    acq = tmp_path / "acq_1"
+    acq.mkdir()
+    rng = np.random.default_rng(3)
+    sources = []
+    for w in range(3):
+        path = acq / f"dtv_stat.{w:08d}.h5"
+        with h5py.File(path, "w") as handle:
+            handle["dtv_stat"] = rng.integers(0, 2**40, size=(4, 2, 2), dtype=np.uint64)
+            handle["dtv_stat"].attrs.update(coarse_freq=np.array([2715, 3115], np.int32), fpga_seq_num=100 + w,
+                                            fpga_seq_time_nsec=10**9 * (w + 1))
+        sources.append(path)
+    summary = combine(acq, tmp_path / "out", "stat")
+    assert [r["windows"] for r in summary] == [3] and summary[0]["verified"]
+    combined = list(iter_windows(summary[0]["file"]))
+    for (attrs, block), source in zip(combined, sources):
+        with h5py.File(source, "r") as handle:
+            assert np.array_equal(block, handle["dtv_stat"][()])
+        assert attrs["fpga_seq_num"] == read_attrs(source)["fpga_seq_num"]

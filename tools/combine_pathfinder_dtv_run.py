@@ -2,7 +2,7 @@
 """Combine the per-window DTV files of a Pathfinder run into one file per product, half and acquisition.
 
     combine_pathfinder_dtv_run.py --acq "/mnt/cs00/data/dtv/acq_2026112*" --out ~/dtv-combined \
-        [--products fine_powers mask powers fine_support]
+        [--products fine_powers mask powers fine_support stat]
 
 recv writes one file per half and ~43 s window, about 56 000 a day for a calibration-mode run of the pilot nodes,
 and each costs about 25 ms to open over NFS. This writes <out>/<acquisition>/dtv_<product>.<half>.combined.h5 for
@@ -22,7 +22,8 @@ from pathlib import Path
 
 from pilot_proxy.run_files import combine
 
-PRODUCTS = ["fine_powers", "mask", "powers", "fine_support"]
+# stat is the [n_peak, d_rho] pair of fine decision v3 (dtv_stat), which a v3 run sends in place of the decision
+PRODUCTS = ["fine_powers", "mask", "powers", "fine_support", "stat"]
 
 
 def main():

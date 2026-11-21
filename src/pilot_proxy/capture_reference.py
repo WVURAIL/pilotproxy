@@ -424,9 +424,10 @@ def expected_products(
             if not isinstance(words, list) or len(words) != 4 or any(not isinstance(word, str) for word in words):
                 raise ValueError("bulk_mask_words_hex must contain four hexadecimal strings")
         bulk, rank = calibration_geometry(calibration)
+        # v3 searches every bin and has no anchor or search width
         args = {
-            "anchor_bin": calibration["anchor_bin"],
-            "designated_half_width": calibration["designated_half_width"],
+            "anchor_bin": calibration.get("anchor_bin"),
+            "designated_half_width": calibration.get("designated_half_width"),
             "bulk_mask": bulk,
             "cfar_rank": rank,
         }

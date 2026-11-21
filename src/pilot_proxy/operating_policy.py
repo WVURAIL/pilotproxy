@@ -170,11 +170,12 @@ def _binding(channel, freq, eta, bound, status="calibrated"):
     v3 = fine["decision_version"] == FINE_DECISION_V3_VERSION
     word_key = "power_limit_multiplier_q16" if v3 else "cfar_multiplier_q16"
     _require(fine.get(word_key) == eta, f"channel {channel}: the bundle's word differs from the decided word")
-    geometry = {} if v3 else {"cfar_rank": fine["cfar_rank"], "bulk_mask_words_hex": fine["bulk_mask_words_hex"]}
+    # v3 has no geometry: every bin searched, the even bins' median
+    geometry = {} if v3 else {"cfar_rank": fine["cfar_rank"], "bulk_mask_words_hex": fine["bulk_mask_words_hex"],
+                              "anchor_bin": fine["anchor_bin"], "designated_half_width": fine["designated_half_width"]}
     return {
         "physical_channel": channel, "receiver_channel_id": freq, "eta_q16": str(eta),
-        "decision_version": fine["decision_version"], "anchor_bin": fine["anchor_bin"],
-        "designated_half_width": fine["designated_half_width"], **geometry,
+        "decision_version": fine["decision_version"], **geometry,
         **({"marker_guard_bins": fine["marker_guard_bins"]} if "marker_guard_bins" in fine else {}),
     }
 

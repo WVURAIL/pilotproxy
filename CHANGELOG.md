@@ -5,6 +5,12 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Fine decision v3 has no anchor or search width (kernel core 4.2.0). `n_peak` is the largest `2 S_t[b]` of
+  all 256 fine bins, so the padded bins catch a pilot between two independent bins, and `d_rho` stays the median
+  reference of the 128 even bins. `PilotProxy_Compute_FineStatV3_U64` loses its `anchor_bin` and
+  `designated_half_width` arguments, `fine_stat_v3` takes the fine powers alone, and a v3 bundle block carries
+  neither field (the validator refuses them). The v3 null gives one score per frame. The v3 entry changed before
+  any consumer used it, so this is a minor version.
 - The Pathfinder tools read fine decision v3 runs. `fine_decision.masks_from_stat` turns recorded
   `[n_peak, d_rho]` rows into dtv_mask decisions at a word (exact at the keep boundary; unevaluated rows are kept,
   missing blocks are -1, `d_rho = 0` is rejected), and `run_files.v3_words` gives each v3 channel's N2 word. With

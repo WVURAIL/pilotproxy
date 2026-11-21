@@ -3,8 +3,8 @@
 
 The fused datapath is the one of fine decision v1, so the fine powers must be
 those of the v1 call. The pair ``[n_peak, d_rho]`` must equal
-``pilot_proxy.fine_decision.fine_stat_v3`` over the same exact powers, and its
-decision at any word must equal the v2 kernel mask over the even bins at rank 63.
+``pilot_proxy.fine_decision.fine_stat_v3`` over the same exact powers: the largest
+target of all 256 bins and the median reference of the 128 even bins.
 """
 from __future__ import annotations
 
@@ -50,8 +50,7 @@ def _stat(cp, kernel, packed, weights, streams):
     d_fine = cp.zeros((batch, TERMS, FINE_BINS), dtype=cp.uint64)
     d_stat = cp.full((batch, 2), 77, dtype=cp.uint64)
     try:
-        kernel.compute_fine_stat_v3_u64(handle, weights.ctypes.data, ANCHOR, HALF_WIDTH,
-                                        int(d_fine.data.ptr), int(d_stat.data.ptr))
+        kernel.compute_fine_stat_v3_u64(handle, weights.ctypes.data, int(d_fine.data.ptr), int(d_stat.data.ptr))
         cp.cuda.Device().synchronize()
         assert kernel.last_error() == ""
         return cp.asnumpy(d_fine), cp.asnumpy(d_stat)
@@ -87,25 +86,25 @@ def test_v3_stat_matches_reference():
         fine1, _ = _mask_v2(cp, kernel, packed, weights, streams, 65536)
         np.testing.assert_array_equal(fine, fine1)                       # same datapath
         for b in range(batch):
-            ref = fine_stat_v3(fine[b], anchor_bin=ANCHOR, designated_half_width=HALF_WIDTH)
+            ref = fine_stat_v3(fine[b])
             assert (int(stat[b, 0]), int(stat[b, 1])) == (ref.n_peak, ref.d_rho), (streams, b)
 
 
-def test_v3_decision_equals_v2_mask_over_the_even_bins():
+def test_v3_decision_at_every_keep_boundary():
     cp = cupy_or_skip()
     kernel = _kernel_or_skip()
     rng = np.random.default_rng(11)
     streams, batch = 8, 6
     packed, weights = _frames(rng, streams, batch)
-    _, stat = _stat(cp, kernel, packed, weights, streams)
+    fine, stat = _stat(cp, kernel, packed, weights, streams)
     words = [fine_keep_word_v3(int(n), int(d)) for n, d in stat]
     assert all(1 < w < (1 << 64) for w in words)
     seen = set()
     for mult in sorted({w + delta for w in words for delta in (-1, 0)} | {1, 65536, 3 * 65536}):
-        _, mask = _mask_v2(cp, kernel, packed, weights, streams, mult)
         for b in range(batch):
+            ref = fine_stat_v3(fine[b])
             keep = fine_keep_v3(int(stat[b, 0]), int(stat[b, 1]), mult)
-            assert keep == 1 - int(mask[b]) == int(mult >= words[b]), (mult, b)   # 1 keeps
+            assert keep == fine_keep_v3(ref.n_peak, ref.d_rho, mult) == int(mult >= words[b]), (mult, b)
             seen.add(keep)
     assert seen == {0, 1}
 

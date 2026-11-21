@@ -959,12 +959,13 @@ def _validate_fine_calibration(
         }
         is_v3 = block.get("decision_version") == FINE_DECISION_V3_VERSION
         if is_v3:
-            # v3 fixes its reference bins (the 128 even bins at rank 63), so a block names none
-            required_fields -= {"bulk_mask_words_hex", "cfar_rank"}
-            for key in ("bulk_mask_words_hex", "cfar_rank", "marker_guard_bins"):
+            # v3 has no geometry: it searches every bin and takes the median of the even bins at rank 63
+            required_fields -= {"bulk_mask_words_hex", "cfar_rank", "anchor_bin", "designated_half_width"}
+            for key in ("bulk_mask_words_hex", "cfar_rank", "marker_guard_bins", "anchor_bin",
+                        "designated_half_width"):
                 if key in block:
                     _add_error(errors, f"{field}.{key}",
-                               f"{FINE_DECISION_V3_VERSION} fixes its reference bins and takes no {key}")
+                               f"{FINE_DECISION_V3_VERSION} has no search geometry and takes no {key}")
         missing_fields = sorted(required_fields - set(block))
         if missing_fields:
             _add_error(
@@ -1099,13 +1100,7 @@ def _validate_fine_calibration(
 
 
 def _validate_v3_fine_calibration(*, block: dict, field: str, errors: list[dict[str, str]]) -> None:
-    """Check the anchor, the search and the words of a fine_decision_v3 block."""
-    anchor = _fine_calibration_int(block=block, key="anchor_bin", field=field, errors=errors)
-    half_width = _fine_calibration_int(block=block, key="designated_half_width", field=field, errors=errors)
-    if anchor is not None and not 0 <= anchor < FINE_CALIBRATION_NUM_BINS:
-        _add_error(errors, f"{field}.anchor_bin", f"out of range: {anchor}")
-    if half_width is not None and not 0 <= half_width < FINE_CALIBRATION_NUM_BINS // 2:
-        _add_error(errors, f"{field}.designated_half_width", f"out of range: {half_width}")
+    """Check the words of a fine_decision_v3 block."""
     keys = ["cfar_multiplier_q16"] + (["power_limit_multiplier_q16"] if "power_limit_multiplier_q16" in block else [])
     for key in keys:
         word = _fine_calibration_int(block=block, key=key, field=field, errors=errors)

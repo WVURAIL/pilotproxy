@@ -145,10 +145,16 @@ def validate_score_profile(profile):
         type(profile.get("fine_bins")) is int and profile["fine_bins"] == 256,
         "Fine FFT must have 256 bins",
     )
-    anchor = _integer(profile.get("anchor_bin"), "anchor_bin", 0, 255)
-    width = _integer(
-        profile.get("designated_half_width"), "designated_half_width", 0, 127
-    )
+    v3 = profile.get("decision_version") == FINE_DECISION_V3_VERSION
+    if v3:
+        # v3 searches every bin, so it has no anchor or search width
+        _require("anchor_bin" not in profile and "designated_half_width" not in profile,
+                 "fine_decision_v3 has no anchor or search width")
+    else:
+        anchor = _integer(profile.get("anchor_bin"), "anchor_bin", 0, 255)
+        width = _integer(
+            profile.get("designated_half_width"), "designated_half_width", 0, 127
+        )
     words = profile.get("bulk_mask_words_hex")
     _require(
         isinstance(words, list)
@@ -163,8 +169,8 @@ def validate_score_profile(profile):
     population = int(mask.sum())
     rank = _integer(profile.get("cfar_rank"), "cfar_rank", 0, 255)
     _require(rank < population, "Rank has insufficient frozen reference support")
-    if profile.get("decision_version") == FINE_DECISION_V3_VERSION:
-        # v3 takes the median of the even bins, the search included
+    if v3:
+        # v3 takes the median of the even bins
         even, v3_rank = v3_geometry()
         _require(bool(np.array_equal(mask, even)) and rank == v3_rank,
                  "fine_decision_v3 uses the 128 even bins at rank 63")

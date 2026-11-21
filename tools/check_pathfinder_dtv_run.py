@@ -106,7 +106,9 @@ def anchors(bundle_dir):
     if not bundle_dir:
         return {}
     bundle = json.load(open(os.path.join(bundle_dir, "pilot_profiles.json")))
-    return {int(p["receiver_channel_id"]): int(p["fine_calibration"]["anchor_bin"]) for p in bundle["profiles"]}
+    # a v3 profile has no anchor
+    return {int(p["receiver_channel_id"]): int(p["fine_calibration"]["anchor_bin"]) for p in bundle["profiles"]
+            if "anchor_bin" in p["fine_calibration"]}
 
 
 def vis_fractions(vis_dir, channels):

@@ -150,9 +150,12 @@ def combine(acq_dir: str | Path, out_dir: str | Path, product: str, verify: bool
             data0 = first[_product(first)]
             shape, dtype, static = data0.shape, data0.dtype, {k: v for k, v in data0.attrs.items() if k not in WINDOW_ATTRS}
         with h5py.File(tmp, "w") as out:
-            # byte shuffle and zstd: bitshuffle cannot write under HDF5 2.0 with hdf5plugin 7.1 (cx50)
+            # byte shuffle and zstd: bitshuffle cannot write under HDF5 2.0 with hdf5plugin 7.1 (cx50). Fine
+            # powers are read one row (bound channel) at a time, so each row of a window is its own chunk:
+            # 12 ms to read one on cx50, against 19 ms for Kotekan's per-window file.
+            rows = (1, shape[0], 1, *shape[2:]) if product == "fine_powers" else (1, *shape)
             data = out.create_dataset(f"dtv_{product}", shape=(len(members), *shape), dtype=dtype,
-                                      chunks=(1, *shape), shuffle=True, **hdf5plugin.Zstd())
+                                      chunks=rows, shuffle=True, **hdf5plugin.Zstd())
             for key, value in static.items():
                 data.attrs[key] = value
             out["fpga_seq_num"] = np.array([s for _, s, _ in members], np.int64)

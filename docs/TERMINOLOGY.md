@@ -13,8 +13,12 @@ to the equations below, and serialized names that differ are listed.
 | Signed pilot excess `e` | `Q - 1` | `normalized_pilot_excess` |
 | Fine ratio `T[f]` | `2 S_0[f] / (S_1[f] + S_2[f])` | Reconstructed from exact fine powers |
 | Detection score `w` | Maximum marker ratio divided by bulk order statistic | `scores.required_eta_q16_by_rank` and `fine_decision` |
-| Rank `rho` | One-based bulk order statistic | `rho`; C ABI `cfar_rank` is zero-based |
+| Rank `rho` | One-based bulk order statistic (v1, v2) | `rho`; C ABI `cfar_rank` is zero-based |
+| Peak target `n_peak` | Largest `2 S_0[f]` over the search (v3) | `dtv_stat[..., 0]`, `FineStat.n_peak` |
+| Median reference `d_rho` | Median of `S_1[f] + S_2[f]` over the 128 even bins, rank 63 (v3) | `dtv_stat[..., 1]`, `FineStat.d_rho` |
 | Threshold `eta` | Dimensionless limit on `w` | `eta_q16 / 65536` |
+| Default word | Knee or floor word, for a backend with no word of its own (v3) | `cfar_multiplier_q16` |
+| Power-limit word | Word of the power-limit test, applied by N2 (v3) | `power_limit_multiplier_q16` |
 | Retention `kappa` | Equal-event probability kept | `threshold_rule.sweep` |
 | Shelf proxy `x` | Signed retained mean excess times `C_shelf`, floored after averaging | Sweep `x`; uncertainty in `se` |
 | Bias ratio `r` | `a abs(R_DV)` | `bias_over_sigma` |

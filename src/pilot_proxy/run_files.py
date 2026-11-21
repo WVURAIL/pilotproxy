@@ -225,6 +225,29 @@ def iter_windows(path: str | Path) -> Iterator[tuple[dict[str, Any], np.ndarray]
         yield read_attrs(spec), block
 
 
+def v3_words(bundle_dir: str | Path | None, *, mask_control: bool = False) -> dict[int, int]:
+    """Return {freq_id: word} of the bundle's fine_decision_v3 channels, the word N2 applies.
+
+    Kotekan's DtvRfiMask decides these channels from dtv_stat, so their dtv_mask rows hold 0. The control
+    is included only with ``mask_control``, as in DtvRfiMask. An empty mapping without a bundle.
+    """
+    import json
+
+    from pilot_proxy.fine_decision import FINE_DECISION_V3_VERSION, v3_word
+
+    if not bundle_dir:
+        return {}
+    bundle = json.loads((Path(bundle_dir) / "pilot_profiles.json").read_text())
+    words = {}
+    for row in bundle["profiles"]:
+        calibration = row["fine_calibration"]
+        if calibration.get("decision_version") != FINE_DECISION_V3_VERSION:
+            continue
+        if calibration.get("status") == "calibrated" or (calibration.get("status") == "control" and mask_control):
+            words[int(row["receiver_channel_id"])] = v3_word(calibration)
+    return words
+
+
 def _half(coarse: list[int]) -> str:
     """Name a half by its coarse channels: the bound ones for fine powers, the first and count for the rest."""
     used = [c for c in coarse if c >= 0]

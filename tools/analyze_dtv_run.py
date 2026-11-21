@@ -14,7 +14,8 @@ Checks, all from the files alone:
   quiet      the quiet channel's masked fraction lies at or below the high end (95th percentile)
   report     per bound channel: masked fraction, per-minute masked fractions, runs of consecutive masked frames,
              and the frame-power ratio 2 P_target / (P_lower + P_upper) against the profile's null ratio
-Needs only numpy. Exit status 0 when every check passes, 1 otherwise.
+Needs only numpy, and pilot-proxy for a fine_decision_v3 bundle, whose channels are decided from dtv_stat.
+Exit status 0 when every check passes, 1 otherwise.
 """
 import argparse
 import glob
@@ -114,6 +115,21 @@ def main():
     M = np.array([np.frombuffer(p, np.int8) for p in mask["payload"]]).reshape(n, F)
     P = np.array([np.frombuffer(p, "<u8") for p in powers["payload"]]).reshape(n, F, 3)
     S = np.array([np.frombuffer(p, "<i4") for p in support["payload"]]).reshape(n, F, 2)
+    # a fine_decision_v3 channel is decided from its dtv_stat rows, and its mask and support rows hold 0 and -1
+    profiles = json.load(open(os.path.join(a.bundle_dir, "pilot_profiles.json")))["profiles"]
+    if any(p["fine_calibration"].get("decision_version") == "fine_decision_v3" for p in profiles):
+        # only a v3 bundle needs pilot-proxy
+        from pilot_proxy.fine_decision import masks_from_stat
+        from pilot_proxy.run_files import v3_words
+
+        v3 = v3_words(a.bundle_dir, mask_control=True)
+        stat = read_product(a.run_dir, "stat", F * 2 * 8)
+        checks["stat_frames_match"] = len(stat["seq"]) == n and bool((stat["seq"] == mask["seq"]).all())
+        T = np.array([np.frombuffer(p, "<u8") for p in stat["payload"]]).reshape(n, F, 2)
+        for i, f in enumerate(mask["freqs"] or []):
+            if f in v3:
+                M[:, i] = masks_from_stat(T[:, i], v3[f])
+                S[:, i, 0] = np.where(T[:, i, 1] > 0, 1, 0)
     bundle = json.load(open(os.path.join(a.bundle_dir, "pilot_profiles.json")))
     prof = {r["receiver_channel_id"]: r for r in bundle["profiles"]}
     bound_cols = {f: i for i, f in enumerate(freqs) if f in prof}

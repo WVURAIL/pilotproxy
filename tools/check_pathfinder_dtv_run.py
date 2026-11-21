@@ -9,6 +9,8 @@ fine bin against the bundle anchor, and the visibilities' frac_dtv_mask_enabled.
 matplotlib and the fine powers, it also plots the target fine powers in chunks, over all
 blocks and over the kept blocks. The masked percent of every channel by UTC hour, from the
 window times recv writes (fpga_seq_time_nsec), goes to masked_by_hour.csv and a figure.
+A fine_decision_v3 channel of the bundle is decided from its dtv_stat rows at the word N2 applies
+(the control at its own word, so its false alarms show), since its dtv_mask rows hold 0.
 Reads per-window or combined files (combine_pathfinder_dtv_run.py). Needs numpy, h5py, hdf5plugin and pilot-proxy.
 """
 import argparse
@@ -21,7 +23,8 @@ import h5py
 import hdf5plugin  # noqa: F401  (registers the bitshuffle filter)
 import numpy as np
 
-from pilot_proxy.run_files import iter_windows, read_attrs, windows
+from pilot_proxy.fine_decision import MISSING_ROW, masks_from_stat
+from pilot_proxy.run_files import iter_windows, read_attrs, v3_words, windows
 
 SAMPLE_NS = 5120
 BLOCK_SAMPLES = 8192
@@ -89,6 +92,14 @@ def plot_by_hour(by_hour, path):
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
+
+
+def v3_support(stat):
+    """Return fine-support rows for a v3 channel: 1 decided, 0 no decision (d_rho = 0), -1 not tested."""
+    d = stat[:, 1]
+    valid = np.where(d > 0, 1, 0)
+    valid[d == np.uint64(MISSING_ROW)] = -1
+    return np.stack([valid, np.full(len(valid), 128)], axis=1)
 
 
 def anchors(bundle_dir):
@@ -195,7 +206,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dtv-dir", required=True, help="Directory of dtv_*.h5 files, searched recursively.")
     parser.add_argument("--channels", type=int, nargs="+", default=list(PILOTS), help="freq_ids to check.")
-    parser.add_argument("--bundle-dir", help="Bundle of the run, for the anchor bins.")
+    parser.add_argument("--bundle-dir", help="Bundle of the run, for the anchor bins and its v3 words.")
     parser.add_argument("--vis-dir", help="Visibility acquisition of the run.")
     parser.add_argument("--chunk-seconds", type=float, default=10.0)
     parser.add_argument("--output-dir")
@@ -203,6 +214,10 @@ def main():
 
     masks = collect(args.dtv_dir, "mask", args.channels)
     supports = collect(args.dtv_dir, "fine_support", args.channels)
+    words = {c: w for c, w in v3_words(args.bundle_dir, mask_control=True).items() if c in args.channels}
+    for channel, rows in collect(args.dtv_dir, "stat", list(words)).items():
+        masks[channel] = {seq: masks_from_stat(stat, words[channel]) for seq, stat in rows.items()}
+        supports[channel] = {seq: v3_support(stat) for seq, stat in rows.items()}
     fines = collect(args.dtv_dir, "fine_powers", args.channels)
     anchor = anchors(args.bundle_dir)
     fractions = vis_fractions(args.vis_dir, args.channels) if args.vis_dir else {}

@@ -557,7 +557,7 @@ test JSON (\code{--output-json}) & The \code{test-bundle} checks: \code{passed} 
 Kotekan ships its bundles in \code{config/chime/dtv_bundles/} and \code{config/chord/dtv_bundles/}, each with a \code{README.md}. \code{make install} copies the whole config tree to \code{<prefix>/etc/kotekan/}, so with the default prefix a bundle is at \code{/usr/local/etc/kotekan/<telescope>/dtv_bundles/<bundle>/}. With \code{CMAKE_INSTALL_PREFIX=/usr}, the tree goes to \code{/etc/kotekan/}.
 
 \begin{longtable}{|L{0.33\linewidth}|L{0.18\linewidth}|L{0.39\linewidth}|}
-\caption{Bundles shipped with Kotekan. All are detect-only, and Kotekan refuses \code{dtv_apply_mask} with them.}\label{tab:shipped}\\
+\caption{Bundles shipped with Kotekan. All are detect-only, and Kotekan refuses to switch the mask on with them.}\label{tab:shipped}\\
 \hline
 \textbf{Bundle} & \textbf{Channels} & \textbf{Use and words}\\ \hline
 \endfirsthead
@@ -839,7 +839,7 @@ Kotekan reads the bundle from a local path once, at startup. A bundle changes on
   \draw[->,thick] (merge) -- (n2);
   \draw[->,thick] (prod.south) -- (rec.north);
 \end{tikzpicture}
-\caption{The detector in a Kotekan node. \code{DtvRfiMask} runs only on CHORD. On the Pathfinder it always runs, and \code{/dtv_mask_enabled} decides whether it changes the mask. On CHIME the detector is detect-only, and no visibility or weight consumer reads its outputs.}
+\caption{The detector in a Kotekan node. \code{DtvRfiMask} runs only on CHORD. On the Pathfinder it runs unless \code{dtv_enabled} is false, and \code{/dtv_mask_enabled} decides whether it changes the mask. On CHIME the detector is detect-only, and no visibility or weight consumer reads its outputs.}
 \label{fig:kotekan}
 \end{figure}
 
@@ -851,11 +851,9 @@ At startup, each detector instance loads the bundle. It checks the schema, the n
 \subsection{CHORD Pathfinder}
 \label{sec:pathfinder}
 
-\code{config/chord/pathfinder.j2} always includes \code{config/chord/dtv.j2}, so every node runs the detector and \code{DtvRfiMask}, and every node needs the bundle. The n2k correlator always reads \code{dtv_RFImask}, which is the SK mask while the DTV mask is off. The detector uses \code{detector_window_samples: 64} and the namespace \code{chord_freq_id}. These variables are set when \code{pathfinder.j2} and \code{config/chord/recv.j2} are rendered:
+\code{config/chord/pathfinder.j2} includes \code{config/chord/dtv.j2} unless it is rendered with \code{dtv_enabled: false}, so every node runs the detector and \code{DtvRfiMask}, and every node needs the bundle. The n2k correlator then reads \code{dtv_RFImask}, which is the SK mask while the DTV mask is off. The detector uses \code{detector_window_samples: 64} and the namespace \code{chord_freq_id}. Since kotekan\#1919, \code{config/chord/telescope.j2} reads two variables for both \code{pathfinder.j2} and \code{config/chord/recv.j2}, so both are rendered with the same values:
 \begin{lstlisting}[style=shell]
-dtv_runtime_bundle_dir: /usr/local/etc/kotekan/chord/dtv_bundles/<bundle>
-dtv_apply_mask: false
-dtv_write_enabled: false
+dtv_enabled: true
 dtv_calibration_mode: true
 \end{lstlisting}
 
@@ -867,11 +865,11 @@ dtv_calibration_mode: true
 \hline
 \textbf{Variable} & \textbf{Default} & \textbf{Effect}\\ \hline
 \endhead
-\pfield{dtv_runtime_bundle_dir} & \pfield{pathfinder-commissioning-e2e90219}, installed path & The bundle directory.\\ \hline
-\pfield{dtv_apply_mask} & false & Starting value of \code{/dtv_mask_enabled}: apply the DTV mask to N2.\\ \hline
-\pfield{dtv_write_enabled} & false & Starting value of \code{/dtv_write_enabled}: send the products to the recv node.\\ \hline
-\pfield{dtv_calibration_mode} & false & Template only. Without it only \code{dtv_mask} is sent. With it \code{dtv_powers}, \code{dtv_fine_support} and \code{dtv_fine_powers} (2 rows) are sent too. \code{recv.j2} must be rendered with the same value.\\ \hline
+\pfield{dtv_enabled} & true & False leaves the detector, \code{DtvRfiMask} and the recording out of both templates, and n2k reads the SK mask.\\ \hline
+\pfield{dtv_calibration_mode} & false & Without it only \code{dtv_mask} is sent. With it \code{dtv_powers}, \code{dtv_fine_support} and \code{dtv_fine_powers} (2 rows) are sent too.\\ \hline
 \end{longtable}
+
+The bundle directory, \pfield{dtv_runtime_bundle_dir} in \code{dtv.j2}, is the installed \pfield{pathfinder-commissioning-e2e90219}, and a new bundle is named there by a Kotekan pull request. Both REST switches start off at every start. The detector's \code{mask_control} (kotekan\#1915), which masks the control like a pilot, is set in its command in \code{dtv.j2}. Before kotekan\#1919 the templates also took \code{dtv_runtime_bundle_dir}, \code{dtv_apply_mask}, \code{dtv_write_enabled} and \code{dtv_mask_control}.
 
 The two switches are changed over REST until the next restart:
 \begin{lstlisting}[style=shell]
@@ -915,7 +913,7 @@ With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>} (
 
 In detect-only mode the detector records its decisions and the visibilities do not change. On the Pathfinder this is \code{/dtv_mask_enabled} off. On CHIME it is the only mode. With the mask on, \code{DtvRfiMask} clears every sample of a block at a frequency that the detector rejected, that has fine support \((0,n)\), or that is in the permanent-mask list. The visibilities and the valid-sample counts change together.
 
-Since Kotekan pull request \#1906, merged into \code{develop} through \#1914 on 20 November 2026, \code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. The control and \code{pending_campaign} channels never reach a mask and need no record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before \code{dtv_apply_mask: true} is set.
+Since Kotekan pull request \#1906, merged into \code{develop} through \#1914 on 20 November 2026, \code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. The control and \code{pending_campaign} channels never reach a mask and need no record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before the mask is switched on.
 
 \subsection{Bad Feeds}
 

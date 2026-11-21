@@ -106,15 +106,18 @@ built without it. Read
 
 ## 5. Deploy
 
-For commissioning and debugging, the X-engines can read the bundle from the site home: set
-`dtv_runtime_bundle_dir` to it when the configurations are rendered. A production bundle goes into Kotekan
-through a pull request under `config/chord/dtv_bundles/<purpose>-<first 8 hex of sha256(sha256sums.txt)>`.
-With kotekan#1906, the stage refuses to switch the mask on with a bundle that has not been qualified.
+Since kotekan#1919 the X-engines read only the bundle named in `config/chord/dtv.j2`. A new bundle goes into
+Kotekan through a pull request that adds it under
+`config/chord/dtv_bundles/<purpose>-<first 8 hex of sha256(sha256sums.txt)>` and sets `dtv_runtime_bundle_dir`
+in `dtv.j2` to its installed path. The `chord` branch can carry the pull request before it merges into
+`develop`, and the nodes take the bundle at the next deploy. With kotekan#1906, the stage refuses to switch
+the mask on with a bundle that has not been qualified.
 
 ## 6. Characterize with the mask on
 
-With calibration mode on and `dtv_mask_control: true` (kotekan#1915, so the control is masked like a
-pilot), switch the mask on from the choco host and keep it on for at least a day:
+With calibration mode on and `mask_control: true` in the detector command of `config/chord/dtv.j2`
+(kotekan#1915, so the control is masked like a pilot; kotekan#1919 removed its render variable), switch the
+mask on from the choco host and keep it on for at least a day:
 
 ```bash
 choco set cx dtv_mask_enabled '{"enabled": true, "valid_at_time_ns": 0}'

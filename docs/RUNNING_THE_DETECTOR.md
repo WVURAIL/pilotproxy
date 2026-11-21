@@ -181,22 +181,22 @@ The digests can be checked there before a restart:
 sha256sum -c sha256sums.txt
 ```
 
-With `CMAKE_INSTALL_PREFIX=/usr`, the configs go to `/etc/kotekan/` instead, and `dtv_runtime_bundle_dir` must be set to match.
+With `CMAKE_INSTALL_PREFIX=/usr`, the configs go to `/etc/kotekan/` instead, and the bundle path must be changed to match: `dtv_runtime_bundle_dir` on CHIME, and the path set in `config/chord/dtv.j2` on the Pathfinder.
 
 ### CHORD Pathfinder
 
 [PATHFINDER_RECALIBRATION.md](PATHFINDER_RECALIBRATION.md) is the checklist for the steps below, with the commands.
 
-The detector always runs in `config/chord/pathfinder.j2`. With kotekan#1895, its bundle defaults to the installed `pathfinder-commissioning-e2e90219`. A new bundle is named in that default by a Kotekan pull request, or set for one run. These variables are set when `pathfinder.j2` and `config/chord/recv.j2` are rendered:
+`config/chord/pathfinder.j2` runs the detector unless it is rendered with `dtv_enabled: false`, which leaves the detector, the DTV mask and the recording out, and n2k then reads the SK mask. Since kotekan#1919 the bundle path is set in `config/chord/dtv.j2`, to the installed `pathfinder-commissioning-e2e90219`, and a new bundle is named there by a Kotekan pull request. `config/chord/telescope.j2` reads two variables for both `pathfinder.j2` and `config/chord/recv.j2`, so render both with the same values:
 
 ```yaml
-dtv_runtime_bundle_dir: /usr/local/etc/kotekan/chord/dtv_bundles/<bundle>
-dtv_apply_mask: false
-dtv_write_enabled: false
+dtv_enabled: true
 dtv_calibration_mode: true
 ```
 
-Without `dtv_calibration_mode` only the mask is sent. With it, the powers, fine support and fine powers are sent too, and both templates must be rendered with the same value. The mask and recording switches start from the values above, and either is changed over REST until the next restart:
+Without `dtv_calibration_mode` only the mask is sent. With it, the powers, fine support and fine powers are sent too. The detector's `mask_control` (kotekan#1915), which masks the control like a pilot, is set in its command in `dtv.j2`. Before kotekan#1919 the templates also took `dtv_runtime_bundle_dir`, `dtv_apply_mask`, `dtv_write_enabled` and `dtv_mask_control`.
+
+The mask and recording switches start off at every start, and either is changed over REST until the next restart:
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true, "valid_at_time_ns": 0}' <node>:12048/dtv_mask_enabled
@@ -316,4 +316,4 @@ On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, a
 
 ## Applying the mask
 
-Masking needs a calibration on the telescope, a passing `test-bundle` report with the control, `qualify-bundle`, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then `dtv_apply_mask: true`. With kotekan#1906, Kotekan's `DtvRfiMask` refuses to start with the mask on unless every calibrated channel of the bundle is qualified, and a POST that switches the mask on with such a bundle stops Kotekan.
+Masking needs a calibration on the telescope, a passing `test-bundle` report with the control, `qualify-bundle`, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then switching the mask on. With kotekan#1906, Kotekan's `DtvRfiMask` refuses to start with the mask on unless every calibrated channel of the bundle is qualified, and a POST that switches the mask on with such a bundle stops Kotekan.

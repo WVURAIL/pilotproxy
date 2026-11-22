@@ -40,6 +40,20 @@ WINDOW = math.ceil(((FRAME+3)*2048-1)*FS/800e6)+1
 PILOT_MODEL = -3e6+(6e6-FS/2)/2
 PILOT_NOMINAL = -3e6+309441.0
 ROLE = {0:'calibration_engineering',1:'reference_variation_stress',2:'primary_evaluation',3:'primary_evaluation'}
+RECORD_CHANNELS = list(range(14,37))
+CASES_PER_CHANNEL = 7*4
+
+
+def case_index(channel,case,payload):
+    """Index of a case in the record order, which a supplementary channel continues: 37 takes 644-671."""
+    return (channel-14)*CASES_PER_CHANNEL+case*4+payload
+
+
+def mapped(path,path_map):
+    """Path of a recorded file after a move; its SHA256 still identifies it."""
+    for old,new in path_map:
+        if str(path).startswith(old): return Path(new+str(path)[len(old):])
+    return Path(path)
 
 
 def sha(path):
@@ -110,9 +124,11 @@ def freeze(args):
         raise ValueError('Preparation plan binding differs')
     for relative,expected in manifest['files'].items():
         if sha(prep/relative)!=expected: raise ValueError('Preparation manifest mismatch:'+relative)
+    path_map=[item.split('=',1) for item in args.path_map]
+    channels=sorted(set(args.channels))
     payloads=[]
     for record in preparation['payloads']:
-        index=record['index']; path=Path(record['settled_iq'])
+        index=record['index']; path=mapped(record['settled_iq'],path_map)
         if sha(path)!=record['settled_iq_sha256']:
             raise ValueError('Waveform differs')
         if index in (0,2,3) and record['qualified'] is not True:
@@ -124,10 +140,10 @@ def freeze(args):
                          'preparation_interval':record['qualification_interval_half_open']})
     weights=args.weights.resolve(); adjacent=weights.with_suffix(weights.suffix+'.manifest.json')
     bank=DetectorWeightBank(explicit_path=weights)
-    channels=bank.supported_physical_channels()
-    if set(channels)!=set(range(14,37)): raise ValueError('Expected all23 weight profiles')
+    if not set(channels)<=set(bank.supported_physical_channels()) or min(channels)<14:
+        raise ValueError('The weight bank lacks a requested channel')
     profiles=[]
-    for channel in range(14,37):
+    for channel in channels:
         layout=bank.layout_for_physical_channel(channel)
         packed,valid=bank.get_weights_for_physical_channel(channel)
         if not valid or packed is None: raise ValueError('Invalid weight profile')
@@ -143,18 +159,19 @@ def freeze(args):
                          'cases':geometry_cases(layout)})
     # These seeds calibrate only a deterministic digital normalization. Their
     # draws are not independent detector-noise trials or physical thermal
-    # measurements. The check below confirms that the 23 seeds are distinct and
-    # that none collides with a reserved seed.
-    gain_seeds={str(c):int.from_bytes(hashlib.sha256(f'fine-validation-pfb-gain-v1:{c}'.encode()).digest()[:8],'big') for c in range(14,37)}
-    prior=RAIL/'results/channel29_residual_controls_2026-09-09/preflight'
+    # measurements. The check below confirms that the seeds of the record channels
+    # and of the requested ones are distinct and that none collides with a reserved seed.
+    seed_of=lambda c:int.from_bytes(hashlib.sha256(f'fine-validation-pfb-gain-v1:{c}'.encode()).digest()[:8],'big')
+    gain_seeds={str(c):seed_of(c) for c in channels}
+    prior=args.prior_preflight
     with np.load(prior/'seed-exclusions.npz',allow_pickle=False) as z:
         raw=set(int(x) for x in z['raw_seed']); eff=set(int(x) for x in z['effective_seed63'])
     with np.load(prior/'planned-frame-seeds.npz',allow_pickle=False) as z:
         raw.update(int(x) for x in z['raw_seed']); eff.update(int(x) for x in z['effective_seed63'])
     payload_seeds=json.loads((prep/'plan.json').read_text())['payload_seeds']
     raw.update(payload_seeds);eff.update(payload_seeds)
-    values=list(gain_seeds.values())
-    if len(set(values))!=23 or any(x in raw or (x&((1<<63)-1)) in eff for x in values):
+    values=[seed_of(c) for c in sorted(set(RECORD_CHANNELS)|set(channels))]
+    if len(set(values))!=len(values) or any(x in raw or (x&((1<<63)-1)) in eff for x in values):
         raise ValueError('PFB normalization seed collision')
     sources={str(Path(__file__).resolve()):sha(__file__)}
     for module in list(sys.modules.values()):
@@ -169,7 +186,9 @@ def freeze(args):
           'source_sha256':sources,'preparation':str(prep),'preparation_plan_sha256':sha(prep/'plan.json'),
           'preparation_manifest_sha256':sha(prep/'manifest.json'),'preparation_summary_sha256':sha(prep/'summary.json'),
           'weights_path':str(weights),'weights_sha256':sha(weights),'weight_manifest_sha256':sha(adjacent),
-          'profiles':profiles,'payloads':payloads,'cache_count':644,
+          'profiles':profiles,'payloads':payloads,'cache_count':CASES_PER_CHANNEL*len(channels),
+          'case_index_rule':'(physical_channel-14)*28+case*4+payload, the order of the record campaign of channels 14-36',
+          'path_map':path_map,
           'window_index':0,'window_input_samples':WINDOW,'output_samples':FRAME,
           'pfb':{'real_adc_sample_rate_hz':800e6,'fft_size':2048,'taps':4,'response':'sinc_hamming_pfb_response checked-in implementation',
                  'source_iq_sample_rate_hz':FS,'output_sample_rate_hz':COARSE_FS,'input_interpolation':'piecewise linear as implemented by full reference ADC model'},
@@ -191,7 +210,7 @@ def freeze(args):
           'case_order':'channel ascending, each profile case list order, payload index ascending',
           'existing_failures_policy':'Write and report failed caches; no hidden replacement or retuning. Complete failure-free status is required for a primary cache-ready claim.'}
     write(out/'plan.json',plan)
-    print(json.dumps({'plan_sha256':sha(out/'plan.json'),'cache_count':644,'gain_seeds':gain_seeds}),flush=True)
+    print(json.dumps({'plan_sha256':sha(out/'plan.json'),'cache_count':plan['cache_count'],'gain_seeds':gain_seeds}),flush=True)
 
 
 def verify_plan(out):
@@ -246,9 +265,10 @@ def gain(out,plan,profile):
 
 def generate(args):
     out=args.output.resolve();plan=verify_plan(out);bank=DetectorWeightBank(explicit_path=plan['weights_path'])
-    cases=[(profile,case,payload) for profile in plan['profiles'] for case in profile['cases'] for payload in plan['payloads']]
-    indices=list(range(len(cases))) if args.case_index is None else args.case_index
-    if len(indices)!=len(set(indices)) or any(i<0 or i>=len(cases) for i in indices):
+    cases={case_index(profile['physical_channel'],c,p):(profile,case,payload) for profile in plan['profiles']
+           for c,case in enumerate(profile['cases']) for p,payload in enumerate(plan['payloads'])}
+    indices=sorted(cases) if args.case_index is None else args.case_index
+    if len(indices)!=len(set(indices)) or any(i not in cases for i in indices):
         raise ValueError('Invalid requested case indices')
     directory=out/'cases';directory.mkdir(exist_ok=True)
     import time
@@ -317,5 +337,11 @@ if __name__=='__main__':
     parser.add_argument('--weights',type=Path,default=ROOT/'weights/chime_dtv_weights_k128.bin')
     parser.add_argument('--backend',choices=('cpu','gpu'),default='cpu')
     parser.add_argument('--case-index',type=int,action='append')
+    parser.add_argument('--channels',type=int,nargs='+',default=RECORD_CHANNELS,
+                        help='physical channels to build; a channel outside 14-36 continues the record case order')
+    parser.add_argument('--path-map',action='append',default=[],metavar='OLD=NEW',
+                        help='prefix of a recorded preparation path and where it lives now')
+    parser.add_argument('--prior-preflight',type=Path,default=RAIL/'results/channel29_residual_controls_2026-09-09/preflight',
+                        help='seed ledgers of the channel-29 controls, reserved against the gain seeds')
     arguments=parser.parse_args()
     freeze(arguments) if arguments.stage=='freeze' else generate(arguments)

@@ -20,8 +20,9 @@ All notable changes to PilotProxy are recorded here. The project follows
 - `test-bundle` fails the masked-fraction check of a channel calibrated with no captures, with a message, in place
   of a KeyError on its missing `masked_interval`.
 - Under v3, the power-limit test of `calibrate-bundle` forms the shelf estimate with `T_rho` over the even bins
-  farther than 32 fine bins from each channel's nominal pilot bin (95 or 96 bins, rank 47,
-  `power_limit_word.shelf_reference`), and reads the control in its own window. Over all 128 even bins, the pilot
+  farther than 96 fine bins (1144 Hz) from each channel's nominal pilot bin (31 or 32 bins, rank 15,
+  `power_limit_word.shelf_reference`), and reads the control in its own window. A first window of 32 bins still
+  held the pilot's leakage skirt, mostly below the pilot; 96 bins reduce that bias but do not remove it. Over all 128 even bins, the pilot
   and its nearby lines raised `T_rho` and biased the kept estimate low; the dissertation measured 3.6 to 7.5 shelf
   limits at the passing words of channels 19, 26 and 32. The decision keeps `d_rho` over all 128 even bins. The
   report gives `shelf_reference` with each power-limit test.

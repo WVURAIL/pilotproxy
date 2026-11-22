@@ -21,8 +21,8 @@ import numpy as np
 
 # frames reduced together, about 0.15 GB of float temporaries
 EXCESS_CHUNK = 65536
-# fine bins (381 Hz) about the nominal pilot that the v3 shelf reference leaves out
-SHELF_HALF_WIDTH = 32
+# fine bins (1144 Hz) about the nominal pilot that the v3 shelf reference leaves out
+SHELF_HALF_WIDTH = 96
 MARGIN_STANDARD_ERRORS = 2.0
 SELECTION = "maximum kept fraction subject to upper power <= checked limit"
 EVALUATION = "in-sample; independent evaluation required"
@@ -32,10 +32,11 @@ def shelf_reference(nominal_bin: int, half_width: int = SHELF_HALF_WIDTH) -> tup
     """Return the bins and median rank of T_rho for the v3 shelf estimate.
 
     The v3 decision divides by the median reference of all 128 even bins. The shelf estimate divides the target
-    by the reference bin by bin, and the target holds the pilot and its nearby lines, so T_rho takes the even bins
-    farther than `half_width` fine bins, circularly, from the nominal pilot bin: 95 bins at an even nominal bin, 96
-    at an odd one, rank 47. With all 128, the pilot raises T_rho and biases the kept estimate low (the
-    dissertation's scripts/shelf_reference.py).
+    by the reference bin by bin, and the target holds the pilot, its leakage skirt and its nearby lines, so T_rho
+    takes the even bins farther than `half_width` fine bins, circularly, from the nominal pilot bin: 31 bins at an
+    even nominal bin, 32 at an odd one, rank 15. Closer bins raise T_rho and bias the kept estimate low. At 32 bins
+    the skirt, mostly below the pilot, still did; 96 reduces that bias but does not remove it (the dissertation's
+    scripts/shelf_reference.py, decided 2026-11-22).
     """
     b = np.arange(256)
     distance = np.minimum((b - nominal_bin) % 256, (nominal_bin - b) % 256)

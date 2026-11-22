@@ -275,11 +275,15 @@ knee and floor. The power-limit test reads the control at the same scale: a cont
 frame counts as kept at the channel word `u` when its keep word is at most
 `floor(u / lambda_c)`, so its selection shift and the default word map the control onto
 the channel the same way. Its excess divides by `T_rho` over the even bins farther
-than 32 fine bins from the nominal pilot bin (rank 47), and the control is read in
-its own window. Over all 128 even bins, the pilot and its nearby lines raise `T_rho`,
-which biased the kept estimate low by 3.6 to 7.5 shelf limits at the passing words
-of channels 19, 26 and 32 (the dissertation's decision of 2026-11-21). The decision
-itself still divides by `d_rho` over all 128 even bins.
+than 96 fine bins (1144 Hz) from the nominal pilot bin (31 or 32 bins, rank 15), and
+the control is read in its own window. Over all 128 even bins, the pilot and its nearby
+lines raise `T_rho`, which biased the kept estimate low by 3.6 to 7.5 shelf limits at
+the passing words of channels 19, 26 and 32 (the dissertation's decision of
+2026-11-21). Beyond 32 bins (381 Hz), the pilot's leakage skirt, mostly below the
+pilot, still raised `T_rho`, so the window was widened to 96 bins (the dissertation's
+decision of 2026-11-22). The bias falls as the window widens and does not level off
+by 96 bins, so the wider window reduces it but does not remove it. The decision itself
+still divides by `d_rho` over all 128 even bins.
 
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%
 less time than the v2 mask for one channel and 0.5% less for 16 channels in one

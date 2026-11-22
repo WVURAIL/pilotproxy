@@ -63,6 +63,7 @@ rows = bc._rows(bundle)
 nominal = {c: bc.nominal_fine_bin(r["pilot_frequency_hz"], r["coarse_channel_center_hz"], cell_hz, descending)
            for c, r in rows.items()}
 bulk, rank = bc._geometry(0, (), V3)
+norms = {c: bc.weight_norms(bc._weights(r, bank)) for c, r in rows.items()}
 mu0 = {c: bc.null_level(bc._weights(r, bank)) for c, r in rows.items()}
 control37 = show("data/assembly/control37.json")
 
@@ -82,7 +83,7 @@ else:
     with np.load(CONTROL_PRODUCT, allow_pickle=False) as z:
         ok = z["valid"][:, 0] > 0
         cfines, cunits = z["fine_power_u64"][ok], z["frame_unit_index"][ok]
-control = (cfines, cunits)
+control = (cfines, cunits, norms[37])
 
 captured = {}
 real_limit_test = bc.limit_test
@@ -97,12 +98,30 @@ bc.limit_test = recording_limit_test
 
 
 def rel(a, b):
+    """Largest relative difference, where infinite values must sit at the same places."""
     a, b = np.asarray(a, float), np.asarray(b, float)
+    if not np.array_equal(np.isinf(a), np.isinf(b)):
+        return float("inf")
+    a, b = a[np.isfinite(b)], b[np.isfinite(b)]
     scale_ = np.maximum(np.abs(b), 1e-300)
     return float(np.max(np.abs(a - b)/scale_)) if a.size else 0.0
 
 
-report = dict(rev=REV, estimate=offset.get("estimate"), control_frames=CONTROL_FRAMES, control_decided_only=bool(os.environ.get("CONTROL_DECIDED_ONLY")), control_frame_count=int(len(cfines)), pilotproxy=subprocess.check_output(["git", "-C", str(PP), "rev-parse", "--short", "HEAD"]).decode().strip(),
+def abs_diff(a, b):
+    """Largest absolute difference; infinite values must coincide."""
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    if not np.array_equal(np.isinf(a), np.isinf(b)):
+        return float("inf")
+    a, b = a[np.isfinite(b)], b[np.isfinite(b)]
+    return float(np.max(np.abs(a - b))) if a.size else 0.0
+
+
+def git(*args):
+    return subprocess.check_output(["git", "-C", str(PP), *args]).decode().strip()
+
+
+report = dict(rev=REV, estimate=offset.get("estimate"), control_frames=CONTROL_FRAMES, control_decided_only=bool(os.environ.get("CONTROL_DECIDED_ONLY")), control_frame_count=int(len(cfines)), pilotproxy=git("rev-parse", "--short", "HEAD"),
+              pilotproxy_src_tree=git("rev-parse", "--short", "HEAD:src"), pilotproxy_src_clean=not git("status", "--porcelain", "src"),
               shelf=shelf, shelf_dissertation=T.SHELF, route=route, control_mu0=mu0[37],
               control_mu0_dissertation=control37["mu0"], channels={})
 for ch in CHANNELS:
@@ -125,8 +144,7 @@ for ch in CHANNELS:
         inputs = dict(table=table, rows={c: {} for c in CHANNELS}, limits={ch: t["power_limit"]}, coupling={},
                       curvature=curvature, margin=margin, min_captures=30, shelf=shelf)
         result = bc._limit_channel(ch, fines, captures, seen, control, anchor=nominal[ch], bulk=bulk, rank=rank,
-                                   inputs=inputs, decision_version=V3, control_scale=scale[ch],
-                                   mu0=mu0[ch], control_mu0=mu0[37])
+                                   inputs=inputs, decision_version=V3, control_scale=scale[ch], norms=norms[ch])
         s, kw = captured["sweep"], dict(captured)
         x = np.maximum(kw["shelf"]*s["mean_excess"] - kw["shift"] - kw["offset"], 0.0)
         ratio = kw["coupling"]*kw["power_scale"]*(x + 2*s["se"] + kw["margin"])**2/kw["power_limit"]
@@ -139,7 +157,7 @@ for ch in CHANNELS:
     p = variants["plan"]
     s = p["sweep"]
     same_words = bool(np.array_equal(np.asarray(s["word"], np.uint64), np.asarray(d["word"], np.uint64)))
-    ours = bc.ratio_excess(fines, mu0[ch])
+    ours = bc.ratio_excess(fines, norms[ch])
     ok = np.isfinite(ours) & np.isfinite(product_excess)
     excess_diff = float(np.max(np.abs(ours[ok] - product_excess[ok])))
     row = dict(nominal_bin=nominal[ch], mu0=mu0[ch], mu0_product=float(product_mu0), excess_max_abs_diff=excess_diff,
@@ -155,6 +173,11 @@ for ch in CHANNELS:
                    mean_excess_rel=rel(s["mean_excess"][e], raw[e]),
                    shift_rel=rel(p["kw"]["shift"][e], d["selection_shift"][e]),
                    ratio_rel_plan=rel(p["ratio"][e], dratio[e]),
+                   ratio_rel_all_words=rel(p["ratio"], dratio), unmeasured_words=int(np.isinf(dratio).sum()),
+                   # the shift error inside PilotProxy's margin, 2 (s_delta + s_n + s_d) + r
+                   # in shelf units; the shift errors are of order 1e-6
+                   shift_se_abs_all_words=abs_diff((p["kw"]["margin"] - route - 2*offsets[ch]["curvature_se"])/2
+                                              - p["result"]["corrections"]["null_se"], d["selection_shift_se"]),
                    upper_shelf_diff_plan=float(np.max(np.abs(np.sqrt(p["ratio"][e]) - np.sqrt(dratio[e]))*np.sqrt(t["power_limit"]/t["power_scale"]))))
     for name, v in variants.items():
         r = v["result"]

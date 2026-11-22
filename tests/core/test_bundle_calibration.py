@@ -726,18 +726,22 @@ def test_ratio_excess_reads_the_pilot_over_the_null_level():
     fines[:, 0] = 100                # F = 2 P_0 / (P_1 + P_2) = 2, the null level
     fines[1, 0, 7] += 25600          # a pilot that doubles the frame power
     fines[2, 1:] = 0                 # no reference
-    excess = ratio_excess(fines, 2.0)
+    excess = ratio_excess(fines, (1, 1))     # mu_0 = 2 |w_t|^2 / (|w_lo|^2 + |w_up|^2) = 2
     assert excess[0] == pytest.approx(0.0) and excess[1] == pytest.approx(1.0) and np.isnan(excess[2])
 
 
-def test_ratio_excess_is_the_archive_pilot_excess():
-    from pilot_proxy.detector_contract import null_power_ratio_from_weight_norms
-    from pilot_proxy.product_contract import pilot_excess_from_fine_powers
+def test_ratio_excess_is_the_archive_pilot_excess(monkeypatch):
+    import pilot_proxy.power_limit_word as power_limit_word
+    from pilot_proxy.product_contract import CurrentProductContractError, pilot_excess_from_fine_powers
 
     fines = np.random.default_rng(5).integers(0, 2**40, (50, 3, 256), dtype=np.uint64)
+    fines[9, 1:] = 0
     product = dict(fine_power_u64=fines, target_norm_sq=np.asarray([3]), reference_norm_sum_sq=np.asarray([5]))
-    np.testing.assert_allclose(ratio_excess(fines, null_power_ratio_from_weight_norms(3, 5)),
-                               pilot_excess_from_fine_powers(product), rtol=1e-14, atol=1e-15)
+    monkeypatch.setattr(power_limit_word, "EXCESS_CHUNK", 7)
+    np.testing.assert_array_equal(ratio_excess(fines, (3, 5)), pilot_excess_from_fine_powers(product))
+    # float powers would be truncated by the exact sums, so they are refused
+    with pytest.raises(CurrentProductContractError, match="uint64"):
+        ratio_excess(fines.astype(np.float64), (3, 5))
 
 
 def test_control_corrections_equal_the_direct_sums():
@@ -753,7 +757,11 @@ def test_control_corrections_equal_the_direct_sums():
     assert got["null"] == pytest.approx(mean) and got["null_se"] == pytest.approx(np.sqrt(sums @ sums) / n)
     for i, word in enumerate(at):
         keep = words <= word
-        if not keep.any() or keep.all():
+        if not keep.any():
+            # no control frame kept, so no measured shift
+            assert got["shift"][i] == 0.0 and got["shift_se"][i] == np.inf
+            continue
+        if keep.all():
             assert got["shift"][i] == 0.0 and got["shift_se"][i] == 0.0
             continue
         kept = excess[keep].mean()
@@ -776,6 +784,9 @@ def test_limit_test_takes_the_largest_passing_word():
     assert shifted["upper_shelf"] == pytest.approx(0.021) and shifted["word"] == 30
     assert limit_test(sweep, min_captures=5, **common)["reason"] == "no word keeps 5 captures"
     assert limit_test(sweep, min_captures=3, coupling=1e-3, **common)["word"] == 40
+    # a word with no measured shift cannot pass
+    unmeasured = limit_test(sweep, min_captures=3, margin=np.array([0.0, 0.0, np.inf, 0.0]), **common)
+    assert (unmeasured["word"], unmeasured["passing_words"]) == (20, 1)
     with pytest.raises(ValueError, match="at most 1"):
         limit_test(sweep, coupling=1.5, **common)
 
@@ -875,14 +886,44 @@ def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plan
 
 
 def test_v3_power_limit_estimate_is_the_ratio_at_each_null_level(plans, tmp_path):
+    from pilot_proxy.bundle_calibration import _shelf, weight_norms
+
     path = limit_plan(plans, tmp_path, 1e-3)
-    path.write_text(json.dumps(dict(json.loads(path.read_text()), decision_version="fine_decision_v3")))
+    plan = dict(json.loads(path.read_text()), decision_version="fine_decision_v3")
+    path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    control = null_level(bytes.fromhex(report["control"]["weights_hex"]))
+    weights = bytes.fromhex(report["control"]["weights_hex"])
+    control = null_level(weights)
+    # the control's null is its mean ratio at its own null level, which tells the two levels apart
+    bundle = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())
+    reverse = bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"])
+    row = dict(physical_channel=report["control"]["channel"], receiver_channel_id=report["control"]["receiver_channel_id"],
+               weight_bank_offset_bytes=0, weight_bank_nbytes=len(weights))
+    fines, _ = _load_fines(plan["control"]["captures"], "chime_baseband", row, weights, 128, reverse, None)
+    null = _shelf(plan, path.parent) * ratio_excess(fines, weight_norms(weights)).mean()
     for channel in ("35", "29"):
         tested = report["channels"][channel]["power_limit"]
         assert tested["estimate"] == "ratio, F / mu_0 - 1"
-        assert tested["mu0"] == report["channels"][channel]["mu0"] and tested["corrections"]["control_mu0"] == control
+        assert tested["mu0"] == report["channels"][channel]["mu0"] != control
+        assert tested["corrections"]["control_mu0"] == control
+        assert tested["corrections"]["control_frames"] == len(fines)
+        assert tested["corrections"]["null"] == pytest.approx(null, rel=1e-12)
+
+
+def test_power_limit_corrections_take_only_decided_control_frames(plans, tmp_path, monkeypatch):
+    import pilot_proxy.bundle_calibration as calibration
+
+    words = calibration.required_words
+
+    def first_masked_always(*args, **kwargs):
+        out = words(*args, **kwargs)
+        out[0] = calibration.MAX_SCORE
+        return out
+
+    monkeypatch.setattr(calibration, "required_words", first_masked_always)
+    report = calibrate_bundle(plan_path=limit_plan(plans, tmp_path, 1e-3), output_dir=tmp_path / "bundle")
+    corrections = report["channels"]["35"]["power_limit"]["corrections"]
+    assert corrections["control_frames"] == report["control"]["frames"] - 1
 
 
 def test_v3_channel_with_no_passing_word_carries_no_power_limit_word(plans, tmp_path):

@@ -624,7 +624,9 @@ and \code{--output-dir}. Under v3:
         are measured on the control. A control frame counts as kept at the
         channel word \(u\) when its keep word is at most
         \(\lfloor u/\lambda_c\rfloor\), so the default word and the power-limit
-        corrections map the control onto the channel the same way. The
+        corrections map the control onto the channel the same way. Only the
+        control frames that the decision decides enter, and a word at which
+        the control keeps no frame has no measured shift and cannot pass. The
         excess is the frame-level ratio \(e = F/\mu_0 - 1\),
         \(F = 2P_0/(P_1+P_2)\), the normalized pilot excess of the archive
         products, with each channel and the control at the null level of its
@@ -636,7 +638,7 @@ and \code{--output-dir}. Under v3:
         the archive would pass channels 21, 29 and 32 under the worst case.
         With the dissertation's values, the test reproduces the
         dissertation's worst-case test on the archive to
-        \(3\times10^{-13}\) on every word
+        \(10^{-13}\) on every word
         (\code{docs/evidence/bao_word_crosscheck_2026-11-22}). A channel
         with no passing word carries only the default word, and
         \code{bundle.decisions.json} records the outcome for the

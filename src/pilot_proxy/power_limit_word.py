@@ -7,8 +7,9 @@ The acceptance test keeps the most frames whose upper residual power meets the c
 
 The excess is the frame-level ratio e = F / mu_0 - 1, F = 2 P_0 / (P_1 + P_2), each channel and the
 control at its own null level mu_0. The kept mean excess e(u) and its clustered error come from the
-channel. The null o and the selection shift delta(u) come from the control, read under the words of
-the channel.
+channel. The null o and the selection shift delta(u) come from the control frames that the decision
+decides, read under the words of the channel. A word at which the control keeps no frame has no measured
+shift, and cannot pass.
 The response table, the checked limits and the coupling fraction f are inputs. The test is in-sample,
 so its word is a candidate until it is tested on independent data.
 """
@@ -19,6 +20,8 @@ from typing import Any
 
 import numpy as np
 
+from pilot_proxy.product_contract import pilot_excess_from_fine_powers
+
 # frames reduced together
 EXCESS_CHUNK = 65536
 MARGIN_STANDARD_ERRORS = 2.0
@@ -26,26 +29,27 @@ SELECTION = "maximum kept fraction subject to upper power <= checked limit"
 EVALUATION = "in-sample; independent evaluation required"
 
 
-def ratio_excess(fines: np.ndarray, mu0: float) -> np.ndarray:
+def ratio_excess(fines: np.ndarray, norms: tuple[int, int]) -> np.ndarray:
     """Return e = 2 P_0 / (P_1 + P_2) / mu_0 - 1 of each [3, 256] frame, NaN where the reference has no power.
 
-    P_r is the frame power of term r, the sum of its fine powers, and mu_0 the null level of the channel's weights,
-    so e is the normalized pilot excess of the archive products (pilot_excess_from_fine_powers).
+    `norms` are the squared weight norms (|w_t|^2, |w_lo|^2 + |w_up|^2) of the channel, so mu_0 = 2 |w_t|^2 /
+    (|w_lo|^2 + |w_up|^2). The excess is that of the archive products, pilot_excess_from_fine_powers, which takes
+    uint64 fine powers only.
     """
     out = np.empty(len(fines))
-    with np.errstate(divide="ignore", invalid="ignore"):
-        for lo in range(0, len(fines), EXCESS_CHUNK):
-            # exact uint64 sums, as the products form them
-            power = np.asarray(fines[lo:lo + EXCESS_CHUNK]).sum(axis=2, dtype=np.uint64).astype(np.float64)
-            out[lo:lo + len(power)] = 2.0 * power[:, 0] / (power[:, 1] + power[:, 2]) / mu0 - 1.0
-    return np.where(np.isfinite(out), out, np.nan)
+    for lo in range(0, len(fines), EXCESS_CHUNK):
+        chunk = np.asarray(fines[lo:lo + EXCESS_CHUNK])
+        out[lo:lo + len(chunk)] = pilot_excess_from_fine_powers(
+            dict(fine_power_u64=chunk, target_norm_sq=norms[0], reference_norm_sum_sq=norms[1]))
+    return out
 
 
 def control_corrections(words: np.ndarray, excess: np.ndarray, capture: np.ndarray, at: np.ndarray) -> dict[str, Any]:
     """Return the null of the control and its selection shift at each word of `at`, with clustered errors.
 
     The null is the mean excess of the control. The shift at a word is the mean over the control
-    frames that the word keeps, less the mean over all of them. Values are in units of the excess.
+    frames that the word keeps, less the mean over all of them. A word that keeps no control frame has
+    no measured shift: it gets 0 with an infinite error. Values are in units of the excess.
     """
     n = excess.size
     null = float(excess.mean())
@@ -79,7 +83,8 @@ def control_corrections(words: np.ndarray, excess: np.ndarray, capture: np.ndarr
     cross = prefix(es * total[us]) - mean * prefix(total[us])
     variance = square / kk**2 - 2.0 * cross / (kk * n) + tt / n**2
     return dict(null=null, null_se=math.sqrt(tt) / n, frames=int(n), captures=int(total.size),
-                shift=np.where(inside, mean, 0.0), shift_se=np.where(inside, np.sqrt(np.maximum(variance, 0.0)), 0.0))
+                shift=np.where(inside, mean, 0.0),
+                shift_se=np.where(inside, np.sqrt(np.maximum(variance, 0.0)), np.where(k == 0, np.inf, 0.0)))
 
 
 def limit_test(sweep: dict[str, np.ndarray], *, shelf: float, power_scale: float, power_limit: float,

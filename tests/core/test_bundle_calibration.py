@@ -23,8 +23,10 @@ from pilot_proxy.bundle_calibration import (
     iter_run_frames,
     knee_word,
     nominal_fine_bin,
+    null_level,
     qualify_bundle,
     required_words,
+    scaled_word,
     simulated_null_scores,
     test_bundle as run_bundle_test,
 )
@@ -828,3 +830,57 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
     # a channel with no passing word holds the floor as its power-limit word
     assert fine[29]["power_limit_multiplier_q16"] == report["floor_word_q16"]
+
+
+def _v3_plan(plans, tmp_path, **extra):
+    plan = dict(plans["calibrate"], decision_version="fine_decision_v3", **extra)
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    return path
+
+
+def test_v3_default_word_is_the_scaled_control_word(plans, tmp_path):
+    factors = {"35": 1.01, "29": 0.99, "37": 1.002}
+    report = calibrate_bundle(plan_path=_v3_plan(plans, tmp_path, default_word=dict(passband_factor=factors)),
+                              output_dir=tmp_path / "bundle")
+    q = report["control_quantile_q16"]
+    assert report["reference_level"] > 0 and report["measured_floor_q16"] == int(np.ceil(q))
+    rows = {r["physical_channel"]: r["fine_calibration"]
+            for r in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
+    for channel in ("35", "29"):
+        r = report["channels"][channel]
+        assert r["word_source"] == "control word x scale" and "knee_word_q16" not in r
+        assert r["passband_factor"] == factors[channel] and r["passband_factor_source"] == "plan"
+        assert r["scale"] == pytest.approx(r["mu0"] * factors[channel] / report["reference_level"], rel=1e-15)
+        assert r["word_q16"] == scaled_word(q, r["scale"]) == rows[int(channel)]["cfar_multiplier_q16"]
+
+
+def test_v3_control_channel_takes_the_control_word_itself(plans, tmp_path):
+    captures = plans["calibrate"]["control"]["captures"]
+    path = _v3_plan(plans, tmp_path, channels={**plans["calibrate"]["channels"], "37": captures})
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    r = report["channels"]["37"]
+    assert r["scale"] == 1.0 and r["passband_factor_source"] == "not given"
+    assert r["word_q16"] == int(np.ceil(report["control_quantile_q16"]))
+
+
+def test_v3_default_word_needs_no_captures_of_the_channel(plans, tmp_path):
+    path = _v3_plan(plans, tmp_path, channels={"29": [], "35": plans["calibrate"]["channels"]["35"]})
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    r = report["channels"]["29"]
+    assert r["frames"] == 0 and r["word_source"] == "control word x scale"
+    assert r["word_q16"] == scaled_word(report["control_quantile_q16"], r["scale"])
+
+
+@pytest.mark.parametrize("block, match", [(dict(passband_factor={"29": 0.0}), "positive"),
+                                          (dict(offsets={"29": 1.0}), "unknown default_word")])
+def test_v3_default_word_plan_errors(plans, tmp_path, block, match):
+    with pytest.raises(ValueError, match=match):
+        calibrate_bundle(plan_path=_v3_plan(plans, tmp_path, default_word=block), output_dir=tmp_path / "bundle")
+
+
+def test_null_level_is_the_weight_norm_ratio():
+    # target (1, 0) and references (1, 1) and (0, 1) in every tap: 2 * 1 / (2 + 1)
+    k = 4
+    taps = np.array([[0x10] * k, [0x11] * k, [0x01] * k], dtype=np.uint8)
+    assert null_level(taps.tobytes()) == pytest.approx(2 * k / (2 * k + k), rel=1e-15)

@@ -252,14 +252,27 @@ the split itself changes no decision.
 The threshold belongs to the consumer because the backends tolerate different
 residuals. N2 needs the strict word that the power-limit test sets, and the FRB
 and baseband backends would lose good data at it. A v3 bundle carries the
-default word `cfar_multiplier_q16` (the knee or floor) for a backend with no
-word of its own, and `power_limit_multiplier_q16` where the power-limit test
+default word `cfar_multiplier_q16` for a backend with no word of its own, and `power_limit_multiplier_q16` where the power-limit test
 set one. Kotekan's `DtvRfiMask` applies the power-limit word, or the default
 word when there is none. A backend can set its own word from its own residual
 analysis.
 
-On an RTX 5000 Ada at 2048 inputs, the v3 entry takes 7% less time than the v2
-mask for one channel and 1 to 3% less for 16 channels in one call.
+The v3 default word is a CFAR word set on the control, not the knee of a
+channel's own kept fraction. `calibrate-bundle` takes the 99th percentile
+(`null_quantile`) of the control's exact keep words and scales it to each
+channel's null level, `mu_0,c g_c / (mu_0,37 g_37)`, rounded up to Q16.
+`mu_0 = 2 |w_t|^2 / (|w_lo|^2 + |w_up|^2)` comes from the stored weights and
+`g = 1 + o/C`, the passband factor of the line-free offset `o` at the pilot, from
+the plan's `default_word.passband_factor` (1 where not given; it moves the
+archive words by under 2%). The word then means a fixed share of pilot-free
+frames masked, and it needs no captures of the channel, so every channel of a
+first bundle gets it. On the archive this reproduces the dissertation's v3
+default words exactly (`default_words_v3.json`). Bundles of v1 and v2 keep the
+knee and floor.
+
+On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%
+less time than the v2 mask for one channel and 0.5% less for 16 channels in one
+call.
 
 ## The source stamp is memoized per process
 

@@ -18,6 +18,7 @@ from typing import Any, Iterator, Sequence
 import numpy as np
 
 from pilot_proxy.capture_reference import expected_matched_filter_row_projections
+from pilot_proxy.detector_contract import null_power_ratio_from_weight_norms, weight_term_norms_sq
 from pilot_proxy.detectors.narrowband_marker.anchors import WINDOW_HALF_WIDTH, bulk_mask
 from pilot_proxy.fine_decision import (
     CALIBRATION_DECISION_VERSION,
@@ -70,7 +71,8 @@ NULL_CHUNK = 4096
 # relative float gap below which a frame is scored exactly, far above the 1e-15 error of the float word
 FLOAT_MARGIN = 1e-12
 BUNDLE_FILES = ("detector_contract.json", "pilot_profiles.json", "weights.bin", "weights.manifest.json")
-# the knee is the general word of a channel, and the power-limit word keeps the most frames under a checked residual power
+# the knee (v1, v2) or the scaled control word (v3) is the default word of a channel, and the power-limit word keeps
+# the most frames under a checked residual power
 THRESHOLDS = ("knee", "power_limit")
 DECISIONS_SCHEMA = "pilotproxy-power-decisions-v4"
 # reported only for a channel that passes
@@ -394,6 +396,29 @@ def _weights(row: dict[str, Any], bank: bytes) -> bytes:
     return bank[offset:offset + int(row["weight_bank_nbytes"])]
 
 
+def null_level(weights: bytes) -> float:
+    """Return mu_0 = 2 |w_t|^2 / (|w_lo|^2 + |w_up|^2), the null level that a channel's weights give its fine ratio."""
+    target, lower, upper = weight_term_norms_sq(np.frombuffer(weights, dtype=np.int8).reshape(3, -1))
+    return null_power_ratio_from_weight_norms(target, lower + upper)
+
+
+def scaled_word(quantile_q16: float, scale: float) -> int:
+    """Return the default word of fine decision v3: the control quantile times the channel scale, rounded up to Q16."""
+    return int(math.ceil(quantile_q16 / Q16 * scale * Q16))
+
+
+def _passband_factors(plan: dict[str, Any]) -> dict[int, float]:
+    """Return the passband factors g = 1 + o/C of the plan's "default_word" block, by physical channel."""
+    given = plan.get("default_word", {})
+    unknown = set(given) - {"passband_factor"}
+    if unknown:
+        raise ValueError(f"unknown default_word keys {sorted(unknown)}")
+    factors = {int(c): float(v) for c, v in given.get("passband_factor", {}).items()}
+    if any(not np.isfinite(v) or v <= 0 for v in factors.values()):
+        raise ValueError("every passband factor must be finite and positive")
+    return factors
+
+
 def _expand(paths: Sequence[str]) -> list[str]:
     """Return the paths with any glob patterns expanded, in sorted order, and combined run files as their windows."""
     from pilot_proxy.run_files import windows
@@ -609,7 +634,18 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         independent = (len(fines) if control else MIN_SIMULATED_FRAMES) * per_frame
         if independent * (1.0 - quantile) < 1:
             raise ValueError(f"{independent} independent null scores are too few for quantile {quantile}")
-        measured_word = int(math.ceil(float(np.quantile(scores, quantile))))
+        v3 = decision == FINE_DECISION_V3_VERSION
+        factors = _passband_factors(plan) if v3 else {}
+        if v3 and control:
+            # the quantile of the exact keep words of the control frames that have a word
+            exact = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=control_rank, decision_version=decision)
+            exact = exact[(exact >= 0) & (exact < MAX_SCORE)]
+            quantile_q16 = float(np.quantile(exact.astype(np.float64), quantile))
+            reference_level = null_level(_weights(row, bank)) * factors.get(int(control["channel"]), 1.0)
+        elif v3:
+            # white noise through ideal weights has the null level 1
+            quantile_q16, reference_level = float(np.quantile(scores, quantile)), 1.0
+        measured_word = int(math.ceil(quantile_q16)) if v3 else int(math.ceil(float(np.quantile(scores, quantile))))
         floor = int(plan.get("word_q16", measured_word))
         if "word_q16" in plan:
             source = "the plan"
@@ -622,15 +658,32 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             nominal = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             paths = plan["channels"][str(channel)]
             excluded = plan.get("exclude_bins", {}).get(str(channel), [])
+            scaling = {}
+            if v3:
+                # v3's default word: the control's 1% word scaled to the null level of this channel
+                level = null_level(_weights(row, bank))
+                factor = factors.get(channel, 1.0)
+                scale = level * factor / reference_level
+                default = floor if "word_q16" in plan else scaled_word(quantile_q16, scale)
+                scaling = dict(mu0=level, passband_factor=factor,
+                               passband_factor_source="plan" if channel in factors else "not given", scale=scale)
             if not paths:
                 # a first bundle, so the detector can record the data for the next one
                 anchor = int(plan.get("anchors", {}).get(str(channel), nominal))
                 bulk, rank = _geometry(anchor, excluded, decision)
-                values[channel] = _fine_values(channel, anchor, rank, bulk, floor, plan, quantile,
-                                               f"Word from the floor, no captures, floor from {source}.", decision)
+                given_word = plan.get("words", {}).get(str(channel))
+                if v3:
+                    # the v3 default word needs no captures of the channel
+                    word = int(default if given_word is None else given_word)
+                    word_source = "plan" if given_word is not None or "word_q16" in plan else "control word x scale"
+                else:
+                    word, word_source = floor, "floor, no captures"
+                note = (f"Word from {word_source}, control word from {source}." if v3
+                        else f"Word from the floor, no captures, floor from {source}.")
+                values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile, note, decision)
                 report_channels[str(channel)] = dict(
                     anchor_bin=anchor, anchor_source="nominal", nominal_bin=nominal, frames=0, captures=0,
-                    word_q16=floor, eta=floor / Q16, word_source="floor, no captures")
+                    word_q16=word, eta=word / Q16, word_source=word_source, **scaling)
                 continue
             fines, captures = _load_fines(paths, fmt, row, bank, k, reverse, max_frames)
             window = (nominal + np.arange(-WINDOW_HALF_WIDTH, WINDOW_HALF_WIDTH + 1)) % FINE_BINS
@@ -655,7 +708,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             supported = seen >= 0
             if not supported.any():
                 raise ValueError(f"channel {channel} has no supported frames")
-            knee = knee_word(seen[supported], capture_weights(captures)[supported])
+            knee = None if v3 else knee_word(seen[supported], capture_weights(captures)[supported])
             weights = capture_weights(captures[supported])
             at_floor = float(np.sum(weights[seen[supported] > floor]))
             # share of frames with a pilot, less the clean frames the floor masks
@@ -673,10 +726,12 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                                   outcome="not useful", reason="pilot not seen")
             limited = None
             if decision == FINE_DECISION_V3_VERSION and tested is not None and not is_control:
-                # v3 keeps the power-limit word apart, and the default word follows the knee rule
+                # v3 keeps the power-limit word apart, and the default word is the scaled control word
                 limited = (tested["word"], "power limit") if tested["outcome"] == "useful" else (floor, f"floor, power limit: {tested['reason']}")
             if given_word is not None or "word_q16" in plan:
                 word, word_source = int(floor if given_word is None else given_word), "plan"
+            elif v3:
+                word, word_source = default, "control word x scale"
             elif tested is not None and not is_control and limited is None:
                 # a channel with no passing word is masked whole by the operating policy, and holds the floor here
                 word, word_source = (tested["word"], "power limit") if tested["outcome"] == "useful" else (floor, f"floor, power limit: {tested['reason']}")
@@ -693,14 +748,15 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 word, word_source = knee, "knee"
             masked = float(np.sum(weights[seen[supported] > word]))
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
-            note = f"Word from {word_source}, floor from {source}."
+            note = f"Word from {word_source}, {'control word' if v3 else 'floor'} from {source}."
             if limited is not None:
                 note += f" Power-limit word from {limited[1]}."
             values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile, note, decision,
                                            power_limit_word=None if limited is None else limited[0])
             report_channels[str(channel)] = dict(
                 anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines), captures=count,
-                word_q16=word, eta=word / Q16, word_source=word_source, knee_word_q16=knee,
+                word_q16=word, eta=word / Q16, word_source=word_source, **scaling,
+                **({} if v3 else {"knee_word_q16": knee}),
                 **({"power_limit_word_q16": limited[0], "power_limit_word_source": limited[1]} if limited else {}),
                 masked_fraction=masked, masked_at_floor=at_floor, pilot_share=share,
                 pilot_in_nearly_every_frame=bool(share > ALWAYS_ON_SHARE),
@@ -721,6 +777,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         raise ValueError(f"bundle failed validation: {validation['errors']}")
 
     report = dict(threshold=threshold, decision_version=decision, floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
+                  **(dict(default_word_rule="control quantile x mu0_c g_c / (mu0_ref g_ref), rounded up to Q16",
+                          control_quantile_q16=quantile_q16, reference_level=reference_level) if v3 else {}),
                   null_quantile=quantile, floor_source=source, search_half_width=SEARCH_HALF_WIDTH,
                   null_scores=int(independent), channels=report_channels, control=control_record,
                   calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values()

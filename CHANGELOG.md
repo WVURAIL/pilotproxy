@@ -5,6 +5,13 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The v3 default word of `calibrate-bundle` is the control's word at `null_quantile` (99%), from its exact keep
+  words, scaled to each channel's null level `mu_0,c g_c / (mu_0,37 g_37)` and rounded up to Q16, in place of the
+  knee. `mu_0` comes from the stored weights (`bundle_calibration.null_level`), and the passband factor `g` from the
+  optional plan block `"default_word": {"passband_factor": {channel: g}}` (1 where not given). A v3 channel with no
+  captures gets the same word. The report gives `control_quantile_q16`, `reference_level` and each channel's `mu0`,
+  `passband_factor` and `scale`. On the archive it reproduces the dissertation's v3 default words exactly. v1 and v2
+  bundles keep the knee and floor.
 - `combine_pathfinder_dtv_run.py` also combines `dtv_stat`, the `[n_peak, d_rho]` rows that a fine decision v3 run records,
   so a v3 run can be combined like the others.
 - Fine decision v3 has no anchor or search width (kernel core 4.2.0). `n_peak` is the largest `2 S_t[b]` of

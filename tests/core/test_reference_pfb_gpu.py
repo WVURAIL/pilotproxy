@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from gpu import cuda_available
 
 cupy = pytest.importorskip("cupy")
+_CUDA, _NO_CUDA = cuda_available()
+pytestmark = pytest.mark.skipif(not _CUDA, reason=_NO_CUDA)
 
 from pilot_proxy.reference_channelizer import (  # noqa: E402
     REFERENCE_PFB_FFT_SIZE,

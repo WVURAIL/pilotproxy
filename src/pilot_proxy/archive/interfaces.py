@@ -294,7 +294,7 @@ class Reader:
         raise NotImplementedError(
             f"reader {getattr(self.info, 'name', type(self).__name__)!r} does "
             f"not declare an archive file shape (survey_files); an archive "
-            f"survey needs a reader that does. See docs/ADDING_A_READER.md.")
+            f"survey needs a reader that does (Reader.survey_files in pilot_proxy/archive/interfaces.py).")
 
     def annotate_row(self, row: dict, instrument) -> None:
         """Add fields to one verified inventory row in place (optional).

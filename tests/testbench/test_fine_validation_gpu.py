@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from gpu import cupy_or_skip
 
 from pilot_proxy.detector_reference import quantize_complex_numpy
 from pilot_proxy.testbench.fine_validation_gpu import (
@@ -65,12 +66,10 @@ def test_output_digest_binds_name_shape_dtype_and_bytes():
 
 @pytest.fixture
 def engine():
-    cp = pytest.importorskip("cupy")
+    cp = cupy_or_skip()
     from pilot_proxy.kernel import PilotProxyKernel
     from pilot_proxy.paths import DEFAULT_LIB_PATH
 
-    if not cp.cuda.runtime.getDeviceCount():
-        pytest.skip("CUDA unavailable")
     rng = np.random.default_rng(20260909001)
     signal = (rng.normal(size=(128, 128)) + 1j * rng.normal(size=(128, 128))).astype(
         np.complex64

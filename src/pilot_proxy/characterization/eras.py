@@ -48,8 +48,7 @@ Current era
     "current era", and is *stale-latest* when it ends before the snapshot.
 
 Where the text leaves the procedure open, this module takes the readings
-below. Each is a named parameter or rule, and section 6 of
-``docs/archive-results-design.md`` records the instrument choice.
+below. Each is a named parameter or rule.
 
 For the monthly fine-peak location, the fine statistic
 ``T = 2 S_0 / (S_1 + S_2)`` is formed per frame from the exact terms on the

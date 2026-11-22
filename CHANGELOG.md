@@ -5,6 +5,8 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `bundle_calibration.null_level` is removed. `bundle_calibration.weight_norms` gives a channel's weight norms, and
+  `detector_contract.null_power_ratio_from_weight_norms` their null level `mu_0`.
 - The power-limit test of `calibrate-bundle` takes only the control frames that the decision decides (keep word
   below `MAX_SCORE`), and a word at which the control keeps no frame gets an infinite selection-shift error, so it
   cannot pass. Both match the dissertation, and neither changes an archive outcome.
@@ -50,19 +52,13 @@ All notable changes to PilotProxy are recorded here. The project follows
   (all its frames) is unchanged, and the report gives `control_word_scale` with the corrections.
 - The v3 default word of `calibrate-bundle` is the control's word at `null_quantile` (99%), from its exact keep
   words, scaled to each channel's null level `mu_0,c g_c / (mu_0,37 g_37)` and rounded up to Q16, in place of the
-  knee. `mu_0` comes from the stored weights (`bundle_calibration.null_level`), and the passband factor `g` from the
+  knee. `mu_0` comes from the stored weight norms (`bundle_calibration.weight_norms`), and the passband factor `g` from the
   optional plan block `"default_word": {"passband_factor": {channel: g}}` (1 where not given). A v3 channel with no
   captures gets the same word. The report gives `control_quantile_q16`, `reference_level` and each channel's `mu0`,
   `passband_factor` and `scale`. On the archive it reproduces the dissertation's v3 default words exactly. v1 and v2
   bundles keep the knee and floor.
 - `combine_pathfinder_dtv_run.py` also combines `dtv_stat`, the `[n_peak, d_rho]` rows that a fine decision v3 run records,
   so a v3 run can be combined like the others.
-- Fine decision v3 has no anchor or search width (kernel core 4.2.0). `n_peak` is the largest `2 S_t[b]` of
-  all 256 fine bins, so the padded bins catch a pilot between two independent bins, and `d_rho` stays the median
-  reference of the 128 even bins. `PilotProxy_Compute_FineStatV3_U64` loses its `anchor_bin` and
-  `designated_half_width` arguments, `fine_stat_v3` takes the fine powers alone, and a v3 bundle block carries
-  neither field (the validator refuses them). The v3 null gives one score per frame. The v3 entry changed before
-  any consumer used it, so this is a minor version.
 - The Pathfinder tools read fine decision v3 runs. `fine_decision.masks_from_stat` turns recorded
   `[n_peak, d_rho]` rows into dtv_mask decisions at a word (exact at the keep boundary; unevaluated rows are kept,
   missing blocks are -1, `d_rho = 0` is rejected), and `run_files.v3_words` gives each v3 channel's N2 word. With
@@ -70,10 +66,12 @@ All notable changes to PilotProxy are recorded here. The project follows
   control) and `analyze_dtv_run.py` decide the v3 channels from `dtv_stat`, whose dtv_mask rows hold 0.
 - Kernel core 4.1.1 allocates the completion counter of `PilotProxy_Compute_FineStatV3_U64` in
   `PilotProxy_Create`, so that no compute entry allocates device memory.
-- Fine decision v3 is added beside v1 and v2, as kernel core 4.1.0. The kernel writes the
-  statistic `[n_peak, d_rho]` per frame in place of a mask: `n_peak` is the largest
-  `2 S_t[b]` of the search and `d_rho` the median reference power `S_lo + S_up` of the 128 even
-  bins (rank 63, zeros included), with no bulk mask or rank. The consumer applies its word with
+- Fine decision v3 is added beside v1 and v2, as kernel core 4.1.0 and, with no anchor or search width, 4.2.0.
+  The kernel writes the statistic `[n_peak, d_rho]` per frame in place of a mask: `n_peak` is the largest
+  `2 S_t[b]` of all 256 fine bins, so the padded bins catch a pilot between two independent bins, and `d_rho` the
+  median reference power `S_lo + S_up` of the 128 even bins (rank 63, zeros included), with no bulk mask or rank.
+  A v3 bundle block carries no `anchor_bin` or `designated_half_width` (the validator refuses them), and the v3
+  null gives one score per frame. The consumer applies its word with
   `pilotproxy_v3_keep` (`cuda/pilotproxy_decision.h`), which keeps a frame when
   `n_peak * 2**16 <= word * d_rho` in exact 128-bit products and returns 1 to keep and 0 to flag,
   as Kotekan's RFI mask does; `d_rho = 0` means no decision. The entry point is
@@ -104,6 +102,11 @@ All notable changes to PilotProxy are recorded here. The project follows
   under a checked residual power, the BAO acceptance test with the RFIsher table. It
   uses the same fine powers, measures the null and the selection shift on the control,
   and writes `bundle.decisions.json` for the operating-policy compiler.
+
+## 1.1.0, November 13, 2026
+
+Tagged `v1.1.0` at 6d3032a. The version string dates from October 24.
+
 - `plan-run` splits a detect-only run into a calibration plan and a test plan.
 - `run-spectrogram` plots the fine powers of a detect-only run with and without the mask.
 - `calibrate-bundle` accepts the control channel as a bound channel, so a run records
@@ -153,9 +156,6 @@ All notable changes to PilotProxy are recorded here. The project follows
   uses explicit legacy cases and the retained v5 inventory, removing the
   obsolete July-inventory dependency. CUDA arithmetic and shipped weights
   are unchanged.
-
-## 1.1.0, October 24, 2026
-
 - Detector core 4.0.0 renames the native interface: the Python class to
   `PilotProxyKernel`, the C API to `PilotProxy_*`, macros to `PILOTPROXY_*`,
   the native library to `libpilotproxy.so`, and source files to

@@ -24,12 +24,12 @@ from pilot_proxy.bundle_calibration import (
     iter_run_frames,
     knee_word,
     nominal_fine_bin,
-    null_level,
     qualify_bundle,
     required_words,
     scaled_word,
     simulated_null_scores,
     test_bundle as run_bundle_test,
+    weight_norms,
 )
 from pilot_proxy.characterization import threshold_rule
 from pilot_proxy.runtime_bundle import _write_sha256sums, validate_runtime_weight_bundle
@@ -886,14 +886,15 @@ def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plan
 
 
 def test_v3_power_limit_estimate_is_the_ratio_at_each_null_level(plans, tmp_path):
-    from pilot_proxy.bundle_calibration import _shelf, weight_norms
+    from pilot_proxy.bundle_calibration import _shelf
+    from pilot_proxy.detector_contract import null_power_ratio_from_weight_norms
 
     path = limit_plan(plans, tmp_path, 1e-3)
     plan = dict(json.loads(path.read_text()), decision_version="fine_decision_v3")
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     weights = bytes.fromhex(report["control"]["weights_hex"])
-    control = null_level(weights)
+    control = null_power_ratio_from_weight_norms(*weight_norms(weights))
     # the control's null is its mean ratio at its own null level, which tells the two levels apart
     bundle = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())
     reverse = bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"])
@@ -1018,11 +1019,11 @@ def test_v3_default_word_plan_errors(plans, tmp_path, block, match):
         calibrate_bundle(plan_path=_v3_plan(plans, tmp_path, default_word=block), output_dir=tmp_path / "bundle")
 
 
-def test_null_level_is_the_weight_norm_ratio():
-    # target (1, 0) and references (1, 1) and (0, 1) in every tap: 2 * 1 / (2 + 1)
+def test_weight_norms_are_the_squared_norms_of_the_terms():
+    # target (1, 0) and references (1, 1) and (0, 1) in every tap: |w_t|^2 = k, |w_lo|^2 + |w_up|^2 = 2 k + k
     k = 4
     taps = np.array([[0x10] * k, [0x11] * k, [0x01] * k], dtype=np.uint8)
-    assert null_level(taps.tobytes()) == pytest.approx(2 * k / (2 * k + k), rel=1e-15)
+    assert weight_norms(taps.tobytes()) == (k, 3 * k)
 
 
 def test_control_words_at_maps_a_channel_word_onto_the_control():

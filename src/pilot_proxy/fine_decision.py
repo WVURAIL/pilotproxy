@@ -552,7 +552,6 @@ def fine_required_multiplier_q16_v3(
                                   limiting_bin=stat.peak_bin if word > 1 else -1, multiplier_q16=word)
 
 
-UNEVALUATED_V3 = (0, (1 << 64) - 1)  # a row the detector did not evaluate; every word keeps it
 MISSING_ROW = (1 << 64) - 1          # a block missing from a recorded window is all 0xFF bytes
 
 

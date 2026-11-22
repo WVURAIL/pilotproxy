@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from gpu import cupy_or_skip
 
 from pilot_proxy import detect
 from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
@@ -96,9 +97,7 @@ def test_detect_main_writes_exact_powers_and_calibrated_artifact(
 ):
     weights = _weights()
     if backend == "cuda":
-        cp = pytest.importorskip("cupy")
-        if cp.cuda.runtime.getDeviceCount() == 0:
-            pytest.skip("CUDA device required")
+        cupy_or_skip()
         if not DEFAULT_LIB_PATH.is_file():
             pytest.skip("Native detector library required")
         expected_version = detect.PilotProxyKernel(DEFAULT_LIB_PATH).version.as_string()

@@ -635,6 +635,8 @@ def limit_plan(plans, tmp_path, limit, **given):
     limits.write_text(json.dumps({"35": limit, "29": limit}))
     table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
     path = tmp_path / "limit_plan.json"
+    # the curvature and the margin are required, and zero here
+    given = dict(dict(curvature={c: [0.0, 0.0] for c in plans["calibrate"]["channels"]}, margin=0.0), **given)
     path.write_text(json.dumps(dict(plans["calibrate"], threshold="power_limit",
                                     power_limit=dict(table=str(table), limits=str(limits), min_captures=2, **given))))
     return path
@@ -706,7 +708,13 @@ def test_power_limit_plan_errors(plans, tmp_path):
     for change, message in ((dict(threshold="best"), "threshold must be"), (dict(power_limit={}), "needs"),
                             (dict(words={"35": 70000}), "takes no words"),
                             (dict(control=None, num_inputs=16), "needs a control"),
-                            (dict(power_limit=dict(base["power_limit"], coupling={"35": 2.0})), "at most 1")):
+                            (dict(power_limit=dict(base["power_limit"], coupling={"35": 2.0})), "at most 1"),
+                            (dict(power_limit={k: v for k, v in base["power_limit"].items() if k != "margin"}),
+                             r"needs \['margin'\]"),
+                            (dict(power_limit={k: v for k, v in base["power_limit"].items() if k != "curvature"}),
+                             r"needs \['curvature'\]"),
+                            (dict(power_limit=dict(base["power_limit"], curvature={"35": [0.0, 0.0]})),
+                             r"no entry for channels \[29\]")):
         path.write_text(json.dumps(dict(base, **change)))
         with pytest.raises(ValueError, match=message):
             calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
@@ -780,7 +788,8 @@ def test_process_run_takes_the_power_limit_threshold(plans, tmp_path):
             handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 32 * 8192
     (tmp_path / "limits.json").write_text(json.dumps({"35": 1e-5, "37": 1e-5}))
     table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
-    (tmp_path / "inputs.json").write_text(json.dumps(dict(table=str(table), limits="limits.json", min_captures=2)))
+    (tmp_path / "inputs.json").write_text(json.dumps(dict(table=str(table), limits="limits.json", min_captures=2,
+                                                          curvature={"35": [0.0, 0.0], "37": [0.0, 0.0]}, margin=0.0)))
     common = dict(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
                   calibration_share=0.5, receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
     summary = process_run(output_dir=tmp_path / "out", threshold="power_limit", power_limit=tmp_path / "inputs.json", **common)

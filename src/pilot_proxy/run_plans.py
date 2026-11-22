@@ -46,10 +46,11 @@ def ordered_run_files(runs: list[str]) -> list[tuple[int | None, list[int], str]
 def _limit_plan(path: Path | None) -> dict[str, Any]:
     """Return the power-limit inputs of a plan, with the paths of the table and the limits made absolute."""
     if path is None:
-        raise ValueError("the power_limit threshold needs a JSON file that names the response table and the checked power limits")
+        raise ValueError("the power_limit threshold needs a JSON file that names the response table and the checked power "
+                         "limits and gives the curvature and the margin")
     given = json.loads(Path(path).read_text())
-    if not {"table", "limits"} <= set(given):
-        raise ValueError(f"{path} must name a table and limits")
+    if not {"table", "limits", "curvature", "margin"} <= set(given):
+        raise ValueError(f"{path} must name a table and limits and give the curvature and the margin")
     base = Path(path).resolve().parent
     return {**given, **{key: str((base / given[key]).resolve()) for key in ("table", "limits")}}
 

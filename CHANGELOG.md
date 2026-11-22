@@ -5,6 +5,8 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `docs/evidence/v3_timing_laptop_2026-11-21` records the v3 core timing on the laptop RTX 5000 Ada (core 4.2.0,
+  no correlator load), and the DD quotes it. The deployment GPUs are not yet timed under v3.
 - `qualify-bundle` refuses a test report with no passing masked-fraction check of a calibrated channel, so a channel
   the test plan left out is not qualified untested.
 - Under v3, the pilot-seen gate of `calibrate-bundle` counts the frames whose keep word passes the channel's default

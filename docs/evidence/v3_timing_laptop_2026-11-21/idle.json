@@ -1,0 +1,33 @@
+{
+ "lib": "/home/djgormley/code/pilotproxy-wt-docs/cuda/libpilotproxy.so",
+ "gpu": "NVIDIA RTX 5000 Ada Generation Laptop GPU",
+ "host": "p16g2",
+ "streams": 2048,
+ "k": 128,
+ "frame_ms": 41.94304,
+ "decision": "fine_decision_v3",
+ "entry": "PilotProxy_Compute_FineStatV3_U64",
+ "mode": "idle",
+ "frames_per_measurement": 50,
+ "repeats": 30,
+ "forms": {
+  "stat/n1": {
+   "median_ms": 0.3951433999463916,
+   "p16_ms": 0.37200688231969253,
+   "p84_ms": 0.4283596456167288,
+   "share_of_frame": 0.009420952795657911
+  },
+  "seq_stat/n16": {
+   "median_ms": 5.988929629966151,
+   "p16_ms": 5.958580600027926,
+   "p84_ms": 6.308259796805214,
+   "share_of_frame": 0.14278720927157762
+  },
+  "batch_stat/n16": {
+   "median_ms": 4.286266940034693,
+   "p16_ms": 4.264918869605753,
+   "p84_ms": 4.740465406375006,
+   "share_of_frame": 0.10219256734930736
+  }
+ }
+}

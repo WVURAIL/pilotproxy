@@ -283,7 +283,10 @@ itself still divides by `d_rho` over all 128 even bins.
 
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%
 less time than the v2 mask for one channel and 0.5% less for 16 channels in one
-call.
+call. With core 4.2.0 on that laptop GPU (WSL2, no correlator load), the v3 entry took
+0.40 ms for one channel, 5.99 ms for 16 in sequence and 4.29 ms for 16 in one call,
+against the 41.94 ms frame (`docs/evidence/v3_timing_laptop_2026-11-21`). The
+deployment GPUs are not yet timed under v3.
 
 ## The source stamp is memoized per process
 

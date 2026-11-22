@@ -268,7 +268,10 @@ archive words by under 2%). The word then means a fixed share of pilot-free
 frames masked, and it needs no captures of the channel, so every channel of a
 first bundle gets it. On the archive this reproduces the dissertation's v3
 default words exactly (`default_words_v3.json`). Bundles of v1 and v2 keep the
-knee and floor.
+knee and floor. The power-limit test reads the control at the same scale: a control
+frame counts as kept at the channel word `u` when its keep word is at most
+`floor(u / s_c)`, so its selection shift and the default word map the control onto
+the channel the same way.
 
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%
 less time than the v2 mask for one channel and 0.5% less for 16 channels in one

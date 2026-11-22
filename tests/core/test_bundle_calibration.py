@@ -19,6 +19,7 @@ from pilot_proxy.bundle_calibration import (
     bundle_digest,
     calibrate_bundle,
     capture_weights,
+    control_words_at,
     default_rank,
     iter_run_frames,
     knee_word,
@@ -884,3 +885,31 @@ def test_null_level_is_the_weight_norm_ratio():
     k = 4
     taps = np.array([[0x10] * k, [0x11] * k, [0x01] * k], dtype=np.uint8)
     assert null_level(taps.tobytes()) == pytest.approx(2 * k / (2 * k + k), rel=1e-15)
+
+
+def test_control_words_at_maps_a_channel_word_onto_the_control():
+    words = np.array([10, 100, 131072], dtype=np.int64)
+    assert control_words_at(words, 1.0).tolist() == [10, 100, 131072]
+    assert control_words_at(words, 1.25).tolist() == [8, 80, 104857]
+    assert control_words_at(words, 0.98).tolist() == [10, 102, 133746]
+
+
+def test_v3_power_limit_reads_the_control_at_the_scaled_word(plans, tmp_path, monkeypatch):
+    import pilot_proxy.bundle_calibration as calibration
+    from pilot_proxy.characterization import threshold_rule
+
+    swept, read = [], []
+    sweep, corrections = threshold_rule.sweep, calibration.control_corrections
+    monkeypatch.setattr(threshold_rule, "sweep", lambda *a, **k: swept.append(sweep(*a, **k)) or swept[-1])
+    monkeypatch.setattr(calibration, "control_corrections", lambda w, e, c, at: read.append(at) or corrections(w, e, c, at))
+    path = limit_plan(plans, tmp_path, 1e-3)
+    plan = dict(json.loads(path.read_text()), decision_version="fine_decision_v3",
+                default_word=dict(passband_factor={"35": 1.03, "29": 0.97, "37": 1.0}))
+    path.write_text(json.dumps(plan))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    scale = report["channels"]["35"]["scale"]
+    tested = report["channels"]["35"]["power_limit"]
+    assert tested["corrections"]["control_word_scale"] == scale != 1.0
+    words = next(s["word"] for s, at in zip(swept, read) if len(s["word"]) == len(at)
+                 and np.array_equal(at, control_words_at(s["word"].astype(np.int64), scale)))
+    assert len(words) > 0

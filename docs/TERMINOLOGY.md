@@ -17,7 +17,7 @@ to the equations below, and serialized names that differ are listed.
 | Peak target `n_peak` | Largest `2 S_0[f]` over the search (v3) | `dtv_stat[..., 0]`, `FineStat.n_peak` |
 | Median reference `d_rho` | Median of `S_1[f] + S_2[f]` over the 128 even bins, rank 63 (v3) | `dtv_stat[..., 1]`, `FineStat.d_rho` |
 | Threshold `eta` | Dimensionless limit on `w` | `eta_q16 / 65536` |
-| Default word | Knee or floor word, for a backend with no word of its own (v3) | `cfar_multiplier_q16` |
+| Default word | Control's 1% word scaled to the channel's null level, for a backend with no word of its own (v3) | `cfar_multiplier_q16` |
 | Power-limit word | Word of the power-limit test, applied by N2 (v3) | `power_limit_multiplier_q16` |
 | Retention `kappa` | Equal-event probability kept | `threshold_rule.sweep` |
 | Shelf proxy `x` | Signed retained mean excess times `C_shelf`, floored after averaging | Sweep `x`; uncertainty in `se` |

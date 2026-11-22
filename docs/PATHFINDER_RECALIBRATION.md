@@ -87,7 +87,7 @@ files of the run's acquisitions and prints each change. The detector sums only t
 Each length calibrates on the first part and tests on the rest. Lengths are clock hours from the first
 capture, so a gap leaves its hours empty; the tool prints each gap. Take the shortest length whose words
 still pass, and its `calibration_share` in `length/length.json`. Conditions change within a day, so expect
-at least one: on 2026-11-20 one hour gave channel 29's knee as eta 3.90 from its first half and 2.22 from
+at least one: on 2026-11-20 one hour gave channel 29's v2 knee as eta 3.90 from its first half and 2.22 from
 its second. `--block-hours 4` shows how each word follows the time of day, and with `--input-counts` how
 it follows the good inputs.
 
@@ -100,7 +100,7 @@ it follows the good inputs.
 ```
 
 kotekan#1914 is in `develop` since 2026-11-20. Add `--decision-version fine_decision_v1` only for a stage
-built without it. Read
+built without it, and `--decision-version fine_decision_v3` for a stage with kotekan#1924. Read
 `run1/summary.md` and the spectrograms, then qualify the bundle with the test report `run1/test.json`
 (Step 3 of the run guide).
 

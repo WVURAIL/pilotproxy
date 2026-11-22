@@ -5,6 +5,10 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Under v3, a channel that fails the power-limit test of `calibrate-bundle` carries no `power_limit_multiplier_q16`,
+  so Kotekan and the relay decide it at its default word, and the operating policy masks it whole. It used to carry
+  the unscaled control word, which they would have applied in place of the default word. The report gives
+  `power_limit_word_q16: null` and the reason in `power_limit_word_source` (`none, power limit: <reason>`).
 - `tools/prepare_fine_validation_cache.py --channels` builds the fine-validation cache of a channel outside the
   record campaign, such as the channel-37 control. Its case indices continue the record order (37 takes 644-671), so
   `validate_fine_detector.engine_for` loads them unchanged. `--path-map` relocates the recorded preparation paths,

@@ -33,9 +33,11 @@
   uint64\\ \scriptsize $F = 2P_t/(P_{r1}+P_{r2})$; integer $F>\mu_0$
   recorded flag};
 \node[half,anchor=north west] (v2) at ($(s2.south)+(0.45,-0.55)$)
-  {\textbf{Fine decision (deployed):}
-  $F_2[f]=2S_t[f]/(S_{r1}[f]+S_{r2}[f])$\\
-  \scriptsize designated-set CFAR $\to$ per-frame mask bit};
+  {\textbf{Fine decision v3 (deployed):}
+  $n_{\mathrm{peak}}=\max_f 2S_t[f]$ over all 256 bins,
+  $d_\rho=$ median of $S_{r1}[f]+S_{r2}[f]$ over the 128 even bins\\
+  \scriptsize peak and median $\to$ pair $[n_{\mathrm{peak}},d_\rho]$;
+  the consumer applies its word};
 
 \draw[->,thick] (in) -- (seg);
 \draw[->,thick] (seg) -- (s1);

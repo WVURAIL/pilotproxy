@@ -860,9 +860,15 @@ core 2.3.0, the fused form took 0.769\,ms per 2048-stream block and the mask
 form 0.895\,ms, of which the epilogue was 0.127\,ms, against the 41.94\,ms
 cadence. On a laptop RTX 5000 Ada at 2048 inputs, the v3 entry takes 7\%
 less time than the v2 mask for one channel and 0.5\% less for 16 channels in
-one call. The repository records no absolute timing for core 4 and none for
-the deployment GPUs, and \code{docs/RUNNING_THE_DETECTOR.md} checks the time
-per block from \code{/gpu_profile} on each run.}
+one call. With core 4.2.0 on the same GPU, under WSL2 and with no correlator
+load, the median time of the v3 entry was 0.40\,ms for one channel, 5.99\,ms
+for 16 channels called in sequence (the stage path) and 4.29\,ms for 16 in one
+batch call. Called in sequence once per frame for 30\,s, the 16 channels took
+a median of 11.86\,ms and at most 52.08\,ms, and 1 of 716 frames was late, as
+the laptop GPU clocks down between frames
+(\code{docs/evidence/v3_timing_laptop_2026-11-21}). The repository records no
+timing for the deployment GPUs, and \code{docs/RUNNING_THE_DETECTOR.md} checks
+the time per block from \code{/gpu_profile} on each run.}
 
 \subsection{Guard and reference names}
 \choice{The public terms are \field{skipped_guard_bins} and
@@ -1247,9 +1253,9 @@ them (\code{CHIME_DERIVED.md}).
         against data products.
   \item Telescope replay with a verified receiver state, Compute Sanitizer and
         a sustained shadow run of the full pipeline have not been done.
-  \item The recorded timings are for core 2.3.0 on an A100. The repository
-        records none for the deployment GPUs, and no absolute timing for fine
-        decision v3.
+  \item The recorded timings are for core 2.3.0 on an A100 and for fine
+        decision v3 on a laptop RTX 5000 Ada with no correlator load. The
+        repository records none for the deployment GPUs.
   \item Failure recovery and pairwise masking are not covered by
         \code{DtvRfiMask}. Shared pair acceptance is not enforced for CHIME
         \code{N2Accumulate}.

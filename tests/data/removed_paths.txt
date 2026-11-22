@@ -315,3 +315,12 @@ docs/FINE_THRESHOLD_CALIBRATION.md	d3a3749
 docs/ADAPTING.md	d3a3749
 docs/archive/kotekan_interface_design.md	81886b4
 docs/releases.md	81886b4
+src/pilot_proxy/detectors/narrowband_marker/rescore.py	44d0068
+tests/detectors/narrowband_marker/test_rescore.py	44d0068
+tests/detectors/narrowband_marker/test_rescore_cli.py	44d0068
+scripts/check_scan.py	44d0068
+tools/audit_sdr_streaming_throughput.py	44d0068
+tools/benchmark_sdr_upgrade_streaming.py	44d0068
+tools/plot_sdr_antenna_controls.py	44d0068
+docs/figures/system_context_standalone.tex	44d0068
+docs/figures/detector_datapath_standalone.tex	44d0068

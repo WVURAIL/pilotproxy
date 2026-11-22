@@ -1,13 +1,8 @@
 % Detector datapath in the two-stage channelizer (filterbank) view.
 % This file is the one source of the diagram. It is \input by PilotProxy_DD001
-% (Design Document) and PilotProxy_UG001 (User Guide), and
-% detector_datapath_standalone.tex renders it to detector_datapath.svg for
-% Markdown. It needs the tikz libraries arrows.meta, positioning, calc and
-% decorations.pathreplacing, and the colors PilotProxyBlue, PilotProxyRed,
-% PilotProxyGray and LightGray from the host document or the standalone
-% wrapper. The svg must be rendered again after each edit:
-%   cd docs/figures && pdflatex detector_datapath_standalone.tex \
-%     && pdftocairo -svg detector_datapath_standalone.pdf detector_datapath.svg
+% (Design Document). It needs the tikz libraries arrows.meta, positioning, calc
+% and decorations.pathreplacing, and the colors PilotProxyBlue, PilotProxyRed,
+% PilotProxyGray and LightGray from the host document.
 \begin{tikzpicture}[node distance=0.40cm,>=Latex,
   blk/.style={rectangle,rounded corners,draw=PilotProxyBlue,thick,fill=LightGray,
               minimum height=0.62cm,align=center,text width=0.72\linewidth},

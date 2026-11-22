@@ -101,7 +101,7 @@ A plan takes one of two thresholds. `"threshold": "knee"`, the default, gives ea
 f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0)
 ```
 
-With the RFIsher table and limits of the BAO forecast, this is the BAO acceptance test, and its word is the BAO threshold. The kept mean excess `e(u)` and its error `s` come from the same fine powers as the default word. The null `o` and the selection shift `delta(u)` are measured on the control; under v3 the control frames kept at a channel's word `u` are those with keep word at most `floor(u / s_c)`, with `s_c` the scale of the default word, so this plan needs a recorded control. The plan names the rest:
+With the RFIsher table and limits of the BAO forecast, this is the BAO acceptance test, and its word is the BAO threshold. The kept mean excess `e(u)` and its error `s` come from the same fine powers as the default word. The null `o` and the selection shift `delta(u)` are measured on the control; under v3 the control frames kept at a channel's word `u` are those with keep word at most `floor(u / s_c)`, with `s_c` the scale of the default word, so this plan needs a recorded control. Under v3 the excess divides by `T_rho`, the median of the bin ratios over the even bins farther than 32 fine bins from the nominal pilot bin (95 or 96 bins, rank 47), and the control is read in its own window, since the pilot and its nearby lines would raise `T_rho` over all 128 even bins and bias the kept excess low. The report gives `shelf_reference`. The plan names the rest:
 
 ```json
 {

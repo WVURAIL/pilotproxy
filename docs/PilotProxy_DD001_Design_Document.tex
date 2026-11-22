@@ -620,7 +620,12 @@ plan, writes v3. Under v3:
         are measured on the control. A control frame counts as kept at the
         channel word \(u\) when its keep word is at most
         \(\lfloor u/s_c\rfloor\), so the default word and the power-limit
-        corrections map the control onto the channel the same way. A channel
+        corrections map the control onto the channel the same way. The
+        excess divides by \(T_\rho\), the median of the bin ratios over the
+        even bins farther than 32 fine bins from the nominal pilot bin (95 or
+        96 bins, rank 47), and the control is read in its own window. Over all
+        128 even bins, the pilot and its nearby lines would raise \(T_\rho\)
+        and bias the kept estimate low. A channel
         with no passing word carries only the default word, and
         \code{bundle.decisions.json} records the outcome for the
         operating-policy compiler.

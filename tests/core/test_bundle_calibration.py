@@ -833,6 +833,27 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     assert "power_limit_multiplier_q16" not in fine[29]
 
 
+def test_v3_shelf_reference_leaves_out_the_pilot_window():
+    from pilot_proxy.power_limit_word import shelf_reference
+
+    # channel 32's nominal bin, and an odd one near the wrap: 95 or 96 even bins, rank 47
+    for nominal, size, nearest in ((144, 95, 34), (3, 96, 33)):
+        bins, rank = shelf_reference(nominal)
+        kept = np.flatnonzero(bins)
+        distance = np.minimum((kept - nominal) % 256, (nominal - kept) % 256)
+        assert kept.size == size and rank == 47
+        assert np.all(kept % 2 == 0) and distance.min() == nearest
+
+
+def test_v3_power_limit_shelf_estimate_takes_the_window(plans, tmp_path):
+    path = limit_plan(plans, tmp_path, 1e-3)
+    path.write_text(json.dumps(dict(json.loads(path.read_text()), decision_version="fine_decision_v3")))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    for channel in ("35", "29"):
+        assert report["channels"][channel]["power_limit"]["shelf_reference"] in ({"bins": 95, "rank": 47},
+                                                                                {"bins": 96, "rank": 47})
+
+
 def test_v3_channel_with_no_passing_word_carries_no_power_limit_word(plans, tmp_path):
     from pilot_proxy.operating_policy import _decisions, _threshold_kind
 

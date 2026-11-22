@@ -87,8 +87,9 @@ For every channel 14 to 36 of the decisions the compiler checks:
    36). The map of the CHIME profile gives
    `freq_id = coarse_channel_index + 1`.
 4. A deployed channel whose bundle profile is `calibrated` carries exactly the
-   decided word (`cfar_multiplier_q16`), and its anchor, width, bulk mask, and
-   rank are copied into the binding. A deployed channel whose profile is still
+   decided word (`power_limit_multiplier_q16` under v3, `cfar_multiplier_q16`
+   under v1 and v2). Under v1 and v2 its anchor, width, bulk mask, and rank are
+   copied into the binding, and a v3 binding has none. A deployed channel whose profile is still
    `pending_campaign` is listed in `pending_freq_ids`, since the decision has a
    word that the bundle does not carry yet.
 

@@ -10,13 +10,14 @@ The detector tests for a small excess of power at a television pilot over nearby
 | Bundle content | What sets it | How it is obtained |
 |---|---|---|
 | Weights | Receiver geometry and the pilot frequency | Computed, no data needed |
-| Anchor bin | The true pilot frequency of each transmitter | Measured from a capture |
-| Reference bins and rank | Lines near the pilot, which must be left out | Default, plus any measured exclusions |
-| Threshold word | The frames of each channel, above the noise of the telescope | Knee of the kept fraction, with a floor from a channel with no pilot |
+| BAO word | The residual power the BAO measurement tolerates on each channel | Power-limit test on recorded frames, with the RFIsher table of the telescope |
+| Default word | The noise of the telescope, for a backend with no word of its own | The control's 99% word, scaled to each channel |
 
-The word is the part that does not transfer between telescopes, and each channel has its own. For each frame, we find the smallest word that keeps it. The kept fraction against the logarithm of the word rises over the frames with no pilot or a weak pilot and then bends, and the word at this bend, known as the knee, is the word of largest height above the chord of the curve. Every capture has equal weight, so a long capture does not set the curve. The knee is a generic starting point, with no link to a science requirement. A channel with a strong pilot in nearly every frame has no clean frames to bend away from, so its knee lands in the spread of the pilot itself and masks little. Calibration gives such a channel the floor instead, so it is masked whenever the pilot is seen, which is nearly always. A frame mask recovers little of such a channel, and it is a candidate to flag whole.
+Under fine decision v3 the bundle carries no search geometry: the detector takes the largest target over all 256 fine bins against the median reference of the 128 even bins, and publishes the pair `[n_peak, d_rho]`. Each consumer applies its own word to the pair. The words are the part that does not transfer between telescopes, and each channel has its own. For each frame, we find the smallest word that keeps it, its keep word.
 
-The floor keeps a word above the noise. It is the 99% quantile of the scores of a channel with no pilot, and it depends on the number of inputs summed and on the real array. White noise gives its lowest value, which `"num_inputs"` simulates (2.15 as a ratio for 32 inputs, 1.48 for 128, and 1.10 for 2048). A real control can sit well above this, so a simulated floor is only a first guess and a floor from a short capture is a lower limit. Each telescope needs a control record of its own.
+The BAO word is the point of the calibration: the word that keeps the most frames while the kept DTV power meets the checked power limit of the channel (see Choosing the threshold). The correlator path applies it where calibration sets one. The default word is the generic threshold beside it, for a backend with no word of its own. It is the 99% quantile of the keep words of the control channel, which has no pilot, scaled to the null level of each channel by `mu0_c g_c / (mu0_37 g_37)`: `mu0` is the weight-norm ratio of the stored weights, and `g` an optional passband factor from the plan. It depends on the number of inputs summed and on the real array. White noise gives its lowest value, which `"num_inputs"` simulates when no control is recorded, so a simulated word is only a first guess and a word from a short control capture is a lower limit. Each telescope needs a control record of its own.
+
+Bundles of fine decisions v1 and v2, which Kotekan `develop` runs until kotekan#1924 merges, still carry an anchor bin, a search half-width, reference bins and a rank, and their default word is the knee of the kept fraction with a floor from the control. Their rules are kept in the report fields named below.
 
 No channel is qualified for masking yet. The stage refuses words marked `archive_review_only`, and every bundle made by the commands below is a detect-only commissioning bundle. In detect-only mode the detector records its decisions and the visibilities do not change.
 
@@ -39,7 +40,7 @@ The loop is repeated after a change to the gains or quantization, the input popu
 
 Calibration reads each channel to be bound and a control channel with no pilot. Channel 37 is the control for CHIME and the Pathfinder. The best source is the detector itself. With `dtv_calibration_mode` and `dtv_write_enabled` on, a detect-only run writes the fine powers of every block to `dtv_fine_powers*.h5`, and each file of about 43 s counts as one capture (`dtv_fine_powers` in the plan). `tools/combine_pathfinder_dtv_run.py` stacks an acquisition's files into one per half, and the run commands read a window of a combined file as they read a per-window file. They read a file of several frames with per-frame metadata (kotekan#1925) by its frames. The channels and the control must be bound in the bundle of that run, and the voltages are not needed. Reading these files needs `h5py` and `hdf5plugin`. A run of a few days covers the changes over a day, and it gives far more than the 30 captures a knee needs.
 
-A telescope with no data starts from its parameters alone. A plan with empty capture lists, `"control": null` and `"num_inputs"` gives a first bundle at the simulated floor, and this bundle is enough to record the data for the next one:
+A telescope with no data starts from its parameters alone. A plan with empty capture lists, `"control": null` and `"num_inputs"` gives a first bundle at the simulated control word, and this bundle is enough to record the data for the next one:
 
 ```json
 {
@@ -61,12 +62,12 @@ Merged Pathfinder files are chunked over all their frequencies (7424 since kotek
 python3 tools/extract_baseband_channels.py --input baseband_subset.00000000.h5 --output day1.h5 --coarse-freq 2531 2715 2869 3115 --blocks 20
 ```
 
-Calibration and testing use different epochs, at different times of day. The null quantile sets the amount of control data. A floor at 99% needs at least 50 control frames, and more frames give a steadier floor. A knee needs at least 30 captures of each channel, spread over the conditions the telescope sees, because a curve from a few captures describes only those captures.
+Calibration and testing use different epochs, at different times of day. The null quantile sets the amount of control data. A control word at 99% needs at least 100 control frames, and more frames give a steadier word. The BAO word needs at least 30 kept captures of each channel (`min_captures`), spread over the conditions the telescope sees, because a test on a few captures describes only those captures.
 
 
 ## Step 2: Calibrate
 
-`calibrate-bundle` exports the weights, measures each anchor, finds the floor from the control channel, finds the knee of each channel, and writes a sealed bundle. It reads a plan:
+`calibrate-bundle` exports the weights, finds the control word, sets the default word and, with the power-limit threshold, the BAO word of each channel, and writes a sealed bundle. It reads a plan:
 
 ```json
 {
@@ -85,22 +86,22 @@ Calibration and testing use different epochs, at different times of day. The nul
 pilot-proxy calibrate-bundle --plan calibrate.json --output-dir bundle
 ```
 
-Paths to profiles are relative to the plan, and capture lists take glob patterns such as `"/scratch/dtv/run1/dtv_fine_powers*.h5"`. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first floor. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, so its anchor is the expected bin and a capture with the pilot on should replace it. Lines in the reference bins are added to `exclude_bins`.
+Paths to profiles are relative to the plan, and capture lists take glob patterns such as `"/scratch/dtv/run1/dtv_fine_powers*.h5"`. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first word. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, and a capture with the pilot on should replace it before its BAO word is trusted.
 
-The report gives `word_source` for each channel. The word is the knee when the pilot was seen in at least 30 captures, in at most 90% of the frames, and the knee lies above the floor, and in any other case it is the floor. `pilot_share` estimates the share of frames with a pilot, the share masked at the floor less the clean frames the floor masks, and `pilot_in_nearly_every_frame` marks a share above 90%. A first bundle from a few captures therefore holds the floor on every channel, which is enough for a detect-only run. Its `knee_interval_q16` gives the 16th and 84th percentiles of the knee over resampled captures, and a wide interval means more captures are needed.
+The report gives `word_source` for each channel: `control word x scale` for the default word of a v3 bundle, `power limit` for a BAO word, or `plan`. It also gives `control_quantile_q16`, `reference_level`, and each channel's `mu0`, `passband_factor` and `scale`. The default word needs no captures of the channel, so a first bundle from a short control capture already holds it on every channel, which is enough for a detect-only run. `pilot_share` estimates the share of frames with a pilot. For a v1 or v2 bundle, the word is the knee when the pilot was seen in at least 30 captures, in at most 90% of the frames, and the knee lies above the floor, and otherwise the floor; `knee_word_q16` and `knee_interval_q16` report it.
 
-Three plan keys replace a measured value. `"word_q16"` sets the floor and the word of every channel, `"words": {"29": 165551}` sets the word of one channel, and `"anchors": {"29": 202}` sets an anchor. A word belongs to its geometry, so a word moved from another record must come with its anchor, search and reference bins. The report gives the strongest bin of each channel, which shows faint lines, so each anchor is read against the report before the bundle is tested. The strongest bin of a faint line can move between captures, so an anchor needs several epochs, and a single short capture is only trusted for a strong pilot.
+Plan keys replace a measured value. `"word_q16"` sets the word of every channel, `"words": {"29": 165551}` sets the word of one channel, and `"default_word": {"passband_factor": {"29": 1.004}}` sets the passband factor of the default word. A word belongs to its test and its weights, so a word moved from another record must come with its decision version and weights. For a v1 or v2 bundle, `"anchors": {"29": 202}` sets an anchor, and a word moved from another record must also come with its anchor, search and reference bins.
 
 
 ### Choosing the threshold
 
-A plan takes one of two thresholds. `"threshold": "knee"`, the default, gives each channel the general word above. `"threshold": "power_limit"` gives each channel the word that keeps the most frames while the upper residual power meets a checked limit:
+A plan takes one of two thresholds. `"threshold": "knee"`, the default, gives each channel the default word above (the knee for v1 and v2). `"threshold": "power_limit"` gives each channel the word that keeps the most frames while the upper residual power meets a checked limit:
 
 ```
 f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0)
 ```
 
-With the RFIsher table and limits of the BAO forecast, this is the BAO acceptance test, and its word is the BAO threshold. The kept mean excess `e(u)` and its error `s` come from the same fine powers as the knee. The null `o` and the selection shift `delta(u)` are measured on the control, under the geometry and words of each channel, so this plan needs a recorded control. The plan names the rest:
+With the RFIsher table and limits of the BAO forecast, this is the BAO acceptance test, and its word is the BAO threshold. The kept mean excess `e(u)` and its error `s` come from the same fine powers as the default word. The null `o` and the selection shift `delta(u)` are measured on the control; under v3 the control frames kept at a channel's word `u` are those with keep word at most `floor(u / s_c)`, with `s_c` the scale of the default word, so this plan needs a recorded control. The plan names the rest:
 
 ```json
 {
@@ -117,7 +118,7 @@ With the RFIsher table and limits of the BAO forecast, this is the BAO acceptanc
 
 `table` is the RFIsher channel table of this telescope, which supplies `power_scale`, and `limits` gives each channel's checked power limit in mK². These two are required, and a table of another telescope gives a wrong word. `coupling` is the fraction `f` of the kept shelf power that reaches the map, and a channel with none takes 1, the worst case. `curvature` is the passband curvature left between the pilot position and the control position, with its standard error, and `margin` is added to the upper estimate. Both are in units of the shelf estimate and default to zero. A word must keep at least 30 captures (`min_captures`).
 
-A channel with a passing word carries it, with `word_source` `power limit`. A channel with no passing word holds the floor in the bundle, and the operating policy masks it whole. `bundle.decisions.json` records each outcome in the form that `compile-operating-policy` reads ([CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)), and the report keeps the knee of each channel beside its test. The control is tested with no corrections, as a check on the run.
+A channel with a passing word carries it, with `word_source` `power limit`. A channel with no passing word holds the default word in the bundle, and the operating policy masks it whole. `bundle.decisions.json` records each outcome in the form that `compile-operating-policy` reads ([CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)), and the report keeps the default word of each channel beside its test. The control is tested with no corrections, as a check on the run.
 
 The test bounds the bias of the residual at the given `f`. It does not test a residual that enters as noise. Its word is in-sample, so it is tested on later data before it masks. This threshold holds the control in memory beside each channel, about 13 GB more for a day.
 
@@ -147,9 +148,9 @@ Each check prints PASS or FAIL, and the exit status is 1 on any failure.
 | Structure and digests | A damaged bundle stops the instance at startup |
 | Every bound channel has values | A pending channel stops the instance at its first frame |
 | Test data differ from calibration data | A word tested on its own data proves nothing |
-| Rank support on each channel | A frame with too few reference bins is not tested |
+| Every frame decided on each channel | A v3 frame whose median reference is zero, or a v1/v2 frame with too few reference bins, has no decision |
 | Masked fraction on each channel | The word masks other captures as it masked the calibration captures |
-| False alarms on the control | The floor gives the rate it claims. A test plan without a control fails |
+| False alarms on the control | The control word gives the rate it claims. A test plan without a control fails |
 
 Kotekan's `tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh` tests the code, and `test-bundle` tests the numbers. Both are needed after a change to the detector core.
 
@@ -217,13 +218,13 @@ choco set cx dtv_write_enabled '{"enabled": true}'
 
 The recv node writes the products under `/mnt/cs00/data/dtv/acq_<start time>/`, with a new directory for each recv start, and one file for each half and window of about 43 s. The `coarse_freq` and `fpga_seq_num` attributes identify the half and the window, and `fpga_seq_time_nsec` gives the window's time. The tools order the files by that time, so a recording split by restarts, even one that resets `fpga_seq_num`, keeps its order. A block missing from a window is a row of 0xFF bytes, and the reader skips it.
 
-After a run, one command does every step below and writes a summary of each channel to `summary.md`: the anchor, the word and its source, the pilot share, the masked percent on each part under the new bundle, the longest masked stretch, and the test result. It also writes the plans, the bundle and its report, the test record, and the spectrograms of each part:
+After a run, one command does every step below and writes a summary of each channel to `summary.md`: the scale of its default word (v3) or its anchor (v1 and v2), the word and its source, the pilot share, the masked percent on each part under the new bundle, the longest masked stretch, and the test result. It also writes the plans, the bundle and its report, the test record, and the spectrograms of each part:
 
 ```bash
 pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "Pathfinder commissioning" --calibration-share 0.25 --output-dir run1
 ```
 
-New bundles are written for fine decision v2. A Kotekan stage that runs only v1 refuses them, so on nodes whose build lacks kotekan#1914 (in `develop` since 2026-11-20), add `--decision-version fine_decision_v1` to `process-run` or `plan-run`.
+New bundles are written for fine decision v2 until Kotekan runs v3. Add `--decision-version fine_decision_v3` to `process-run` or `plan-run` for a stage with kotekan#1924, which publishes `dtv_stat` and applies the words in `DtvRfiMask`. A Kotekan stage that runs only v1 refuses v2 and v3 bundles, so on nodes whose build lacks kotekan#1914 (in `develop` since 2026-11-20), add `--decision-version fine_decision_v1`.
 
 The steps can also be run one at a time. `plan-run` splits the files in time, with the first two thirds for calibration and the rest for the test. `--calibration-share` moves the split. On a recording of several days, a share that ends the calibration on a whole day keeps a full day in each part, as 0.25 does on four days:
 
@@ -241,9 +242,9 @@ pilot-proxy test-bundle --bundle-dir run1/bundle --plan run1/plans/test.json --o
 
 Calibration holds the fine powers of one channel at a time, about 13 GB for a day. On a 90 min synthetic run of four channels, calibration took 18 s, the test 10 s and the spectrograms 15 s, and the time grows in proportion to the run.
 
-These runs set the deployed words on every telescope; the archive values characterize the method and are not deployed. A detect-only recording of several days calibrates on its first part and tests on the days after. The recording also sets how long the calibration must be. Run `process-run` with `--calibration-share` at increasing first parts, and take the shortest whose words still pass on the rest. The first part is at least a day, since conditions change within one: on the Pathfinder, one hour gave a channel-29 knee of eta 3.90 from its first half and 2.22 from its second. A run of at least a day with the new bundle then keeps the mask on throughout and confirms the masks on the nodes. Visibilities with and without the mask wait for a second, unmasked correlation, so that both come from the same frames. The bundle is qualified as in Step 3 before the mask is switched on.
+These runs set the deployed words on every telescope; the archive values characterize the method and are not deployed. A detect-only recording of several days calibrates on its first part and tests on the days after. The recording also sets how long the calibration must be. Run `process-run` with `--calibration-share` at increasing first parts, and take the shortest whose words still pass on the rest. The first part is at least a day, since conditions change within one: on the Pathfinder, one hour gave a channel-29 v2 knee of eta 3.90 from its first half and 2.22 from its second. A run of at least a day with the new bundle then keeps the mask on throughout and confirms the masks on the nodes. Visibilities with and without the mask wait for a second, unmasked correlation, so that both come from the same frames. The bundle is qualified as in Step 3 before the mask is switched on.
 
-The bundle of the run must bind the control, or `plan-run` stops, because the run then gives no floor. A pilot that fades during the run can fail the masked fraction check on the last third, so a failure on a weak channel is read against its spectrogram before the word is changed.
+The bundle of the run must bind the control, or `plan-run` stops, because the run then gives no control word. A pilot that fades during the run can fail the masked fraction check on the last third, so a failure on a weak channel is read against its spectrogram before the word is changed.
 
 ### CHIME upgrade
 
@@ -269,7 +270,7 @@ The first check is the log. Each pilot must have a `bound ATSC physical channel`
 | N2 products | No new frame drops |
 | Disk use on CHIME | About 38 GB per hour |
 
-`tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support, and the masked fraction of each channel. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`.
+`tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support (v1 and v2), and the masked fraction of each channel. With `--bundle-dir`, it decides the v3 channels from `dtv_stat` at each channel's word. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`.
 
 A run with `dtv_calibration_mode` also gives a spectrogram of each bound channel with and without the mask, in 10 s chunks:
 
@@ -305,7 +306,7 @@ On CHIME, the detector is removed by a restart without `dtv_enabled`, and the re
 | `missing bundle receiver namespace` | Bundle was made for the other telescope | Use the matching receiver profile |
 | `detector DISABLED` | No bundle pilot on this node | Check the frequency map |
 | N2 falls behind | Detector holds the voltage ring | Stop the detector and report its time per block |
-| Control false alarms fail | Floor is too low, or the control has a line | Check `dtv_powers`, then recalibrate with more epochs |
+| Control false alarms fail | Control word is too low, or the control has a line | Check `dtv_powers`, then recalibrate with more epochs |
 | Masked fraction test fails | The test captures differ from the calibration captures | Read the report, then recalibrate with captures that cover both |
 
 

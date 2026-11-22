@@ -10,10 +10,10 @@
 \node[blk] (rfi) at ($(voltage.south)+(-2.6,-0.9)$)
   {Existing RFI mask\\ \scriptsize one bit per time sample and frequency};
 \node[blk] (detector) at ($(voltage.south)+(2.6,-0.9)$)
-  {PilotProxy detector\\ \scriptsize rejection bits, frame powers, rank support};
+  {PilotProxy detector\\ \scriptsize pair $[n_{\mathrm{peak}},d_\rho]$, frame powers};
 \node[wide,below=1.8cm of voltage] (combine)
   {\texttt{DtvRfiMask} (opt-in)\\
-   \scriptsize time/frequency alignment check, rejection and validity merge};
+   \scriptsize time/frequency alignment check, word applied to the pair, rejection merge};
 \node[wide,below=of combine] (consumers)
   {Visibility correlator and sample-count consumers\\
    \scriptsize both consume the same combined RFImask};

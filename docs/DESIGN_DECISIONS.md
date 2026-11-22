@@ -329,10 +329,12 @@ outcome, or reason. `r_hi` moves by at most `1.6e-5` relative on channels 14 to
 sign of the excess, and with it `reject_mask`, changes on 50 frames (18 of the
 40606 channel 37 frames), each no more than `7e-6` from the boundary.
 
-## The search is 65 bins
+## The v1 and v2 search is 65 bins
 
-`calibrate-bundle` writes a designated half-width of 32, so 65 designated bins
-(±381 Hz about the anchor). Every installed bundle uses it. The ±2-bin set
+For fine decisions v1 and v2, `calibrate-bundle` writes a designated half-width
+of 32, so 65 designated bins (±381 Hz about the anchor). Every installed v2
+bundle uses it, and v3 searches all 256 fine bins (see "Fine decision v3
+publishes the statistic, and each consumer decides" above). The ±2-bin set
 quoted above, and `FINE_CALIBRATION_DEFAULT_HALF_WIDTH = 2` in
 `runtime_bundle.py`, belong to the archive characterization and to the
 placeholder block of an uncalibrated export. Calibration replaces that block.

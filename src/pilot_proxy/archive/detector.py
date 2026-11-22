@@ -55,7 +55,6 @@ from pilot_proxy.detector_contract import (
     build_detector_contract,
     normalize_weight_coordinate_system,
     normalized_positive_excess,
-    null_power_ratio_from_weight_norms,
     weight_term_norms_sq,
 )
 from pilot_proxy.detector_geometry import (
@@ -531,7 +530,6 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         # exact integer weight-norm zero-point (set with the weights in begin())
         self._target_norm_sq = 0
         self._reference_norm_sum_sq = 0
-        self._null_power_ratio = float("nan")
         self._resumed_provenance: dict[str, Any] | None = None
         # accumulators
         self._p_target: list[int] = []
@@ -1132,11 +1130,6 @@ class PilotProxyDetectorAnalyzer(Analyzer):
         _nt, _nl, _nu = weight_term_norms_sq(self._weights)
         self._target_norm_sq = int(_nt)
         self._reference_norm_sum_sq = int(_nl + _nu)
-        self._null_power_ratio = (
-            null_power_ratio_from_weight_norms(self._target_norm_sq, self._reference_norm_sum_sq)
-            if self._reference_norm_sum_sq > 0
-            else float("nan")
-        )
 
         time_reverse = nyquist_zone_is_mirrored(self._nyquist_zone)
         default_wc = (

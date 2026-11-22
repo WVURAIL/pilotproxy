@@ -694,7 +694,8 @@ def _add_threshold_arguments(parser: argparse.ArgumentParser) -> None:
                              "scaled to the channel for v3. power_limit: the word that keeps the most frames under a "
                              "checked power limit.")
     parser.add_argument("--power-limit", type=Path, default=None,
-                        help="For --threshold power_limit: JSON naming the response table and the checked power limits.")
+                        help="For --threshold power_limit: JSON naming the response table and the checked power limits, "
+                             "with the curvature of each channel and the margin.")
     parser.add_argument("--decision-version", choices=FINE_DECISION_VERSIONS, default=None,
                         help="Test the words are set for (default: the calibration default). "
                              "fine_decision_v1 for a Kotekan stage that runs only that test.")

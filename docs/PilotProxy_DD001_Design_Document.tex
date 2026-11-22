@@ -630,7 +630,12 @@ and \code{--output-dir}. Under v3:
         bin (31 or 32 bins, rank 15), and the control is read in its own
         window. Closer bins hold the pilot, its leakage skirt and its nearby
         lines, which raise \(T_\rho\) and bias the kept estimate low. The
-        window reduces this bias but does not remove it. A channel
+        window reduces this bias but does not remove it. The plan must give
+        each channel's curvature and the margin, which have no defaults:
+        where the estimate clips at zero only these terms remain. With the
+        dissertation's values, the test reproduces the dissertation's
+        worst-case test on the archive to \(2\times10^{-13}\) on every word
+        (\code{docs/evidence/bao_word_crosscheck_2026-11-22}). A channel
         with no passing word carries only the default word, and
         \code{bundle.decisions.json} records the outcome for the
         operating-policy compiler.

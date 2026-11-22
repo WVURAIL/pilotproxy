@@ -532,13 +532,23 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
         raise ValueError(f"unknown power_limit keys {sorted(unknown)}")
     if "words" in plan or "word_q16" in plan:
         raise ValueError("a power_limit plan takes no words, because the test sets them")
+    # no defaults: where a channel's estimate clips at zero only these error terms remain, so leaving them out
+    # reads the channel low, the direction that passes it
+    missing = sorted({"curvature", "margin"} - set(given))
+    if missing:
+        raise ValueError(f"a power_limit plan needs {missing}: the curvature of each channel with its standard error, "
+                         "and the margin, in units of the shelf estimate (0 where measured as none)")
+    control_channel = {int(plan["control"]["channel"])} if plan.get("control") else set()
+    uncovered = sorted({int(c) for c in plan["channels"]} - control_channel - {int(c) for c in given["curvature"]})
+    if uncovered:
+        raise ValueError(f"the power_limit curvature has no entry for channels {uncovered}")
     table_path, limits_path = (base / given["table"]).resolve(), (base / given["limits"]).resolve()
     table = threshold_rule.load_table(table_path)
     rows = {int(row["channel"]): row for row in table["channels"]}
-    margin = float(given.get("margin", 0.0))
+    margin = float(given["margin"])
     if not np.isfinite(margin) or margin < 0:
         raise ValueError("the margin must be finite and nonnegative")
-    curvature = {int(c): (float(v[0]), float(v[1])) for c, v in given.get("curvature", {}).items()}
+    curvature = {int(c): (float(v[0]), float(v[1])) for c, v in given["curvature"].items()}
     return dict(
         table=table, rows=rows, limits={int(c): float(v) for c, v in json.loads(limits_path.read_text()).items()},
         coupling={int(c): float(v) for c, v in given.get("coupling", {}).items()}, curvature=curvature, margin=margin,

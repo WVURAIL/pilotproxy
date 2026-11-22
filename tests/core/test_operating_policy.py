@@ -314,6 +314,42 @@ def test_the_control_is_refused_off_its_word_or_without_the_consumer_capability(
         analyze(case)
 
 
+def with_v3(case, *, capability=True):
+    """Re-export the example bundle with channel 29 as a fine_decision_v3 profile at the decided word."""
+    path, plan, directory = case
+    bundle = directory / "bundle_v3"
+    export_runtime_weight_bundle(
+        receiver_profile_path=directory / "receiver_profile.json",
+        detector_core_profile_path=directory / "detector_core_profile.json",
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
+        physical_channels=[14, 29], output_dir=bundle,
+    )
+    profiles = read(bundle / "pilot_profiles.json")
+    rows = {row["physical_channel"]: row for row in profiles["profiles"]}
+    v1 = calibrated(65536, plan["decisions"]["sha256"])
+    rows[29]["fine_calibration"] = {"status": "calibrated", "decision_version": "fine_decision_v3",
+                                    "cfar_multiplier_q16": 70000, "power_limit_multiplier_q16": 65536,
+                                    "provenance": v1["provenance"]}
+    write(bundle / "pilot_profiles.json", profiles)
+    plan["bundle_files"] = refresh_bundle(bundle)
+    if capability:
+        plan["consumer"]["capabilities"] = sorted(op.REQUIRED_CAPABILITIES | {op.V3_CAPABILITY})
+
+
+def test_a_v3_bundle_compiles_with_the_v3_capability(case):
+    with_v3(case)
+    report = analyze(case)
+    (binding,) = report["required_threshold_bindings"]
+    assert binding["decision_version"] == "fine_decision_v3" and binding["eta_q16"] == "65536"
+    assert "anchor_bin" not in binding
+
+
+def test_a_v3_bundle_is_refused_without_the_v3_capability(case):
+    with_v3(case, capability=False)
+    with pytest.raises(ValueError, match="dtv_stat_v3_v1.*channels \\[29\\]"):
+        analyze(case)
+
+
 def test_a_control_profile_needs_the_control_decision_word(case):
     with_control(case)
     change_decisions(case, lambda rows: rows[37].update(outcome="not useful", reason="no control word",

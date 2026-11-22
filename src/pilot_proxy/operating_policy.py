@@ -23,7 +23,9 @@ bundle's channel 37 profile has status ``control`` at the decided word,
 channel 37 is compiled as the noise control. It is listed in
 ``control_freq_ids``, which the detector evaluates and records and the
 consumer never applies. A control needs the consumer capability
-``dtv_control_freq_ids_v1``. On ``chime_freq_id``, the frequency ID of each
+``dtv_control_freq_ids_v1``. A bundle with a ``fine_decision_v3`` profile needs
+``dtv_stat_v3_v1``: the consumer reads ``dtv_stat`` and applies each channel's
+power-limit word, or its default word, with ``pilotproxy_v3_keep``. On ``chime_freq_id``, the frequency ID of each
 channel is the project's (``Project.target_freq_id``), and the bundle must
 agree with it.
 
@@ -63,6 +65,8 @@ REQUIRED_CAPABILITIES = frozenset({
     "dtv_fine_support_v1", "dtv_permanent_mask_freq_ids_v1", "dtv_require_fine_freq_ids_v1",
 })
 CONTROL_CAPABILITY = "dtv_control_freq_ids_v1"   # required only when a control is compiled
+# required when the bundle holds a v3 profile: the consumer reads dtv_stat and applies the v3 words
+V3_CAPABILITY = "dtv_stat_v3_v1"
 CONSUMER_FREQUENCY_ID_LIMIT = 12288
 NAMESPACES = tuple(sorted(CHANNEL_ID_NAMESPACE_FIELD_ALIASES))
 FIRST_CHANNEL, LAST_CHANNEL = 14, 36        # the ATSC UHF television channels a DTV policy covers
@@ -249,6 +253,11 @@ def analyze_policy(plan_path):
     profiles = {}
     for profile in bundle["pilot_profiles.json"]["profiles"]:
         profiles.setdefault(profile["physical_channel"], []).append(profile)
+    # Kotekan's DtvRfiMask refuses a v3 bundle without the statistic it decides from
+    v3_channels = sorted({p["physical_channel"] for p in bundle["pilot_profiles.json"]["profiles"]
+                          if p["fine_calibration"].get("decision_version") == FINE_DECISION_V3_VERSION})
+    _require(not v3_channels or V3_CAPABILITY in caps,
+             f"Consumer lacks {V3_CAPABILITY}, needed for the fine_decision_v3 profiles of channels {v3_channels}")
     project = default_project() if namespace == "chime_freq_id" else None
     permanent, unmasked, pending, thresholds, rows, outside = [], [], [], [], [], []
     review_candidates, controls = [], []

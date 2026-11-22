@@ -113,6 +113,12 @@ must be supplied, with evidence and all of these explicit capability tokens:
 - `dtv_permanent_mask_freq_ids_v1`
 - `dtv_require_fine_freq_ids_v1`
 
+Two more are required by what the policy holds: `dtv_control_freq_ids_v1` when the
+channel 37 control is compiled, and `dtv_stat_v3_v1` when the bundle holds a
+`fine_decision_v3` profile. The second means the consumer reads `dtv_stat` and applies
+each channel's power-limit word, or its default word, with `pilotproxy_v3_keep`
+(kotekan#1924).
+
 A missing capability causes refusal. The compiler checks the declared name,
 version, digest, and capability list, and it has no way to verify that a binary
 implements them. The output therefore keeps

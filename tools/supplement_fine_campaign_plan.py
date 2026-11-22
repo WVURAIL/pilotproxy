@@ -76,13 +76,13 @@ def derive(record_path, cache, weights):
         cache_sha256=files,
         weights_path=str(Path(weights).resolve()),
         source_sha256={**record["source_sha256"], str(Path(weights).resolve()): sha(weights)},
+        levels_db=lattice(),
         supplement={
             "record_plan": str(Path(record_path).resolve()),
             "record_plan_sha256": record_sha,
             "kept": "counts, seeds and identities, false-alarm gate, shelf coordinate, input powers, coordinate system",
             "replaced": "channels, cache_path, cache_cases, cache_sha256, weights_path and its source digest",
-            "evaluation_levels_db": lattice(),
-            "evaluation_levels_rule": "the whole 0.75 dB lattice over the clip range of evaluation_grid_rule; every "
+            "levels_db_rule": "the whole 0.75 dB lattice over the clip range of evaluation_grid_rule; every "
                                       "record grid samples this lattice, so a bracketed crossing is unchanged",
         },
     )

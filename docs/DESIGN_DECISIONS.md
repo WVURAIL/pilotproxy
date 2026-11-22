@@ -274,15 +274,13 @@ default words exactly (`default_words_v3.json`). Bundles of v1 and v2 keep the
 knee and floor. The power-limit test reads the control at the same scale: a control
 frame counts as kept at the channel word `u` when its keep word is at most
 `floor(u / lambda_c)`, so its selection shift and the default word map the control onto
-the channel the same way. Its excess divides by `T_rho` over the even bins farther
-than 96 fine bins (1144 Hz) from the nominal pilot bin (31 or 32 bins, rank 15), and
-the control is read in its own window. Over all 128 even bins, the pilot and its nearby
-lines raise `T_rho`, which biased the kept estimate low by 3.6 to 7.5 shelf limits at
-the passing words of channels 19, 26 and 32 (the dissertation's decision of
-2026-11-21). Beyond 32 bins (381 Hz), the pilot's leakage skirt, mostly below the
-pilot, still raised `T_rho`, so the window was widened to 96 bins (the dissertation's
-decision of 2026-11-22). The bias falls as the window widens and does not level off
-by 96 bins, so the wider window reduces it but does not remove it. The decision itself
+the channel the same way. Its excess is the frame-level ratio `e = F / mu_0 - 1`, the
+products' normalized pilot excess, with each channel and the control at the null level
+of its own weights. For a time it divided by `T_rho`, a median of the bin ratios away
+from the pilot (±32, then ±96 fine bins), as the dissertation did. The dissertation
+returned to the ratio on 2026-11-22: under the measured coupling, the ratio and the
+median at ±64 and ±96 each leave 8 usable channels, so the median's window, the bias
+that the pilot's skirt gives it and its setting bought nothing. The decision itself
 still divides by `d_rho` over all 128 even bins.
 
 The power-limit plan has no defaults for `curvature` and `margin`. Where a channel's

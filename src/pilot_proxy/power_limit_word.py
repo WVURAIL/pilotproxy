@@ -5,10 +5,10 @@ The acceptance test keeps the most frames whose upper residual power meets the c
 
     f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0).
 
-The kept mean excess e(u) and its clustered error come from the channel. The null o and the
-selection shift delta(u) come from the control, read under the words of the channel. Under v3 the
-excess divides by T_rho over the even bins clear of each channel's own pilot (`shelf_reference`),
-so the control is read in its own window.
+The excess is the frame-level ratio e = F / mu_0 - 1, F = 2 P_0 / (P_1 + P_2), each channel and the
+control at its own null level mu_0. The kept mean excess e(u) and its clustered error come from the
+channel. The null o and the selection shift delta(u) come from the control, read under the words of
+the channel.
 The response table, the checked limits and the coupling fraction f are inputs. The test is in-sample,
 so its word is a candidate until it is tested on independent data.
 """
@@ -19,45 +19,25 @@ from typing import Any
 
 import numpy as np
 
-# frames reduced together, about 0.15 GB of float temporaries
+# frames reduced together
 EXCESS_CHUNK = 65536
-# fine bins (1144 Hz) about the nominal pilot that the v3 shelf reference leaves out
-SHELF_HALF_WIDTH = 96
 MARGIN_STANDARD_ERRORS = 2.0
 SELECTION = "maximum kept fraction subject to upper power <= checked limit"
 EVALUATION = "in-sample; independent evaluation required"
 
 
-def shelf_reference(nominal_bin: int, half_width: int = SHELF_HALF_WIDTH) -> tuple[np.ndarray, int]:
-    """Return the bins and median rank of T_rho for the v3 shelf estimate.
+def ratio_excess(fines: np.ndarray, mu0: float) -> np.ndarray:
+    """Return e = 2 P_0 / (P_1 + P_2) / mu_0 - 1 of each [3, 256] frame, NaN where the reference has no power.
 
-    The v3 decision divides by the median reference of all 128 even bins. The shelf estimate divides the target
-    by the reference bin by bin, and the target holds the pilot, its leakage skirt and its nearby lines, so T_rho
-    takes the even bins farther than `half_width` fine bins, circularly, from the nominal pilot bin: 31 bins at an
-    even nominal bin, 32 at an odd one, rank 15. Closer bins raise T_rho and bias the kept estimate low. At 32 bins
-    the skirt, mostly below the pilot, still did; 96 reduces that bias but does not remove it (the dissertation's
-    scripts/shelf_reference.py, decided 2026-11-22).
+    P_r is the frame power of term r, the sum of its fine powers, and mu_0 the null level of the channel's weights,
+    so e is the normalized pilot excess of the archive products (pilot_excess_from_fine_powers).
     """
-    b = np.arange(256)
-    distance = np.minimum((b - nominal_bin) % 256, (nominal_bin - b) % 256)
-    bins = (b % 2 == 0) & (distance > half_width)
-    return bins, (int(bins.sum()) - 1) // 2
-
-
-def median_excess(fines: np.ndarray, bulk: np.ndarray, rank: int) -> np.ndarray:
-    """Return e' = R_0 / T_rank - 1 of each [3, 256] frame, NaN where the reference has no support.
-
-    R_0 is the ratio of the frame powers and T_rank the fine ratio of the given rank over the
-    reference bins, the same background the decision divides by.
-    """
-    bins = np.flatnonzero(bulk)
     out = np.empty(len(fines))
     with np.errstate(divide="ignore", invalid="ignore"):
         for lo in range(0, len(fines), EXCESS_CHUNK):
-            f = np.asarray(fines[lo:lo + EXCESS_CHUNK], dtype=np.float64)
-            power = f.sum(axis=2)
-            background = np.sort(f[:, 0, bins] / (f[:, 1, bins] + f[:, 2, bins]), axis=1)[:, rank]
-            out[lo:lo + len(f)] = power[:, 0] / (power[:, 1] + power[:, 2]) / background - 1.0
+            # exact uint64 sums, as the products form them
+            power = np.asarray(fines[lo:lo + EXCESS_CHUNK]).sum(axis=2, dtype=np.uint64).astype(np.float64)
+            out[lo:lo + len(power)] = 2.0 * power[:, 0] / (power[:, 1] + power[:, 2]) / mu0 - 1.0
     return np.where(np.isfinite(out), out, np.nan)
 
 

@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 import pytest
 
-from pilot_proxy.power_limit_word import control_corrections, limit_test, median_excess
+from pilot_proxy.power_limit_word import control_corrections, limit_test, ratio_excess
 from pilot_proxy.bundle_calibration import (
     BUNDLE_FILES,
     _bulk,
@@ -721,14 +721,23 @@ def test_power_limit_plan_errors(plans, tmp_path):
         assert not (tmp_path / "bundle").exists()
 
 
-def test_median_excess_reads_the_pilot_over_the_background():
+def test_ratio_excess_reads_the_pilot_over_the_null_level():
     fines = np.full((3, 3, 256), 50, dtype=np.uint64)
-    fines[:, 0] = 100
+    fines[:, 0] = 100                # F = 2 P_0 / (P_1 + P_2) = 2, the null level
     fines[1, 0, 7] += 25600          # a pilot that doubles the frame power
     fines[2, 1:] = 0                 # no reference
-    bulk = _bulk(7)
-    excess = median_excess(fines, bulk, default_rank(bulk))
+    excess = ratio_excess(fines, 2.0)
     assert excess[0] == pytest.approx(0.0) and excess[1] == pytest.approx(1.0) and np.isnan(excess[2])
+
+
+def test_ratio_excess_is_the_archive_pilot_excess():
+    from pilot_proxy.detector_contract import null_power_ratio_from_weight_norms
+    from pilot_proxy.product_contract import pilot_excess_from_fine_powers
+
+    fines = np.random.default_rng(5).integers(0, 2**40, (50, 3, 256), dtype=np.uint64)
+    product = dict(fine_power_u64=fines, target_norm_sq=np.asarray([3]), reference_norm_sum_sq=np.asarray([5]))
+    np.testing.assert_allclose(ratio_excess(fines, null_power_ratio_from_weight_norms(3, 5)),
+                               pilot_excess_from_fine_powers(product), rtol=1e-14, atol=1e-15)
 
 
 def test_control_corrections_equal_the_direct_sums():
@@ -865,25 +874,15 @@ def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plan
     assert not check["passed"] and "no captures" in check["detail"] and not result["passed"]
 
 
-def test_v3_shelf_reference_leaves_out_the_pilot_window():
-    from pilot_proxy.power_limit_word import shelf_reference
-
-    # channel 32's nominal bin, and an odd one near the wrap: 31 or 32 even bins, rank 15
-    for nominal, size, nearest in ((144, 31, 98), (3, 32, 97)):
-        bins, rank = shelf_reference(nominal)
-        kept = np.flatnonzero(bins)
-        distance = np.minimum((kept - nominal) % 256, (nominal - kept) % 256)
-        assert kept.size == size and rank == 15
-        assert np.all(kept % 2 == 0) and distance.min() == nearest
-
-
-def test_v3_power_limit_shelf_estimate_takes_the_window(plans, tmp_path):
+def test_v3_power_limit_estimate_is_the_ratio_at_each_null_level(plans, tmp_path):
     path = limit_plan(plans, tmp_path, 1e-3)
     path.write_text(json.dumps(dict(json.loads(path.read_text()), decision_version="fine_decision_v3")))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    control = null_level(bytes.fromhex(report["control"]["weights_hex"]))
     for channel in ("35", "29"):
-        assert report["channels"][channel]["power_limit"]["shelf_reference"] in ({"bins": 31, "rank": 15},
-                                                                                {"bins": 32, "rank": 15})
+        tested = report["channels"][channel]["power_limit"]
+        assert tested["estimate"] == "ratio, F / mu_0 - 1"
+        assert tested["mu0"] == report["channels"][channel]["mu0"] and tested["corrections"]["control_mu0"] == control
 
 
 def test_v3_channel_with_no_passing_word_carries_no_power_limit_word(plans, tmp_path):

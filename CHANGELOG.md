@@ -23,13 +23,11 @@ All notable changes to PilotProxy are recorded here. The project follows
   ask only for the v1/v2 capabilities.
 - `test-bundle` fails the masked-fraction check of a channel calibrated with no captures, with a message, in place
   of a KeyError on its missing `masked_interval`.
-- Under v3, the power-limit test of `calibrate-bundle` forms the shelf estimate with `T_rho` over the even bins
-  farther than 96 fine bins (1144 Hz) from each channel's nominal pilot bin (31 or 32 bins, rank 15,
-  `power_limit_word.shelf_reference`), and reads the control in its own window. A first window of 32 bins still
-  held the pilot's leakage skirt, mostly below the pilot; 96 bins reduce that bias but do not remove it. Over all 128 even bins, the pilot
-  and its nearby lines raised `T_rho` and biased the kept estimate low; the dissertation measured 3.6 to 7.5 shelf
-  limits at the passing words of channels 19, 26 and 32. The decision keeps `d_rho` over all 128 even bins. The
-  report gives `shelf_reference` with each power-limit test.
+- The power-limit test of `calibrate-bundle` forms its excess as the frame-level ratio `e = F / mu_0 - 1`
+  (`power_limit_word.ratio_excess`, the products' normalized pilot excess), with each channel and the control at
+  the null level of its own weights, as the dissertation does. It used to divide by a median of the bin ratios,
+  under v3 over the even bins farther than 96 fine bins from the pilot; `shelf_reference`, `SHELF_HALF_WIDTH` and
+  `median_excess` are removed. The report gives `estimate`, `mu0` and the control's `control_mu0` with each test.
 - Under v3, a channel that fails the power-limit test of `calibrate-bundle` carries no `power_limit_multiplier_q16`,
   so Kotekan and the relay decide it at its default word, and the operating policy masks it whole. It used to carry
   the unscaled control word, which they would have applied in place of the default word. The report gives

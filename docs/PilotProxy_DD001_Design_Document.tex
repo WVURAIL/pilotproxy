@@ -625,16 +625,18 @@ and \code{--output-dir}. Under v3:
         channel word \(u\) when its keep word is at most
         \(\lfloor u/\lambda_c\rfloor\), so the default word and the power-limit
         corrections map the control onto the channel the same way. The
-        excess divides by \(T_\rho\), the median of the bin ratios over the
-        even bins farther than 96 fine bins (1144\,Hz) from the nominal pilot
-        bin (31 or 32 bins, rank 15), and the control is read in its own
-        window. Closer bins hold the pilot, its leakage skirt and its nearby
-        lines, which raise \(T_\rho\) and bias the kept estimate low. The
-        window reduces this bias but does not remove it. The plan must give
-        each channel's curvature and the margin, which have no defaults:
-        where the estimate clips at zero only these terms remain. With the
-        dissertation's values, the test reproduces the dissertation's
-        worst-case test on the archive to \(2\times10^{-13}\) on every word
+        excess is the frame-level ratio \(e = F/\mu_0 - 1\),
+        \(F = 2P_0/(P_1+P_2)\), the normalized pilot excess of the archive
+        products, with each channel and the control at the null level of its
+        own weights. The passband offset of the ratio differs between a
+        channel's pilot and the control position, so the plan gives that
+        difference for each channel as its \code{curvature}, with its error,
+        and gives the margin. Neither has a default: the difference is
+        negative on some channels, so leaving it out reads them low, and on
+        the archive would pass channels 21, 29 and 32 under the worst case.
+        With the dissertation's values, the test reproduces the
+        dissertation's worst-case test on the archive to
+        \(3\times10^{-13}\) on every word
         (\code{docs/evidence/bao_word_crosscheck_2026-11-22}). A channel
         with no passing word carries only the default word, and
         \code{bundle.decisions.json} records the outcome for the

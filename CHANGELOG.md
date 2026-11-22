@@ -6,9 +6,9 @@ All notable changes to PilotProxy are recorded here. The project follows
 ## Unreleased
 
 - A power-limit plan must give `curvature` for every calibrated channel and `margin` (0 where measured as none);
-  `calibrate-bundle` and `plan-run` refuse a plan without them. Both used to default to zero, which reads a channel
-  whose estimate clips at zero low. On the archive, with the dissertation's curvature and route term, the test
-  reproduces the dissertation's worst-case test exactly (`docs/evidence/bao_word_crosscheck_2026-11-22`).
+  `calibrate-bundle` and `plan-run` refuse a plan without them. Both used to default to zero, which on the archive
+  would pass channels 21, 29 and 32 under the worst case. With the dissertation's offset differences and route
+  term, the test reproduces the dissertation's worst-case test to 3e-13 (`docs/evidence/bao_word_crosscheck_2026-11-22`).
 - `docs/evidence/v3_timing_laptop_2026-11-21` records the v3 core timing on the laptop RTX 5000 Ada (core 4.2.0,
   no correlator load), and the DD quotes it. The deployment GPUs are not yet timed under v3.
 - `qualify-bundle` refuses a test report with no passing masked-fraction check of a calibrated channel, so a channel
@@ -23,13 +23,11 @@ All notable changes to PilotProxy are recorded here. The project follows
   ask only for the v1/v2 capabilities.
 - `test-bundle` fails the masked-fraction check of a channel calibrated with no captures, with a message, in place
   of a KeyError on its missing `masked_interval`.
-- Under v3, the power-limit test of `calibrate-bundle` forms the shelf estimate with `T_rho` over the even bins
-  farther than 96 fine bins (1144 Hz) from each channel's nominal pilot bin (31 or 32 bins, rank 15,
-  `power_limit_word.shelf_reference`), and reads the control in its own window. A first window of 32 bins still
-  held the pilot's leakage skirt, mostly below the pilot; 96 bins reduce that bias but do not remove it. Over all 128 even bins, the pilot
-  and its nearby lines raised `T_rho` and biased the kept estimate low; the dissertation measured 3.6 to 7.5 shelf
-  limits at the passing words of channels 19, 26 and 32. The decision keeps `d_rho` over all 128 even bins. The
-  report gives `shelf_reference` with each power-limit test.
+- The power-limit test of `calibrate-bundle` forms its excess as the frame-level ratio `e = F / mu_0 - 1`
+  (`power_limit_word.ratio_excess`, the products' normalized pilot excess), with each channel and the control at
+  the null level of its own weights, as the dissertation does. It used to divide by a median of the bin ratios,
+  under v3 over the even bins farther than 96 fine bins from the pilot; `shelf_reference`, `SHELF_HALF_WIDTH` and
+  `median_excess` are removed. The report gives `estimate`, `mu0` and the control's `control_mu0` with each test.
 - Under v3, a channel that fails the power-limit test of `calibrate-bundle` carries no `power_limit_multiplier_q16`,
   so Kotekan and the relay decide it at its default word, and the operating policy masks it whole. It used to carry
   the unscaled control word, which they would have applied in place of the default word. The report gives

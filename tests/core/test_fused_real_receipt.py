@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from gpu import cupy_or_skip
 
 from pilot_proxy.fine_decision import fine_mask_decision
 
@@ -197,6 +198,7 @@ def test_merge_sums_disjoint_parts_and_refuses_overlap(tmp_path):
 
 @pytest.mark.cuda
 def test_receipt_end_to_end_on_a_tiny_synthetic_file(tmp_path):
+    cupy_or_skip()
     h5py = pytest.importorskip("h5py")
     pytest.importorskip("cupy")
     from pilot_proxy.kernel import PilotProxyKernel

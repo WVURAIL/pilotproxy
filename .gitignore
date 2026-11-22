@@ -32,6 +32,10 @@ build/
 work/
 generated/
 results/
+# make release-clean removes these too
+dist/
+.idea/
+inspection/
 
 # Evidence studies are committed whole. A study directory under docs/evidence/
 # is the record a dissertation chapter cites, so it must carry its own figures

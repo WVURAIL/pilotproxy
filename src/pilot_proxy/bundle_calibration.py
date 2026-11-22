@@ -400,14 +400,12 @@ def _weights(row: dict[str, Any], bank: bytes) -> bytes:
 
 
 def weight_norms(weights: bytes) -> tuple[int, int]:
-    """Return the exact squared norms (|w_t|^2, |w_lo|^2 + |w_up|^2) of a channel's packed weights."""
+    """Return the exact squared norms (|w_t|^2, |w_lo|^2 + |w_up|^2) of a channel's packed weights.
+
+    Their null level, mu_0 = 2 |w_t|^2 / (|w_lo|^2 + |w_up|^2), is null_power_ratio_from_weight_norms(*norms).
+    """
     target, lower, upper = weight_term_norms_sq(np.frombuffer(weights, dtype=np.int8).reshape(3, -1))
     return target, lower + upper
-
-
-def null_level(weights: bytes) -> float:
-    """Return mu_0 = 2 |w_t|^2 / (|w_lo|^2 + |w_up|^2), the null level that a channel's weights give its fine ratio."""
-    return null_power_ratio_from_weight_norms(*weight_norms(weights))
 
 
 def scaled_word(quantile_q16: float, scale: float) -> int:

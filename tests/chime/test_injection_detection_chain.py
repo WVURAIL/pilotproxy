@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from gpu import cupy_or_skip
 
 h5py = pytest.importorskip("h5py")
 
@@ -210,12 +211,7 @@ def _scalar_fit(points):
 
 @pytest.mark.cuda
 def test_native_injection_detector_recovery_chain(tmp_path, monkeypatch):
-    cp = pytest.importorskip("cupy")
-    try:
-        if cp.cuda.runtime.getDeviceCount() < 1:
-            pytest.skip("CUDA device is unavailable")
-    except cp.cuda.runtime.CUDARuntimeError as exc:
-        pytest.skip(str(exc))
+    cupy_or_skip()
     if not DEFAULT_LIB_PATH.is_file():
         pytest.skip("compiled detector library is unavailable")
     pytest.importorskip("matplotlib")

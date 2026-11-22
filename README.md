@@ -23,7 +23,10 @@ the rank-based detection score, and the conditional forecast quantities.
 | Process archive data on CANFAR | [CANFAR runbook](docs/CANFAR_RUNBOOK.md) |
 | Install, build CUDA, or run a synthetic bench | [Installation and usage](docs/USAGE.md) |
 | Compile a receiver policy | [Operating policy](docs/CHANNEL_OPERATING_POLICY.md) |
+| Calibrate, test and run the detector on a telescope | [Running the detector](docs/RUNNING_THE_DETECTOR.md), [user guide](docs/pdf/PilotProxy_UG001_User_Guide.pdf) |
+| Recalibrate Pathfinder | [Pathfinder recalibration](docs/PATHFINDER_RECALIBRATION.md) |
 | Commission the kotekan integration | [Operator handoff](docs/OPERATOR_HANDOFF.md) |
+| Read the detector's design and its decisions | [Design document](docs/pdf/PilotProxy_DD001_Design_Document.pdf), [design decisions](docs/DESIGN_DECISIONS.md) |
 | Find an analysis or development utility | [Tools catalog](tools/README.md) |
 
 Access to the CHIME archive requires collaboration credentials. This source
@@ -81,8 +84,9 @@ of earlier cores are mapped in
 | `docs/evidence/`, `docs/runtime_freezes/` | Frozen receipts and provenance records |
 
 The detector package imports no development tool, and the frozen records are
-kept apart from the guides. Generated data, figures, shared libraries, and
-documentation PDFs are written to output and build directories.
+kept apart from the guides. Generated data, figures and shared libraries are
+written to output and build directories. `make docs` builds the user guide and
+design document into `docs/out`; the committed copies are in `docs/pdf`.
 
 ## Scientific and compatibility boundaries
 

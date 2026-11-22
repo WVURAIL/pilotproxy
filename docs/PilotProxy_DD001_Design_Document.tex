@@ -605,8 +605,8 @@ and \code{--output-dir}. Under v3:
         with null level 1, and the word is only a first guess.
   \item \textbf{Default word.} The control word times the channel scale
         \(\lambda_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16, written
-        as \code{cfar_multiplier_q16}. \(\mu_0\) comes from the stored weights
-        (\code{null_level}). \(g=1+o/C\) is the passband factor of the
+        as \code{cfar_multiplier_q16}. \(\mu_0\) comes from the stored weight
+        norms (\code{weight_norms}). \(g=1+o/C\) is the passband factor of the
         line-free offset \(o\) at the pilot, from the optional plan block
         \code{"default_word": {"passband_factor": {...}}}, and 1 where not
         given. It moves the archive words by under 2\%. The default word needs

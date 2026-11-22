@@ -6,7 +6,7 @@ The bundled example runs on this reader. The on-disk format is held in
 reader yields the [nfft, n_feeds] complex64 frames that an analyzer consumes.
 CHIME and its outriggers (KKO, GBO and HCO) share this product, so one reader
 serves all four. A different file format needs its own reader, and this file
-is the worked example in docs/ADDING_A_READER.md.
+is a worked example of one.
 """
 from __future__ import annotations
 

@@ -64,7 +64,7 @@ nominal = {c: bc.nominal_fine_bin(r["pilot_frequency_hz"], r["coarse_channel_cen
            for c, r in rows.items()}
 bulk, rank = bc._geometry(0, (), V3)
 norms = {c: bc.weight_norms(bc._weights(r, bank)) for c, r in rows.items()}
-mu0 = {c: bc.null_level(bc._weights(r, bank)) for c, r in rows.items()}
+mu0 = {c: bc.null_power_ratio_from_weight_norms(*n) for c, n in norms.items()}
 control37 = show("data/assembly/control37.json")
 
 # the control, as the dissertation reads it: its valid frames, clustered by capture

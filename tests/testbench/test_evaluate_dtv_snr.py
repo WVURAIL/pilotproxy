@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from gpu import cupy_or_skip
 
 from pilot_proxy.dtv_units import DB_POWER_FACTOR
 from pilot_proxy.paths import PACKAGE_ROOT
@@ -678,9 +679,7 @@ def test_kernel_measurements_equal_the_cpu_reference_exactly() -> None:
     """
     import numpy as np
 
-    cp = pytest.importorskip("cupy")
-    if not cp.cuda.runtime.getDeviceCount():
-        pytest.skip("CUDA unavailable")
+    cupy_or_skip()
     from pilot_proxy.kernel import PilotProxyKernel
     from pilot_proxy.paths import DEFAULT_LIB_PATH
     from pilot_proxy.testbench.evaluate_snr import (

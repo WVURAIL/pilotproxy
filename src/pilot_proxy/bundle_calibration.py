@@ -18,7 +18,10 @@ from typing import Any, Iterator, Sequence
 import numpy as np
 
 from pilot_proxy.capture_reference import expected_matched_filter_row_projections
-from pilot_proxy.detector_contract import null_power_ratio_from_weight_norms, weight_term_norms_sq
+from pilot_proxy.detector_contract import (
+    null_power_ratio_from_weight_norms,
+    weight_term_norms_sq,
+)
 from pilot_proxy.detectors.narrowband_marker.anchors import WINDOW_HALF_WIDTH, bulk_mask
 from pilot_proxy.fine_decision import (
     CALIBRATION_DECISION_VERSION,

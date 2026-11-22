@@ -6,9 +6,9 @@ All notable changes to PilotProxy are recorded here. The project follows
 ## Unreleased
 
 - A power-limit plan must give `curvature` for every calibrated channel and `margin` (0 where measured as none);
-  `calibrate-bundle` and `plan-run` refuse a plan without them. Both used to default to zero, which reads a channel
-  whose estimate clips at zero low. On the archive, with the dissertation's curvature and route term, the test
-  reproduces the dissertation's worst-case test exactly (`docs/evidence/bao_word_crosscheck_2026-11-22`).
+  `calibrate-bundle` and `plan-run` refuse a plan without them. Both used to default to zero, which on the archive
+  would pass channels 21, 29 and 32 under the worst case. With the dissertation's offset differences and route
+  term, the test reproduces the dissertation's worst-case test to 3e-13 (`docs/evidence/bao_word_crosscheck_2026-11-22`).
 - `docs/evidence/v3_timing_laptop_2026-11-21` records the v3 core timing on the laptop RTX 5000 Ada (core 4.2.0,
   no correlator load), and the DD quotes it. The deployment GPUs are not yet timed under v3.
 - `qualify-bundle` refuses a test report with no passing masked-fraction check of a calibrated channel, so a channel

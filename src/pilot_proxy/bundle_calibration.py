@@ -531,11 +531,11 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
         raise ValueError(f"unknown power_limit keys {sorted(unknown)}")
     if "words" in plan or "word_q16" in plan:
         raise ValueError("a power_limit plan takes no words, because the test sets them")
-    # no defaults: where a channel's estimate clips at zero only these error terms remain, so leaving them out
-    # reads the channel low, the direction that passes it
+    # no defaults: the offset difference is negative on some channels, and where an estimate clips at zero only the
+    # error terms remain, so leaving them out reads a channel low, the direction that passes it
     missing = sorted({"curvature", "margin"} - set(given))
     if missing:
-        raise ValueError(f"a power_limit plan needs {missing}: the curvature of each channel with its standard error, "
+        raise ValueError(f"a power_limit plan needs {missing}: the offset difference (curvature) of each channel with its standard error, "
                          "and the margin, in units of the shelf estimate (0 where measured as none)")
     control_channel = {int(plan["control"]["channel"])} if plan.get("control") else set()
     uncovered = sorted({int(c) for c in plan["channels"]} - control_channel - {int(c) for c in given["curvature"]})

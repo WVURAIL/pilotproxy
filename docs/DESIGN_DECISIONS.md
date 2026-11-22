@@ -283,13 +283,15 @@ median at ±64 and ±96 each leave 8 usable channels, so the median's window, th
 that the pilot's skirt gives it and its setting bought nothing. The decision itself
 still divides by `d_rho` over all 128 even bins.
 
-The power-limit plan has no defaults for `curvature` and `margin`. Where a channel's
-estimate clips at zero, only the error terms remain in its upper estimate, so a plan
-that left them out would read the channel low, toward a pass. On the archive at ±96,
-a plan without them read channels 16, 19, 23 and 26 between 27 and 52% low (channel
-16 at 1.02 of its limit, against 1.40). With the dissertation's curvature and its
-route term as the margin, `calibrate-bundle` reproduces the dissertation's worst-case
-test to 2e-13 on every word of channels 14 to 36
+The power-limit plan has no defaults for `curvature` and `margin`. The offset
+difference is negative where the ratio's passband offset is lower at the pilot than at
+the control position, and where an estimate clips at zero only the error terms remain,
+so a plan that left them out would read those channels low, toward a pass. On the
+archive, a plan without them would pass channels 21, 29 and 32 under the worst case
+(least ratios 0.31, 0.14 and 0.21, against 4.2, 7.7 and 4.9; their offset differences
+are -2.6e-5, -1.5e-5 and -3.0e-5 in shelf units). With the dissertation's offset
+differences and its route term as the margin, `calibrate-bundle` reproduces the
+dissertation's worst-case test to 3e-13 on every word of channels 14 to 36
 (`docs/evidence/bao_word_crosscheck_2026-11-22`).
 
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%

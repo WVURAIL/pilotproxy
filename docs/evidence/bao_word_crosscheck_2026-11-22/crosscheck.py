@@ -1,17 +1,18 @@
-"""Cross-check of PilotProxy's worst-case power-limit test against the dissertation's corrected rule.
+"""Cross-check of PilotProxy's worst-case power-limit test on the ratio estimate against the dissertation's rule.
 
-PilotProxy's calibrate-bundle path (bundle_calibration._limit_channel, power_limit_word) runs on the archive frames of
-record (the v3 score cache and the archive products' fine powers) and on the channel-37 control product, with the
-dissertation's inputs: power limits, response table, default-word scale lambda_c, curvature d_c and its error, and
-the route term as the plan margin. Each word of PilotProxy's sweep is compared with the dissertation's sweep
+PilotProxy's calibrate-bundle path (bundle_calibration._limit_channel, power_limit_word.ratio_excess) runs on the
+archive frames of record (the v3 score cache and the archive products' fine powers) and on the channel-37 control
+product, with the dissertation's inputs: power limits, response table, default-word scale lambda_c, the ratio's
+offset difference d_c and its error (estimate_offset.json "curvature"), and the route term as the plan margin. Each word of PilotProxy's sweep is compared with the dissertation's sweep
 (data/assembly/sweeps65 at REV), and the least ratio with corrected_rule.json. A second run uses the plan defaults
 (no curvature, margin 0), as a plan without those fields would.
 
-usage: crosscheck.py REV HALF [channels]   (dissertation commit, shelf half-width; writes out/hHALF_REV.json)
+usage: crosscheck.py REV [channels]   (dissertation commit; writes out/ratio_REV_<control>.json)
 Reads the dissertation records with git show; changes nothing there.
 """
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -26,13 +27,16 @@ CONTROL_PRODUCT = Path.home()/"rail/RFIM/Datasets/ch37-control-491-2026-09-24/ch
 OUT = Path(__file__).resolve().parent/"out"
 sys.path.insert(0, str(PP/"src"))
 
-from pilot_proxy import bundle_calibration as bc                      # noqa: E402
-from pilot_proxy.characterization import threshold_rule as T          # noqa: E402
+from pilot_proxy import bundle_calibration as bc  # noqa: E402
+from pilot_proxy.characterization import threshold_rule as T  # noqa: E402
 from pilot_proxy.fine_decision import FINE_DECISION_V3_VERSION as V3  # noqa: E402
-from pilot_proxy.power_limit_word import shelf_reference              # noqa: E402
+from pilot_proxy.product_contract import (  # noqa: E402
+    null_power_ratio_of,
+    pilot_excess_from_fine_powers,
+)
 
-REV, HALF = sys.argv[1], int(sys.argv[2])
-CHANNELS = [int(c) for c in sys.argv[3:]] or list(range(14, 37))
+REV = sys.argv[1]
+CHANNELS = [int(c) for c in sys.argv[2:]] or list(range(14, 37))
 
 
 def show(path, binary=False):
@@ -54,14 +58,15 @@ plan = dict(receiver_profile=str(PP/"configs/receiver_profiles/chime_dtv_fengine
             detector_core_profile=str(PP/"configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json"))
 k, cell_hz, descending = bc._receiver(plan, PP)
 shelf = bc._shelf(plan, PP)
-bundle, _ = bc._export(plan, PP, sorted({*CHANNELS, 37}), tmp/"bundle")
+bundle, bank = bc._export(plan, PP, sorted({*CHANNELS, 37}), tmp/"bundle")
 rows = bc._rows(bundle)
 nominal = {c: bc.nominal_fine_bin(r["pilot_frequency_hz"], r["coarse_channel_center_hz"], cell_hz, descending)
            for c, r in rows.items()}
 bulk, rank = bc._geometry(0, (), V3)
+mu0 = {c: bc.null_level(bc._weights(r, bank)) for c, r in rows.items()}
+control37 = show("data/assembly/control37.json")
 
 # the control, as the dissertation reads it: its valid frames, clustered by capture
-import os
 CONTROL_FRAMES = os.environ.get("CONTROL_FRAMES", "cache")
 if CONTROL_FRAMES == "cache":
     # the control's frames of the v3 score cache, clustered by capture, as scripts/median/selection.py reads them
@@ -78,7 +83,6 @@ else:
         ok = z["valid"][:, 0] > 0
         cfines, cunits = z["fine_power_u64"][ok], z["frame_unit_index"][ok]
 control = (cfines, cunits)
-control_reference = shelf_reference(nominal[37], HALF)
 
 captured = {}
 real_limit_test = bc.limit_test
@@ -98,15 +102,17 @@ def rel(a, b):
     return float(np.max(np.abs(a - b)/scale_)) if a.size else 0.0
 
 
-report = dict(rev=REV, half_width=HALF, control_frames=CONTROL_FRAMES, control_decided_only=bool(os.environ.get("CONTROL_DECIDED_ONLY")), control_frame_count=int(len(cfines)), pilotproxy=subprocess.check_output(["git", "-C", str(PP), "rev-parse", "--short", "HEAD"]).decode().strip(),
-              shelf=shelf, shelf_dissertation=T.SHELF, route=route, control_nominal=nominal[37],
-              control_reference_bins=int(control_reference[0].sum()), channels={})
+report = dict(rev=REV, estimate=offset.get("estimate"), control_frames=CONTROL_FRAMES, control_decided_only=bool(os.environ.get("CONTROL_DECIDED_ONLY")), control_frame_count=int(len(cfines)), pilotproxy=subprocess.check_output(["git", "-C", str(PP), "rev-parse", "--short", "HEAD"]).decode().strip(),
+              shelf=shelf, shelf_dissertation=T.SHELF, route=route, control_mu0=mu0[37],
+              control_mu0_dissertation=control37["mu0"], channels={})
 for ch in CHANNELS:
     meta = json.loads((SCORES/f"ch{ch}.json").read_text())
     with np.load(SCORES/f"ch{ch}.npz", allow_pickle=False) as z:
         sc = {key: z[key] for key in z.files}
     with np.load(meta["original_product_identity"]["path"], allow_pickle=False) as p:
         fines = p["fine_power_u64"][sc["source_row_index"]]
+        product_excess = pilot_excess_from_fine_powers(p, sc["source_row_index"])
+        product_mu0 = null_power_ratio_of(p)
     captures = sc["frame_event_index"]
     seen = bc.required_words(fines, anchor_bin=nominal[ch], bulk=bulk, rank=rank, decision_version=V3)
     sup = sc["supported"]
@@ -120,7 +126,7 @@ for ch in CHANNELS:
                       curvature=curvature, margin=margin, min_captures=30, shelf=shelf)
         result = bc._limit_channel(ch, fines, captures, seen, control, anchor=nominal[ch], bulk=bulk, rank=rank,
                                    inputs=inputs, decision_version=V3, control_scale=scale[ch],
-                                   reference=shelf_reference(nominal[ch], HALF), control_reference=control_reference)
+                                   mu0=mu0[ch], control_mu0=mu0[37])
         s, kw = captured["sweep"], dict(captured)
         x = np.maximum(kw["shelf"]*s["mean_excess"] - kw["shift"] - kw["offset"], 0.0)
         ratio = kw["coupling"]*kw["power_scale"]*(x + 2*s["se"] + kw["margin"])**2/kw["power_limit"]
@@ -133,7 +139,11 @@ for ch in CHANNELS:
     p = variants["plan"]
     s = p["sweep"]
     same_words = bool(np.array_equal(np.asarray(s["word"], np.uint64), np.asarray(d["word"], np.uint64)))
-    row = dict(nominal_bin=nominal[ch], shelf_bins=int(shelf_reference(nominal[ch], HALF)[0].sum()),
+    ours = bc.ratio_excess(fines, mu0[ch])
+    ok = np.isfinite(ours) & np.isfinite(product_excess)
+    excess_diff = float(np.max(np.abs(ours[ok] - product_excess[ok])))
+    row = dict(nominal_bin=nominal[ch], mu0=mu0[ch], mu0_product=float(product_mu0), excess_max_abs_diff=excess_diff,
+               excess_nan_agree=bool(np.array_equal(np.isnan(ours), np.isnan(product_excess))),
                keep_words_match_cache=words_match, capture_weight_rel=weight_rel, same_sweep_words=same_words,
                power_scale_rel=rel(p["kw"]["power_scale"], t["power_scale"]),
                dissertation=dict(word=corrected[ch]["word"], ratio=corrected[ch]["ratio"],
@@ -152,10 +162,10 @@ for ch in CHANNELS:
                          least_ratio_word=r.get("least_ratio_word"), passing_words=r["passing_words"],
                          word=r.get("word"), corrections=r.get("corrections"))
     report["channels"][ch] = row
-    print(ch, "bins", row["shelf_bins"], "words", words_match, "w", f"{weight_rel:.1e}", "same", same_words,
+    print(ch, "mu0", f"{mu0[ch]:.6f}", "mu0_prod", f"{product_mu0:.6f}", "e_diff", f"{excess_diff:.1e}", "words", words_match, "w", f"{weight_rel:.1e}", "same", same_words,
           "| diss", corrected[ch]["word"], f"{corrected[ch]['ratio']:.4g}",
           "| plan", row["plan"]["least_ratio_word"], f"{row['plan']['least_ratio']:.4g}", row["plan"]["outcome"],
           "| defaults", row["defaults"]["least_ratio_word"], f"{row['defaults']['least_ratio']:.4g}",
           "| ratio_rel", f"{row.get('ratio_rel_plan', float('nan')):.2e}", flush=True)
 OUT.mkdir(exist_ok=True)
-(OUT/f"h{HALF}_{REV}_{CONTROL_FRAMES}{os.environ.get('CONTROL_DECIDED_ONLY', '') and '_decided'}.json").write_text(json.dumps(report, indent=1, default=lambda o: o.item() if hasattr(o, "item") else str(o)))
+(OUT/f"ratio_{REV}_{CONTROL_FRAMES}{os.environ.get('CONTROL_DECIDED_ONLY', '') and '_decided'}.json").write_text(json.dumps(report, indent=1, default=lambda o: o.item() if hasattr(o, "item") else str(o)))

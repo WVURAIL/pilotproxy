@@ -631,10 +631,12 @@ and \code{--output-dir}. Under v3:
         own weights. The passband offset of the ratio differs between a
         channel's pilot and the control position, so the plan gives that
         difference for each channel as its \code{curvature}, with its error,
-        and gives the margin. Neither has a default: where the estimate clips
-        at zero only these terms remain. With the
-        dissertation's values, the test reproduces the dissertation's
-        worst-case test on the archive to \(2\times10^{-13}\) on every word
+        and gives the margin. Neither has a default: the difference is
+        negative on some channels, so leaving it out reads them low, and on
+        the archive would pass channels 21, 29 and 32 under the worst case.
+        With the dissertation's values, the test reproduces the
+        dissertation's worst-case test on the archive to
+        \(3\times10^{-13}\) on every word
         (\code{docs/evidence/bao_word_crosscheck_2026-11-22}). A channel
         with no passing word carries only the default word, and
         \code{bundle.decisions.json} records the outcome for the

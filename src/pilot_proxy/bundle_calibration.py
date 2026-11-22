@@ -410,6 +410,18 @@ def scaled_word(quantile_q16: float, scale: float) -> int:
     return int(math.ceil(quantile_q16 / Q16 * scale * Q16))
 
 
+def control_words_at(words: np.ndarray, scale: float) -> np.ndarray:
+    """Return the control keep word that a channel word maps to, floor(u / s_c), as the v3 default word scales it.
+
+    A control frame is kept at the channel word u when its keep word is at most floor(u / s_c), so the default
+    word and the control corrections of the power-limit test map the control onto the channel the same way.
+    """
+    words = np.asarray(words, dtype=np.int64)
+    if scale == 1.0:
+        return words
+    return np.floor(words.astype(np.float64) / scale).astype(np.int64)
+
+
 def _passband_factors(plan: dict[str, Any]) -> dict[int, float]:
     """Return the passband factors g = 1 + o/C of the plan's "default_word" block, by physical channel."""
     given = plan.get("default_word", {})
@@ -537,8 +549,12 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
 
 
 def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: np.ndarray, control, *, anchor: int,
-                 bulk: np.ndarray, rank: int, inputs: dict[str, Any], decision_version: str) -> dict[str, Any]:
-    """Return the power-limit test of one channel. The control is read with no corrections, as `control=None`."""
+                 bulk: np.ndarray, rank: int, inputs: dict[str, Any], decision_version: str,
+                 control_scale: float = 1.0) -> dict[str, Any]:
+    """Return the power-limit test of one channel. The control is read with no corrections, as `control=None`.
+
+    Under v3 the control is read at floor(u / s_c), where s_c = `control_scale` is the scale of the default word.
+    """
     from pilot_proxy.characterization import threshold_rule
 
     if channel not in inputs["rows"] or channel not in inputs["limits"]:
@@ -556,7 +572,8 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
         good = (words >= 0) & np.isfinite(control_excess)
         if not good.any():
             raise ValueError(f"the control has no supported frames under the geometry of channel {channel}")
-        measured = control_corrections(words[good], control_excess[good], control[1][good], sweep["word"].astype(np.int64))
+        at = control_words_at(sweep["word"].astype(np.int64), control_scale)
+        measured = control_corrections(words[good], control_excess[good], control[1][good], at)
         curvature, curvature_se = inputs["curvature"].get(channel, (0.0, 0.0))
         offset = shelf * measured["null"] + curvature
         shift = shelf * measured["shift"]
@@ -570,7 +587,8 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
                       null=shelf * measured["null"], null_se=shelf * measured["null_se"],
                       curvature=inputs["curvature"].get(channel, (0.0, 0.0))[0],
                       curvature_source="plan" if channel in inputs["curvature"] else "not given",
-                      control_frames=measured["frames"], control_captures=measured["captures"]))
+                      control_frames=measured["frames"], control_captures=measured["captures"],
+                      control_word_scale=control_scale))
     if measured is not None and result["outcome"] == "useful":
         at = int(np.searchsorted(sweep["word"], np.uint64(result["word"])))
         result["corrections"].update(selection_shift=float(shift[at]), selection_shift_se=float(shelf * measured["shift_se"][at]))
@@ -722,7 +740,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             tested = None
             if inputs and (not is_control or (channel in inputs["rows"] and channel in inputs["limits"])):
                 tested = _limit_channel(channel, fines, captures, seen, None if is_control else control_frames,
-                                      anchor=anchor, bulk=bulk, rank=rank, inputs=inputs, decision_version=decision)
+                                      anchor=anchor, bulk=bulk, rank=rank, inputs=inputs, decision_version=decision,
+                                      control_scale=scaling.get("scale", 1.0))
                 if origin == "nominal" and not is_control:
                     # with no pilot in the run the estimate reads only noise, which is no pass
                     tested = dict({key: value for key, value in tested.items() if key not in PASSING_FIELDS},

@@ -5,6 +5,11 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Under v3, the power-limit test of `calibrate-bundle` reads the control at `floor(u / s_c)`, where `s_c` is the
+  channel scale of the default word, so a control frame counts as kept at the channel word `u` when its keep word
+  is at most `floor(u / s_c)` (`bundle_calibration.control_words_at`). The default word and the selection shift
+  then map the control onto the channel the same way, as the dissertation's v3 rerun does. The null of the control
+  (all its frames) is unchanged, and the report gives `control_word_scale` with the corrections.
 - The v3 default word of `calibrate-bundle` is the control's word at `null_quantile` (99%), from its exact keep
   words, scaled to each channel's null level `mu_0,c g_c / (mu_0,37 g_37)` and rounded up to Q16, in place of the
   knee. `mu_0` comes from the stored weights (`bundle_calibration.null_level`), and the passband factor `g` from the

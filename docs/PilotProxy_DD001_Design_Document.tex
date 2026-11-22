@@ -466,7 +466,7 @@ integer number of turns per window through stage~1. The rectangular window
 of stage~1 gives the capture factor \(\mathrm{sinc}^2(\delta f/
 \ppDetectorBinHz\,\mathrm{Hz})\), a loss of \ppCaptureLossThreeHundredDb\,dB
 at 300\,Hz and \ppCaptureLossFiveHundredDb\,dB at 500\,Hz
-(\code{docs/METHOD_SPEC.md}). The scalloping loss is at most
+(\code{docs/METHOD_SPEC.md}). The capture loss is at most
 \ppCaptureLossEdgeDb\,dB at the edge of the fine span.
 
 \begin{figure}[H]
@@ -587,14 +587,16 @@ a control channel or on simulated noise.
 \code{pilot-proxy calibrate-bundle} reads a plan and writes a sealed bundle
 and a report (\code{src/pilot_proxy/bundle_calibration.py}). It reads the
 captures of each channel with the deployed integer path. Each frame has a
-\emph{keep word}, the smallest word that keeps it. A v3 bundle carries two
-words per channel. The BAO word is the point of the system. The default word
+\emph{keep word}, the smallest word that keeps it. A v3 bundle carries a
+default word for every channel, and a BAO word where the power-limit test sets one. The BAO word is the point of the system. The default word
 is the generic threshold beside it.
 
 New bundles are \code{fine_decision_v2} until Kotekan runs v3
 (\code{CALIBRATION_DECISION_VERSION} in \code{src/pilot_proxy/fine_decision.py}).
-\code{--decision-version fine_decision_v3}, or \code{decision_version} in the
-plan, writes v3. Under v3:
+The plan key \code{decision_version} writes v3, as does
+\code{--decision-version fine_decision_v3} of \code{plan-run} and
+\code{process-run}; \code{calibrate-bundle} itself takes only \code{--plan}
+and \code{--output-dir}. Under v3:
 
 \begin{itemize}
   \item \textbf{Control word.} The \code{null_quantile} (default 0.99) of the
@@ -611,7 +613,9 @@ plan, writes v3. Under v3:
         no captures of the channel, so every channel of a first bundle gets
         one. The report gives \code{word_source} \code{control word x scale},
         or \code{plan} when the plan sets the word.
-  \item \textbf{BAO word.} With \code{--threshold power_limit}, the word keeps
+  \item \textbf{BAO word.} With the plan key \code{threshold} set to
+        \code{power_limit} (\code{--threshold power_limit} of \code{plan-run}
+        and \code{process-run}), the word keeps
         the most frames while the upper residual power meets a checked power
         limit. The response table comes from RFIsher, and the table and the
         checked limits are computed once per telescope configuration. This is
@@ -629,6 +633,12 @@ plan, writes v3. Under v3:
         with no passing word carries only the default word, and
         \code{bundle.decisions.json} records the outcome for the
         operating-policy compiler.
+  \item \textbf{Pilot seen.} The anchor search still runs: it finds the bin
+        of the largest 90th-percentile \(F_2\) within \(\pm30\) bins of the
+        nominal bin. It no longer places a search, since the peak takes every
+        bin, but a channel whose anchor stays \code{nominal} (no pilot seen)
+        gets no BAO word, with the reason \code{pilot not seen}. A plan
+        \code{anchors} entry overrides that gate.
 \end{itemize}
 
 A v1 or v2 bundle keeps the rules of record, whose constants are module
@@ -641,8 +651,9 @@ is not measured (binomial upper tail of the frames above the floor not below
 \(10^{-4}\)). The floor is the \code{null_quantile} of null scores, which are
 peaks over pseudo-searches at bins clear of the real search. The word is the
 knee of the kept fraction against \(\log(\text{word})\), the point of largest
-height above the chord of that curve. The floor replaces it when the plan
-sets a word, the pilot was not seen, fewer than 30 captures were read, the
+height above the chord of that curve. A plan \code{words} entry gives that
+channel the plan's word, and \code{word_q16} sets the floor and every word. The
+floor replaces the knee when the pilot was not seen, fewer than 30 captures were read, the
 estimated pilot share is above 0.9, or the knee is below the floor. Under the
 power-limit threshold, a channel with no passing word holds the floor.
 
@@ -777,8 +788,10 @@ characterization (\(h=2\)), and the frames that search kept carried the excess
 of the whole capture. The 65-bin search (\(h=32\)) that followed was adopted
 after those captures were inspected. A peak over every bin finds a line
 wherever it falls in the fine span and needs no parameter set for each channel
-(dissertation, \code{chapters/detection.tex}), and the padded odd bins cut the worst scalloping
-from 3.9\,dB to 0.9\,dB. The even bins are the independent samples of the
+(dissertation, \code{chapters/detection.tex}). It takes the odd bins of the
+padded transform as well, so a pilot between two independent bins loses at most
+0.9\,dB, not the 3.9\,dB of the even bins alone; the padding gives this, in every
+version. The even bins are the independent samples of the
 padded transform, so their median is an order-statistic CFAR reference in the
 standard sense. It ignores lines, pilot leakage and stray bins while fewer
 than half of the even bins carry them, so no bulk mask, guard, census list or
@@ -796,7 +809,9 @@ and makes no decision. Each consumer applies its own Q16 word with
 \code{cfar_multiplier_q16}, for any backend with no word of its own, and may
 carry the BAO word \code{power_limit_multiplier_q16}, which the correlator
 (N2) path applies. Kotekan's \code{DtvRfiMask} applies the power-limit word,
-or the default word when there is none (kotekan\#1924).}
+or the default word when there is none (kotekan\#1924). The DTV relay
+(\code{WVURAIL/dtv-relay}) carries the pair to other backends, and its
+receivers apply the same rule, counting an untested row as missing.}
 {The threshold belongs to the consumer because the backends tolerate
 different residuals. N2 needs the strict word that the power-limit test sets,
 and the FRB and baseband backends would lose good data at it. One statistic
@@ -899,7 +914,8 @@ bins.}
 
 \subsection{Channel 37 is the control}
 \choice{Channel 37 can be bound with \code{fine_calibration.status: control}.
-Its decisions are formed and recorded, and its mask stays zero. Only channel
+Its decisions are formed and recorded, and its mask stays zero unless
+\code{dtv_mask_control} is set (kotekan\#1915). Only channel
 37 may carry that status, and it is never \code{calibrated}.}
 {The default word and the power-limit corrections need frames of the same
 receiver with no pilot. A channel reserved for radio astronomy gives them
@@ -1024,13 +1040,13 @@ and a \code{fine_calibration} block:
 \code{decision_version} & \code{fine_decision_v3}. \code{fine_decision_v2}, the calibration default until Kotekan runs v3, and \code{fine_decision_v1}, in earlier bundles, stay valid.\\ \hline
 \code{cfar_multiplier_q16} & The default word, in \([1,2^{64}-1]\), for any backend with no word of its own. Under v1 and v2, the only word.\\ \hline
 \code{power_limit_multiplier_q16} & v3 only, optional. The BAO word from the power-limit test, in \([1,2^{64}-1]\), applied by the correlator (N2) path.\\ \hline
+\code{provenance} & \code{epochs}, \code{source_product_sha256}, \code{null_quantile}, optional \code{note}, \code{summed_inputs}, \code{mask_qualification} and \code{threshold_selection}. A pending block has empty lists and a null quantile. \code{mask_qualification} holds \code{test_report_sha256} and \code{reviewer}, and only a \code{calibrated} block may carry it. A \code{threshold_selection} carries \code{qualification: archive_review_only}.\\ \hline
 \multicolumn{2}{|l|}{\textit{v1 and v2 only. The validator refuses these fields on a v3 block.}}\\ \hline
 \code{anchor_bin} & Fine bin of the pilot, 0 to 255.\\ \hline
 \code{designated_half_width} & \(h\). Designated bins are \(a\pm h\) modulo 256.\\ \hline
 \code{bulk_mask_words_hex} & Four \code{0x}-prefixed uint64 words. Bin \(b\) is bit \(b\bmod64\) of word \(\lfloor b/64\rfloor\).\\ \hline
 \code{cfar_rank} & Zero-based rank, below the bulk population.\\ \hline
 \code{marker_guard_bins} & Optional extra guard around the designated set.\\ \hline
-\code{provenance} & \code{epochs}, \code{source_product_sha256}, \code{null_quantile}, optional \code{note}, \code{summed_inputs}, \code{mask_qualification} and \code{threshold_selection}. A pending block has empty lists and a null quantile. \code{mask_qualification} holds \code{test_report_sha256} and \code{reviewer}, and only a \code{calibrated} block may carry it. A \code{threshold_selection} carries \code{qualification: archive_review_only}.\\ \hline
 \end{longtable}
 
 The validator (\code{validate_runtime_weight_bundle} in
@@ -1232,7 +1248,8 @@ them (\code{CHIME_DERIVED.md}).
   \item Telescope replay with a verified receiver state, Compute Sanitizer and
         a sustained shadow run of the full pipeline have not been done.
   \item The recorded timings are for core 2.3.0 on an A100. The repository
-        records none for the deployment GPUs or for fine decision v3.
+        records none for the deployment GPUs, and no absolute timing for fine
+        decision v3.
   \item Failure recovery and pairwise masking are not covered by
         \code{DtvRfiMask}. Shared pair acceptance is not enforced for CHIME
         \code{N2Accumulate}.
@@ -1242,7 +1259,9 @@ them (\code{CHIME_DERIVED.md}).
   \item No test shows that a word catches weak pilots. \code{test-bundle}
         tests the control word on the control and the masked fractions.
   \item The power-limit word is in-sample, and its corrections use an
-        assumed normalization from the RFIsher table.
+        assumed normalization from the RFIsher table. \code{test-bundle} tests
+        the default word on held-out captures, never the BAO word that
+        \code{DtvRfiMask} applies.
 \end{itemize}
 
 %=====================================================================
@@ -1257,10 +1276,11 @@ them (\code{CHIME_DERIVED.md}).
 \textbf{Path} & \textbf{Content}\\ \hline
 \endhead
 \code{cuda/pilotproxy_detector.{h,cu}}, \code{cuda/config.h} & C API, kernels, compile-time geometry and bounds.\\ \hline
+\code{cuda/pilotproxy_decision.h} & Header-only v3 keep test \code{pilotproxy_v3_keep}, shared with Kotekan's CPU stages.\\ \hline
 \code{cuda/pilotproxy_reference.*}, \code{cuda/fxfft256_ref.c} & CPU reference.\\ \hline
 \code{src/pilot_proxy/kernel.py} & ctypes wrapper \code{PilotProxyKernel}.\\ \hline
 \code{src/pilot_proxy/fxfft.py} & Frozen fixed-point transform.\\ \hline
-\code{src/pilot_proxy/fine_decision.py} & Python reference of fine decision v1.\\ \hline
+\code{src/pilot_proxy/fine_decision.py} & Python reference of fine decisions v1, v2 and v3.\\ \hline
 \code{src/pilot_proxy/fine_reduction.py}, \code{product_contract.py} & Fine reduction, frame powers, coarse columns.\\ \hline
 \code{src/pilot_proxy/detector_weights.py}, \code{integration/weight_generation.py} & Weight banks and reference placement.\\ \hline
 \code{src/pilot_proxy/detector_contract.py} & Detector contract, \(\mu_0\), contract digest.\\ \hline
@@ -1367,6 +1387,8 @@ kotekan\#1894, \#1896 & Merged. Only the mask sent outside calibration mode; per
 kotekan\#1905, \#1906 & Merged through \#1914. Re-vendor of the core at \code{54ae410}; masking refused with a detect-only bundle; summed-input warning.\\ \hline
 kotekan\#1914 & Merged 2026-11-20. Fine decision v2 where the bundle names it; core vendored at \code{d34ae7d}.\\ \hline
 kotekan\#1915 & Merged 2026-11-20. \code{dtv_mask_control}: the control channel masked like a pilot.\\ \hline
+kotekan\#1924 & Open. Fine decision v3: core 4.2.0, \code{dtv_stat} always written, and \code{DtvRfiMask} applying the words.\\ \hline
+kotekan\#1925 & Open. Recv files of many frames with \code{frame_metadata}, which PilotProxy reads.\\ \hline
 \end{longtable}
 
 \subsection{Dissertation}

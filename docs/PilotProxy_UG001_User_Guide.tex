@@ -214,9 +214,9 @@ The consumer decides. With its word \(W\), it keeps the block when
 \begin{equation}
   n_{\mathrm{peak}}\cdot 2^{16} \;\le\; W\,d_\rho ,
 \end{equation}
-with both products formed exactly in 128 bits, and flags it otherwise. The threshold \(\eta=W/2^{16}\) is the word on a Q16 grid. When \(d_\rho=0\), at least half the even bins have zero reference power (lost packets, or every input flagged), and the block has no decision: consumers reject it. A row the detector did not test is \((0,2^{64}-1)\), and every word keeps it. The test is \code{pilotproxy_v3_keep(n_peak, d_rho, word)} in \code{cuda/pilotproxy_decision.h}. It returns 1 to keep, 0 to flag, and \(-1\) when \(d_\rho=0\). Its Python counterpart is \code{fine_decision.fine_keep_v3}. The GPU entry point is \code{PilotProxy_Compute_FineStatV3_U64}, and the Python reference of the pair is \code{fine_decision.fine_stat_v3}. The keeping word of a block is the smallest word that keeps it (\code{fine_keep_word_v3}).
+with both products formed exactly in 128 bits, and flags it otherwise. The threshold \(\eta=W/2^{16}\) is the word on a Q16 grid. When \(d_\rho=0\), at least half the even bins have zero reference power (lost packets, or every input flagged), and the block has no decision: consumers reject it. A row the detector did not test is \((0,2^{64}-1)\), and every word keeps it. The test is \code{pilotproxy_v3_keep(n_peak, d_rho, word)} in \code{cuda/pilotproxy_decision.h}. It returns 1 to keep, 0 to flag, and \(-1\) when \(d_\rho=0\). Its Python counterpart is \code{fine_decision.fine_keep_v3}, which returns \code{None} in place of \(-1\) and raises on a word outside \([1,2^{64}-1]\). The GPU entry point is \code{PilotProxy_Compute_FineStatV3_U64}, and the Python reference of the pair is \code{fine_decision.fine_stat_v3}. The keeping word of a block is the smallest word that keeps it (\code{fine_keep_word_v3}).
 
-A v3 profile carries the default word \code{cfar_multiplier_q16}, for any backend with no word of its own, and optionally the power-limit (BAO) word \code{power_limit_multiplier_q16}, which N2 applies where calibration set one (Section~\ref{sec:threshold}). Kotekan's \code{DtvRfiMask} applies \code{power_limit_multiplier_q16} if present, and \code{cfar_multiplier_q16} otherwise, to the pair in \code{dtv_stat}. This needs kotekan\#1924, which is not yet merged into \code{develop}. Kotekan \code{develop} accepts \code{fine_decision_v1} and \code{fine_decision_v2} bundles (since \#1914), and \code{calibrate-bundle} writes v2 by default until Kotekan runs v3 (Section~\ref{sec:calibrate}). On a laptop RTX 5000 Ada with 2048 inputs, the v3 entry point, searching every bin, takes 7\% less time than the v2 mask for one channel and 0.5\% less for 16 channels in one call.
+A v3 profile carries the default word \code{cfar_multiplier_q16}, for any backend with no word of its own, and optionally the power-limit (BAO) word \code{power_limit_multiplier_q16}, which N2 applies where calibration set one (Section~\ref{sec:threshold}). Kotekan's \code{DtvRfiMask} applies \code{power_limit_multiplier_q16} if present, and \code{cfar_multiplier_q16} otherwise, to the pair in \code{dtv_stat}. This needs kotekan\#1924, which is not yet merged into \code{develop}. Kotekan \code{develop} accepts \code{fine_decision_v1} and \code{fine_decision_v2} bundles (since \#1914), and \code{calibrate-bundle} writes v2 by default until Kotekan runs v3 (Section~\ref{sec:calibrate}).
 
 \begin{figure}[H]
 \centering
@@ -257,7 +257,7 @@ Power-limit word & \code{power_limit_multiplier_q16}, the BAO word: the word tha
 Statistic & Under v3, the pair \([n_{\mathrm{peak}},d_\rho]\) of each channel and block, recorded as \code{dtv_stat}.\\ \hline
 Keeping word & For one block, the smallest word that keeps it. Calibration computes it for every block and calls it the block's score. Under v3 it is \code{fine_keep_word_v3}.\\ \hline
 Floor & The \code{null_quantile} quantile (default 0.99) of the scores of the control channel, or of simulated white noise when there is no control record. Under v3 it is the control word that the default words are scaled from.\\ \hline
-Control channel & Channel 37. Its profile has status \code{control}. It is decided and recorded like a pilot, and its mask stays 0.\\ \hline
+Control channel & Channel 37. Its profile has status \code{control}. It is decided and recorded like a pilot, and its mask stays 0 unless \code{dtv_mask_control} is set (kotekan\#1915).\\ \hline
 Capture & One input file of a plan: a baseband HDF5 file, or one \code{dtv_fine_powers} file of about 43 s from a detect-only run.\\ \hline
 Detect-only & The detector records its decisions and the visibilities do not change. All shipped bundles are for detect-only runs.\\ \hline
 Fine support & Versions 1 and 2, per channel and block, \code{(valid, n)}: \((1,n)\) a valid test over \(n\) bulk bins, \((0,n)\) too few bulk bins, \((-1,-1)\) no test. The row of a v3 channel is \((-1,-1)\).\\ \hline
@@ -383,7 +383,7 @@ A runtime bundle is one directory with five files (Table~\ref{tab:bundlefiles}).
 
 \subsection{\texorpdfstring{\code{pilot_profiles.json}}{pilot\_profiles.json}}
 
-This file is the one an operator reads most. It holds the receiver binding and the threshold of every channel. Table~\ref{tab:pp_top} lists its top-level fields, Table~\ref{tab:pp_row} the fields of each entry of \code{profiles}, and Table~\ref{tab:pp_fine} the fields of each \code{fine_calibration} object. The column ``Kotekan'' marks the fields that the Kotekan detector reads. The PilotProxy validator requires every listed field of the profile's decision version, except those marked optional. A v3 profile carries only its words, no geometry, and the validator refuses \code{anchor_bin}, \code{designated_half_width}, \code{cfar_rank} and \code{bulk_mask_words_hex} on it.
+This file is the one an operator reads most. It holds the receiver binding and the threshold of every channel. Table~\ref{tab:pp_top} lists its top-level fields, Table~\ref{tab:pp_row} the fields of each entry of \code{profiles}, and Table~\ref{tab:pp_fine} the fields of each \code{fine_calibration} object. The column ``Kotekan'' marks the fields that the Kotekan detector reads. The PilotProxy validator requires every listed field of the profile's decision version, except those marked optional. A v3 profile carries only its words, no geometry, and the validator refuses \code{anchor_bin}, \code{designated_half_width}, \code{cfar_rank}, \code{bulk_mask_words_hex} and \code{marker_guard_bins} on it.
 
 \begin{longtable}{|L{0.30\linewidth}|L{0.52\linewidth}|C{0.09\linewidth}|}
 \caption{Top-level fields of \code{pilot_profiles.json}.}\label{tab:pp_top}\\
@@ -649,7 +649,7 @@ A plan for a CHIME bundle from baseband captures:
   "epoch": "2026-11 CHIME upgrade commissioning",
   "decision_version": "fine_decision_v3",
   "null_quantile": 0.99,
-  "channels": {"35": ["capture_521.h5"], "29": ["capture_614.h5"]},
+  "channels": {"35": ["capture_521.h5"], "29": ["capture_614.h5"], "37": ["capture_491.h5"]},
   "control": {"channel": 37, "captures": ["capture_491.h5"]},
   "default_word": {"passband_factor": {"29": 1.0}}
 }
@@ -681,12 +681,12 @@ A first bundle with no captures:
 \pfield{epoch} & Text recorded in each profile's \code{provenance.epochs}.\\ \hline
 \pfield{decision_version} & \code{fine_decision_v3}, or \code{fine_decision_v2} (default until Kotekan runs v3).\\ \hline
 \pfield{channels} & Map from channel to a list of captures. An empty list gives the default word, or under v1 and v2 the floor at the nominal anchor.\\ \hline
-\pfield{control} & \code{{"channel": 37, "captures": [...]}}, or \code{null}.\\ \hline
-\pfield{num_inputs} & Inputs summed. Required when \code{control} is \code{null}, for the simulated control. When given, each profile records it as \code{summed_inputs}.\\ \hline
+\pfield{control} & \code{{"channel": 37, "captures": [...]}}, or \code{null}. List channel 37 under \code{channels} as well, so the bundle binds it and \code{plan-run} finds the control in the runs it records.\\ \hline
+\pfield{num_inputs} & Inputs summed. Required when \code{control} is \code{null}, for the simulated control. When given, each profile records it as \code{summed_inputs}. \code{plan-run} and \code{process-run} do not write it, so add it by hand to a plan from a run.\\ \hline
 \pfield{null_quantile} & Quantile of the control word (the floor under v1 and v2), default 0.99.\\ \hline
 \pfield{default_word} & v3 only. \code{{"passband_factor": {channel: g}}}, the passband factor of each channel's scale, 1 where not given.\\ \hline
 \pfield{exclude_bins} & v1 and v2 only. Map from channel to fine bins left out of the bulk, for lines found near the pilot.\\ \hline
-\pfield{anchors} & v1 and v2 only. Map from channel to a fixed anchor bin.\\ \hline
+\pfield{anchors} & Map from channel to a fixed anchor bin. Under v1 and v2 it places the search, and under v3 it also passes the pilot-seen gate of the BAO test (Section~\ref{sec:anchor}).\\ \hline
 \pfield{words} & Map from channel to a fixed word.\\ \hline
 \pfield{word_q16} & Sets the control word (floor) and the default word of every channel.\\ \hline
 \pfield{min_knee_captures} & v1 and v2 only. Fewest captures for a knee, default 30.\\ \hline
@@ -698,9 +698,10 @@ A first bundle with no captures:
 
 A v3 word holds for the weights and the summed inputs it was set on. Under v1 and v2 a word also belongs to its geometry, and a word copied from another record must come with its anchor, its bulk and its rank.
 
-\subsubsection{Anchor (v1 and v2)}
+\subsubsection{Anchor}
+\label{sec:anchor}
 
-Under v1 and v2, the anchor starts at the nominal fine bin of the pilot. Calibration looks within 30 bins of it for the bin with the largest 0.9 quantile of the fine ratio. That bin becomes the anchor (\code{anchor_source: measured}) when the blocks above the floor are too many to come from the null. Otherwise the nominal bin is kept (\code{nominal}), and a plan \code{anchors} entry gives \code{plan}. A channel marked \code{nominal} showed no pilot in its captures, and a capture with the pilot on should replace it.
+The anchor starts at the nominal fine bin of the pilot. Calibration looks within 30 bins of it for the bin with the largest 0.9 quantile of the fine ratio. That bin becomes the anchor (\code{anchor_source: measured}) when the blocks above the floor are too many to come from the null. Otherwise the nominal bin is kept (\code{nominal}), and a plan \code{anchors} entry gives \code{plan}. A channel marked \code{nominal} showed no pilot in its captures, and a capture with the pilot on should replace it. Under v1 and v2 the anchor places the search. Under v3 the search takes every bin, and the anchor search only decides whether the pilot was seen: a channel marked \code{nominal} gets no BAO word (\code{pilot not seen}), and a plan \code{anchors} entry overrides that gate.
 
 \subsubsection{Word}
 \label{sec:word}
@@ -736,7 +737,8 @@ Every capture has equal total weight in the knee, so a long capture does not set
 \pfield{channels.<ch>.word_q16}, \pfield{eta}, \pfield{word_source} & The default word and its source.\\ \hline
 \pfield{channels.<ch>.mu0}, \pfield{passband_factor}, \pfield{scale} & v3 only. The channel's null level, passband factor, and scale \(s_c\).\\ \hline
 \pfield{channels.<ch>.power_limit_word_q16}, \pfield{power_limit_word_source} & v3 with the BAO test. The BAO word, or \code{null} and the reason it has none.\\ \hline
-\pfield{channels.<ch>.anchor_bin}, \pfield{anchor_source}, \pfield{nominal_bin}, \pfield{knee_word_q16} & v1 and v2 only. The anchor, where it came from, and the knee.\\ \hline
+\pfield{channels.<ch>.anchor_bin}, \pfield{anchor_source}, \pfield{nominal_bin} & The anchor and where it came from (Section~\ref{sec:anchor}).\\ \hline
+\pfield{channels.<ch>.knee_word_q16} & v1 and v2 only. The knee.\\ \hline
 \pfield{channels.<ch>.masked_fraction}, \pfield{masked_at_floor} & The share of blocks masked at the word and at the control word.\\ \hline
 \pfield{channels.<ch>.pilot_share}, \pfield{pilot_in_nearly_every_frame} & Estimated share of blocks with a pilot, and whether it is above 0.9.\\ \hline
 \pfield{channels.<ch>.knee_interval_q16} & 16th and 84th percentiles of the knee over resampled captures. A wide interval means more captures are needed. A diagnostic only under v3.\\ \hline
@@ -768,7 +770,7 @@ The power-limit plan names its inputs:
 \end{lstlisting}
 \code{table} is the RFIsher channel table of this telescope and \code{limits} maps each channel to its checked power limit in mK\(^2\). Both are required. \code{coupling} is the fraction of the kept shelf power that reaches the map, 1 by default. \code{curvature} gives a passband correction and its standard error, and \code{margin} is added to the upper estimate. Both default to zero. \code{min_captures} defaults to 30. Under v3, a channel with a passing word carries it as \code{power_limit_multiplier_q16} beside its default word, and the test reads the control at \(\lfloor u/s_c\rfloor\), the channel word \(u\) mapped onto the control by the scale of the default word. Its shelf estimate divides by \(T_\rho\) over the even bins farther than 32 fine bins from the channel's nominal pilot bin (95 or 96 bins, rank 47), and the control is read in its own window; the report gives \code{shelf_reference}. A channel with no passing word carries only its default word, and the operating policy masks it whole. Under v1 and v2, the passing word is the channel's \code{cfar_multiplier_q16} (\code{word_source} \code{power limit}), and a channel with no passing word holds the floor. The outcomes go to \code{<dir>.decisions.json}, which \code{compile-operating-policy} reads (\code{docs/CHANNEL_OPERATING_POLICY.md}). This threshold holds the control in memory beside each channel. The meaning of the test is described in the Design Document.
 
-\code{plan-run} and \code{process-run} take \code{--threshold power_limit --power-limit inputs.json}, where the file holds the \code{power_limit} object.
+\code{plan-run} and \code{process-run} take \code{--threshold power_limit --power-limit inputs.json}, where the file holds the \code{power_limit} object, and \code{--decision-version fine_decision_v3} for a v3 bundle. Without it they write v2, which Kotekan \code{develop} runs until kotekan\#1924 merges. For \code{calibrate-bundle}, these are the plan keys \code{threshold}, \code{power_limit} and \code{decision_version}.
 
 \subsection{Step 3: Test}
 \label{sec:test}
@@ -799,10 +801,10 @@ every bound channel has values & No profile is \code{pending_campaign}.\\ \hline
 test data differ from calibration data & No test capture is in the report's calibration or control captures.\\ \hline
 rank support on channel \(c\) & Every block of the channel has a decision: \(d_\rho > 0\) under v3, a valid rank under v1 and v2.\\ \hline
 masked fraction on channel \(c\) & The masked count at the default word is consistent with a rate inside the calibration's \code{masked_interval}.\\ \hline
-false alarms on the control channel & The control's masked count at the control word is consistent with the rate \(1-\)\code{null_quantile}. A test plan without a control fails this check.\\ \hline
+false alarms on the control channel & The control's masked count at the control word is not above the rate \(1-\)\code{null_quantile} (an upper-tail test). A test plan without a control fails this check.\\ \hline
 \end{longtable}
 
-The control check tests the control word on new data. Under v3 every default word is that word scaled to its channel, and under v1 and v2 every word is at or above it, so the check stands for the false alarms of every channel. The masked-fraction check shows that the test data are masked like the calibration data. Neither check can show that a word catches weak pilots, since the captures do not say which blocks hold one. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is qualified.
+The control check tests the control word on new data. Under v3 every default word is that word scaled to its channel, and under v1 and v2 every word is at or above it, so the check stands for the false alarms of every channel at its default word. Neither check tests the BAO word that \code{DtvRfiMask} applies where the bundle carries one: that word is in-sample until a run on independent data tests it. The masked-fraction check shows that the test data are masked like the calibration data. Neither check can show that a word catches weak pilots, since the captures do not say which blocks hold one. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is qualified.
 
 \subsection{Processing a Run in One Step}
 
@@ -819,7 +821,7 @@ pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_
   \item \code{bundle/}, \code{bundle.report.json}, and \code{bundle.decisions.json} for a power-limit run;
   \item \code{test.json}, the \code{test-bundle} record;
   \item \code{spectrograms/calibrate/} and \code{spectrograms/test/}, with one \code{spectrogram_ch<NN>.pdf} and \code{.npz} per channel and \code{masked_summary.csv};
-  \item \code{summary.md} and \code{summary.json}: per channel the scale (v3) or the anchor (v1 and v2), the word and its source, the pilot share, the masked percent of each part, the longest masked stretch, and the test result.
+  \item \code{summary.md} and \code{summary.json}, with the masks at the default word: per channel the scale (v3) or the anchor (v1 and v2), the word and its source, the pilot share, the masked percent of each part, the longest masked stretch, and the test result.
 \end{itemize}
 
 \subsection{Step 4: Deploy}
@@ -848,14 +850,14 @@ Kotekan reads the bundle from a local path once, at startup. A bundle changes on
   \node[blk] (ring) {Voltage ring\\ \scriptsize\code{voltage} (CHORD), \code{xposed_voltage} (CHIME)};
   \node[blk,below=0.9cm of ring] (det) {\code{cudaPilotProxyDetector}\\ \scriptsize reads \code{pilot_profiles.json}, \code{weights.bin}};
   \node[blk,left=1.2cm of det] (bf) {Bad feed mask ring\\ \scriptsize \code{bufferBadInputs} (\code{bf_mask})};
-  \node[prd,right=0.8cm of det] (prod) {\code{dtv_mask} int8 [1,F]\\ \code{dtv_fine_support} int32 [1,F,2]\\ \code{dtv_powers} uint64 [1,F,3]\\ \code{dtv_fine_powers} uint64 [1,R,3,256]};
+  \node[prd,right=0.8cm of det] (prod) {\code{dtv_stat} uint64 [1,F,2] (v3)\\ \code{dtv_mask} int8 [1,F]\\ \code{dtv_fine_support} int32 [1,F,2]\\ \code{dtv_powers} uint64 [1,F,3]\\ \code{dtv_fine_powers} uint64 [1,R,3,256]};
   \node[blk,below=0.9cm of det] (merge) {\code{DtvRfiMask}\\ \scriptsize SK mask \code{rfi_RFImask} \(\to\) \code{dtv_RFImask}};
   \node[blk,below=of merge] (n2) {n2k correlator, counts and \code{RfiMaskSum}};
   \node[prd,right=0.8cm of merge,text width=4.6cm] (rec) {Pathfinder: sent to the recv node\\ CHIME: written under \code{dtv_output_dir}};
   \draw[->,thick] (ring) -- (det);
   \draw[->,thick] (bf) -- (det);
   \draw[->,thick] (det) -- (prod);
-  \draw[->,thick,PilotProxyRed] (det) -- node[right,font=\scriptsize]{mask, support} (merge);
+  \draw[->,thick,PilotProxyRed] (det) -- node[right,font=\scriptsize,align=left]{stat (v3);\\ mask, support (v1, v2)} (merge);
   \draw[->,thick] (merge) -- (n2);
   \draw[->,thick] (prod.south) -- (rec.north);
 \end{tikzpicture}
@@ -890,7 +892,7 @@ dtv_calibration_mode: true
 \pfield{dtv_runtime_bundle_dir} & \pfield{pathfinder-commissioning-e2e90219}, installed path & The bundle directory.\\ \hline
 \pfield{dtv_apply_mask} & false & Starting value of \code{/dtv_mask_enabled}: apply the DTV mask to N2.\\ \hline
 \pfield{dtv_write_enabled} & false & Starting value of \code{/dtv_write_enabled}: send the products to the recv node.\\ \hline
-\pfield{dtv_calibration_mode} & false & Template only. Without it only \code{dtv_mask} is sent. With it \code{dtv_powers}, \code{dtv_fine_support} and \code{dtv_fine_powers} (2 rows) are sent too. \code{recv.j2} must be rendered with the same value.\\ \hline
+\pfield{dtv_calibration_mode} & false & Template only. Without it only \code{dtv_mask} is sent, and with kotekan\#1924 \code{dtv_stat} as well, in every mode. With it \code{dtv_powers}, \code{dtv_fine_support} and \code{dtv_fine_powers} (2 rows) are sent too. \code{recv.j2} must be rendered with the same value.\\ \hline
 \end{longtable}
 
 The two switches are changed over REST until the next restart:
@@ -933,13 +935,13 @@ With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>} (
 \subsection{Detect-only and Applying the Mask}
 \label{sec:applymask}
 
-In detect-only mode the detector records its decisions and the visibilities do not change. On the Pathfinder this is \code{/dtv_mask_enabled} off. On CHIME it is the only mode. With the mask on, \code{DtvRfiMask} clears every sample of a block at a frequency that the detector rejected, that has fine support \((0,n)\), or that is in the permanent-mask list. The visibilities and the valid-sample counts change together.
+In detect-only mode the detector records its decisions and the visibilities do not change. On the Pathfinder this is \code{/dtv_mask_enabled} off. On CHIME it is the only mode. With the mask on, \code{DtvRfiMask} clears every sample of a block at a frequency that the detector rejected, that has fine support \((0,n)\) (v1, v2), or that is in the permanent-mask list. For a v3 channel (kotekan\#1924) it reads \code{dtv_stat} and clears the block unless \code{pilotproxy_v3_keep} keeps it at the channel's BAO word, or its default word where there is none, and a block with \(d_\rho=0\) is cleared. The visibilities and the valid-sample counts change together.
 
 Since Kotekan pull request \#1906, merged into \code{develop} through \#1914 on 20 November 2026, \code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. The control and \code{pending_campaign} channels never reach a mask and need no record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before \code{dtv_apply_mask: true} is set.
 
 \subsection{Bad Feeds}
 
-On both telescopes the detector reads the bad feed mask ring of \code{bufferBadInputs} (\code{bf_mask_name: bf_mask}), and a flagged input is packed as zero. On CHORD, \code{bufferBadInputs} also flags the elements outside the main array, so the detector drops the 16 RFI antennas. On CHIME this was added by Kotekan pull request \#1880. \code{dtv_powers} and \code{dtv_fine_powers} fall as inputs are flagged. A word holds for the inputs summed at calibration. When the bundle records \code{summed_inputs}, the detector of Kotekan pull request \#1906 logs a warning while the count of good inputs differs from it by more than 10\%, and an INFO line when the count returns. The loop is repeated if the warning persists. On the Pathfinder the operators' script changes the mask as feeds misbehave: on 20 November 2026 it moved between 111 and 113 good inputs of 128 about every 14 minutes. The visibility files record it under \code{bad_feed_mask}. \code{tools/pathfinder_input_counts.py} reads it and prints each change, and \code{tools/calibration_length.py --input-counts} gives each channel's good inputs beside its word.
+On both telescopes the detector reads the bad feed mask ring of \code{bufferBadInputs} (\code{bf_mask_name: bf_mask}), and a flagged input is packed as zero. On CHORD, \code{bufferBadInputs} also flags the elements outside the main array, so the detector drops the 16 RFI antennas. On CHIME this was added by Kotekan pull request \#1880. \code{dtv_powers} and \code{dtv_fine_powers} fall as inputs are flagged. A word holds for the inputs summed at calibration. When the bundle records \code{summed_inputs} (from the plan's \code{num_inputs}, which \code{plan-run} does not write), the detector of Kotekan pull request \#1906 logs a warning while the count of good inputs differs from it by more than 10\%, and an INFO line when the count returns. The loop is repeated if the warning persists. On the Pathfinder the operators' script changes the mask as feeds misbehave: on 20 November 2026 it moved between 111 and 113 good inputs of 128 about every 14 minutes. The visibility files record it under \code{bad_feed_mask}. \code{tools/pathfinder_input_counts.py} reads it and prints each change, and \code{tools/calibration_length.py --input-counts} gives each channel's good inputs beside its word.
 
 %======================================================================
 \section{Checking a Run}
@@ -970,7 +972,7 @@ which is checked against the frequency map of the node. A \code{reject-all limit
 \code{dtv_fine_powers} & uint64 [1,R,3,256] & Fine powers of the bound channels. Bound channel \(i\) is in row \(i\), and \code{coarse_freq} names each row (\(-1\) for an unused row).\\ \hline
 \end{longtable}
 
-A new line in the reference bins, or under v1 and v2 a pilot that moves out of its designated set, shows in \code{dtv_powers} and in the spectrograms before the mask changes. Either one calls for a recalibration.
+Under v1 and v2, a new line in the reference bins or a pilot that moves out of its designated set shows in \code{dtv_powers} and in the spectrograms before the mask changes, and either one calls for a recalibration. Under v3 the median ignores a line in the reference until half the even bins carry lines, and a new line anywhere in the channel raises \(n_{\mathrm{peak}}\), so it shows as a rise of the masked fraction.
 
 \subsection{Spectrograms and Masked Percent}
 
@@ -980,7 +982,7 @@ pilot-proxy run-spectrogram --bundle-dir bundle \
   --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
   --channel 18 24 29 37 --output-dir spectrograms
 \end{lstlisting}
-The decision is recomputed from the fine powers and the bundle word, so the control shows what its word would remove. A block whose test is invalid counts as masked, as in \code{DtvRfiMask}. Chunks are 10 s by default (\code{--chunk-seconds}). A chunk with no kept blocks is grey. The time axis is recorded time, so a gap in the recording does not appear. The command also writes \code{masked_summary.csv} with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
+The decision is recomputed from the fine powers and the bundle's default word (\code{cfar_multiplier_q16}), not the BAO word that \code{DtvRfiMask} applies where there is one, so the control shows what its word would remove. A block whose test is invalid counts as masked, as in \code{DtvRfiMask}. Chunks are 10 s by default (\code{--chunk-seconds}). A chunk with no kept blocks is grey. The time axis is recorded time, so a gap in the recording does not appear. The command also writes \code{masked_summary.csv} with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
 
 \subsection{Run Check Tools}
 
@@ -1115,7 +1117,7 @@ Masked fraction fails in \code{test-bundle} & The test captures differ from the 
   \item A control word from simulated white noise is the lowest it can be. A real control can sit well above it, and a word from a short capture is a lower limit. The first CHIME bundle has such a word until a run with the control replaces it.
   \item \code{test-bundle} cannot show that a word catches weak pilots, since the captures do not say which blocks hold one.
   \item The detector masks only the coarse frequency that holds each pilot. A whole DTV channel is removed with the permanent-mask list of the F-engine template.
-  \item Kotekan warns when the summed inputs differ from the calibration, and does not recalibrate. A bundle without \code{summed_inputs}, such as every shipped bundle, is not checked.
+  \item Kotekan warns when the summed inputs differ from the calibration, and does not recalibrate. A bundle without \code{summed_inputs}, such as every shipped bundle or one from \code{plan-run}, is not checked.
   \item On CHIME the template has no mask path, so the detector is detect-only there.
   \item The decision covers only the DTV test, and under v1 and v2 the fine support reports only whether a block had enough bulk bins for the rank test. Packet loss and input health are handled by other Kotekan stages.
 \end{itemize}

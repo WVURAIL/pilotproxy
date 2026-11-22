@@ -908,6 +908,11 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
         if str(channel) not in predicted:
             check(f"channel {channel}", False, f"{report_path} has no prediction")
             continue
+        if "masked_interval" not in predicted[str(channel)]:
+            # a channel calibrated with no captures has a word but no masked fraction to test against
+            check(f"masked fraction on channel {channel}", False,
+                  "calibration had no captures of this channel, so it predicts no masked fraction")
+            continue
         hits = int(np.count_nonzero(words[valid] > fine_cal["cfar_multiplier_q16"]))
         trials = int(valid.sum())
         low, high = predicted[str(channel)]["masked_interval"]

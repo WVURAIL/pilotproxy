@@ -54,7 +54,7 @@ A telescope with no data starts from its parameters alone. A plan with empty cap
 }
 ```
 
-Baseband voltages work as well, as CHIME baseband HDF5 (`chime_baseband`) or Pathfinder baseband HDF5 (`chord_baseband`). The CHIME upgrade has no voltage capture path of its own yet, and `config/chime/dtv.j2` does not write fine powers yet, so its first captures come from the CHIME/FRB baseband system.
+Baseband voltages work as well, as CHIME baseband HDF5 (`chime_baseband`) or Pathfinder baseband HDF5 (`chord_baseband`). The CHIME upgrade has no voltage capture path of its own yet. Its first captures can come from the CHIME/FRB baseband system, and since kotekan#1880 `config/chime/dtv.j2` writes fine powers in calibration mode as well.
 
 Merged Pathfinder files are chunked over all their frequencies (7424 since kotekan#1884 widened the band to 150-1600 MHz, 6144 before), so a read of one channel cost about 97 s per block on cx50 at 6144. The Pathfinder receiver profile still gives the earlier science band (300-1500 MHz, channels 1536-7679) in its descriptive `science_band` field. It is left as it is, since the shipped bundles bind the profile by hash and the replay and operating-policy tools refuse a bundle whose profile hash differs. Every DTV pilot and the control lie in both bands. The channels are therefore extracted once, to a small file on `/scratch`:
 

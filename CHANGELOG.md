@@ -5,10 +5,15 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The power-limit test of `calibrate-bundle` takes only the control frames that the decision decides (keep word
+  below `MAX_SCORE`), and a word at which the control keeps no frame gets an infinite selection-shift error, so it
+  cannot pass. Both match the dissertation, and neither changes an archive outcome.
+  `power_limit_word.ratio_excess` forms the excess with the products' `pilot_excess_from_fine_powers` from the
+  weight norms, so the two agree exactly and float fine powers are refused.
 - A power-limit plan must give `curvature` for every calibrated channel and `margin` (0 where measured as none);
   `calibrate-bundle` and `plan-run` refuse a plan without them. Both used to default to zero, which on the archive
   would pass channels 21, 29 and 32 under the worst case. With the dissertation's offset differences and route
-  term, the test reproduces the dissertation's worst-case test to 3e-13 (`docs/evidence/bao_word_crosscheck_2026-11-22`).
+  term, the test reproduces the dissertation's worst-case test to 1e-13 (`docs/evidence/bao_word_crosscheck_2026-11-22`).
 - `docs/evidence/v3_timing_laptop_2026-11-21` records the v3 core timing on the laptop RTX 5000 Ada (core 4.2.0,
   no correlator load), and the DD quotes it. The deployment GPUs are not yet timed under v3.
 - `qualify-bundle` refuses a test report with no passing masked-fraction check of a calibrated channel, so a channel

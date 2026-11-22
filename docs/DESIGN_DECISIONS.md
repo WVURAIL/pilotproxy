@@ -274,13 +274,15 @@ default words exactly (`default_words_v3.json`). Bundles of v1 and v2 keep the
 knee and floor. The power-limit test reads the control at the same scale: a control
 frame counts as kept at the channel word `u` when its keep word is at most
 `floor(u / lambda_c)`, so its selection shift and the default word map the control onto
-the channel the same way. Its excess is the frame-level ratio `e = F / mu_0 - 1`, the
+the channel the same way. As in the dissertation, only the control frames that the
+decision decides enter, and a word at which the control keeps no frame has no measured
+shift, so its error is infinite and it cannot pass. Its excess is the frame-level ratio `e = F / mu_0 - 1`, the
 products' normalized pilot excess, with each channel and the control at the null level
 of its own weights. For a time it divided by `T_rho`, a median of the bin ratios away
 from the pilot (±32, then ±96 fine bins), as the dissertation did. The dissertation
-returned to the ratio on 2026-11-22: under the measured coupling, the ratio and the
-median at ±64 and ±96 each leave 8 usable channels, so the median's window, the bias
-that the pilot's skirt gives it and its setting bought nothing. The decision itself
+returned to the ratio on 2026-11-22: under the measured coupling, the median at ±32,
+±64 and ±96 left 9, 9 and 8 channels usable, against 9 for the ratio, so the median's
+window, the bias that the pilot's skirt gives it and its setting bought nothing. The decision itself
 still divides by `d_rho` over all 128 even bins.
 
 The power-limit plan has no defaults for `curvature` and `margin`. The offset
@@ -291,7 +293,7 @@ archive, a plan without them would pass channels 21, 29 and 32 under the worst c
 (least ratios 0.31, 0.14 and 0.21, against 4.2, 7.7 and 4.9; their offset differences
 are -2.6e-5, -1.5e-5 and -3.0e-5 in shelf units). With the dissertation's offset
 differences and its route term as the margin, `calibrate-bundle` reproduces the
-dissertation's worst-case test to 3e-13 on every word of channels 14 to 36
+dissertation's worst-case test to 1e-13 on every word of channels 14 to 36
 (`docs/evidence/bao_word_crosscheck_2026-11-22`).
 
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%

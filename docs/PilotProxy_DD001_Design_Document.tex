@@ -1155,7 +1155,7 @@ transform stays in \code{int32}. With \(R=128K\), the frame power obeys
 \apicode{PilotProxy_Compute_FusedFineMask_U64} & Fused launch plus the fine decision v1 epilogue. One mask per block.\\ \hline
 \apicode{PilotProxy_Compute_FusedFineMaskWithSupport_U64} & As above, plus \code{rank_valid} and \code{n_bulk}. Used by Kotekan when the support buffer is bound.\\ \hline
 \apicode{PilotProxy_Compute_FusedFineMaskV2_U64}, \apicode{PilotProxy_Compute_FusedFineMaskV2WithSupport_U64} & The same launches with the fine decision v2 epilogue.\\ \hline
-\apicode{PilotProxy_Compute_FineStatV3_U64} & Fused launch plus the v3 epilogue: the pair \([n_\text{peak},d_\rho]\) per block in \code{d_stat_out}, no mask. Arguments \code{handle}, \code{w_in}, \code{d_fine_power_out}, \code{d_stat_out}, \code{d_power_out}, \code{d_row_sums_out}.\\ \hline
+\apicode{PilotProxy_Compute_FineStatV3_U64} & Fused launch plus the v3 epilogue: the pair \([n_\text{peak},d_\rho]\) per block in \code{d_stat_out}, no mask. It takes the arguments of \code{PilotProxy_Compute_FusedFine_U64}, with \code{d_stat_out} after \code{d_fine_power_out}.\\ \hline
 \apicode{pilotproxy_v3_keep} (\code{pilotproxy_decision.h}) & Header-only v3 keep test of the consumer: 1 keep, 0 flag, \(-1\) when \(d_\rho=0\).\\ \hline
 \apicode{PilotProxy_Supports_*} & Run-time probes for each compute entry.\\ \hline
 \end{longtable}

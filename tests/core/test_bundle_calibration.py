@@ -833,6 +833,17 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     assert "power_limit_multiplier_q16" not in fine[29]
 
 
+def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plans, tmp_path):
+    # channel 29 calibrated with no captures has a word and no masked_interval; its test captures fail the check
+    plan = dict(plans["calibrate"], channels=dict(plans["calibrate"]["channels"], **{"29": []}))
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    result = run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])
+    check = next(c for c in result["checks"] if c["check"] == "masked fraction on channel 29")
+    assert not check["passed"] and "no captures" in check["detail"] and not result["passed"]
+
+
 def test_v3_shelf_reference_leaves_out_the_pilot_window():
     from pilot_proxy.power_limit_word import shelf_reference
 

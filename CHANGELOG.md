@@ -5,6 +5,8 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `test-bundle` fails the masked-fraction check of a channel calibrated with no captures, with a message, in place
+  of a KeyError on its missing `masked_interval`.
 - Under v3, the power-limit test of `calibrate-bundle` forms the shelf estimate with `T_rho` over the even bins
   farther than 32 fine bins from each channel's nominal pilot bin (95 or 96 bins, rank 47,
   `power_limit_word.shelf_reference`), and reads the control in its own window. Over all 128 even bins, the pilot
@@ -60,7 +62,7 @@ All notable changes to PilotProxy are recorded here. The project follows
 - Runtime bundles can carry fine decision v3. A `fine_decision_v3` block names no
   `bulk_mask_words_hex`, `cfar_rank` or `marker_guard_bins`, and the validator refuses them. It carries
   `cfar_multiplier_q16`, the default word, and may carry `power_limit_multiplier_q16`. `calibrate-bundle`
-  writes v3 when the plan or `--decision-version` names it: with the `power_limit` threshold the tested
+  writes v3 when the plan names it (`plan-run` and `process-run` take `--decision-version`): with the `power_limit` threshold the tested
   word becomes the power-limit word and the default word follows the knee rule. `test-bundle`, the run
   scores, the spectrogram, the capture reference and replay and the operating policy read the v3 geometry
   with `calibration_geometry`, and the operating policy checks the power-limit word. New calibrations still

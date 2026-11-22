@@ -5,6 +5,9 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The operating-policy compiler requires the consumer capability `dtv_stat_v3_v1` when the bundle holds a
+  `fine_decision_v3` profile: the consumer reads `dtv_stat` and applies the v3 words (kotekan#1924). It used to
+  ask only for the v1/v2 capabilities.
 - `test-bundle` fails the masked-fraction check of a channel calibrated with no captures, with a message, in place
   of a KeyError on its missing `masked_interval`.
 - Under v3, the power-limit test of `calibrate-bundle` forms the shelf estimate with `T_rho` over the even bins

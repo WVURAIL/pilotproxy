@@ -5,6 +5,12 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `tools/prepare_fine_validation_cache.py --channels` builds the fine-validation cache of a channel outside the
+  record campaign, such as the channel-37 control. Its case indices continue the record order (37 takes 644-671), so
+  `validate_fine_detector.engine_for` loads them unchanged. `--path-map` relocates the recorded preparation paths,
+  which stay checked by SHA256, and `--prior-preflight` names the reserved seed ledgers. The new
+  `tools/supplement_fine_campaign_plan.py` derives a sealed campaign plan for such a cache from the record plan,
+  with the record's protocol and the whole 0.75 dB level lattice in `levels_db`.
 - Under v3, the power-limit test of `calibrate-bundle` reads the control at `floor(u / s_c)`, where `s_c` is the
   channel scale of the default word, so a control frame counts as kept at the channel word `u` when its keep word
   is at most `floor(u / s_c)` (`bundle_calibration.control_words_at`). The default word and the selection shift

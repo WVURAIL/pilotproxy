@@ -36,6 +36,7 @@ def _summary_rows(report: dict[str, Any], tested: dict[str, Any], masked: dict[s
             channel=int(channel), anchor_bin=row["anchor_bin"], anchor_source=row["anchor_source"],
             nominal_bin=row["nominal_bin"], eta=round(row["eta"], 4), word_q16=row["word_q16"],
             word_source=row["word_source"], pilot_share=None if "pilot_share" not in row else round(row["pilot_share"], 3),
+            scale=row.get("scale"),
             **{f"{part}_{key}": value for part in PARTS
                for key, value in masked[part].get(int(channel), {}).items()},
             test_passed=all(c["passed"] for c in mine) if mine else None))
@@ -44,16 +45,20 @@ def _summary_rows(report: dict[str, Any], tested: dict[str, Any], masked: dict[s
 
 def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: list[dict]) -> str:
     control = next((c for c in tested["checks"] if c["check"].startswith("false alarms")), None)
+    # fine decision v3 has no search geometry, and its default word is the control word scaled to each channel
+    v3 = report.get("decision_version") == "fine_decision_v3"
+    word = "Control word" if v3 else "Floor"
     lines = [f"# Run {epoch}", "",
-             f"Test {'PASSED' if tested['passed'] else 'FAILED'}. Floor eta {report['floor_eta']:.4f} "
+             f"Test {'PASSED' if tested['passed'] else 'FAILED'}. {word} eta {report['floor_eta']:.4f} "
              f"from the {report['floor_source']}.",
              f"Control: {control['detail'] if control else 'no check'}.", "",
-             "| Channel | Anchor | Eta | Word from | Pilot share | Masked, calibrate | Masked, test "
-             "| Longest masked, s | Test |",
+             f"| Channel | {'Scale' if v3 else 'Anchor'} | Eta | Word from | Pilot share | Masked, calibrate "
+             "| Masked, test | Longest masked, s | Test |",
              "|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
-        anchor = f"{r['anchor_bin']} ({r['anchor_source']}" + (
-            f", nominal {r['nominal_bin']})" if r["anchor_bin"] != r["nominal_bin"] else ")")
+        anchor = (f"{r['scale']:.4f}" if r.get("scale") is not None else "-") if v3 else (
+            f"{r['anchor_bin']} ({r['anchor_source']}" + (
+                f", nominal {r['nominal_bin']})" if r["anchor_bin"] != r["nominal_bin"] else ")"))
         test = {True: "pass", False: "FAIL", None: "-"}[r["test_passed"]]
         lines.append(f"| {r['channel']} | {anchor} | {r['eta']} | {r['word_source']} | {r['pilot_share']} "
                      f"| {r.get('calibrate_masked_percent', '-')}% | {r.get('test_masked_percent', '-')}% "
@@ -65,10 +70,12 @@ def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: 
         tested = report["power_limit"]
         none = ", ".join(str(c) for c in tested["no_passing_word"]) or "none"
         lines += ["", f"Threshold: power limit, against {tested['experiment']}. Channels with no passing word: {none}. "
-                  "The operating policy masks these whole, and the bundle holds the floor on them. A power-limit word "
+                  f"The operating policy masks these whole, and the bundle holds the {'default word' if v3 else 'floor'} "
+                  "on them. A power-limit word "
                   "is in-sample, and it needs a test on independent data before it masks."]
-    lines += ["", "A word from the knee or the floor is only as good as the run behind it. Read each channel's "
-              "spectrograms under spectrograms/ before the bundle is used."]
+    source = "the control behind it" if v3 else "the run behind it"
+    lines += ["", f"A word from the {'control' if v3 else 'knee or the floor'} is only as good as {source}. "
+              "Read each channel's spectrograms under spectrograms/ before the bundle is used."]
     return "\n".join(lines) + "\n"
 
 

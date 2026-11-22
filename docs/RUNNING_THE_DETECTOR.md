@@ -86,11 +86,11 @@ Calibration and testing use different epochs, at different times of day. The nul
 pilot-proxy calibrate-bundle --plan calibrate.json --output-dir bundle
 ```
 
-Paths to profiles are relative to the plan, and capture lists take glob patterns such as `"/scratch/dtv/run1/dtv_fine_powers*.h5"`. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first word. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, and a capture with the pilot on should replace it before its BAO word is trusted.
+Paths to profiles are relative to the plan, and capture lists take glob patterns such as `"/scratch/dtv/run1/dtv_fine_powers*.h5"`. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first word. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, and a capture with the pilot on should replace it before its BAO word is trusted. Under v3 the anchor search only decides whether the pilot was seen, and a `nominal` channel gets no BAO word (`pilot not seen`). It counts the frames whose keep word passes the channel's default word, and a v3 keep word takes every bin, so a line anywhere in the channel counts as well.
 
-The report gives `word_source` for each channel: `control word x scale` for the default word of a v3 bundle, `power limit` for a BAO word, or `plan`. It also gives `control_quantile_q16`, `reference_level`, and each channel's `mu0`, `passband_factor` and `scale`. The default word needs no captures of the channel, so a first bundle from a short control capture already holds it on every channel, which is enough for a detect-only run. `pilot_share` estimates the share of frames with a pilot. For a v1 or v2 bundle, the word is the knee when the pilot was seen in at least 30 captures, in at most 90% of the frames, and the knee lies above the floor, and otherwise the floor; `knee_word_q16` and `knee_interval_q16` report it.
+The report gives `word_source` for each channel's default word: `control word x scale` under v3, or `plan`. The BAO word of a v3 channel is kept apart, in `power_limit_word_q16` with `power_limit_word_source` `power limit`, or `null` with `none, power limit: <reason>` for a channel with no passing word. It also gives `control_quantile_q16`, `reference_level`, and each channel's `mu0`, `passband_factor` and `scale`. The default word needs no captures of the channel, so a first bundle from a short control capture already holds it on every channel, which is enough for a detect-only run. `pilot_share` estimates the share of frames with a pilot. For a v1 or v2 bundle, the word is the knee when the pilot was seen in at least 30 captures, in at most 90% of the frames, and the knee lies above the floor, and otherwise the floor; `knee_word_q16` and `knee_interval_q16` report it.
 
-Plan keys replace a measured value. `"word_q16"` sets the word of every channel, `"words": {"29": 165551}` sets the word of one channel, and `"default_word": {"passband_factor": {"29": 1.004}}` sets the passband factor of the default word. A word belongs to its test and its weights, so a word moved from another record must come with its decision version and weights. For a v1 or v2 bundle, `"anchors": {"29": 202}` sets an anchor, and a word moved from another record must also come with its anchor, search and reference bins.
+Plan keys replace a measured value. `"word_q16"` sets the word of every channel, `"words": {"29": 165551}` sets the word of one channel, and `"default_word": {"passband_factor": {"29": 1.004}}` sets the passband factor of the default word. A word belongs to its test and its weights, so a word moved from another record must come with its decision version and weights. `"anchors": {"29": 202}` sets an anchor: for a v1 or v2 bundle it places the search, and under v3 it passes the pilot-seen gate of the BAO test. For a v1 or v2 bundle, and a word moved from another record must also come with its anchor, search and reference bins.
 
 
 ### Choosing the threshold
@@ -101,7 +101,7 @@ A plan takes one of two thresholds. `"threshold": "knee"`, the default, gives ea
 f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0)
 ```
 
-With the RFIsher table and limits of the BAO forecast, this is the BAO acceptance test, and its word is the BAO threshold. The kept mean excess `e(u)` and its error `s` come from the same fine powers as the default word. The null `o` and the selection shift `delta(u)` are measured on the control; under v3 the control frames kept at a channel's word `u` are those with keep word at most `floor(u / s_c)`, with `s_c` the scale of the default word, so this plan needs a recorded control. Under v3 the excess divides by `T_rho`, the median of the bin ratios over the even bins farther than 32 fine bins from the nominal pilot bin (95 or 96 bins, rank 47), and the control is read in its own window, since the pilot and its nearby lines would raise `T_rho` over all 128 even bins and bias the kept excess low. The report gives `shelf_reference`. The plan names the rest:
+With the RFIsher table and limits of the BAO forecast, this is the BAO acceptance test, and its word is the BAO threshold. The kept mean excess `e(u)` and its error `s` come from the same fine powers as the default word. The null `o` and the selection shift `delta(u)` are measured on the control; under v3 the control frames kept at a channel's word `u` are those with keep word at most `floor(u / lambda_c)`, with `lambda_c` the scale of the default word, so this plan needs a recorded control. Under v3 the excess divides by `T_rho`, the median of the bin ratios over the even bins farther than 32 fine bins from the nominal pilot bin (95 or 96 bins, rank 47), and the control is read in its own window, since the pilot and its nearby lines would raise `T_rho` over all 128 even bins and bias the kept excess low. The report gives `shelf_reference`. The plan names the rest:
 
 ```json
 {
@@ -118,7 +118,7 @@ With the RFIsher table and limits of the BAO forecast, this is the BAO acceptanc
 
 `table` is the RFIsher channel table of this telescope, which supplies `power_scale`, and `limits` gives each channel's checked power limit in mK². These two are required, and a table of another telescope gives a wrong word. `coupling` is the fraction `f` of the kept shelf power that reaches the map, and a channel with none takes 1, the worst case. `curvature` is the passband curvature left between the pilot position and the control position, with its standard error, and `margin` is added to the upper estimate. Both are in units of the shelf estimate and default to zero. A word must keep at least 30 captures (`min_captures`).
 
-A channel with a passing word carries it, with `word_source` `power limit`. A channel with no passing word holds the default word in the bundle, and the operating policy masks it whole. `bundle.decisions.json` records each outcome in the form that `compile-operating-policy` reads ([CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)), and the report keeps the default word of each channel beside its test. The control is tested with no corrections, as a check on the run.
+Under v3, a channel with a passing word carries it as `power_limit_multiplier_q16` beside its default word (`power_limit_word_source` `power limit`). A channel with no passing word, or with no captures, carries only its default word, and the operating policy masks it whole. Under v1 and v2 the passing word is the channel's word, with `word_source` `power limit`. `bundle.decisions.json` records each outcome in the form that `compile-operating-policy` reads ([CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)), and the report keeps the default word of each channel beside its test. The control is tested with no corrections, as a check on the run.
 
 The test bounds the bias of the residual at the given `f`. It does not test a residual that enters as noise. Its word is in-sample, so it is tested on later data before it masks. This threshold holds the control in memory beside each channel, about 13 GB more for a day.
 
@@ -197,7 +197,7 @@ dtv_write_enabled: false
 dtv_calibration_mode: true
 ```
 
-Without `dtv_calibration_mode` only the mask is sent. With it, the powers, fine support and fine powers are sent too, and both templates must be rendered with the same value. The mask and recording switches start from the values above, and either is changed over REST until the next restart:
+Without `dtv_calibration_mode` only the mask is sent, and with kotekan#1924 `dtv_stat` as well (port 11039), in every mode. With it, the powers, fine support and fine powers are sent too, and both templates must be rendered with the same value. The mask and recording switches start from the values above, and either is changed over REST until the next restart:
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true, "valid_at_time_ns": 0}' <node>:12048/dtv_mask_enabled
@@ -257,7 +257,7 @@ dtv_write_enabled: true
 dtv_output_dir: /scratch/dtv
 ```
 
-The bundle profiles must use `chime_freq_id`, and the voltage metadata must carry the 16 `coarse_freq` values of each domain. There is no REST switch, so the detector runs and writes from startup. The detector drops the inputs flagged by `bufferBadInputs` and writes only the mask unless `dtv_calibration_mode` is set, which adds the powers, fine support and fine powers as on CHORD. The first bundle is `chime-first-56005bb7` (kotekan#1880).
+The bundle profiles must use `chime_freq_id`, and the voltage metadata must carry the 16 `coarse_freq` values of each domain. There is no REST switch, so the detector runs and writes from startup. The detector drops the inputs flagged by `bufferBadInputs` and writes only the mask (and with kotekan#1924 `dtv_stat` beside it) unless `dtv_calibration_mode` is set, which adds the powers, fine support and fine powers as on CHORD. The first bundle is `chime-first-56005bb7` (kotekan#1880).
 
 ### Checking a run
 
@@ -282,7 +282,7 @@ The decision is recomputed from the fine powers and the bundle word, so the cont
 
 The same command writes `masked_summary.csv`, with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
 
-`--threshold power_limit` sets the word of the BAO acceptance test in the bundle (Step 2). To study the sweep of a channel by itself, `run-scores` writes the score cache of the threshold rule: each frame's smallest keeping word, its frame powers and its 10 s event. It reads the files once, and `--jobs` scores them in parallel:
+The `power_limit` threshold (the plan key `threshold`, or `--threshold power_limit` of `plan-run` and `process-run`) sets the word of the BAO acceptance test in the bundle (Step 2). To study the sweep of a channel by itself, `run-scores` writes the score cache of the threshold rule: each frame's smallest keeping word, its frame powers and its 10 s event. It reads the files once, and `--jobs` scores them in parallel:
 
 ```bash
 pilot-proxy run-scores --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --channel 18 24 29 --jobs 32 --output-dir scores

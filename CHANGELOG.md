@@ -5,6 +5,13 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `qualify-bundle` refuses a test report with no passing masked-fraction check of a calibrated channel, so a channel
+  the test plan left out is not qualified untested.
+- Under v3, the pilot-seen gate of `calibrate-bundle` counts the frames whose keep word passes the channel's default
+  word, not the unscaled control word, so a channel with a scale above 1 no longer reads its noise as the pilot. A
+  channel with no captures in a power-limit plan gets a `not useful` decision (`no captures`), so the operating
+  policy masks it whole.
+- The scale of the v3 default word is written `lambda_c` in the docs, as in the dissertation.
 - The operating-policy compiler requires the consumer capability `dtv_stat_v3_v1` when the bundle holds a
   `fine_decision_v3` profile: the consumer reads `dtv_stat` and applies the v3 words (kotekan#1924). It used to
   ask only for the v1/v2 capabilities.
@@ -26,9 +33,9 @@ All notable changes to PilotProxy are recorded here. The project follows
   which stay checked by SHA256, and `--prior-preflight` names the reserved seed ledgers. The new
   `tools/supplement_fine_campaign_plan.py` derives a sealed campaign plan for such a cache from the record plan,
   with the record's protocol and the whole 0.75 dB level lattice in `levels_db`.
-- Under v3, the power-limit test of `calibrate-bundle` reads the control at `floor(u / s_c)`, where `s_c` is the
+- Under v3, the power-limit test of `calibrate-bundle` reads the control at `floor(u / lambda_c)`, where `lambda_c` is the
   channel scale of the default word, so a control frame counts as kept at the channel word `u` when its keep word
-  is at most `floor(u / s_c)` (`bundle_calibration.control_words_at`). The default word and the selection shift
+  is at most `floor(u / lambda_c)` (`bundle_calibration.control_words_at`). The default word and the selection shift
   then map the control onto the channel the same way, as the dissertation's v3 rerun does. The null of the control
   (all its frames) is unchanged, and the report gives `control_word_scale` with the corrections.
 - The v3 default word of `calibrate-bundle` is the control's word at `null_quantile` (99%), from its exact keep
@@ -66,7 +73,7 @@ All notable changes to PilotProxy are recorded here. The project follows
   `bulk_mask_words_hex`, `cfar_rank` or `marker_guard_bins`, and the validator refuses them. It carries
   `cfar_multiplier_q16`, the default word, and may carry `power_limit_multiplier_q16`. `calibrate-bundle`
   writes v3 when the plan names it (`plan-run` and `process-run` take `--decision-version`): with the `power_limit` threshold the tested
-  word becomes the power-limit word and the default word follows the knee rule. `test-bundle`, the run
+  word becomes the power-limit word, and the default word is written beside it. `test-bundle`, the run
   scores, the spectrogram, the capture reference and replay and the operating policy read the v3 geometry
   with `calibration_geometry`, and the operating policy checks the power-limit word. New calibrations still
   write v2 until Kotekan runs v3.
@@ -82,7 +89,7 @@ All notable changes to PilotProxy are recorded here. The project follows
   `PilotProxy_Compute_FusedFineMaskV2_U64` and its `WithSupport` form, and
   `final_score_arrays` takes `decision_version=2`. Fine decision v1, the bundles and the
   detector contract are unchanged.
-- `calibrate-bundle`, `plan-run` and `process-run` take a threshold choice. `knee` is
+- `calibrate-bundle` (the plan key `threshold`), `plan-run` and `process-run` (`--threshold`) take a threshold choice. `knee` is
   the default. `power_limit` gives each channel the word that keeps the most frames
   under a checked residual power, the BAO acceptance test with the RFIsher table. It
   uses the same fine powers, measures the null and the selection shift on the control,

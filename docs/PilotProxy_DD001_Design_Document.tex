@@ -604,7 +604,7 @@ and \code{--output-dir}. Under v3:
         the frames are simulated white noise over \code{num_inputs} streams,
         with null level 1, and the word is only a first guess.
   \item \textbf{Default word.} The control word times the channel scale
-        \(s_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16, written
+        \(\lambda_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16, written
         as \code{cfar_multiplier_q16}. \(\mu_0\) comes from the stored weights
         (\code{null_level}). \(g=1+o/C\) is the passband factor of the
         line-free offset \(o\) at the pilot, from the optional plan block
@@ -623,7 +623,7 @@ and \code{--output-dir}. Under v3:
         \code{power_limit_multiplier_q16}. The null and the selection shift
         are measured on the control. A control frame counts as kept at the
         channel word \(u\) when its keep word is at most
-        \(\lfloor u/s_c\rfloor\), so the default word and the power-limit
+        \(\lfloor u/\lambda_c\rfloor\), so the default word and the power-limit
         corrections map the control onto the channel the same way. The
         excess divides by \(T_\rho\), the median of the bin ratios over the
         even bins farther than 32 fine bins from the nominal pilot bin (95 or
@@ -826,7 +826,7 @@ kotekan\#1924 merges, and until then new bundles are v2.}
 \subsection{The default word is the control's 1\% word}
 \choice{Under v3, the default word is the word of the control channel (37)
 at \code{null_quantile} (0.99) of its exact keep words, times the channel
-scale \(s_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16
+scale \(\lambda_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16
 (Section~\ref{ssec:calibration}). It replaces the knee, a rule on the shape
 of the kept-fraction curve with a floor and a switch at a 90\% pilot share.
 v1 and v2 bundles keep the knee and floor.}

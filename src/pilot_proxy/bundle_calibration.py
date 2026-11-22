@@ -399,10 +399,15 @@ def _weights(row: dict[str, Any], bank: bytes) -> bytes:
     return bank[offset:offset + int(row["weight_bank_nbytes"])]
 
 
+def weight_norms(weights: bytes) -> tuple[int, int]:
+    """Return the exact squared norms (|w_t|^2, |w_lo|^2 + |w_up|^2) of a channel's packed weights."""
+    target, lower, upper = weight_term_norms_sq(np.frombuffer(weights, dtype=np.int8).reshape(3, -1))
+    return target, lower + upper
+
+
 def null_level(weights: bytes) -> float:
     """Return mu_0 = 2 |w_t|^2 / (|w_lo|^2 + |w_up|^2), the null level that a channel's weights give its fine ratio."""
-    target, lower, upper = weight_term_norms_sq(np.frombuffer(weights, dtype=np.int8).reshape(3, -1))
-    return null_power_ratio_from_weight_norms(target, lower + upper)
+    return null_power_ratio_from_weight_norms(*weight_norms(weights))
 
 
 def scaled_word(quantile_q16: float, scale: float) -> int:
@@ -560,32 +565,34 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
 
 def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: np.ndarray, control, *, anchor: int,
                  bulk: np.ndarray, rank: int, inputs: dict[str, Any], decision_version: str,
-                 mu0: float, control_mu0: float | None = None, control_scale: float = 1.0) -> dict[str, Any]:
+                 norms: tuple[int, int], control_scale: float = 1.0) -> dict[str, Any]:
     """Return the power-limit test of one channel. The control is read with no corrections, as `control=None`.
 
-    The excess is the ratio F / mu_0 - 1, with `mu0` the null level of the channel and `control_mu0` that of the
-    control. Under v3 the control is read at floor(u / lambda_c), where lambda_c = `control_scale` is the scale of
-    the default word.
+    `control` holds the fine powers, captures and weight norms of the control channel, and `norms` are the weight
+    norms of this one. The excess of each is the ratio F / mu_0 - 1 at its own null level. Under v3 the control is
+    read at floor(u / lambda_c), where lambda_c = `control_scale` is the scale of the default word.
     """
     from pilot_proxy.characterization import threshold_rule
 
     if channel not in inputs["rows"] or channel not in inputs["limits"]:
         raise ValueError(f"channel {channel} needs a row in the response table and a checked power limit")
     shelf = inputs["shelf"]
-    excess = ratio_excess(fines, mu0)
+    excess = ratio_excess(fines, norms)
     good = (seen >= 0) & np.isfinite(excess)
     sweep = threshold_rule.sweep(threshold_rule.ChannelFrames(
         channel, np.where(good, seen, 0).astype(np.uint64), capture_weights(captures), good, captures,
         np.where(good, excess, 0.0)), shelf=shelf)
     offset, shift, margin, measured = 0.0, 0.0, 0.0, None
     if control is not None:
-        words = required_words(control[0], anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision_version)
-        control_excess = ratio_excess(control[0], control_mu0)
-        good = (words >= 0) & np.isfinite(control_excess)
+        control_fines, control_captures, control_norms = control
+        words = required_words(control_fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision_version)
+        control_excess = ratio_excess(control_fines, control_norms)
+        # decided frames only, as in the dissertation: a frame masked at every word (MAX_SCORE) is no null sample
+        good = (words >= 0) & (words < MAX_SCORE) & np.isfinite(control_excess)
         if not good.any():
             raise ValueError(f"the control has no supported frames under the geometry of channel {channel}")
         at = control_words_at(sweep["word"].astype(np.int64), control_scale)
-        measured = control_corrections(words[good], control_excess[good], control[1][good], at)
+        measured = control_corrections(words[good], control_excess[good], control_captures[good], at)
         curvature, curvature_se = inputs["curvature"].get(channel, (0.0, 0.0))
         offset = shelf * measured["null"] + curvature
         shift = shelf * measured["shift"]
@@ -594,14 +601,14 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
     result = limit_test(sweep, shelf=shelf, power_scale=threshold_rule.power_scale(inputs["table"], channel),
                       power_limit=inputs["limits"][channel], coupling=coupling, offset=offset, shift=shift, margin=margin,
                       min_captures=inputs["min_captures"])
-    result.update(estimate="ratio, F / mu_0 - 1", mu0=float(mu0),
+    result.update(estimate="ratio, F / mu_0 - 1", mu0=null_power_ratio_from_weight_norms(*norms),
                   coupling_source="plan" if channel in inputs["coupling"] else "worst case",
                   corrections="none, the control itself" if measured is None else dict(
                       null=shelf * measured["null"], null_se=shelf * measured["null_se"],
                       curvature=inputs["curvature"].get(channel, (0.0, 0.0))[0],
                       curvature_source="plan" if channel in inputs["curvature"] else "not given",
                       control_frames=measured["frames"], control_captures=measured["captures"],
-                      control_mu0=float(control_mu0), control_word_scale=control_scale))
+                      control_mu0=null_power_ratio_from_weight_norms(*control_norms), control_word_scale=control_scale))
     if measured is not None and result["outcome"] == "useful":
         at = int(np.searchsorted(sweep["word"], np.uint64(result["word"])))
         result["corrections"].update(selection_shift=float(shift[at]), selection_shift_se=float(shelf * measured["shift_se"][at]))
@@ -647,9 +654,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             anchor = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             bulk, control_rank = _geometry(anchor, (), decision)
             fines, control_captures = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
+            control_weights = _weights(row, bank)
+            control_norms = weight_norms(control_weights)
             # the corrections of the power-limit test read the control again under the words of each channel
-            control_frames = (fines, control_captures) if inputs else None
-            control_mu0 = null_level(_weights(row, bank))
+            control_frames = (fines, control_captures, control_norms) if inputs else None
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
                 null_scores(fines[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=control_rank,
@@ -657,12 +665,12 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 for lo in range(0, len(fines), NULL_CHUNK)])
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=control_rank,
-                                  weights_hex=_weights(row, bank).hex(), frames=len(fines),
+                                  weights_hex=control_weights.hex(), frames=len(fines),
                                   captures=[str(Path(p).resolve()) for p in _expand(control["captures"])])
             source = "control channel"
         else:
             scores = simulated_null_scores(int(plan["num_inputs"]), decision_version=decision)
-            control_record, control_mu0 = None, None
+            control_record = None
             source = f"white noise, {int(plan['num_inputs'])} inputs"
         # v3 searches every bin, so a frame holds one independent null score, not clear_searches()
         per_frame = 1 if decision == FINE_DECISION_V3_VERSION else clear_searches()
@@ -676,7 +684,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             exact = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=control_rank, decision_version=decision)
             exact = exact[(exact >= 0) & (exact < MAX_SCORE)]
             quantile_q16 = float(np.quantile(exact.astype(np.float64), quantile))
-            reference_level = null_level(_weights(row, bank)) * factors.get(int(control["channel"]), 1.0)
+            reference_level = null_power_ratio_from_weight_norms(*control_norms) * factors.get(int(control["channel"]), 1.0)
         elif v3:
             # white noise through ideal weights has the null level 1
             quantile_q16, reference_level = float(np.quantile(scores, quantile)), 1.0
@@ -690,13 +698,14 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         values = {}
         for channel in channels:
             row = rows[channel]
+            norms = weight_norms(_weights(row, bank))
             nominal = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             paths = plan["channels"][str(channel)]
             excluded = plan.get("exclude_bins", {}).get(str(channel), [])
             scaling = {}
             if v3:
                 # v3's default word: the control's 1% word scaled to the null level of this channel
-                level = null_level(_weights(row, bank))
+                level = null_power_ratio_from_weight_norms(*norms)
                 factor = factors.get(channel, 1.0)
                 scale = level * factor / reference_level
                 default = floor if "word_q16" in plan else scaled_word(quantile_q16, scale)
@@ -771,8 +780,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             if inputs and (not is_control or (channel in inputs["rows"] and channel in inputs["limits"])):
                 tested = _limit_channel(channel, fines, captures, seen, None if is_control else control_frames,
                                       anchor=anchor, bulk=bulk, rank=rank, inputs=inputs, decision_version=decision,
-                                      mu0=null_level(_weights(row, bank)), control_mu0=control_mu0,
-                                      control_scale=scaling.get("scale", 1.0))
+                                      norms=norms, control_scale=scaling.get("scale", 1.0))
                 if origin == "nominal" and not is_control:
                     # with no pilot in the run the estimate reads only noise, which is no pass
                     tested = dict({key: value for key, value in tested.items() if key not in PASSING_FIELDS},

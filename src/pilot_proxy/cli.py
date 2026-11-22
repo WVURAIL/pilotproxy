@@ -690,7 +690,9 @@ def _cmd_validate_runtime_weight_bundle(args: argparse.Namespace) -> None:
 
 def _add_threshold_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--threshold", choices=THRESHOLDS, default="knee",
-                        help="Word of each channel: its knee, or the word that keeps the most frames under a checked power limit.")
+                        help="Word of each channel. knee: the default word, the knee for v1 and v2 and the control's 1%% word "
+                             "scaled to the channel for v3. power_limit: the word that keeps the most frames under a "
+                             "checked power limit.")
     parser.add_argument("--power-limit", type=Path, default=None,
                         help="For --threshold power_limit: JSON naming the response table and the checked power limits.")
     parser.add_argument("--decision-version", choices=FINE_DECISION_VERSIONS, default=None,

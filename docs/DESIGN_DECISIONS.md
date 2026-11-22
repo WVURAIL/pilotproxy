@@ -228,7 +228,7 @@ cadence, and the decision epilogue adds 0.127 ms of this.
 
 ## Fine decision v3 publishes the statistic, and each consumer decides
 
-Fine decision v3 (core 4.1) keeps the arithmetic of v2 and changes two things.
+Fine decision v3 (core 4.1, 4.2) keeps the arithmetic of v2 and changes three things.
 
 The reference `d_rho` is the median of the reference powers `S_l[b] + S_u[b]`
 over the 128 even fine bins, rank 63, with no bulk mask, guard, census list or
@@ -240,14 +240,17 @@ bins carry them, so no bin is excluded. Zero reference powers count, and a
 frame whose median is zero (lost packets or every input flagged) has no
 decision.
 
-The kernel writes the pair `[n_peak, d_rho]`, where `n_peak` is the largest
-`2 S_t[b]` of the search, in place of a mask. Each consumer applies its own Q16
+The peak `n_peak` is the largest `2 S_t[b]` of all 256 fine bins (core 4.2).
+v3 has no anchor or search width, so a line is found wherever it falls in the
+channel, and the padded bins cut the worst scalloping from 3.9 dB to 0.9 dB. A
+v3 bundle block carries only its words.
+
+The kernel writes the pair `[n_peak, d_rho]` in place of a mask. Each consumer applies its own Q16
 word with `pilotproxy_v3_keep` in `cuda/pilotproxy_decision.h`: it keeps when
 `n_peak * 2^16 <= word * d_rho`, formed exactly in 128 bits, and returns 1 to
 keep and 0 to flag, as Kotekan's RFI mask does. `fine_keep_v3` is its Python
-counterpart. On the same frames, the pair and this test give exactly the v2
-mask over the even bins at rank 63 (`tests/kernel/test_fine_stat_gpu.py`), so
-the split itself changes no decision.
+counterpart. The GPU pair and this test agree with the Python reference at
+every keep boundary (`tests/kernel/test_fine_stat_gpu.py`).
 
 The threshold belongs to the consumer because the backends tolerate different
 residuals. N2 needs the strict word that the power-limit test sets, and the FRB

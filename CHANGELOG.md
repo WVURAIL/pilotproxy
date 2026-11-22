@@ -5,6 +5,10 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Removed files nothing used: the v1-geometry rescoring CLI `detectors/narrowband_marker/rescore.py` and its
+  tests, `scripts/check_scan.py`, three SDR tools (`audit_sdr_streaming_throughput.py`,
+  `benchmark_sdr_upgrade_streaming.py`, `plot_sdr_antenna_controls.py`) and the two standalone figure wrappers.
+  `tests/data/removed_paths.txt` names the last commit that holds each.
 - `bundle_calibration.null_level` is removed. `bundle_calibration.weight_norms` gives a channel's weight norms, and
   `detector_contract.null_power_ratio_from_weight_norms` their null level `mu_0`.
 - The power-limit test of `calibrate-bundle` takes only the control frames that the decision decides (keep word

@@ -412,9 +412,9 @@ def scaled_word(quantile_q16: float, scale: float) -> int:
 
 
 def control_words_at(words: np.ndarray, scale: float) -> np.ndarray:
-    """Return the control keep word that a channel word maps to, floor(u / s_c), as the v3 default word scales it.
+    """Return the control keep word that a channel word maps to, floor(u / lambda_c), as the v3 default word scales it.
 
-    A control frame is kept at the channel word u when its keep word is at most floor(u / s_c), so the default
+    A control frame is kept at the channel word u when its keep word is at most floor(u / lambda_c), so the default
     word and the control corrections of the power-limit test map the control onto the channel the same way.
     """
     words = np.asarray(words, dtype=np.int64)
@@ -555,7 +555,7 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
                  control_reference: tuple[np.ndarray, int] | None = None) -> dict[str, Any]:
     """Return the power-limit test of one channel. The control is read with no corrections, as `control=None`.
 
-    Under v3 the control is read at floor(u / s_c), where s_c = `control_scale` is the scale of the default word, and
+    Under v3 the control is read at floor(u / lambda_c), where lambda_c = `control_scale` is the scale of the default word, and
     the shelf estimates divide by T_rho over `reference` (the channel) and `control_reference` (the control), the
     even bins clear of each one's nominal pilot. Without them the estimate takes the decision's bulk and rank.
     """
@@ -713,6 +713,17 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 report_channels[str(channel)] = dict(
                     anchor_bin=anchor, anchor_source="nominal", nominal_bin=nominal, frames=0, captures=0,
                     word_q16=word, eta=word / Q16, word_source=word_source, **scaling)
+                is_control = bool(control) and channel == int(control["channel"])
+                if inputs and not is_control and channel in inputs["rows"] and channel in inputs["limits"]:
+                    # no captures, so no power-limit word: the decision masks the channel whole
+                    from pilot_proxy.characterization import threshold_rule
+                    report_channels[str(channel)].update(
+                        power_limit=dict(outcome="not useful", reason="no captures",
+                                         power_limit=inputs["limits"][channel],
+                                         power_scale=threshold_rule.power_scale(inputs["table"], channel),
+                                         coupling=inputs["coupling"].get(channel, 1.0)),
+                        **({"power_limit_word_q16": None, "power_limit_word_source": "none, power limit: no captures"}
+                           if v3 else {}))
                 continue
             fines, captures = _load_fines(paths, fmt, row, bank, k, reverse, max_frames)
             window = (nominal + np.arange(-WINDOW_HALF_WIDTH, WINDOW_HALF_WIDTH + 1)) % FINE_BINS
@@ -722,7 +733,11 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             given = plan.get("anchors", {}).get(str(channel))
             bulk, rank = _geometry(anchor, excluded, decision)
             seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
-            hits = int(np.count_nonzero(seen > floor))
+            # the pilot is seen when more frames than the null allows pass the channel's own null word: the floor,
+            # or under v3 the default word, the control word scaled to this channel. A v3 keep word takes every bin,
+            # so a line anywhere in the channel counts as well.
+            gate = default if v3 else floor
+            hits = int(np.count_nonzero(seen > gate))
             fraction = hits / seen.size
             measured = binomial_upper_tail(hits, seen.size, 1.0 - quantile) < MAX_LINE_TAIL
             peak = float(np.median(fine_ratio(fines[:, :, [anchor]])))
@@ -740,8 +755,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             knee = None if v3 else knee_word(seen[supported], capture_weights(captures)[supported])
             weights = capture_weights(captures[supported])
             at_floor = float(np.sum(weights[seen[supported] > floor]))
-            # share of frames with a pilot, less the clean frames the floor masks
-            share = (at_floor - (1.0 - quantile)) / quantile
+            # share of frames with a pilot, less the clean frames the channel's null word masks
+            at_gate = at_floor if gate == floor else float(np.sum(weights[seen[supported] > gate]))
+            share = (at_gate - (1.0 - quantile)) / quantile
             given_word = plan.get("words", {}).get(str(channel))
             count = int(np.unique(captures).size)
             is_control = bool(control) and channel == int(control["channel"])
@@ -938,7 +954,10 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
         check("false alarms on the control channel", tail >= MIN_TAIL,
               f"{hits} of {words.size} frames masked, target {rate:.3f}, tail probability {tail:.2g}")
     elif plan.get("control"):
-        check("false alarms on the control channel", False, f"{report_path} is missing")
+        # the report may exist with no control record, when calibration simulated the control
+        check("false alarms on the control channel", False,
+              f"{report_path} has no control record, since calibration simulated it" if Path(report_path).exists()
+              else f"{report_path} is missing")
     else:
         # without the control only the masked fractions are tested, and they pass a floor set too low
         check("false alarms on the control channel", False, "the test plan has no control")
@@ -990,6 +1009,7 @@ def qualify_bundle(*, bundle_dir: Path, test_report: Path, reviewer: str, output
         raise ValueError(f"{bundle_dir} failed validation: {validation['errors']}")
     bundle = json.loads((bundle_dir / "pilot_profiles.json").read_text())
     record = dict(test_report_sha256=_sha256_text(report_bytes), reviewer=reviewer.strip())
+    tested = {c["check"] for c in report["checks"] if c["passed"]}
     qualified = []
     for row in bundle["profiles"]:
         calibration = row["fine_calibration"]
@@ -997,6 +1017,10 @@ def qualify_bundle(*, bundle_dir: Path, test_report: Path, reviewer: str, output
             continue
         if calibration["status"] != "calibrated":
             raise ValueError(f"channel {row['physical_channel']} has status {calibration['status']}")
+        # a channel the test plan left out was never tested, so it is not qualified
+        if f"masked fraction on channel {row['physical_channel']}" not in tested:
+            raise ValueError(f"{test_report} has no passing masked-fraction check of channel {row['physical_channel']}; "
+                             "test it on captures of its own, or leave it out of the bundle")
         calibration["provenance"]["mask_qualification"] = dict(record)
         qualified.append(int(row["physical_channel"]))
     output_dir.mkdir(parents=True)

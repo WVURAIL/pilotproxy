@@ -706,7 +706,7 @@ The anchor starts at the nominal fine bin of the pilot. Calibration looks within
 \subsubsection{Word}
 \label{sec:word}
 
-Under v3, the report gives \code{word_source} \code{control word x scale} for the default word: the control's word at \code{null_quantile}, from the exact keep words of its frames, times the channel scale \(s_c = \mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16. \(\mu_0\) is the null level of the stored weights, and \(g\) the passband factor of the plan's \code{default_word} block. A word from \code{words} or \code{word_q16} gives \code{plan}. The default word does not depend on the channel's own pilot, so a channel with a pilot in nearly every frame is masked whenever the pilot is seen. A frame mask recovers little of such a channel.
+Under v3, the report gives \code{word_source} \code{control word x scale} for the default word: the control's word at \code{null_quantile}, from the exact keep words of its frames, times the channel scale \(\lambda_c = \mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16. \(\mu_0\) is the null level of the stored weights, and \(g\) the passband factor of the plan's \code{default_word} block. A word from \code{words} or \code{word_q16} gives \code{plan}. The default word does not depend on the channel's own pilot, so a channel with a pilot in nearly every frame is masked whenever the pilot is seen. A frame mask recovers little of such a channel.
 
 The BAO word is kept apart, in \code{power_limit_word_q16}, with \code{power_limit_word_source} \code{power limit}, or \code{none, power limit: <reason>} for a channel with no passing word (Section~\ref{sec:threshold}).
 
@@ -735,7 +735,7 @@ Every capture has equal total weight in the knee, so a long capture does not set
 \pfield{control} & The control record: channel, weights, captures, and the reference it was scored with. \code{test-bundle} uses it.\\ \hline
 \pfield{calibration_captures} & Every capture used, as an absolute path.\\ \hline
 \pfield{channels.<ch>.word_q16}, \pfield{eta}, \pfield{word_source} & The default word and its source.\\ \hline
-\pfield{channels.<ch>.mu0}, \pfield{passband_factor}, \pfield{scale} & v3 only. The channel's null level, passband factor, and scale \(s_c\).\\ \hline
+\pfield{channels.<ch>.mu0}, \pfield{passband_factor}, \pfield{scale} & v3 only. The channel's null level, passband factor, and scale \(\lambda_c\).\\ \hline
 \pfield{channels.<ch>.power_limit_word_q16}, \pfield{power_limit_word_source} & v3 with the BAO test. The BAO word, or \code{null} and the reason it has none.\\ \hline
 \pfield{channels.<ch>.anchor_bin}, \pfield{anchor_source}, \pfield{nominal_bin} & The anchor and where it came from (Section~\ref{sec:anchor}).\\ \hline
 \pfield{channels.<ch>.knee_word_q16} & v1 and v2 only. The knee.\\ \hline
@@ -768,7 +768,7 @@ The power-limit plan names its inputs:
   }
 }
 \end{lstlisting}
-\code{table} is the RFIsher channel table of this telescope and \code{limits} maps each channel to its checked power limit in mK\(^2\). Both are required. \code{coupling} is the fraction of the kept shelf power that reaches the map, 1 by default. \code{curvature} gives a passband correction and its standard error, and \code{margin} is added to the upper estimate. Both default to zero. \code{min_captures} defaults to 30. Under v3, a channel with a passing word carries it as \code{power_limit_multiplier_q16} beside its default word, and the test reads the control at \(\lfloor u/s_c\rfloor\), the channel word \(u\) mapped onto the control by the scale of the default word. Its shelf estimate divides by \(T_\rho\) over the even bins farther than 32 fine bins from the channel's nominal pilot bin (95 or 96 bins, rank 47), and the control is read in its own window; the report gives \code{shelf_reference}. A channel with no passing word carries only its default word, and the operating policy masks it whole. Under v1 and v2, the passing word is the channel's \code{cfar_multiplier_q16} (\code{word_source} \code{power limit}), and a channel with no passing word holds the floor. The outcomes go to \code{<dir>.decisions.json}, which \code{compile-operating-policy} reads (\code{docs/CHANNEL_OPERATING_POLICY.md}). This threshold holds the control in memory beside each channel. The meaning of the test is described in the Design Document.
+\code{table} is the RFIsher channel table of this telescope and \code{limits} maps each channel to its checked power limit in mK\(^2\). Both are required. \code{coupling} is the fraction of the kept shelf power that reaches the map, 1 by default. \code{curvature} gives a passband correction and its standard error, and \code{margin} is added to the upper estimate. Both default to zero. \code{min_captures} defaults to 30. Under v3, a channel with a passing word carries it as \code{power_limit_multiplier_q16} beside its default word, and the test reads the control at \(\lfloor u/\lambda_c\rfloor\), the channel word \(u\) mapped onto the control by the scale of the default word. Its shelf estimate divides by \(T_\rho\) over the even bins farther than 32 fine bins from the channel's nominal pilot bin (95 or 96 bins, rank 47), and the control is read in its own window; the report gives \code{shelf_reference}. A channel with no passing word carries only its default word, and the operating policy masks it whole. Under v1 and v2, the passing word is the channel's \code{cfar_multiplier_q16} (\code{word_source} \code{power limit}), and a channel with no passing word holds the floor. The outcomes go to \code{<dir>.decisions.json}, which \code{compile-operating-policy} reads (\code{docs/CHANNEL_OPERATING_POLICY.md}). This threshold holds the control in memory beside each channel. The meaning of the test is described in the Design Document.
 
 \code{plan-run} and \code{process-run} take \code{--threshold power_limit --power-limit inputs.json}, where the file holds the \code{power_limit} object, and \code{--decision-version fine_decision_v3} for a v3 bundle. Without it they write v2, which Kotekan \code{develop} runs until kotekan\#1924 merges. For \code{calibrate-bundle}, these are the plan keys \code{threshold}, \code{power_limit} and \code{decision_version}.
 
@@ -800,7 +800,7 @@ structure and digests & \code{validate-runtime-weight-bundle} reports no errors.
 every bound channel has values & No profile is \code{pending_campaign}.\\ \hline
 test data differ from calibration data & No test capture is in the report's calibration or control captures.\\ \hline
 rank support on channel \(c\) & Every block of the channel has a decision: \(d_\rho > 0\) under v3, a valid rank under v1 and v2.\\ \hline
-masked fraction on channel \(c\) & The masked count at the default word is consistent with a rate inside the calibration's \code{masked_interval}.\\ \hline
+masked fraction on channel \(c\) & The masked count at the default word is consistent with a rate inside the calibration's \code{masked_interval}. A channel calibrated with no captures has no interval and fails: recalibrate it with captures, or leave it out of the bundle. \code{qualify-bundle} needs this check to pass on every calibrated channel.\\ \hline
 false alarms on the control channel & The control's masked count at the control word is not above the rate \(1-\)\code{null_quantile} (an upper-tail test). A test plan without a control fails this check.\\ \hline
 \end{longtable}
 
@@ -832,7 +832,7 @@ A bundle from \code{calibrate-bundle} is detect-only. To mask with it, a person 
 pilot-proxy qualify-bundle --bundle-dir bundle --test-report bundle.test.json \
   --reviewer "Name" --output-dir bundle-qualified
 \end{lstlisting}
-The command refuses a report that failed, that has no passing control check, or that is of another bundle (\code{bundle_sha256sums}). It writes a new bundle in which every \code{calibrated} channel carries \code{mask_qualification}: the SHA-256 of the report and the reviewer. The new bundle has new digests, so it gets a new \code{<purpose>-<digest>} name.
+The command refuses a report that failed, that has no passing control check, that has no passing masked-fraction check of some calibrated channel, or that is of another bundle (\code{bundle_sha256sums}). It writes a new bundle in which every \code{calibrated} channel carries \code{mask_qualification}: the SHA-256 of the report and the reviewer. The new bundle has new digests, so it gets a new \code{<purpose>-<digest>} name.
 
 Kotekan reads the bundle from a local path once, at startup. A bundle changes only at a restart. A passing bundle is added by a Kotekan pull request to \code{config/chime/dtv_bundles/} or \code{config/chord/dtv_bundles/}, under its \code{<purpose>-<digest>} name, with a line in that directory's \code{README.md}. After \code{make install} on the node, the digests are checked in place with \code{sha256sum -c sha256sums.txt}, and \code{dtv_runtime_bundle_dir} is set to the installed path. On the Pathfinder, the default of \code{dtv_runtime_bundle_dir} in \code{pathfinder.j2} is changed by a pull request, or the variable is set for one run.
 
@@ -892,6 +892,7 @@ dtv_calibration_mode: true
 \pfield{dtv_runtime_bundle_dir} & \pfield{pathfinder-commissioning-e2e90219}, installed path & The bundle directory.\\ \hline
 \pfield{dtv_apply_mask} & false & Starting value of \code{/dtv_mask_enabled}: apply the DTV mask to N2.\\ \hline
 \pfield{dtv_write_enabled} & false & Starting value of \code{/dtv_write_enabled}: send the products to the recv node.\\ \hline
+\pfield{dtv_mask_control} & false & Template only (kotekan\#1915). Masks the control, channel 37, like a bound channel, so a run with the mask on characterizes the mask on the control.\\ \hline
 \pfield{dtv_calibration_mode} & false & Template only. Without it only \code{dtv_mask} is sent, and with kotekan\#1924 \code{dtv_stat} as well, in every mode. With it \code{dtv_powers}, \code{dtv_fine_support} and \code{dtv_fine_powers} (2 rows) are sent too. \code{recv.j2} must be rendered with the same value.\\ \hline
 \end{longtable}
 
@@ -904,7 +905,7 @@ curl -X POST -H 'Content-Type: application/json' \
 \end{lstlisting}
 A \code{valid_at_time_ns} of 0 applies a mask change from the next frame. A nonzero value applies it from the first frame starting at or after that instrument time. A write change applies to whole frames. A POST sent before the stages start has no effect. The \code{DtvRfiMask} log line \code{DTV mask on} or \code{off} confirms a mask change. \code{N2Accumulate} records the fraction of each bin the mask was on, and \code{hdf5N2Write} writes it as \code{frac_dtv_mask_enabled}.
 
-Each X-engine half packs 1024 blocks (about 43 s) of each sent product into one frame and sends it to the recv node, on ports 11031 (mask), 11033 (powers), 11035 (fine support) and 11037 (fine powers). \code{recv.j2} writes each frame to its own file under \code{/mnt/cs00/data/dtv/acq_<start time>/}, named \code{dtv_<product>.<number>.h5}, with a new directory for each recv start. The numbers follow arrival order. The \code{coarse_freq} attribute identifies the half and \code{fpga_seq_num} gives the start of the window. A block missing from a window is a row of \code{0xFF} bytes.
+Each X-engine half packs 1024 blocks (about 43 s) of each sent product into one frame and sends it to the recv node, on ports 11031 (mask), 11033 (powers), 11035 (fine support), 11037 (fine powers) and, with kotekan\#1924, 11039 (\code{dtv_stat}). \code{recv.j2} writes each frame to its own file under \code{/mnt/cs00/data/dtv/acq_<start time>/}, named \code{dtv_<product>.<number>.h5}, with a new directory for each recv start. The numbers follow arrival order. The \code{coarse_freq} attribute identifies the half and \code{fpga_seq_num} gives the start of the window. A block missing from a window is a row of \code{0xFF} bytes.
 
 \subsection{CHIME Upgrade}
 
@@ -926,7 +927,7 @@ Each X-engine half packs 1024 blocks (about 43 s) of each sent product into one 
 \pfield{dtv_fine_powers_rows} & \code{num_freq_gpu_buf} & Rows of \code{dtv_fine_powers}. A node that binds more channels than this stops at its first frame.\\ \hline
 \end{longtable}
 
-With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>} (and, in calibration mode, \code{dtv_powers<sfx>} and \code{dtv_fine_support<sfx>}) as \code{.raw} files of 1024 frames, and \code{hdf5FileWrite} writes \code{dtv_fine_powers<sfx>} with 1024 frames per file. The detector runs and writes from startup. It is removed by a restart without \code{dtv_enabled}.
+With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>}, with kotekan\#1924 \code{dtv_stat<sfx>} beside it (and, in calibration mode, \code{dtv_powers<sfx>} and \code{dtv_fine_support<sfx>}) as \code{.raw} files of 1024 frames, and \code{hdf5FileWrite} writes \code{dtv_fine_powers<sfx>} with 1024 frames per file. The detector runs and writes from startup. It is removed by a restart without \code{dtv_enabled}.
 
 \subsection{CHORD F-engine Template}
 
@@ -937,7 +938,7 @@ With \code{dtv_write_enabled}, \code{rawFileWrite} writes \code{dtv_mask<sfx>} (
 
 In detect-only mode the detector records its decisions and the visibilities do not change. On the Pathfinder this is \code{/dtv_mask_enabled} off. On CHIME it is the only mode. With the mask on, \code{DtvRfiMask} clears every sample of a block at a frequency that the detector rejected, that has fine support \((0,n)\) (v1, v2), or that is in the permanent-mask list. For a v3 channel (kotekan\#1924) it reads \code{dtv_stat} and clears the block unless \code{pilotproxy_v3_keep} keeps it at the channel's BAO word, or its default word where there is none, and a block with \(d_\rho=0\) is cleared. The visibilities and the valid-sample counts change together.
 
-Since Kotekan pull request \#1906, merged into \code{develop} through \#1914 on 20 November 2026, \code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. The control and \code{pending_campaign} channels never reach a mask and need no record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before \code{dtv_apply_mask: true} is set.
+Since Kotekan pull request \#1906, merged into \code{develop} through \#1914 on 20 November 2026, \code{DtvRfiMask} reads \code{pilot_profiles.json} at startup. Unless every \code{calibrated} channel carries \code{mask_qualification}, the bundle is detect-only: Kotekan refuses to start with the mask on, and a POST that switches \code{/dtv_mask_enabled} on stops Kotekan. \code{pending_campaign} channels never reach a mask, and the control reaches one only with \code{dtv_mask_control} (kotekan\#1915), so neither needs the record. No shipped bundle is qualified. A qualified bundle also goes through the shadow acceptance in \code{docs/OPERATOR_HANDOFF.md} before \code{dtv_apply_mask: true} is set.
 
 \subsection{Bad Feeds}
 
@@ -965,9 +966,9 @@ which is checked against the frequency map of the node. A \code{reject-all limit
 \hline
 \textbf{Product} & \textbf{Type} & \textbf{Content}\\ \hline
 \endhead
-\code{dtv_mask} & int8 [1,F] & 1 rejects the block. Zero for unbound frequencies, for the control, and for v3 channels, which \code{DtvRfiMask} decides from \code{dtv_stat}.\\ \hline
+\code{dtv_mask} & int8 [1,F] & 1 rejects the block. Zero for unbound frequencies, for the control unless \code{dtv_mask_control} is set (kotekan\#1915), and for v3 channels, which \code{DtvRfiMask} decides from \code{dtv_stat}.\\ \hline
 \code{dtv_stat} & uint64 [1,F,2] & v3 (kotekan\#1924): the pair \([n_\text{peak}, d_\rho]\). \([0, 2^{64}-1]\) for a row with no test, which every word keeps. A row with \(d_\rho = 0\) has no decision and is masked.\\ \hline
-\code{dtv_fine_support} & int32 [1,F,2] & v1 and v2: \((1,n)\) valid test over \(n\) bulk bins; \((0,n)\) too few bulk bins, and its mask of 0 does not mean clean; \((-1,-1)\) no test (no pilot, permanent mask, detector disabled, the control, or a v3 channel).\\ \hline
+\code{dtv_fine_support} & int32 [1,F,2] & v1 and v2: \((1,n)\) valid test over \(n\) bulk bins; \((0,n)\) too few bulk bins, and its mask of 0 does not mean clean; \((-1,-1)\) no test (no pilot, permanent mask, detector disabled, the control without \code{dtv_mask_control}, or a v3 channel).\\ \hline
 \code{dtv_powers} & uint64 [1,F,3] & Target, lower and upper frame powers, each the sum of 256 fine powers.\\ \hline
 \code{dtv_fine_powers} & uint64 [1,R,3,256] & Fine powers of the bound channels. Bound channel \(i\) is in row \(i\), and \code{coarse_freq} names each row (\(-1\) for an unused row).\\ \hline
 \end{longtable}
@@ -1105,6 +1106,8 @@ Many \((0,n)\) support rows (v1, v2) & Too few usable bulk bins. & Check \code{d
 HDF5 filter error on a \code{dtv_fine_powers} file & Install \code{hdf5plugin} (the \code{n2} extra).\\ \hline
 \code{the test plan has no control} & Add the control captures to the test plan.\\ \hline
 \code{did not pass}, \code{is not a test of}, \code{has no passing control check} & \code{qualify-bundle} needs a passing \code{--output-json} report of the same bundle, with a control.\\ \hline
+\code{has no passing masked-fraction check of channel} & The test plan left the channel out. Add captures of it to the test plan and test again, or leave the channel out of the bundle.\\ \hline
+\code{calibration had no captures of this channel} & The channel was calibrated from parameters alone. Recalibrate with captures of it before testing.\\ \hline
 Control false alarms fail in \code{test-bundle} & Control word too low, or a line on the control. Check the control spectrogram, then recalibrate with more epochs.\\ \hline
 Masked fraction fails in \code{test-bundle} & The test captures differ from the calibration captures. Read the report and the spectrogram, then recalibrate with captures that cover both. A pilot that fades during the run can fail on the last part.\\ \hline
 \end{longtable}

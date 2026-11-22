@@ -273,7 +273,7 @@ first bundle gets it. On the archive this reproduces the dissertation's v3
 default words exactly (`default_words_v3.json`). Bundles of v1 and v2 keep the
 knee and floor. The power-limit test reads the control at the same scale: a control
 frame counts as kept at the channel word `u` when its keep word is at most
-`floor(u / s_c)`, so its selection shift and the default word map the control onto
+`floor(u / lambda_c)`, so its selection shift and the default word map the control onto
 the channel the same way. Its excess divides by `T_rho` over the even bins farther
 than 32 fine bins from the nominal pilot bin (rank 47), and the control is read in
 its own window. Over all 128 even bins, the pilot and its nearby lines raise `T_rho`,

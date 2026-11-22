@@ -162,6 +162,18 @@ def test_qualify_refuses_a_failed_or_foreign_report(plans, tmp_path):
     assert not (tmp_path / "q1").exists() and not (tmp_path / "q2").exists()
 
 
+def test_qualify_refuses_a_channel_the_test_left_out(plans, tmp_path):
+    # the test plan leaves out channel 29, so its report passes and never tests it
+    plan = dict(plans["test"], channels={"35": plans["test"]["channels"]["35"]})
+    path = tmp_path / "test35.json"
+    path.write_text(json.dumps(plan))
+    report = tmp_path / "report35.json"
+    assert run_bundle_test(bundle_dir=plans["bundle"], plan_path=path, output_json=report)["passed"]
+    with pytest.raises(ValueError, match="no passing masked-fraction check of channel 29"):
+        qualify_bundle(bundle_dir=plans["bundle"], test_report=report, reviewer="R", output_dir=tmp_path / "q")
+    assert not (tmp_path / "q").exists()
+
+
 def test_qualification_is_refused_on_the_control(plans, tmp_path):
     plan = dict(plans["calibrate"], channels={**plans["calibrate"]["channels"],
                                               "37": plans["calibrate"]["control"]["captures"]})
@@ -893,6 +905,28 @@ def _v3_plan(plans, tmp_path, **extra):
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
     return path
+
+
+def test_v3_pilot_seen_gate_is_the_default_word(plans, tmp_path):
+    # channel 29 holds noise only; at half its null level every noise frame passes its default word, which the
+    # gate reads, while the unscaled control word would leave it unseen
+    report = calibrate_bundle(plan_path=_v3_plan(plans, tmp_path, default_word=dict(passband_factor={"29": 0.5})),
+                              output_dir=tmp_path / "bundle")
+    assert plans["report"]["channels"]["29"]["anchor_source"] == "nominal"
+    assert report["channels"]["29"]["anchor_source"] == "measured"
+
+
+def test_v3_no_capture_channel_in_a_power_limit_plan_is_masked_whole(plans, tmp_path):
+    from pilot_proxy.operating_policy import _decisions, _threshold_kind
+
+    path = limit_plan(plans, tmp_path, 1e-3)
+    plan = json.loads(path.read_text())
+    plan["channels"] = dict(plan["channels"], **{"29": []})
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    channel = report["channels"]["29"]
+    assert channel["power_limit"]["reason"] == "no captures" and channel["power_limit_word_q16"] is None
+    assert _threshold_kind(_decisions(tmp_path / "bundle.decisions.json")[29]) == "reject_all"
 
 
 def test_v3_default_word_is_the_scaled_control_word(plans, tmp_path):

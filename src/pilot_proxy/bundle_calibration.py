@@ -42,6 +42,7 @@ from pilot_proxy.power_limit_word import (
     control_corrections,
     limit_test,
     median_excess,
+    shelf_reference,
 )
 from pilot_proxy.runtime_bundle import (
     CONTROL_PHYSICAL_CHANNEL,
@@ -550,17 +551,20 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
 
 def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: np.ndarray, control, *, anchor: int,
                  bulk: np.ndarray, rank: int, inputs: dict[str, Any], decision_version: str,
-                 control_scale: float = 1.0) -> dict[str, Any]:
+                 control_scale: float = 1.0, reference: tuple[np.ndarray, int] | None = None,
+                 control_reference: tuple[np.ndarray, int] | None = None) -> dict[str, Any]:
     """Return the power-limit test of one channel. The control is read with no corrections, as `control=None`.
 
-    Under v3 the control is read at floor(u / s_c), where s_c = `control_scale` is the scale of the default word.
+    Under v3 the control is read at floor(u / s_c), where s_c = `control_scale` is the scale of the default word, and
+    the shelf estimates divide by T_rho over `reference` (the channel) and `control_reference` (the control), the
+    even bins clear of each one's nominal pilot. Without them the estimate takes the decision's bulk and rank.
     """
     from pilot_proxy.characterization import threshold_rule
 
     if channel not in inputs["rows"] or channel not in inputs["limits"]:
         raise ValueError(f"channel {channel} needs a row in the response table and a checked power limit")
     shelf = inputs["shelf"]
-    excess = median_excess(fines, bulk, rank)
+    excess = median_excess(fines, *(reference or (bulk, rank)))
     good = (seen >= 0) & np.isfinite(excess)
     sweep = threshold_rule.sweep(threshold_rule.ChannelFrames(
         channel, np.where(good, seen, 0).astype(np.uint64), capture_weights(captures), good, captures,
@@ -568,7 +572,7 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
     offset, shift, margin, measured = 0.0, 0.0, 0.0, None
     if control is not None:
         words = required_words(control[0], anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision_version)
-        control_excess = median_excess(control[0], bulk, rank)
+        control_excess = median_excess(control[0], *(control_reference or (bulk, rank)))
         good = (words >= 0) & np.isfinite(control_excess)
         if not good.any():
             raise ValueError(f"the control has no supported frames under the geometry of channel {channel}")
@@ -582,7 +586,9 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
     result = limit_test(sweep, shelf=shelf, power_scale=threshold_rule.power_scale(inputs["table"], channel),
                       power_limit=inputs["limits"][channel], coupling=coupling, offset=offset, shift=shift, margin=margin,
                       min_captures=inputs["min_captures"])
-    result.update(coupling_source="plan" if channel in inputs["coupling"] else "worst case",
+    shelf_bins, shelf_rank = reference or (bulk, rank)
+    result.update(shelf_reference=dict(bins=int(np.count_nonzero(shelf_bins)), rank=int(shelf_rank)),
+                  coupling_source="plan" if channel in inputs["coupling"] else "worst case",
                   corrections="none, the control itself" if measured is None else dict(
                       null=shelf * measured["null"], null_se=shelf * measured["null_se"],
                       curvature=inputs["curvature"].get(channel, (0.0, 0.0))[0],
@@ -634,8 +640,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             anchor = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             bulk, control_rank = _geometry(anchor, (), decision)
             fines, control_captures = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
-            # the corrections of the power-limit test read the control again under the geometry of each channel
+            # the corrections of the power-limit test read the control again under the words of each channel, and
+            # under v3 its shelf estimate in its own window
             control_frames = (fines, control_captures) if inputs else None
+            control_reference = shelf_reference(anchor) if decision == FINE_DECISION_V3_VERSION else None
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
                 null_scores(fines[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=control_rank,
@@ -648,7 +656,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             source = "control channel"
         else:
             scores = simulated_null_scores(int(plan["num_inputs"]), decision_version=decision)
-            control_record = None
+            control_record, control_reference = None, None
             source = f"white noise, {int(plan['num_inputs'])} inputs"
         # v3 searches every bin, so a frame holds one independent null score, not clear_searches()
         per_frame = 1 if decision == FINE_DECISION_V3_VERSION else clear_searches()
@@ -741,7 +749,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             if inputs and (not is_control or (channel in inputs["rows"] and channel in inputs["limits"])):
                 tested = _limit_channel(channel, fines, captures, seen, None if is_control else control_frames,
                                       anchor=anchor, bulk=bulk, rank=rank, inputs=inputs, decision_version=decision,
-                                      control_scale=scaling.get("scale", 1.0))
+                                      control_scale=scaling.get("scale", 1.0),
+                                      reference=shelf_reference(nominal) if v3 else None,
+                                      control_reference=control_reference)
                 if origin == "nominal" and not is_control:
                     # with no pilot in the run the estimate reads only noise, which is no pass
                     tested = dict({key: value for key, value in tested.items() if key not in PASSING_FIELDS},

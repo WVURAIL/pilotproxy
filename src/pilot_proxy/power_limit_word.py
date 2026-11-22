@@ -6,7 +6,9 @@ The acceptance test keeps the most frames whose upper residual power meets the c
     f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0).
 
 The kept mean excess e(u) and its clustered error come from the channel. The null o and the
-selection shift delta(u) come from the control, read under the geometry and words of the channel.
+selection shift delta(u) come from the control, read under the words of the channel. Under v3 the
+excess divides by T_rho over the even bins clear of each channel's own pilot (`shelf_reference`),
+so the control is read in its own window.
 The response table, the checked limits and the coupling fraction f are inputs. The test is in-sample,
 so its word is a candidate until it is tested on independent data.
 """
@@ -19,9 +21,26 @@ import numpy as np
 
 # frames reduced together, about 0.15 GB of float temporaries
 EXCESS_CHUNK = 65536
+# fine bins (381 Hz) about the nominal pilot that the v3 shelf reference leaves out
+SHELF_HALF_WIDTH = 32
 MARGIN_STANDARD_ERRORS = 2.0
 SELECTION = "maximum kept fraction subject to upper power <= checked limit"
 EVALUATION = "in-sample; independent evaluation required"
+
+
+def shelf_reference(nominal_bin: int, half_width: int = SHELF_HALF_WIDTH) -> tuple[np.ndarray, int]:
+    """Return the bins and median rank of T_rho for the v3 shelf estimate.
+
+    The v3 decision divides by the median reference of all 128 even bins. The shelf estimate divides the target
+    by the reference bin by bin, and the target holds the pilot and its nearby lines, so T_rho takes the even bins
+    farther than `half_width` fine bins, circularly, from the nominal pilot bin: 95 bins at an even nominal bin, 96
+    at an odd one, rank 47. With all 128, the pilot raises T_rho and biases the kept estimate low (the
+    dissertation's scripts/shelf_reference.py).
+    """
+    b = np.arange(256)
+    distance = np.minimum((b - nominal_bin) % 256, (nominal_bin - b) % 256)
+    bins = (b % 2 == 0) & (distance > half_width)
+    return bins, (int(bins.sum()) - 1) // 2
 
 
 def median_excess(fines: np.ndarray, bulk: np.ndarray, rank: int) -> np.ndarray:

@@ -5,6 +5,12 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Under v3, the power-limit test of `calibrate-bundle` forms the shelf estimate with `T_rho` over the even bins
+  farther than 32 fine bins from each channel's nominal pilot bin (95 or 96 bins, rank 47,
+  `power_limit_word.shelf_reference`), and reads the control in its own window. Over all 128 even bins, the pilot
+  and its nearby lines raised `T_rho` and biased the kept estimate low; the dissertation measured 3.6 to 7.5 shelf
+  limits at the passing words of channels 19, 26 and 32. The decision keeps `d_rho` over all 128 even bins. The
+  report gives `shelf_reference` with each power-limit test.
 - Under v3, a channel that fails the power-limit test of `calibrate-bundle` carries no `power_limit_multiplier_q16`,
   so Kotekan and the relay decide it at its default word, and the operating policy masks it whole. It used to carry
   the unscaled control word, which they would have applied in place of the default word. The report gives

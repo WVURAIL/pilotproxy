@@ -274,7 +274,12 @@ default words exactly (`default_words_v3.json`). Bundles of v1 and v2 keep the
 knee and floor. The power-limit test reads the control at the same scale: a control
 frame counts as kept at the channel word `u` when its keep word is at most
 `floor(u / s_c)`, so its selection shift and the default word map the control onto
-the channel the same way.
+the channel the same way. Its excess divides by `T_rho` over the even bins farther
+than 32 fine bins from the nominal pilot bin (rank 47), and the control is read in
+its own window. Over all 128 even bins, the pilot and its nearby lines raise `T_rho`,
+which biased the kept estimate low by 3.6 to 7.5 shelf limits at the passing words
+of channels 19, 26 and 32 (the dissertation's decision of 2026-11-21). The decision
+itself still divides by `d_rho` over all 128 even bins.
 
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%
 less time than the v2 mask for one channel and 0.5% less for 16 channels in one

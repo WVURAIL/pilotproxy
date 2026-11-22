@@ -748,8 +748,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                                   outcome="not useful", reason="pilot not seen")
             limited = None
             if decision == FINE_DECISION_V3_VERSION and tested is not None and not is_control:
-                # v3 keeps the power-limit word apart, and the default word is the scaled control word
-                limited = (tested["word"], "power limit") if tested["outcome"] == "useful" else (floor, f"floor, power limit: {tested['reason']}")
+                # v3 keeps the power-limit word apart, and a channel with no passing word carries none, so every
+                # consumer decides it at its default word (the scaled control word) until the policy masks it whole
+                limited = (tested["word"], "power limit") if tested["outcome"] == "useful" else (None, f"none, power limit: {tested['reason']}")
             if given_word is not None or "word_q16" in plan:
                 word, word_source = int(floor if given_word is None else given_word), "plan"
             elif v3:
@@ -772,7 +773,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
             note = f"Word from {word_source}, {'control word' if v3 else 'floor'} from {source}."
             if limited is not None:
-                note += f" Power-limit word from {limited[1]}."
+                note += f" Power-limit word from {limited[1]}." if limited[0] is not None else f" No power-limit word ({limited[1]})."
             values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile, note, decision,
                                            power_limit_word=None if limited is None else limited[0])
             report_channels[str(channel)] = dict(

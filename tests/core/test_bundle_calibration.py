@@ -823,14 +823,37 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     tested = channel["power_limit"]
     assert tested["outcome"] == "useful"
     assert channel["power_limit_word_q16"] == tested["word"] and channel["power_limit_word_source"] == "power limit"
-    # the default word follows the knee rule, as without a power limit
-    assert channel["word_source"] != "power limit"
+    # the default word is the scaled control word, as without a power limit
+    assert channel["word_source"] == "control word x scale"
     fine = {p["physical_channel"]: p["fine_calibration"]
             for p in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
     assert fine[35]["power_limit_multiplier_q16"] == tested["word"]
     assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
-    # a channel with no passing word holds the floor as its power-limit word
-    assert fine[29]["power_limit_multiplier_q16"] == report["floor_word_q16"]
+    # a channel with no passing word carries no power-limit word, so it is decided at its default word
+    assert "power_limit_multiplier_q16" not in fine[29]
+
+
+def test_v3_channel_with_no_passing_word_carries_no_power_limit_word(plans, tmp_path):
+    from pilot_proxy.operating_policy import _decisions, _threshold_kind
+
+    path = limit_plan(plans, tmp_path, 1e-12)
+    # 36 frames, so the pilot is seen (as in the test above) and the channel fails on its power limit
+    mixed = [write_capture(tmp_path / f"c35_{i}.h5", 35, 6, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    plan = json.loads(path.read_text())
+    plan["channels"] = dict(plan["channels"], **{"35": mixed})
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    channel = report["channels"]["35"]
+    assert channel["power_limit"]["outcome"] == "not useful"
+    assert channel["power_limit"]["reason"] == "no supported threshold meets tolerance"
+    assert channel["power_limit_word_q16"] is None
+    assert channel["power_limit_word_source"].startswith("none, power limit: ")
+    # every consumer then decides the channel at its default word, and the policy masks it whole
+    fine = {p["physical_channel"]: p["fine_calibration"]
+            for p in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
+    assert "power_limit_multiplier_q16" not in fine[35]
+    assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
+    assert _threshold_kind(_decisions(tmp_path / "bundle.decisions.json")[35]) == "reject_all"
 
 
 def _v3_plan(plans, tmp_path, **extra):
@@ -913,3 +936,27 @@ def test_v3_power_limit_reads_the_control_at_the_scaled_word(plans, tmp_path, mo
     words = next(s["word"] for s, at in zip(swept, read) if len(s["word"]) == len(at)
                  and np.array_equal(at, control_words_at(s["word"].astype(np.int64), scale)))
     assert len(words) > 0
+
+
+def test_v3_process_run_summary_reports_the_control_word(plans, tmp_path):
+    captures = plans["calibrate"]["control"]["captures"]
+    plan = dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    rng = np.random.default_rng(3)
+    for index in range(8):
+        data = rng.gamma(44, 1e6 / 44, size=(32, 2, 3, 256))
+        data[:, 0, 0, 140] *= 30  # channel 35's pilot in every frame
+        with h5py.File(tmp_path / f"run_{index}.h5", "w") as handle:
+            handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
+            handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 32 * 8192
+    out = tmp_path / "processed"
+    summary = process_run(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
+                          output_dir=out, calibration_share=0.5, decision_version="fine_decision_v3",
+                          receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
+    rows = {row["channel"]: row for row in summary["channels"]}
+    assert rows[35]["word_source"] == "control word x scale" and rows[35]["scale"] > 0
+    text = (out / "summary.md").read_text()
+    assert "Control word eta" in text and "| Scale |" in text and "knee or the floor" not in text

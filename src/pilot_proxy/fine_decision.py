@@ -5,7 +5,7 @@ This module is the Python reference for the three fine decisions of the
 kernel. Fine decision v1 is the fused epilogue of kernel core 4.0.0
 (PilotProxy_Compute_FusedFineMask_U64), and v2 its median-reference form
 (PilotProxy_Compute_FusedFineMaskV2_U64). Fine decision v3 is the statistic
-of kernel core 4.2.0 (PilotProxy_Compute_FineStatV3_U64). For the same fine
+of kernel core 4.2.0 and later (PilotProxy_Compute_FineStatV3_U64). For the same fine
 powers and calibration constants, the CUDA implementation must return the
 same mask bit, or under v3 the same statistic. Python's arbitrary-precision
 integers give the reference for the 128-bit and 192-bit products of the

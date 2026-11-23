@@ -218,7 +218,7 @@ The decision paths in the repository have different operational status:
   the robust per-frame null-bulk threshold, and any threshold exceedances are
   recomputed from those terms in post-processing and leave `reject_mask`
   unchanged.
-- Kernel core 4.2.0 implements three exact integer fine decisions, each with
+- Kernel core 4.2.1 implements three exact integer fine decisions, each with
   bit-equality tests against its Python reference in `fine_decision.py`. Fine
   decisions v1 and v2 test the designated bins
   `anchor_bin +/- designated_half_width` against a ranked reference over the

@@ -321,7 +321,11 @@ less time than the v2 mask for one channel and 0.5% less for 16 channels in one
 call. With core 4.2.0 on that laptop GPU (WSL2, no correlator load), the v3 entry took
 0.40 ms for one channel, 5.99 ms for 16 in sequence and 4.29 ms for 16 in one call,
 against the 41.94 ms frame (`docs/evidence/v3_timing_laptop_2026-11-21`). The
-deployment GPUs are not yet timed under v3.
+deployment GPUs are not yet timed under v3. Core 4.2.1 drops the single-channel row-sum
+kernel, so one channel runs the batched kernel at batch 1. Its output is unchanged, and
+on the same GPU its times are within the run-to-run spread of 4.2.0: over four idle runs
+of each, 0.41 against 0.40 ms for one channel, 6.11 against 6.04 ms for 16 in sequence
+and 4.58 against 4.48 ms for 16 in one call, a path this change does not touch.
 
 ## The source stamp is memoized per process
 

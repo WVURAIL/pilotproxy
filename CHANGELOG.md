@@ -17,7 +17,7 @@ All notable changes to PilotProxy are recorded here. The project follows
   Pathfinder Run 1 they failed every calibration length. `masked_interval` and `applied_masked_interval` are no
   longer written, and `knee_interval_q16` only for v1 and v2 channels. `PATHFINDER_RECALIBRATION.md` asks for
   whole sidereal days of calibration, since Taurus A transits once per sidereal day.
-- `tests/core/test_v3_default_word_pin.py` pins the v3 default words against the dissertation
+- `tests/core/test_default_word_pin.py` pins the v3 default words against the dissertation
   (`data/assembly/default_words.json` at 03ca6bb): the control's night and all-frame 99th percentiles and the 24
   default words, from the control's keep words of the v3 score cache (`tests/data/v3_control_ch37_keep_words.npz`,
   withheld from the code-only cut). `bundle_calibration.control_quantile_q16` is the quantile step that

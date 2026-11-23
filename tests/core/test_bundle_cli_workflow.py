@@ -16,7 +16,7 @@ from pilot_proxy.characterization import threshold_rule
 from pilot_proxy.run_plans import CORE_PROFILE
 from pilot_proxy.run_spectrogram import FRAME_SECONDS
 from pilot_proxy.runtime_bundle import validate_runtime_weight_bundle
-from test_bundle_calibration import ROOT, write_capture
+from test_bundle_calibration import ROOT, T0, write_capture, write_hours
 
 RECEIVER = ROOT / "configs/receiver_profiles/chime_dtv_fengine.json"
 CORE = ROOT / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json"
@@ -38,17 +38,19 @@ def run_cli(argv):
 def calibrated(tmp_path_factory):
     """A knee bundle of channels 35 and 29 with the control, made by calibrate-bundle, and its test plan."""
     tmp = tmp_path_factory.mktemp("cli")
-    # strong and clean captures in turn, so the kept fraction has a knee
-    mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
-    control = [write_capture(tmp / "c37.h5", 37, 26, 3)]
+    # strong and clean captures in turn, so the kept fraction has a knee; one capture an hour, so test-bundle has
+    # the hour-to-hour spread of each masked fraction
+    mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2), ctime=T0 + 3600 * i) for i in range(6)]
+    control = write_hours(tmp / "c37", 37, 26, 3, 13, T0)
     calibrate = dict(receiver_profile=str(RECEIVER), detector_core_profile=str(CORE), capture_format="chime_baseband",
                      epoch="synthetic", null_quantile=0.8, min_knee_captures=4,
-                     channels={"35": mixed, "29": [write_capture(tmp / "c29.h5", 29, 6, 2)], "37": control},
+                     channels={"35": mixed, "29": write_hours(tmp / "c29", 29, 6, 2, 3, T0), "37": control},
                      control=dict(channel=37, captures=control))
     test = dict(capture_format="chime_baseband",
-                channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2)) for i in range(2)],
-                          "29": [write_capture(tmp / "t29.h5", 29, 4, 5)]},
-                control=[write_capture(tmp / "t37.h5", 37, 12, 6)])
+                channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2),
+                                               ctime=T0 + 3600 * (24 + i)) for i in range(2)],
+                          "29": [write_capture(tmp / "t29.h5", 29, 4, 5, ctime=T0 + 3600 * 24)]},
+                control=[write_capture(tmp / "t37.h5", 37, 12, 6, ctime=T0 + 3600 * 24)])
     (tmp / "calibrate.json").write_text(json.dumps(calibrate))
     (tmp / "test.json").write_text(json.dumps(test))
     code, out = run_cli(["calibrate-bundle", "--plan", tmp / "calibrate.json", "--output-dir", tmp / "bundle"])

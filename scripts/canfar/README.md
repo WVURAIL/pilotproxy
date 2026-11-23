@@ -20,10 +20,10 @@ session is refused by the bootstrap at its image check, before any other setup.
 | 1 | `canfar_probe_bootstrap.sh` | Per-node setup: refuse a toolkit-less image, clone at the frozen revision, restore the runtime offline from the freeze bundle's wheelhouse, reuse or build the node's kernel, measure fetch throughput. Once per session. |
 | 2 | `canfar_smoke_844.sh` | Cross-arch qualification: rerun the local rehearsal (channel 844, first 8 files) and compare the product unit by unit against the local sm89 reference. Integer fields must be bit-identical. |
 | 3 | `canfar_shard.sh` | Shard controller: `update`, `gate`, `launch`, `resume`, `run`, `tripwire`, `status`, `stop`. Every launch and resume re-runs the full gate chain, which has an md5-verified byte fetch over the route the scan will use and a cupy JIT compile. |
-| 4 | `canfar_supervise.sh` | Keeps a shard running across archive outages and transient fetch failures, launching it if it has never run and resuming it otherwise. Distinguishes a refused gate (nothing ran) from a scan that ran and exited. |
+| 4 | `canfar_supervise.sh` | Keeps a shard running across archive outages and transient fetch failures, launching it if it has never run and resuming it otherwise. Distinguishes a refused gate (nothing ran) from a scan that ran and exited, and stops when `scan_scope.json` shows every unit completed or quarantined. |
 | 5 | `canfar_merge_channel.sh` | Hands a channel finished by a helper shard to the shard that owns it, so the owner skips it instead of re-fetching. Checks run-wide identity and that the product is the channel it claims. |
 | | `canfar_compare_duplicates.py` | Compares the channels two shards both built, field by field and NaN-aware. The byte-identical reproduction result in the ledger comes from this script. |
-| 6 | `canfar_closeout.sh` | Assembles the 23 canonical products, split across two non-overlapping shard directories, into one run directory. |
+| 6 | `canfar_closeout.sh` | Checks that each shard's scope shows its channels fully disposed, then assembles the 23 canonical products, split across two non-overlapping shard directories, into one run directory. |
 
 The qualified sm90 kernel, the `pp_switch` kit (inventory, launcher scripts) and
 the runtime freeze tar are kept in the campaign's `kit/` directory beside the

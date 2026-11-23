@@ -39,7 +39,51 @@ test "$got" = "$PKG" || die "package sha mismatch: $got"
 echo "source  : $REV"
 echo "package : $PKG"
 
-say "1. assemble the 23 canonical products into one run directory"
+say "1. every channel fully disposed in its shard's scan scope"
+# The same rule as canfar_merge_channel.sh: every enumerated unit completed or
+# quarantined, none failed, capped or unprocessed. A product file can exist for a
+# channel the scan left partial, so the files alone do not show this.
+for pair in "$S1:$CH1" "$S2:$CH2"; do
+  src="${pair%%:*}"; chans="${pair#*:}"
+  # shellcheck disable=SC2086
+  python - "$src/scan_scope.json" $chans <<'PYS' || die "a channel of $src is not fully disposed (see above)"
+import json, os, sys
+scope = json.load(open(sys.argv[1]))
+
+
+def entry_channel(p):
+    """Scope entries name their channel by product path, not a freq_id key."""
+    base = os.path.basename(p.get("product") or "")
+    if base.endswith(".npz") and base[:-4].isdigit():
+        return int(base[:-4])
+    sel = p.get("selection")
+    if isinstance(sel, (list, tuple)) and len(sel) == 1:
+        return int(sel[0])
+    if isinstance(sel, int):
+        return int(sel)
+    return None
+
+
+by_channel = {entry_channel(p): p for p in scope["pilots"]}
+bad = []
+for ch in map(int, sys.argv[2:]):
+    p = by_channel.get(ch)
+    if p is None:
+        bad.append(f"{ch}: not in the scope")
+    elif not (int(p.get("enumerated", -1)) == int(p.get("completed", 0)) + int(p.get("quarantined", 0))
+              and int(p.get("failed", 1)) == 0 and int(p.get("capped", 1)) == 0
+              and int(p.get("unprocessed", 1)) == 0):
+        bad.append(f"{ch}: enumerated={p.get('enumerated')} completed={p.get('completed')} "
+                   f"quarantined={p.get('quarantined')} failed={p.get('failed')} "
+                   f"capped={p.get('capped')} unprocessed={p.get('unprocessed')}")
+for b in bad:
+    print("  not disposed:", b)
+assert not bad, f"{len(bad)} channel(s) not fully disposed"
+print(f"  {sys.argv[1]}: {len(sys.argv) - 2} channels fully disposed")
+PYS
+done
+
+say "2. assemble the 23 canonical products into one run directory"
 test ! -e "$ALL" || die "$ALL exists; move it aside for a fresh assembly"
 mkdir -p "$ALL/_per_pilot"
 umask 077
@@ -60,7 +104,7 @@ echo "products: $n copied and sha256-verified"
 
 # One quarantine ledger for the assembled run, deduplicated by key.
 python - "$S1/_per_pilot/quarantine.jsonl" "$S2/_per_pilot/quarantine.jsonl" \
-         "$ALL/_per_pilot/quarantine.jsonl" <<'PYQ'
+         "$ALL/_per_pilot/quarantine.jsonl" <<'PYQ' || die "quarantine ledger not written"
 import json, os, sys
 src1, src2, dst = sys.argv[1], sys.argv[2], sys.argv[3]
 seen, rows = set(), []
@@ -83,8 +127,8 @@ other = len(rows) - sub
 print(f"quarantine: {len(rows)} rows ({sub} sub-frame + {other} archive-corrupt), 0 duplicates")
 PYQ
 
-say "2. verify the assembled set"
-python - "$ALL/_per_pilot" <<'PYV'
+say "3. verify the assembled set"
+python - "$ALL/_per_pilot" <<'PYV' || die "assembled set did not verify"
 import sys, pathlib
 import numpy as np
 d = pathlib.Path(sys.argv[1])

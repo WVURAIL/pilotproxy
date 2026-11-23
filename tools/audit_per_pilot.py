@@ -6,7 +6,10 @@ first principles and the repository's contract functions, and the provenance
 hashes are compared with the shipped weight bank. The audit only reads, so it
 can run on live checkpoints.
 
-Usage: python tools/audit_per_pilot.py <dir-with-<freq_id>.npz> [--repo <pilotproxy checkout>]
+Usage: python tools/audit_per_pilot.py <dir-with-<freq_id>.npz> [--repo <pilotproxy checkout>] [--bank <weights.bin>]
+
+The products are compared with the weight bank they were made with, by default the shipped CHIME bank. The
+channel 37 control product was made with chime_dtv_weights_k128_r14_37.bin, which --bank names.
 
 The script is kept in the repository so that every machine audits with the current
 version. Each machine updates it with git pull, and no local copies are kept.
@@ -38,9 +41,10 @@ from pilot_proxy.product_contract import (
 
 CHIME_HZ_PER_CHANNEL = 400e6 / 1024.0          # 390625 Hz
 PILOT_BASE_MHZ = 470.309441                    # ATSC 14 pilot
+# freq_id of the coarse bin holding each pilot; channel 37 (491) is the control
 FREQ_TABLE = {14 + i: fid for i, fid in enumerate(
     [844, 829, 813, 798, 783, 767, 752, 736, 721, 706, 690, 675, 660,
-     644, 629, 614, 598, 583, 568, 552, 537, 521, 506])}
+     644, 629, 614, 598, 583, 568, 552, 537, 521, 506, 491])}
 
 
 class Audit:
@@ -139,10 +143,10 @@ def audit_file(path: Path, bank_sha: str | None, manifest_sha: str | None) -> tu
     src = next((t[len("source="):][:12] for t in dv.split() if t.startswith("source=")), "?")
     a.check(str(scalar("mask_rule")) == NORMALIZED_POSITIVE_EXCESS_MASK_RULE, "mask_rule string")
     if bank_sha is not None:
-        a.check(str(scalar("weight_bank_sha256")) == bank_sha, "weight_bank_sha256 vs shipped bank")
+        a.check(str(scalar("weight_bank_sha256")) == bank_sha, "weight_bank_sha256 vs the weight bank")
     if manifest_sha is not None:
         a.check(str(scalar("weight_manifest_sha256")) == manifest_sha,
-                "weight_manifest_sha256 vs shipped manifest")
+                "weight_manifest_sha256 vs its manifest")
     contract = json.loads(str(scalar("detector_contract_json")))
     a.check(contract.get("schema_version")
             == ("pilotproxy_detector_contract_v2" if current
@@ -360,10 +364,15 @@ def main() -> int:
     ap.add_argument(
         "--repo", type=Path, default=Path(__file__).resolve().parents[1]
     )
+    ap.add_argument(
+        "--bank", type=Path,
+        help="Weight bank the products were made with (default <repo>/weights/chime_dtv_weights_k128.bin); "
+             "its manifest is <bank>.manifest.json"
+    )
     args = ap.parse_args()
 
-    bank = args.repo / "weights/chime_dtv_weights_k128.bin"
-    man = args.repo / "weights/chime_dtv_weights_k128.bin.manifest.json"
+    bank = args.bank or args.repo / "weights/chime_dtv_weights_k128.bin"
+    man = bank.with_name(bank.name + ".manifest.json")
     bank_sha = sha256_of(bank) if bank.exists() else None
     manifest_sha = sha256_of(man) if man.exists() else None
 

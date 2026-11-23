@@ -75,7 +75,7 @@ dtv_apply_mask: false
 dtv_write_enabled: false
 ```
 
-`dtv_apply_mask` and `dtv_write_enabled` give the starting values of `/dtv_mask_enabled` and `/dtv_write_enabled`, and `tools/pathfinder_dtv_switch.py` switches them on a list of nodes at one shared time. The detector runs whenever the bundle loads. On CHORD, the detector command uses `detector_window_samples: 64` and the pipeline `num_times: 8192`. On CHIME, these are 128 and 16384. The stage derives the detector block size from the selected core, and each GPU frame must contain exactly one block.
+`dtv_apply_mask` and `dtv_write_enabled` give the starting values of `/dtv_mask_enabled` and `/dtv_write_enabled`, and `tools/pathfinder_dtv_switch.py` switches them on a list of nodes at one shared time. It refuses to switch the mask on where a node's bundle is detect-only, since Kotekan stops on that update. The detector runs whenever the bundle loads. On CHORD, the detector command uses `detector_window_samples: 64` and the pipeline `num_times: 8192`. On CHIME, these are 128 and 16384. The stage derives the detector block size from the selected core, and each GPU frame must contain exactly one block.
 
 A bound channel needs a calibrated profile (section 2). Inspect the startup binding records, where each expected pilot must be bound with the correct receiver ID. On a node with no bound pilots, a zero mask means that the detector is disabled, and it says nothing about the data being clean.
 

@@ -133,14 +133,19 @@ def _frame_file(path: str):
 
 
 @lru_cache(maxsize=64)
-def _combined(path: str):
+def _combined_file(path: str, stamp: tuple[int, int]):
     """Keep a combined file open, with its dataset, static attributes and per-window attributes.
 
-    Opening a file over NFS costs about 25 ms, so a combined file is opened once per process, not per window.
+    Opening a file over NFS costs about 25 ms, so a combined file is opened once per process and modification, not
+    per window. A file combined again is opened again.
     """
     handle = _open(path)
     data = handle[_product(handle)]
     return handle, data, dict(data.attrs), {name: handle[name][()] for name in WINDOW_ATTRS if name in handle}
+
+
+def _combined(path: str):
+    return _combined_file(path, _stamp(path))
 
 
 def windows(path: str | Path) -> list[str]:

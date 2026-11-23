@@ -29,7 +29,7 @@ K = 128
 NFFT = 16384
 N_FRAMES = 3
 N_FEEDS = 4
-CHANNELS = {14: 470.3125, 15: 476.3125}
+CHANNELS = {14: 470.3125, 15: 476.171875}
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
 
 

@@ -61,7 +61,7 @@
         "nyquist_zone_note": "the reference testbench mixes the band down by rf_band.lower_hz before its real ADC, so the samples occupy Nyquist zone 1"
       },
       "channelizer_frequency_axis": {
-        "channel_index_to_rf_hz": "rf_hz = upper_hz - (coarse_channel_index + 1) * bandwidth_hz / num_adc_inputs"
+        "channel_index_to_rf_hz": "rf_hz = lower_hz + (coarse_channel_index + 1) * bandwidth_hz / num_coarse_channels, ascending (receiver_profile.coarse_channel_center_hz)"
       },
       "framing": {
         "frame_size_unit": "channelized complex samples per input stream"

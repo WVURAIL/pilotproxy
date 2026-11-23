@@ -118,12 +118,13 @@ LITERALS = {
         "pinned", 6.0e6, lambda: P.interference.band_width_hz),
     # freq_id maps
     "audit_freq_table": (
-        "pilot-proxy tools/audit_per_pilot.py:36 FREQ_TABLE",
+        "pilot-proxy tools/audit_per_pilot.py:45 FREQ_TABLE",
         "pinned",
         {14 + i: fid for i, fid in enumerate(
             [844, 829, 813, 798, 783, 767, 752, 736, 721, 706, 690, 675, 660,
-             644, 629, 614, 598, 583, 568, 552, 537, 521, 506])},
-        lambda: dict(zip(_labels_as_ints(), _freq_ids()))),
+             644, 629, 614, 598, 583, 568, 552, 537, 521, 506, 491])},
+        # the 23 channels and the channel 37 control
+        lambda: dict(zip(_labels_as_ints(), _freq_ids())) | dict(zip(_labels_as_ints("control"), _freq_ids("control")))),
     "control_target_freq_id": (
         "amendment 18 (2026-09-24) decision 13: channel 37 control read at freq_id 491",
         "pinned", {37: 491}, lambda: dict(zip(_labels_as_ints("control"), _freq_ids("control")))),

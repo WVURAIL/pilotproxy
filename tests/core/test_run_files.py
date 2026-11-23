@@ -162,3 +162,42 @@ def test_combined_v3_stat_reads_as_its_windows(tmp_path):
         with h5py.File(source, "r") as handle:
             assert np.array_equal(block, handle["dtv_stat"][()])
         assert attrs["fpga_seq_num"] == read_attrs(source)["fpga_seq_num"]
+
+
+def test_combine_tool_combines_again_when_windows_are_added(tmp_path):
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    tool = Path(__file__).resolve().parents[2] / "tools" / "combine_pathfinder_dtv_run.py"
+    acq, out = tmp_path / "acq_1", tmp_path / "out"
+    acq.mkdir()
+
+    def run():
+        return subprocess.run([sys.executable, str(tool), "--acq", str(acq), "--out", str(out), "--products",
+                               "fine_powers", "--settle-minutes", "0"], capture_output=True, text=True)
+
+    def combined():
+        return windows(str(out / "acq_1" / "dtv_fine_powers.2715-3115.combined.h5"))
+
+    for i in range(2):
+        write_window(acq / f"dtv_fine_powers.{i:08d}.h5", [2715, 3115], 100 * i, 10**9 * (i + 1), i + 1)
+    assert run().returncode == 0 and len(combined()) == 2
+    assert "already combined" in run().stdout
+    # recv adds a window to the same acquisition after a quiet gap
+    write_window(acq / "dtv_fine_powers.00000002.h5", [2715, 3115], 200, 3 * 10**9, 3)
+    done = run()
+    assert done.returncode == 0 and "1 files written since" in done.stdout and len(combined()) == 3
+    record = json.loads((out / "acq_1" / "combine.json").read_text())
+    assert record["sources"] == [f"dtv_fine_powers.{i:08d}.h5" for i in range(3)]
+    # a combined file deleted, then another added: combining again would drop the deleted window
+    (acq / "dtv_fine_powers.00000000.h5").unlink()
+    write_window(acq / "dtv_fine_powers.00000003.h5", [2715, 3115], 300, 4 * 10**9, 4)
+    done = run()
+    assert done.returncode == 1 and "would drop their windows" in done.stderr and len(combined()) == 3
+    # a record from the version before the file list is left alone
+    del record["sources"]
+    (out / "acq_1" / "combine.json").write_text(json.dumps(record))
+    done = run()
+    assert done.returncode == 0 and "kept no file list" in done.stdout and len(combined()) == 3

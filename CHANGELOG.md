@@ -5,6 +5,23 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `combine_pathfinder_dtv_run.py` combines an acquisition again when recv has added files since it was combined
+  (windows written after a quiet gap in the same acquisition). `combine.json` now lists the files it combined
+  (`sources`). If files it combined before are gone, combining again would drop their windows, so the tool refuses
+  and exits 1. An acquisition combined by the older tool, whose `combine.json` has no file list, is skipped as
+  before. A combined file is reopened after it is combined again in the same process.
+- `pathfinder_dtv_switch.py` refuses to switch the mask on at a node whose DtvRfiMask bundle is detect-only (a
+  calibrated channel with no `mask_qualification` record), before any POST: Kotekan stops on such an update. It
+  reads the `pilot_profiles_path` in each node's `/config`, or a copy given with `--bundle-dir`. An
+  `http.client` error no longer aborts the switch loop.
+- `scripts/canfar`: `canfar_supervise.sh` ends at the run's terminal state as `scan_scope.json` records it (every
+  unit completed or quarantined, none failed, capped or unprocessed), not on an "incomplete requested scope" line
+  in the log tail, which is also printed when retryable units are left. `canfar_closeout.sh` checks each channel's
+  scope the same way before it copies a product, and stops if a verification step fails.
+- `tools/audit_per_pilot.py` maps channel 37 to freq_id 491 (the control) and takes `--bank` for products made
+  with another weight bank, such as the control's `chime_dtv_weights_k128_r14_37.bin`.
+- The archive tests place channel 15 at 476.171875 MHz, the centre of freq_id 829; 476.3125 MHz was off the CHIME
+  grid. The annotation of `reference_800mhz_pfb.json` gives its ascending channel formula.
 - Every site that applies a fine_decision_v3 word uses the word the stage applies (`v3_word`): the power-limit
   word where calibration wrote one, and the default word otherwise. `compile-operating-policy` binds a v3 channel
   or control at that word, so a v3 control and a v3 channel with no power-limit word now compile. It used to

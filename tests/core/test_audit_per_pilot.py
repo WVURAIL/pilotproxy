@@ -248,3 +248,12 @@ def test_audit_rejects_archive_unit_without_receiver_state(tmp_path: Path) -> No
     audit, _stats = audit_per_pilot.audit_file(path, None, None)
 
     assert "archive units carry receiver-state identity" in audit.failures
+
+
+def test_freq_table_is_the_chime_bin_of_each_pilot_with_the_control() -> None:
+    from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
+
+    # CHIME bin centres are 800 - 0.390625 f MHz; a pilot lies in the bin whose centre is within half a bin
+    expected = {ch: round((800e6 - physical_channel_to_pilot_hz(ch)) / 390625.0) for ch in range(14, 38)}
+    assert audit_per_pilot.FREQ_TABLE == expected
+    assert audit_per_pilot.FREQ_TABLE[37] == 491

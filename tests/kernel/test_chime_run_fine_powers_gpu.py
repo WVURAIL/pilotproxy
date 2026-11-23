@@ -28,7 +28,7 @@ NFFT = 16384
 K = 128
 N_FRAMES = 2
 N_FEEDS = 4
-CHANNELS = {14: 470.3125, 15: 476.3125}
+CHANNELS = {14: 470.3125, 15: 476.171875}
 
 
 def test_gpu_chime_run_matches_the_cpu_chain_including_fine_powers(tmp_path):

@@ -17,7 +17,10 @@ one assignment at its receiver frequency ID:
   `DTV without a matching pilot` (channel 19). The detector has no pilot to act
   on there and would never fire, so the channel is `threshold.kind: pass_all`,
   listed under `unmasked_freq_ids`, and absent from both consumer lists. Its
-  residual DTV is left to the other flaggers of the consumer.
+  residual DTV is left to the other flaggers of the consumer. The 2026-10-12
+  decisions write this reason as `pilot not seen`. `calibrate-bundle`'s
+  `pilot not seen in the calibration captures` is a different reason, a run that
+  never showed the pilot, and is `reject_all`.
 
 A decision for a channel other than 14 to 36 (the channel 37 control band) is
 not a DTV decision. The review lists it under `not_in_policy` and assigns

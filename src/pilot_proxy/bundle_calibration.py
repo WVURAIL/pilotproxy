@@ -82,6 +82,13 @@ THRESHOLDS = ("knee", "power_limit")
 DECISIONS_SCHEMA = "pilotproxy-power-decisions-v4"
 # reported only for a channel that passes
 PASSING_FIELDS = ("word", "kappa", "ratio", "x", "upper_shelf", "kept_frames", "kept_captures")
+# The power-limit word of a v3 channel with no passing word. The smallest word keeps a frame only when it has no
+# target power, so DtvRfiMask and the relay, which apply the power-limit word where a bundle has one, mask the
+# channel whole without a permanent list.
+REJECT_WORD_Q16 = 1
+# The reason of a channel whose calibration captures never showed its pilot, so its estimate reads only noise. It is
+# not the threshold rule's "DTV without a matching pilot", which the operating policy leaves unmasked.
+NO_PILOT_REASON = "pilot not seen in the calibration captures"
 
 
 def iter_blocks(path: str | Path, capture_format: str, channel_id: int, block_samples: int,
@@ -516,6 +523,39 @@ def _expand(paths: Sequence[str]) -> list[str]:
     return found
 
 
+# bytes read from each end of a capture file for its identity
+FINGERPRINT_BYTES = 1 << 20
+
+
+def capture_identity(spec: str, capture_format: str | None) -> str:
+    """Return the identity of one capture, so the same data under another name or in another layout is one capture.
+
+    A recorded window (dtv_fine_powers) is named by the time and sequence number of its first block and by its
+    frequencies, which a per-window, a combined and a several-frame file give alike. Any other capture, or a window
+    with no sequence number, is named by its file's size and the SHA-256 of the file's first and last MiB (and its
+    window index), so a copy or a hard link has the identity of its source.
+    """
+    import hashlib
+
+    from pilot_proxy.run_files import read_attrs, split
+
+    file, index = split(spec)
+    if capture_format == "dtv_fine_powers":
+        attrs = read_attrs(spec)
+        if "fpga_seq_num" in attrs:
+            freqs = ",".join(str(int(c)) for c in np.ravel(attrs.get("coarse_freq", [])))
+            return f"window {int(attrs.get('fpga_seq_time_nsec', -1))} {int(attrs['fpga_seq_num'])} {freqs}"
+    path = Path(file)
+    size = path.stat().st_size
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        digest.update(handle.read(FINGERPRINT_BYTES))
+        if size > FINGERPRINT_BYTES:
+            handle.seek(max(FINGERPRINT_BYTES, size - FINGERPRINT_BYTES))
+            digest.update(handle.read())
+    return f"file {size} {digest.hexdigest()}" + ("" if index is None else f" #{index}")
+
+
 def _load_fines(paths: Sequence[str], capture_format: str, row: dict[str, Any], bank: bytes, k: int,
                 time_reverse: bool, max_frames: int | None) -> tuple[np.ndarray, np.ndarray]:
     """Return the uint64 [N, 3, 256] fine powers of every frame and the capture index of each."""
@@ -742,7 +782,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=control_rank,
                                   weights_hex=control_weights.hex(), frames=len(fines),
-                                  captures=[str(Path(p).resolve()) for p in _expand(control["captures"])])
+                                  captures=[str(Path(p).resolve()) for p in _expand(control["captures"])],
+                                  capture_ids=sorted({capture_identity(p, fmt) for p in _expand(control["captures"])}))
             if night_site is not None:
                 control_record["night"] = dict(latitude_deg=night_site[0], longitude_deg_east=night_site[1],
                                                frames=int(night.sum()))
@@ -803,21 +844,26 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                     word, word_source = floor, "floor, no captures"
                 note = (f"Word from {word_source}, control word from {source}." if v3
                         else f"Word from the floor, no captures, floor from {source}.")
-                values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile, note, decision)
+                is_control = bool(control) and channel == int(control["channel"])
+                # no captures, so no passing word: the decision masks the channel whole, and under v3 so does the
+                # bundle, through the reject word
+                masked_whole = bool(inputs) and not is_control and channel in inputs["rows"] and channel in inputs["limits"]
+                if masked_whole and v3:
+                    note += f" Reject word {REJECT_WORD_Q16}, masked whole (power limit: no captures)."
+                values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile, note, decision,
+                                               power_limit_word=REJECT_WORD_Q16 if masked_whole and v3 else None)
                 report_channels[str(channel)] = dict(
                     anchor_bin=anchor, anchor_source="nominal", nominal_bin=nominal, frames=0, captures=0,
                     word_q16=word, eta=word / Q16, word_source=word_source, **scaling)
-                is_control = bool(control) and channel == int(control["channel"])
-                if inputs and not is_control and channel in inputs["rows"] and channel in inputs["limits"]:
-                    # no captures, so no power-limit word: the decision masks the channel whole
+                if masked_whole:
                     from pilot_proxy.characterization import threshold_rule
                     report_channels[str(channel)].update(
                         power_limit=dict(outcome="not useful", reason="no captures",
                                          power_limit=inputs["limits"][channel],
                                          power_scale=threshold_rule.power_scale(inputs["table"], channel),
                                          coupling=inputs["coupling"].get(channel, 1.0)),
-                        **({"power_limit_word_q16": None, "power_limit_word_source": "none, power limit: no captures"}
-                           if v3 else {}))
+                        **({"power_limit_word_q16": REJECT_WORD_Q16,
+                            "power_limit_word_source": "reject, power limit: no captures"} if v3 else {}))
                 continue
             fines, captures = _load_fines(paths, fmt, row, bank, k, reverse, max_frames)
             window = (nominal + np.arange(-WINDOW_HALF_WIDTH, WINDOW_HALF_WIDTH + 1)) % FINE_BINS
@@ -863,12 +909,13 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 if origin == "nominal" and not is_control:
                     # with no pilot in the run the estimate reads only noise, which is no pass
                     tested = dict({key: value for key, value in tested.items() if key not in PASSING_FIELDS},
-                                  outcome="not useful", reason="pilot not seen")
+                                  outcome="not useful", reason=NO_PILOT_REASON)
             limited = None
             if decision == FINE_DECISION_V3_VERSION and tested is not None and not is_control:
-                # v3 keeps the power-limit word apart, and a channel with no passing word carries none, so every
-                # consumer decides it at its default word (the scaled control word) until the policy masks it whole
-                limited = (tested["word"], "power limit") if tested["outcome"] == "useful" else (None, f"none, power limit: {tested['reason']}")
+                # v3 keeps the power-limit word apart, and a channel with no passing word carries the reject word,
+                # so every consumer masks it whole, as the operating policy does
+                limited = ((tested["word"], "power limit") if tested["outcome"] == "useful"
+                           else (REJECT_WORD_Q16, f"reject, power limit: {tested['reason']}"))
             if given_word is not None or "word_q16" in plan:
                 word, word_source = int(floor if given_word is None else given_word), "plan"
             elif v3:
@@ -889,13 +936,14 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 word, word_source = knee, "knee"
             masked = float(np.sum(weights[seen[supported] > word]))
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
-            if limited is not None and limited[0] is not None and limited[0] != word:
+            if limited is not None and limited[0] != word:
                 # Kotekan and the relay apply the power-limit word, so test-bundle tests it against this interval
                 intervals["applied_masked_interval"] = bootstrap_captures(
                     seen[supported], captures[supported], int(limited[0]))["masked_interval"]
             note = f"Word from {word_source}, {'control word' if v3 else 'floor'} from {source}."
             if limited is not None:
-                note += f" Power-limit word from {limited[1]}." if limited[0] is not None else f" No power-limit word ({limited[1]})."
+                note += (f" Power-limit word from {limited[1]}." if tested["outcome"] == "useful"
+                         else f" Reject word {REJECT_WORD_Q16}, masked whole ({limited[1]}).")
             values[channel] = _fine_values(channel, anchor, rank, bulk, word, plan, quantile, note, decision,
                                            power_limit_word=None if limited is None else limited[0])
             report_channels[str(channel)] = dict(
@@ -927,7 +975,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                   null_quantile=quantile, floor_source=source, search_half_width=SEARCH_HALF_WIDTH,
                   null_scores=int(independent), channels=report_channels, control=control_record,
                   calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values()
-                                             for p in _expand(ps)))
+                                             for p in _expand(ps)),
+                  # test-bundle compares these, so a copy or another layout of the same data is not new test data
+                  calibration_capture_ids=sorted({capture_identity(p, fmt) for ps in plan["channels"].values()
+                                                  for p in _expand(ps)}))
     if inputs:
         decided = {int(c): row["power_limit"] for c, row in report_channels.items()
                    if "power_limit" in row and int(c) != int(control["channel"])}
@@ -998,11 +1049,13 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
     check("every bound channel has values", not uncalibrated, f"pending: {uncalibrated}")
 
     group = plan.get("channels", {})
-    used = {str(Path(p).resolve()) for ps in group.values() for p in _expand(ps)}
-    used |= {str(Path(p).resolve()) for p in _expand(plan.get("control", []))}
-    reused = used & set(calibration.get("calibration_captures", []))
-    reused |= used & set((calibration.get("control") or {}).get("captures", []))
-    check("test data differ from calibration data", not reused, f"{len(reused)} shared captures")
+    test_specs = [p for ps in group.values() for p in _expand(ps)] + _expand(plan.get("control", []))
+    calibration_control = calibration.get("control") or {}
+    paths = set(calibration.get("calibration_captures", [])) | set(calibration_control.get("captures", []))
+    # a report from before the identities were recorded is compared by path alone
+    ids = set(calibration.get("calibration_capture_ids", [])) | set(calibration_control.get("capture_ids", []))
+    shared = {p for p in test_specs if str(Path(p).resolve()) in paths or (ids and capture_identity(p, fmt) in ids)}
+    check("test data differ from calibration data", not shared, f"{len(shared)} shared captures")
 
     predicted = calibration.get("channels", {})
     for channel, paths in group.items():

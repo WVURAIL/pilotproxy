@@ -5,6 +5,18 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- A fine_decision_v3 channel with no passing BAO word, or with no captures, carries the reject word 1 as its
+  `power_limit_multiplier_q16` (`REJECT_WORD_Q16`) instead of no power-limit word. DtvRfiMask and the relay apply
+  that word, and it keeps only a frame with no target power, so they mask the channel whole without a permanent
+  list, which the Pathfinder templates do not pass. Before, both decided such a channel at its default word.
+- A channel whose calibration captures never showed its pilot gets the reason `pilot not seen in the calibration
+  captures`. It used to get `pilot not seen`, the 2026-10-12 wording of the threshold rule's `DTV without a
+  matching pilot`, so `compile-operating-policy` left it unmasked (`pass_all`); it is now `reject_all`.
+- `test-bundle` finds shared test and calibration data by identity as well as by path. `calibrate-bundle` records
+  `calibration_capture_ids` and the control's `capture_ids`: a recorded window by its time, sequence number and
+  frequencies, any other capture by its size and the SHA-256 of its first and last MiB. A copy, a hard link, or the
+  same windows read per window, combined or from a several-frame file no longer pass as new test data. A report
+  without the identities is compared by path alone.
 - The Pathfinder run tools no longer pass a fine_decision_v3 run they could not read. `check_pathfinder_dtv_run.py`
   reports a v3 channel with no `dtv_stat` rows as an error (exit 1) instead of reading its all-zero `dtv_mask`
   rows as 0% masked, and counts its windows without `dtv_stat`. It and `compare_pathfinder_dtv_mask.py` refuse

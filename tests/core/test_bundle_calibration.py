@@ -10,6 +10,8 @@ import pytest
 from pilot_proxy.power_limit_word import control_corrections, limit_test, ratio_excess
 from pilot_proxy.bundle_calibration import (
     BUNDLE_FILES,
+    NO_PILOT_REASON,
+    REJECT_WORD_Q16,
     _bulk,
     _exact_word,
     _expand,
@@ -32,6 +34,7 @@ from pilot_proxy.bundle_calibration import (
     weight_norms,
 )
 from pilot_proxy.characterization import threshold_rule
+from pilot_proxy.fine_decision import fine_stat_v3, masks_from_stat, v3_word
 from pilot_proxy.runtime_bundle import _write_sha256sums, validate_runtime_weight_bundle
 from pilot_proxy.process_run import process_run
 from pilot_proxy.run_plans import ordered_run_files, write_run_plans
@@ -218,6 +221,28 @@ def test_reused_capture_fails(plans):
     path.write_text(json.dumps(plan))
     result = run_bundle_test(bundle_dir=plans["bundle"], plan_path=path)
     assert not next(c for c in result["checks"] if c["check"].startswith("test data"))["passed"]
+
+
+def test_a_copy_of_a_calibration_capture_is_not_test_data(plans, tmp_path):
+    import os
+    import shutil
+
+    source = plans["calibrate"]["channels"]["35"][0]
+    copy, link = tmp_path / "renamed.h5", tmp_path / "linked.h5"
+    shutil.copy(source, copy)
+    os.link(source, link)
+    for capture in (copy, link):
+        plan = dict(plans["test"], channels={"35": [str(capture)] + plans["test"]["channels"]["35"]})
+        path = tmp_path / "test.json"
+        path.write_text(json.dumps(plan))
+        result = run_bundle_test(bundle_dir=plans["bundle"], plan_path=path)
+        shared = next(c for c in result["checks"] if c["check"] == "test data differ from calibration data")
+        assert not shared["passed"] and shared["detail"] == "1 shared captures"
+    # a report from before the identities were recorded still compares paths
+    report_path = plans["bundle"].with_name(plans["bundle"].name + ".report.json")
+    report = json.loads(report_path.read_text())
+    assert len(report["calibration_capture_ids"]) == len(report["calibration_captures"])
+    assert len(report["control"]["capture_ids"]) == len(report["control"]["captures"])
 
 
 def test_channel_masked_unlike_its_calibration_fails(plans):
@@ -410,6 +435,15 @@ def test_combined_run_gives_the_bundle_of_its_windows(plans, tmp_path):
         assert reports["frames"]["channels"]["35"][key] == reports["windows"]["channels"]["35"][key]
     assert all("#" in c for c in reports["combined"]["calibration_captures"])
     assert all("#" in c for c in reports["frames"]["calibration_captures"])
+    # the three layouts hold the same windows, so a bundle calibrated on one is not tested on another
+    ids = {name: report["calibration_capture_ids"] for name, report in reports.items()}
+    assert ids["combined"] == ids["windows"] == ids["frames"] and len(ids["windows"]) == len(sorted(acq.glob("*.h5")))
+    test = dict(plans["test"], capture_format="dtv_fine_powers",
+                channels={"35": [str(tmp_path / "combined" / "*.combined.h5")]}, control=[])
+    (tmp_path / "test.json").write_text(json.dumps(test))
+    checks = run_bundle_test(bundle_dir=tmp_path / "bundle-windows", plan_path=tmp_path / "test.json")["checks"]
+    shared = next(c for c in checks if c["check"] == "test data differ from calibration data")
+    assert not shared["passed"] and shared["detail"] == f"{len(ids['windows'])} shared captures"
 
 
 def test_spectrogram_removes_masked_frames(plans, tmp_path):
@@ -672,7 +706,7 @@ def test_power_limit_threshold_keeps_the_most_frames_under_the_limit(plans, tmp_
     assert fine[35]["cfar_multiplier_q16"] == tested["word"]
     # a channel whose pilot the run never showed takes the floor and no pass
     quiet = report["channels"]["29"]
-    assert quiet["power_limit"]["outcome"] == "not useful" and quiet["power_limit"]["reason"] == "pilot not seen"
+    assert quiet["power_limit"]["outcome"] == "not useful" and quiet["power_limit"]["reason"] == NO_PILOT_REASON
     assert "word" not in quiet["power_limit"]
     assert quiet["word_q16"] == report["floor_word_q16"]
 
@@ -683,7 +717,8 @@ def test_power_limit_decisions_are_read_by_the_operating_policy(plans, tmp_path)
     calibrate_bundle(plan_path=limit_plan(plans, tmp_path, 1e-3), output_dir=tmp_path / "bundle")
     rows = _decisions(tmp_path / "bundle.decisions.json")
     assert sorted(rows) == [29, 35]
-    assert _threshold_kind(rows[35]) == "finite" and _threshold_kind(rows[29]) == "pass_all"
+    # a run that never showed the pilot is masked whole: it is not the threshold rule's "DTV without a matching pilot"
+    assert _threshold_kind(rows[35]) == "finite" and _threshold_kind(rows[29]) == "reject_all"
     report = json.loads((tmp_path / "bundle.report.json").read_text())
     assert rows[35]["deployed_word"] == report["channels"]["35"]["word_q16"]
 
@@ -893,8 +928,8 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     check = next(c for c in run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])["checks"]
                  if c["check"] == "masked fraction on channel 35")
     assert not check["passed"] and "recalibrate" in check["detail"]
-    # a channel with no passing word carries no power-limit word, so it is decided at its default word
-    assert "power_limit_multiplier_q16" not in fine[29]
+    # a channel with no passing word carries the reject word, so every consumer masks it whole
+    assert fine[29]["power_limit_multiplier_q16"] == REJECT_WORD_Q16
 
 
 def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plans, tmp_path):
@@ -950,7 +985,7 @@ def test_power_limit_corrections_take_only_decided_control_frames(plans, tmp_pat
     assert corrections["control_frames"] == report["control"]["frames"] - 1
 
 
-def test_v3_channel_with_no_passing_word_carries_no_power_limit_word(plans, tmp_path):
+def test_v3_channel_with_no_passing_word_carries_the_reject_word(plans, tmp_path):
     from pilot_proxy.operating_policy import _decisions, _threshold_kind
 
     path = limit_plan(plans, tmp_path, 1e-12)
@@ -963,14 +998,26 @@ def test_v3_channel_with_no_passing_word_carries_no_power_limit_word(plans, tmp_
     channel = report["channels"]["35"]
     assert channel["power_limit"]["outcome"] == "not useful"
     assert channel["power_limit"]["reason"] == "no supported threshold meets tolerance"
-    assert channel["power_limit_word_q16"] is None
-    assert channel["power_limit_word_source"].startswith("none, power limit: ")
-    # every consumer then decides the channel at its default word, and the policy masks it whole
+    assert channel["power_limit_word_q16"] == REJECT_WORD_Q16
+    assert channel["power_limit_word_source"] == "reject, power limit: no supported threshold meets tolerance"
+    # DtvRfiMask and the relay apply the power-limit word, so they mask the channel whole, as the policy does
     fine = {p["physical_channel"]: p["fine_calibration"]
             for p in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
-    assert "power_limit_multiplier_q16" not in fine[35]
+    assert v3_word(fine[35]) == REJECT_WORD_Q16
     assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
     assert _threshold_kind(_decisions(tmp_path / "bundle.decisions.json")[35]) == "reject_all"
+    # every frame with target power is rejected at that word, so the test of the applied word passes on new data
+    bundle = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    fines, _ = _load_fines(plans["test"]["channels"]["35"], "chime_baseband", row,
+                           (tmp_path / "bundle" / "weights.bin").read_bytes(), 128,
+                           bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"]), None)
+    stats = np.array([[s.n_peak, s.d_rho] for s in map(fine_stat_v3, fines)], dtype=np.uint64)
+    assert masks_from_stat(stats, v3_word(fine[35])).all()
+    assert channel["applied_masked_interval"] == [1.0, 1.0]
+    result = run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])
+    check = next(c for c in result["checks"] if c["check"] == "masked fraction on channel 35")
+    assert check["passed"] and "masked 1.000 at the power-limit word" in check["detail"]
 
 
 def _v3_plan(plans, tmp_path, **extra):
@@ -998,8 +1045,11 @@ def test_v3_no_capture_channel_in_a_power_limit_plan_is_masked_whole(plans, tmp_
     path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     channel = report["channels"]["29"]
-    assert channel["power_limit"]["reason"] == "no captures" and channel["power_limit_word_q16"] is None
+    assert channel["power_limit"]["reason"] == "no captures" and channel["power_limit_word_q16"] == REJECT_WORD_Q16
     assert _threshold_kind(_decisions(tmp_path / "bundle.decisions.json")[29]) == "reject_all"
+    fine = {p["physical_channel"]: p["fine_calibration"]
+            for p in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
+    assert fine[29]["power_limit_multiplier_q16"] == REJECT_WORD_Q16
 
 
 def test_v3_default_word_is_the_scaled_control_word(plans, tmp_path):

@@ -26,9 +26,13 @@ import numpy as np
 from pilot_proxy.fine_decision import (
     FINE_DECISION_V3_VERSION,
     FINE_DECISION_VERSIONS,
+    MISSING_ROW,
     FineRequiredMultiplier,
     calibration_geometry,
     decision_functions,
+    fine_stat_v3,
+    masks_from_stat,
+    v3_word,
 )
 from pilot_proxy.fxfft import fine_power_fx
 
@@ -112,6 +116,10 @@ class CaptureGeometry:
     @property
     def power_frame_size(self) -> int:
         return self.num_freq * 3 * 8
+
+    @property
+    def stat_frame_size(self) -> int:
+        return self.num_freq * 2 * 8
 
 
 @dataclass(frozen=True)
@@ -282,15 +290,20 @@ def read_raw_frames(paths: Sequence[str | Path], frame_size: int) -> list[RawFra
 
 def validate_frames(
     voltage: Sequence[RawFrame], masks: Sequence[RawFrame], powers: Sequence[RawFrame],
-    expected_input_frames: int, *, geometry: CaptureGeometry,
+    expected_input_frames: int, *, geometry: CaptureGeometry, stats: Sequence[RawFrame] | None = None,
 ) -> int:
-    """Require complete blocks, identical frequency order and absolute timing."""
+    """Require complete blocks, identical frequency order and absolute timing.
+
+    ``stats`` are the optional dtv_stat frames. Like the mask and power frames, there is one per block.
+    """
     expected_input_frames = _integer(expected_input_frames, "expected_input_frames", 1)
     if expected_input_frames % geometry.frames_per_block:
         raise ValueError("input frame count must contain whole detector blocks")
     num_blocks = expected_input_frames // geometry.frames_per_block
     if (len(voltage), len(masks), len(powers)) != (expected_input_frames, num_blocks, num_blocks):
         raise ValueError("voltage/mask/power frame counts do not match complete capture geometry")
+    if stats is not None and len(stats) != num_blocks:
+        raise ValueError("stat frame count does not match complete capture geometry")
     start = voltage[0].fpga_seq_num
     downsampling = voltage[0].time_downsampling_fpga
     layouts = (
@@ -301,6 +314,9 @@ def validate_frames(
         ("power", powers, "dtv_powers", 6, (geometry.num_freq, 3), ("F", "W"), geometry.block_samples,
          geometry.block_samples * downsampling, geometry.power_frame_size),
     )
+    if stats is not None:
+        layouts += (("stat", stats, "dtv_stat", 6, (geometry.num_freq, 2), ("F", "S"), geometry.block_samples,
+                     geometry.block_samples * downsampling, geometry.stat_frame_size),)
     for kind, frames, name, dtype, dims, names, step, expected_downsampling, frame_size in layouts:
         stride, strides = 1, []
         for extent in reversed(dims):
@@ -373,12 +389,14 @@ class ExpectedProducts:
     masks: np.ndarray
     powers: np.ndarray
     decisions: tuple[FineRequiredMultiplier | None, ...]
+    stats: np.ndarray
+    stat_decisions: tuple[int | None, ...]
 
 
 def expected_products(
     block_bytes: Any, bundle: dict[str, Any], weight_bank: bytes, *, geometry: CaptureGeometry,
 ) -> ExpectedProducts:
-    """Compute fine masks, exact frame powers and exact Q16 keep boundaries.
+    """Compute fine masks, exact frame powers, exact Q16 keep boundaries and the v3 statistic.
 
     The frame powers are the all-bin sums of the exact fxfft256 fine powers,
     ``P_r = sum_f S_r[f]`` in uint64 (kernel core 3.0.0). These are the values
@@ -386,6 +404,13 @@ def expected_products(
     Unbound frequencies have zero mask/powers and a ``None`` decision, as in
     the submitted stage. Every bound frequency must have a fine calibration.
     Invalid rank support remains a decision with ``valid=False`` and mask zero.
+
+    ``stats`` holds the dtv_stat rows. A fine_decision_v3 row is ``[n_peak, d_rho]``
+    and its mask is zero, since the detector does not decide it. Every other row
+    is ``[0, 2^64 - 1]``, the pair of a row the detector does not evaluate.
+    ``stat_decisions`` holds the decision DtvRfiMask makes from a v3 pair at
+    ``v3_word`` (1 rejects, 0 keeps, and ``d_rho = 0`` rejects), and ``None`` for
+    other rows.
     """
     profiles = {}
     for row in bundle["profiles"]:
@@ -401,11 +426,15 @@ def expected_products(
         raise ValueError("time reversal preprocessing must be a boolean")
     masks = np.zeros(geometry.num_freq, dtype=np.uint8)
     powers = np.zeros((geometry.num_freq, 3), dtype=np.uint64)
+    stats = np.zeros((geometry.num_freq, 2), dtype=np.uint64)
+    stats[:, 1] = MISSING_ROW  # [0, 2^64 - 1] marks a row the detector does not evaluate
     decisions = []
+    stat_decisions = []
     for index, frequency_id in enumerate(geometry.frequency_ids):
         profile = profiles.get(frequency_id)
         if profile is None:
             decisions.append(None)
+            stat_decisions.append(None)
             continue
         calibration = profile["fine_calibration"]
         if calibration.get("status") != "calibrated" or calibration.get("decision_version") not in FINE_DECISION_VERSIONS:
@@ -431,10 +460,15 @@ def expected_products(
             "bulk_mask": bulk,
             "cfar_rank": rank,
         }
-        decision = decide(fine, multiplier_q16=calibration["cfar_multiplier_q16"], **args)
-        required = boundary(fine, **args)
-        masks[index] = decision.mask
-        decisions.append(required)
-    masks.flags.writeable = False
-    powers.flags.writeable = False
-    return ExpectedProducts(masks, powers, tuple(decisions))
+        if calibration["decision_version"] == FINE_DECISION_V3_VERSION:
+            # DtvRfiMask decides a v3 row from the pair at the word it applies
+            stat = fine_stat_v3(fine)
+            stats[index] = stat.n_peak, stat.d_rho
+            stat_decisions.append(int(masks_from_stat(stats[index:index + 1], v3_word(calibration))[0]))
+        else:
+            masks[index] = decide(fine, multiplier_q16=calibration["cfar_multiplier_q16"], **args).mask
+            stat_decisions.append(None)
+        decisions.append(boundary(fine, **args))
+    for array in (masks, powers, stats):
+        array.flags.writeable = False
+    return ExpectedProducts(masks, powers, tuple(decisions), stats, tuple(stat_decisions))

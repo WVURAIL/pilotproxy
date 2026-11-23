@@ -311,3 +311,108 @@ def test_preexisting_snapshot_tree_without_binding_is_preserved(tmp_path):
     assert sentinel.read_text() == "Prior interrupted attempt.\n"
     assert list(sentinel.parent.iterdir()) == [sentinel]
     assert not (out / "reduction/source-binding.json").exists()
+
+
+def _rewrite_npz(path, change):
+    """Change a saved archive and rebind its receipt to the new bytes."""
+    with np.load(path, allow_pickle=False) as archive:
+        arrays = {name: archive[name] for name in archive.files}
+    change(arrays)
+    np.savez(path, **arrays)
+    receipt = json.loads(path.with_suffix(".json").read_text())
+    receipt["sha256"] = REDUCER.sha(path)
+    FIXTURES.write(path.with_suffix(".json"), receipt)
+
+
+def _edit_json(path, change):
+    value = json.loads(path.read_text())
+    change(value)
+    FIXTURES.write(path, value)
+
+
+def _damage(out, damage):
+    raw = out / "raw/null_calibration/000000.npz"
+    if damage == "chronology":
+        _edit_json(raw.with_suffix(".json"), lambda r: r.update(completed_utc="2019-01-01T00:00:00+00:00"))
+    elif damage == "meta_json":
+        def change(arrays):
+            metadata = json.loads(str(arrays["meta_json"].item()))
+            arrays["meta_json"] = np.asarray(json.dumps({**metadata, "start": 1}))
+        _rewrite_npz(raw, change)
+    elif damage == "negative":
+        _rewrite_npz(raw, lambda a: a["float_fine"].__setitem__((0, 0, 0, 0, 0), -1.0))
+    elif damage == "clip":
+        _rewrite_npz(raw, lambda a: a["clip_count"].__setitem__((0, 0), 2048 * 128 * 128 + 1))
+    elif damage in ("seed_collision", "identities"):
+        path = out / "trial-identities.npy"
+        ids = np.load(path, allow_pickle=False)
+        if damage == "seed_collision":
+            ids["effective_seed63"][1] = ids["effective_seed63"][0]
+        else:
+            ids["raw_seed"][1] += 1000
+        np.save(path, ids, allow_pickle=False)
+        if damage == "seed_collision":
+            _edit_json(out / "plan.json", lambda p: p.update(identities_sha256=REDUCER.sha(path)))
+    elif damage == "cache_plan":
+        _edit_json(out.parent / "cache/plan.json", lambda p: p.update(edited=True))
+    elif damage == "runtime":
+        _edit_json(out / "reduction/source-binding.json", lambda b: b["runtime"].update(numpy="0.0"))
+    elif damage == "sources":
+        _edit_json(out / "reduction/source-binding.json", lambda b: b["source_sha256"].update(extra="0" * 64))
+    elif damage == "score_receipt":
+        # The manifest is rebound, so only the score receipt is stale.
+        path = out / "scores/null_calibration/ch14.npz"
+        with np.load(path, allow_pickle=False) as archive:
+            arrays = {name: archive[name] for name in archive.files}
+        arrays["coarse_float"] = arrays["coarse_float"] * 2
+        np.savez(path, **arrays)
+        _edit_json(path.parent / "manifest.json",
+                   lambda m: m["outputs_sha256"].update({str(path.relative_to(out)): REDUCER.sha(path)}))
+    elif damage == "calibration_marker":
+        _edit_json(out / "calibration.json", lambda c: c["coarse"]["ch14"][REDUCER.FLOAT_STAGES[0]]["0.05"]
+                   .update(threshold=0.0))
+
+
+@pytest.mark.parametrize("damage,stage,message", [
+    ("chronology", "score_null", "Raw receipt chronology differs"),
+    ("meta_json", "score_null", "Embedded raw metadata differs"),
+    ("negative", "score_null", "Raw powers must be finite nonnegative"),
+    ("clip", "score_null", "Clip count exceeds literal samples"),
+    ("seed_collision", "score_null", "effective seed collisions"),
+    ("identities", "score_null", "Trial identity digest differs"),
+    ("cache_plan", "score_null", "Cache plan changed"),
+    ("runtime", "calibrate", "Reducer runtime differs"),
+    ("sources", "calibrate", "Reducer sources differ"),
+    ("score_receipt", "calibrate", "Score file digest differs"),
+    ("calibration_marker", "freeze_grid", "Calibration completion marker differs"),
+])
+def test_integrity_damage_refuses_at_its_own_check(tmp_path, damage, stage, message):
+    out = FIXTURES.fixture(tmp_path)
+    if stage != "score_null":
+        REDUCER.score_stage(out, "null_calibration")
+    if stage == "freeze_grid":
+        REDUCER.calibrate(out)
+        REDUCER.score_stage(out, "discovery")
+    _damage(out, damage)
+    run = {"score_null": lambda: REDUCER.score_stage(out, "null_calibration"),
+           "calibrate": lambda: REDUCER.calibrate(out),
+           "freeze_grid": lambda: REDUCER.freeze_grid(out)}[stage]
+    with pytest.raises(ValueError, match=message):
+        run()
+    if stage == "calibrate":
+        assert not (out / "calibration.json").exists()
+    assert not (out / "evaluation-grid.json").exists()
+
+
+def test_undeployable_q16_null_threshold_is_refused(tmp_path):
+    out = FIXTURES.fixture(tmp_path)
+    # Trial 1 has no fixed target power in the bulk, so every Q16 boundary is 2**64.
+    _rewrite_npz(out / "raw/null_calibration/000000.npz",
+                 lambda a: a["fixed_fine"][1, :, 0, ::2].fill(0))
+    REDUCER.score_stage(out, "null_calibration")
+    with pytest.raises(ValueError, match="Calibration refused"):
+        REDUCER.calibrate(out)
+    refusals = REDUCER.read_json(out / "calibration-refused.json")["refusals"]
+    q16 = [r["reason"] for r in refusals if r["stage"] == REDUCER.Q16_STAGE]
+    assert len(q16) == 8 * 4 and set(q16) == {"Null threshold is not deployable"}
+    assert not (out / "calibration.json").exists()

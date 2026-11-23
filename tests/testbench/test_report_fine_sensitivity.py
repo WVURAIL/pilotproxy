@@ -139,6 +139,11 @@ def test_raw_grid_discretization_is_outer_difference_not_point_difference():
     assert 0 < bound["point_loss_db"] < 6
 
 
+# Even (bulk) target powers ramp 80..120, so the four ranks have distinct
+# reference values and thresholds. Tones and bin 1 are odd and untouched.
+BULK_RAMP = 80 + (40 * np.arange(128)) // 127
+
+
 def engineering_cohort(tmp_path, *, coarse_members=None):
     spec = importlib.util.spec_from_file_location("sensitivity_fixture_builder", ROOT / "tests/testbench/test_reduce_fine_validation.py")
     helper = importlib.util.module_from_spec(spec)
@@ -163,6 +168,8 @@ def engineering_cohort(tmp_path, *, coarse_members=None):
         with np.load(path, allow_pickle=False) as data:
             arrays = {k: data[k] for k in data.files if k != "meta_json"}
             metadata = json.loads(str(data["meta_json"].item()))
+        for name in ("fixed_fine", "float_fine"):
+            arrays[name][..., 0, ::2] = BULK_RAMP
         metadata["plan_sha256"] = R.sha(out / "plan.json")
         np.savez(path, **arrays, meta_json=np.asarray(json.dumps(metadata)))
         receipt = R.read_json(path.with_suffix(".json"))
@@ -176,6 +183,7 @@ def engineering_cohort(tmp_path, *, coarse_members=None):
     for case in range(7):
         snrs = grid["grids"][f"ch14/case{case}"]
         fine = np.full((2, len(snrs), 3, 256), 100, dtype=np.uint64)
+        fine[..., 0, ::2] = BULK_RAMP
         coarse = np.full((2, len(snrs), 3), 100, dtype=np.uint64)
         # Above -49.5 dB the designated tone is the anchor's null tone plus 2, and
         # bin 1, in no bulk or designated set, lifts the frame power.
@@ -218,6 +226,10 @@ def test_complete_small_native_cohort_end_to_end(tmp_path):
     for cell in report["cells"]:
         saved = R.read_json(out / cell["report"])
         assert len(saved["fine_curves"]) == 168 and len(saved["coarse_curves"]) == 18
+        for stage in R.STAGES:
+            ranked = {c["rank_index"]: c["threshold"] for c in saved["fine_curves"]
+                      if c["stage"] == stage and c["geometry"] == "calibrated" and c["pfa"] == .01}
+            assert len(set(ranked.values())) == 4
         snrs = saved["snr_db"]
         below = sum(v < -49.5 for v in snrs)
         assert below == 4

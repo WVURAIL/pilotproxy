@@ -887,7 +887,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 anchor = nominal if given is None else int(given)
                 origin = "nominal" if given is None else "plan"
                 bulk, rank = _geometry(anchor, excluded, decision)
-                seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
+                if not v3:  # v3 words do not depend on the anchor
+                    seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
 
             supported = seen >= 0
             if not supported.any():

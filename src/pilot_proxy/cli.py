@@ -687,7 +687,6 @@ CHARACTERIZE_STEPS = {
     "histogram-frames": "pilot_proxy.characterization.histogram_frames",
     "fine-histogram-frames": "pilot_proxy.detectors.narrowband_marker.fine_histogram_frames",
     "score-cache": "pilot_proxy.characterization.score_cache",
-    "spectrogram": "pilot_proxy.characterization.spectrogram",
 }
 PRODUCTS_STEPS = {"check-archive": "pilot_proxy.products.acceptance"}
 
@@ -1684,7 +1683,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name, summary, steps in (
         ("characterize", "Archive characterization: the release the frame exports are keyed to (archive), "
-                         "the frame exports, spectrograms and the score cache.",
+                         "the frame exports and the score cache.",
          CHARACTERIZE_STEPS),
         ("products", "Per-pilot product checks: the archive cohort acceptance gate (check-archive).",
          PRODUCTS_STEPS),

@@ -3,7 +3,7 @@
 config/chime/dtv.j2 in Kotekan, run with dtv_calibration_mode) and apply the hello-world pass criteria.
 
     analyze_dtv_run.py --run-dir /scratch/dtv/<run> --bundle-dir <bundle> \
-        [--strong 35] [--quiet 29] [--ranges analysis/archive_ranges.json] [--domain n0] [--json out.json]
+        [--ranges ranges.json [--strong 35] [--quiet 29]] [--domain n0] [--json out.json]
 
 A two-domain run (chime_upgrade_2numa.j2) writes one stream per NUMA domain into one directory, and
 --domain picks one; the tool refuses to mix them.
@@ -12,9 +12,9 @@ Checks, all from the files alone:
   mechanics  three products with equal frame counts; FPGA sequence advancing by 16384 per frame, no gaps;
              one frequency list for the run; unbound rows read mask 0, powers 0, support (-1,-1);
              bound rows carry valid rank support (1, n_bulk) on every frame (invalid frames are listed)
-  yes        the strong channel's masked fraction lies at or above the low end of its archive monthly range
-             (5th percentile) at the bundle word
-  quiet      the quiet channel's masked fraction lies at or below the high end (95th percentile)
+  yes        with --ranges, the strong channel's masked fraction lies at or above the low end of its archive
+             monthly range (5th percentile) at the bundle word
+  quiet      with --ranges, the quiet channel's masked fraction lies at or below the high end (95th percentile)
   report     per bound channel: masked fraction, per-minute masked fractions, runs of consecutive masked frames,
              and the frame-power ratio 2 P_target / (P_lower + P_upper) against the profile's null ratio
 Needs only numpy, and pilot-proxy for a fine_decision_v3 bundle, whose channels are decided from dtv_stat.
@@ -98,8 +98,7 @@ def main():
     ap.add_argument("--bundle-dir", required=True)
     ap.add_argument("--strong", type=int, default=35)
     ap.add_argument("--quiet", type=int, default=29)
-    ap.add_argument("--ranges", default=os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                     "..", "analysis", "archive_ranges.json"))
+    ap.add_argument("--ranges", help="archive monthly ranges of the masked fractions, for the yes and quiet checks")
     ap.add_argument("--num-freq", type=int, default=16)
     ap.add_argument("--domain", help="NUMA domain of a two-domain run, as its file names give it (n0 or n1)")
     ap.add_argument("--json")
@@ -152,12 +151,13 @@ def main():
     unbound = [i for i, f in enumerate(freqs) if f not in prof]
     checks["unbound_rows_zero"] = bool(not M[:, unbound].any() and not P[:, unbound].any()
                                        and (S[:, unbound] == -1).all())
-    ranges = json.load(open(a.ranges)) if os.path.exists(a.ranges) else {}
-    # the archive ranges computed for this bundle: same channels at the same words, each v3 channel at the word N2 applies
-    words = {str(r["physical_channel"]): v3.get(f, r["fine_calibration"]["cfar_multiplier_q16"]) for f, r in prof.items()}
-    ranges = next((rows for rows in ranges.values()
-                   if {c: v["word_q16"] for c, v in rows.items()} == words), {})
-    checks["archive_ranges_found_for_bundle"] = bool(ranges)
+    ranges = {}
+    if a.ranges:
+        # the archive ranges computed for this bundle: same channels at the same words, each v3 channel at the word N2 applies
+        words = {str(r["physical_channel"]): v3.get(f, r["fine_calibration"]["cfar_multiplier_q16"]) for f, r in prof.items()}
+        ranges = next((rows for rows in json.load(open(a.ranges)).values()
+                       if {c: v["word_q16"] for c, v in rows.items()} == words), {})
+        checks["archive_ranges_found_for_bundle"] = bool(ranges)
     minute = int(round(60 / (FRAME_SAMPLES * SAMPLE_SECONDS)))
     for f, i in bound_cols.items():
         ch = prof[f]["physical_channel"]

@@ -45,7 +45,8 @@ All notable changes to PilotProxy are recorded here. The project follows
   `bundle_multiplier_q16` of a v3 row is that word. The replay used to compare the recorded mask with the v3
   decision at the default word, so every frame flagged at that word was a mismatch, a `d_rho = 0` frame was expected
   kept, and the pair was never read. The reader still takes only the pinned metadata ABI, which predates
-  `dtv_stat`, so it cannot yet replay a recorded v3 capture.
+  `dtv_stat`, and only `rawFileWrite` files with `chord_freq_id` bundles. CHORD writes `dtv_stat` with
+  `hdf5FileWrite`, so the command cannot yet replay a recorded v3 capture.
 - `test-bundle` checks each channel's masked fraction at the word the stage applies: for a v3 channel with a
   power-limit word, that word (`v3_word`), against the interval `calibrate-bundle` now also records at it
   (`applied_masked_interval`). It used to test the default word only, so a qualified BAO word had no

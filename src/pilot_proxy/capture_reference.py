@@ -5,7 +5,9 @@ Adapted from Kotekan ``tools/verify_pilotproxy_pipeline.py`` at
 ``lib/metadata/chordMetadata.cpp``, ``DataType.hpp`` and
 ``lib/cuda/cudaPilotProxyDetector.cpp`` define the serialized metadata ABI,
 array types and product layouts used here. Only its little-endian LP64 ABI is
-supported. No code is imported from a Kotekan checkout at runtime.
+supported. That revision has no ``dtv_stat``, so the stat frame layout follows
+its mask and power layouts (see ``docs/CAPTURE_FINE_REPLAY.md``). No code is
+imported from a Kotekan checkout at runtime.
 
 The geometry and file order are supplied by the recording's manifest, and the
 fixture constants of the small verifier are not used. Exact reference

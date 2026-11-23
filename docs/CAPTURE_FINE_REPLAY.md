@@ -1,10 +1,11 @@
 # Capture-specific fine replay and score export
 
 The purpose of `replay-fine-capture` is to recompute the submitted fine
-decision from synchronized native voltage, mask, and coarse-power files. It
-exports the exact decimal Q16 keep boundary, the usable reference count, the
-validity, and the source frame provenance. The runtime bundle is left
-unchanged, and no operating threshold is chosen.
+decision from synchronized native voltage, mask, and coarse-power files, and,
+for `fine_decision_v3`, `dtv_stat` files. It exports the exact decimal Q16
+keep boundary, the usable reference count, the validity, and the source frame
+provenance. The runtime bundle is left unchanged, and no operating threshold
+is chosen.
 
 The detector does not decide a `fine_decision_v3` channel. It writes the pair
 `[n_peak, d_rho]` to `dtv_stat` and leaves the channel's `dtv_mask` row at 0.
@@ -98,16 +99,20 @@ as `[F,3]` little-endian uint64 values. A stat frame contains the pairs
 `dtv_stat`, so a stat frame follows the layout of the mask and power frames.
 Every Kotekan build that writes `dtv_stat` also has the int64
 `time_downsampling_fpga` of kotekan#1787 and a leading `T` axis of length 1 on
-each product (kotekan#1840). The reader refuses that metadata, so it cannot
-yet replay a recorded v3 capture. The v3 checks run on captures in the pinned
+each product (kotekan#1840). The reader refuses that metadata. The CHORD
+configurations also write `dtv_stat` with `hdf5FileWrite`, not
+`rawFileWrite`: the Pathfinder recv node in frames of 1024 blocks, and the
+F-engine one block per frame. CHIME's `dtv.j2` writes raw frames, but its
+bundles use `chime_freq_id`, which the replay refuses. The command cannot yet
+replay a recorded v3 capture. The v3 checks run on captures in the pinned
 layout, such as the synthetic example.
+
 The FPGA sequence of a mask, power or stat frame is that of the first voltage
 sample in the block, and its downsampling is the input downsampling times the
-block length. The replay expects the frame
-powers to be the all-bin sums of the exact fine powers
-(`capture_reference.expected_products`). A capture recorded by a stage that
-vendors a core before 3.0.0 carries row-domain sums and fails power parity,
-while its masks can still agree.
+block length. The replay expects the frame powers to be the all-bin sums of
+the exact fine powers (`capture_reference.expected_products`). A capture
+recorded by a stage that vendors a core before 3.0.0 carries row-domain sums
+and fails power parity, while its masks can still agree.
 
 The submitted loader binds physical channels 14 to 36. Unbound frequencies,
 such as a captured CH37 control, must have zero saved masks and coarse powers,

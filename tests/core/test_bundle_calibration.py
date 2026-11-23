@@ -1543,6 +1543,44 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
     assert tool.describe(none) == "ch29 1.5 (control word x scale, 1.0%, no power-limit word)"
 
 
+def test_calibration_length_takes_the_night_control_word(plans, tmp_path, monkeypatch, capsys):
+    from pilot_proxy.sun import is_night
+
+    tool = _calibration_length_tool()
+    captures = plans["calibrate"]["control"]["captures"]
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    # 64 captures from 0.2 h before sunset at DRAO, so the 0.4 h calibration holds about 17 day and 17 night captures
+    minutes = DAY_CTIME + 60 * np.arange(12 * 60)
+    sunset = minutes[np.argmax(is_night(minutes, DRAO["latitude_deg"], DRAO["longitude_deg_east"]))]
+    times = sunset - 720 + tool.CAPTURE_SECONDS * np.arange(64)
+    day = ~is_night(times, DRAO["latitude_deg"], DRAO["longitude_deg_east"])
+    rng = np.random.default_rng(3)
+    (tmp_path / "run").mkdir()
+    for index in range(64):
+        data = rng.gamma(44, 1e6 / 44, size=(8, 2, 3, 256))
+        data[:, 1, 0] *= 1 + 0.5 * day[index]        # the Sun raises the control's target in the day
+        with h5py.File(tmp_path / "run" / f"run_{index:02d}.h5", "w") as handle:
+            handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
+            handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 8 * 8192
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_time_nsec"] = int(times[index] * 1e9)
+
+    def control(name, *extra):
+        monkeypatch.setattr(sys, "argv", ["calibration_length.py", "--bundle-dir", str(tmp_path / "bundle"), "--run",
+                                          str(tmp_path / "run" / "run_*.h5"), "--hours", "0.4", "--decision-version",
+                                          "fine_decision_v3", "--output-dir", str(tmp_path / name), *extra])
+        tool.main()
+        capsys.readouterr()
+        return json.loads((tmp_path / name / "0.4h" / "bundle.report.json").read_text())
+
+    night = control("night", "--night", str(DRAO["latitude_deg"]), str(DRAO["longitude_deg_east"]))
+    all_frames = control("all")
+    assert night["control"]["night"] == dict(DRAO, frames=8 * int((~day[:34]).sum()))
+    assert night["control_quantile_q16"] < all_frames["control_quantile_q16"]
+
+
 def test_v3_rows_need_a_receiver_namespace():
     from pilot_proxy.runtime_bundle import _validate_receiver_channel_ids
 

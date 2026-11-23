@@ -12,7 +12,7 @@ calibration part, the failed test checks, and the share of captures to give proc
 power-limit word or the floor. Under fine decision v3 the table has no floor or anchor. Each channel's word is
 its default word, the control's 1% word scaled to the channel, and the masked fraction is at that word. With
 --power-limit the table also gives its power-limit word. The calibration length is the shortest L whose words
-still pass.
+still pass. --night takes the control word over the night frames at a site, as for process-run.
 With --block-hours, consecutive blocks of that length are calibrated on their own, which shows how each
 word follows the time of day.
 
@@ -55,7 +55,7 @@ def ordered_files(args, work):
         plans = write_run_plans(bundle_dir=args.bundle_dir, runs=args.run, output_dir=work, epoch=args.epoch,
                                 calibration_share=0.5, decision_version=args.decision_version,
                                 threshold="knee" if args.power_limit is None else "power_limit",
-                                power_limit=args.power_limit)
+                                power_limit=args.power_limit, night_site=args.night)
     calibrate, test = plans["calibrate"], plans["test"]
     files = {ch: calibrate["channels"][ch] + test["channels"][ch] for ch in calibrate["channels"]}
     return calibrate, files, str(calibrate["control"]["channel"])
@@ -204,6 +204,8 @@ def main():
     parser.add_argument("--power-limit", type=Path, default=None,
                         help="Calibrate with the power_limit threshold: JSON naming the response table and the checked "
                              "power limits, with the curvature of each channel and the margin, as for process-run.")
+    parser.add_argument("--night", type=float, nargs=2, default=None, metavar=("LATITUDE_DEG", "LONGITUDE_DEG_EAST"),
+                        help="Take the control word over the night frames at this site, as for process-run.")
     parser.add_argument("--epoch", default="calibration length study")
     parser.add_argument("--input-counts", type=Path, help="Good-input counts from pathfinder_input_counts.py.")
     parser.add_argument("--output-dir", type=Path, required=True)

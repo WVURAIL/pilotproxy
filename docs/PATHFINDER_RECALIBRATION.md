@@ -78,8 +78,11 @@ V=/mnt/cs00/data/kotekan_vis_files/subset
     --output inputs.npz
 ~/pp-venv/bin/python tools/calibration_length.py --bundle-dir <bundle of the run> \
     --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --hours 3 6 12 24 48 --input-counts inputs.npz \
-    --output-dir length
+    --night 49.3208 -119.6236 --output-dir length
 ```
+
+The study takes the same `--night` and `--decision-version` as process-run in step 4, so it tests the words
+that step deploys.
 
 The bad-input mask changes as the operators' script flags feeds: on 2026-11-20 it moved between 111 and
 113 good inputs of 128 about every 14 minutes. `pathfinder_input_counts.py` reads it from the visibility

@@ -287,8 +287,8 @@ def test_run_spectrogram_writes_each_channel_and_the_masked_summary(calibrated, 
 def test_run_scores_write_the_cache_of_each_channel(calibrated, tmp_path, monkeypatch):
     profiles = json.loads((calibrated["bundle"] / "pilot_profiles.json").read_text())["profiles"]
     anchor = next(p for p in profiles if p["physical_channel"] == 35)["fine_calibration"]["anchor_bin"]
-    # the second file was recorded first
-    runs = [loud_run(tmp_path / f"run_{index}.h5", anchor, seq=(1 - index) * 48 * 8192, missing=True)
+    # the second file given was recorded first; untimed files are in the order recv named them
+    runs = [loud_run(tmp_path / f"run_{1 - index}.h5", anchor, seq=(1 - index) * 48 * 8192, missing=True)
             for index in range(2)]
     out_dir = tmp_path / "scores"
     workers = []

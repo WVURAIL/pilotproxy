@@ -655,6 +655,31 @@ def test_first_bundle_needs_no_captures(plans, tmp_path, decision, floor):
     assert {row["fine_calibration"]["decision_version"] for row in rows} == {version}
 
 
+def test_v3_first_bundle_scales_the_simulated_control_word(plans, tmp_path):
+    plan = dict(plans["calibrate"], channels={"29": [], "35": [], "37": []}, control=None, num_inputs=32,
+                null_quantile=0.99, decision_version="fine_decision_v3")
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    # the control word is the quantile of white noise through ideal weights, whose null level is 1
+    q = float(np.quantile(simulated_null_scores(32, decision_version="fine_decision_v3"), 0.99))
+    assert report["control_quantile_q16"] == q and report["reference_level"] == 1.0
+    assert report["floor_word_q16"] == report["measured_floor_q16"] == int(np.ceil(q))
+    assert 1.8 < report["floor_eta"] < 1.95
+    assert report["floor_source"] == "white noise, 32 inputs" and report["control"] is None
+    # one independent null score in each simulated frame
+    assert report["null_scores"] == 2000
+    rows = {r["physical_channel"]: r["fine_calibration"]
+            for r in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
+    for channel in (29, 35, 37):
+        r = report["channels"][str(channel)]
+        assert r["word_source"] == "control word x scale" and r["frames"] == 0
+        assert r["scale"] == r["mu0"] != 1.0 and r["passband_factor_source"] == "not given"
+        assert r["word_q16"] == scaled_word(q, r["mu0"]) == rows[channel]["cfar_multiplier_q16"]
+        assert rows[channel]["decision_version"] == "fine_decision_v3"
+        assert rows[channel]["provenance"]["summed_inputs"] == 32
+
+
 def test_unknown_decision_version_is_refused(plans, tmp_path):
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v9")))

@@ -711,21 +711,26 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
     given = plan.get("power_limit")
     if not isinstance(given, dict) or not {"table", "limits"} <= set(given):
         raise ValueError('the power_limit threshold needs "power_limit": {"table": ..., "limits": ...} in the plan')
-    unknown = set(given) - {"table", "limits", "coupling", "curvature", "margin", "min_captures"}
+    unknown = set(given) - {"table", "limits", "coupling", "curvature", "margin", "pilot_passband", "min_captures"}
     if unknown:
         raise ValueError(f"unknown power_limit keys {sorted(unknown)}")
     if "words" in plan or "word_q16" in plan:
         raise ValueError("a power_limit plan takes no words, because the test sets them")
     # no defaults: the offset difference is negative on some channels, and where an estimate clips at zero only the
-    # error terms remain, so leaving them out reads a channel low, the direction that passes it
-    missing = sorted({"curvature", "margin"} - set(given))
+    # error terms remain, so leaving them out reads a channel low, the direction that passes it. r_c is below 1 on
+    # most channels, so leaving it out reads them low as well.
+    missing = sorted({"curvature", "margin", "pilot_passband"} - set(given))
     if missing:
         raise ValueError(f"a power_limit plan needs {missing}: the offset difference (curvature) of each channel with its standard error, "
-                         "and the margin, in units of the shelf estimate (0 where measured as none)")
+                         "the margin, in units of the shelf estimate (0 where measured as none), and the pilot passband "
+                         "factor r_c of each channel, the control included")
     control_channel = {int(plan["control"]["channel"])} if plan.get("control") else set()
     uncovered = sorted({int(c) for c in plan["channels"]} - control_channel - {int(c) for c in given["curvature"]})
     if uncovered:
         raise ValueError(f"the power_limit curvature has no entry for channels {uncovered}")
+    uncovered = sorted({int(c) for c in plan["channels"]} - {int(c) for c in given["pilot_passband"]})
+    if uncovered:
+        raise ValueError(f"the power_limit pilot_passband has no entry for channels {uncovered}")
     table_path, limits_path = (base / given["table"]).resolve(), (base / given["limits"]).resolve()
     table = threshold_rule.load_table(table_path)
     rows = {int(row["channel"]): row for row in table["channels"]}
@@ -736,7 +741,7 @@ def _limit_inputs(plan: dict[str, Any], base: Path) -> dict[str, Any]:
     return dict(
         table=table, rows=rows, limits={int(c): float(v) for c, v in json.loads(limits_path.read_text()).items()},
         coupling={int(c): float(v) for c, v in given.get("coupling", {}).items()}, curvature=curvature, margin=margin,
-        min_captures=int(given.get("min_captures", MIN_KNEE_CAPTURES)), shelf=_shelf(plan, base),
+        pilot_passband={int(c): float(v) for c, v in given["pilot_passband"].items()}, min_captures=int(given.get("min_captures", MIN_KNEE_CAPTURES)), shelf=_shelf(plan, base),
         record=dict(table=str(table_path), table_sha256=_sha256_text(table_path.read_bytes()),
                     experiment=table["inputs"].get("experiment"), limits=str(limits_path),
                     limits_sha256=_sha256_text(limits_path.read_bytes()), margin=margin,
@@ -779,8 +784,8 @@ def _limit_channel(channel: int, fines: np.ndarray, captures: np.ndarray, seen: 
         margin = 2.0 * (shelf * (measured["shift_se"] + measured["null_se"]) + curvature_se) + inputs["margin"]
     coupling = inputs["coupling"].get(channel, 1.0)
     result = limit_test(sweep, shelf=shelf, power_scale=threshold_rule.power_scale(inputs["table"], channel),
-                      power_limit=inputs["limits"][channel], coupling=coupling, offset=offset, shift=shift, margin=margin,
-                      min_captures=inputs["min_captures"])
+                      power_limit=inputs["limits"][channel], pilot_passband=inputs["pilot_passband"][channel],
+                      coupling=coupling, offset=offset, shift=shift, margin=margin, min_captures=inputs["min_captures"])
     result.update(estimate="ratio, F / mu_0 - 1", mu0=null_power_ratio_from_weight_norms(*norms),
                   coupling_source="plan" if channel in inputs["coupling"] else "worst case",
                   corrections="none, the control itself" if measured is None else dict(
@@ -950,7 +955,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                         power_limit=dict(outcome="not useful", reason="no captures",
                                          power_limit=inputs["limits"][channel],
                                          power_scale=threshold_rule.power_scale(inputs["table"], channel),
-                                         coupling=inputs["coupling"].get(channel, 1.0)),
+                                         coupling=inputs["coupling"].get(channel, 1.0),
+                                         pilot_passband=inputs["pilot_passband"][channel]),
                         **({"power_limit_word_q16": REJECT_WORD_Q16,
                             "power_limit_word_source": "reject, power limit: no captures"} if v3 else {}))
                 continue
@@ -1082,7 +1088,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             schema=DECISIONS_SCHEMA, inputs=dict(inputs["record"], plan_sha256=_sha256_text(plan_path.read_bytes())),
             channels=[dict(channel=c, outcome=t["outcome"], reason=t["reason"], deployed_word=t.get("word"),
                            kappa=t.get("kappa"), ratio=t.get("ratio"), power_limit=t["power_limit"],
-                           power_scale=t["power_scale"], coupling=t["coupling"]) for c, t in sorted(decided.items())]))
+                           power_scale=t["power_scale"], coupling=t["coupling"], pilot_passband=t["pilot_passband"])
+                      for c, t in sorted(decided.items())]))
     write_json_strict(output_dir.with_name(output_dir.name + ".report.json"), report)
     return report
 

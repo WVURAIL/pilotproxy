@@ -50,10 +50,10 @@ def _limit_plan(path: Path | None) -> dict[str, Any]:
     """Return the power-limit inputs of a plan, with the paths of the table and the limits made absolute."""
     if path is None:
         raise ValueError("the power_limit threshold needs a JSON file that names the response table and the checked power "
-                         "limits and gives the curvature and the margin")
+                         "limits and gives the curvature, the margin and the pilot passband")
     given = json.loads(Path(path).read_text())
-    if not {"table", "limits", "curvature", "margin"} <= set(given):
-        raise ValueError(f"{path} must name a table and limits and give the curvature and the margin")
+    if not {"table", "limits", "curvature", "margin", "pilot_passband"} <= set(given):
+        raise ValueError(f"{path} must name a table and limits and give the curvature, the margin and the pilot passband")
     base = Path(path).resolve().parent
     return {**given, **{key: str((base / given[key]).resolve()) for key in ("table", "limits")}}
 

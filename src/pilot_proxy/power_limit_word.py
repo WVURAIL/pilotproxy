@@ -3,14 +3,16 @@
 
 The acceptance test keeps the most frames whose upper residual power meets the checked limit,
 
-    f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0).
+    f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0) / r_c.
 
 The excess is the frame-level ratio e = F / mu_0 - 1, F = 2 P_0 / (P_1 + P_2), each channel and the
 control at its own null level mu_0. The kept mean excess e(u) and its clustered error come from the
 channel. The null o and the selection shift delta(u) come from the control frames that the decision
 decides, read under the words of the channel. A word at which the control keeps no frame has no measured
 shift, and cannot pass.
-The response table, the checked limits and the coupling fraction f are inputs. The test is in-sample,
+The pilot is a tone, and passes the channelizer with another gain than the shelf, so the corrected
+estimate reads r_c times the shelf. The pilot passband factor r_c divides the estimate and its margin s.
+The response table, the checked limits, r_c and the coupling fraction f are inputs. The test is in-sample,
 so its word is a candidate until it is tested on independent data.
 """
 from __future__ import annotations
@@ -88,25 +90,28 @@ def control_corrections(words: np.ndarray, excess: np.ndarray, capture: np.ndarr
 
 
 def limit_test(sweep: dict[str, np.ndarray], *, shelf: float, power_scale: float, power_limit: float,
-             coupling: float = 1.0, offset: float = 0.0, shift: np.ndarray | float = 0.0, margin: np.ndarray | float = 0.0,
-             min_captures: int = 30) -> dict[str, Any]:
+             pilot_passband: float, coupling: float = 1.0, offset: float = 0.0, shift: np.ndarray | float = 0.0,
+             margin: np.ndarray | float = 0.0, min_captures: int = 30) -> dict[str, Any]:
     """Return the outcome of the acceptance test over the words of a sweep.
 
     `sweep` is threshold_rule.sweep of the channel. `offset`, `shift` and `margin` are in shelf units,
-    and `margin` is added to two standard errors of the kept estimate.
+    and `margin` is added to two standard errors of the kept estimate. `pilot_passband` is r_c, which
+    divides the corrected estimate and its margin, so `x` and `upper_shelf` are on the sky.
     """
-    for name, value in (("power_scale", power_scale), ("power_limit", power_limit), ("coupling", coupling)):
+    for name, value in (("power_scale", power_scale), ("power_limit", power_limit), ("coupling", coupling),
+                        ("pilot_passband", pilot_passband)):
         if not np.isfinite(value) or value <= 0:
             raise ValueError(f"{name} must be finite and positive")
     if coupling > 1:
         raise ValueError("the coupling fraction is at most 1, its worst case")
-    x = np.maximum(shelf * sweep["mean_excess"] - shift - offset, 0.0)
-    upper = x + MARGIN_STANDARD_ERRORS * sweep["se"] + margin
+    x = np.maximum(shelf * sweep["mean_excess"] - shift - offset, 0.0) / pilot_passband
+    upper = x + (MARGIN_STANDARD_ERRORS * sweep["se"] + margin) / pilot_passband
     ratio = coupling * power_scale * upper**2 / power_limit
     eligible = (sweep["kept_events"] >= min_captures) & (sweep["kappa"] > 0)
     passing = eligible & (ratio <= 1.0)
     result: dict[str, Any] = dict(outcome="useful" if passing.any() else "not useful", power_limit=float(power_limit),
-                                  power_scale=float(power_scale), coupling=float(coupling), offset=float(offset),
+                                  power_scale=float(power_scale), coupling=float(coupling),
+                                  pilot_passband=float(pilot_passband), offset=float(offset),
                                   eligible_words=int(eligible.sum()), passing_words=int(passing.sum()))
     if not eligible.any():
         return dict(result, reason=f"no word keeps {min_captures} captures")

@@ -974,8 +974,10 @@ def limit_plan(plans, tmp_path, limit, **given):
     limits.write_text(json.dumps({"35": limit, "29": limit}))
     table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
     path = tmp_path / "limit_plan.json"
-    # the curvature and the margin are required, and zero here
-    given = dict(dict(curvature={c: [0.0, 0.0] for c in plans["calibrate"]["channels"]}, margin=0.0), **given)
+    # the curvature, the margin and the pilot passband are required: zero, zero and one here
+    channels = plans["calibrate"]["channels"]
+    given = dict(dict(curvature={c: [0.0, 0.0] for c in channels}, margin=0.0,
+                      pilot_passband={c: 1.0 for c in channels}), **given)
     path.write_text(json.dumps(dict(plans["calibrate"], threshold="power_limit",
                                     power_limit=dict(table=str(table), limits=str(limits), min_captures=2, **given))))
     return path
@@ -1042,6 +1044,21 @@ def test_power_limit_coupling_scales_the_power(plans, tmp_path):
     assert b["least_ratio"] == pytest.approx(1e-6 * a["least_ratio"])
 
 
+def test_power_limit_pilot_passband_divides_the_estimate(plans, tmp_path):
+    flat = calibrate_bundle(plan_path=limit_plan(plans, tmp_path, 1e-12), output_dir=tmp_path / "flat")
+    (tmp_path / "low").mkdir()
+    channels = plans["calibrate"]["channels"]
+    low = calibrate_bundle(plan_path=limit_plan(plans, tmp_path / "low", 1e-12,
+                                                pilot_passband=dict({c: 1.0 for c in channels}, **{"35": 0.5})),
+                           output_dir=tmp_path / "bundle")
+    a, b = flat["channels"]["35"]["power_limit"], low["channels"]["35"]["power_limit"]
+    # a pilot read at half the shelf is twice the shelf on the sky, so four times the power
+    assert (a["pilot_passband"], b["pilot_passband"]) == (1.0, 0.5)
+    assert b["least_ratio"] == pytest.approx(4 * a["least_ratio"]) and b["least_ratio_word"] == a["least_ratio_word"]
+    rows = {row["channel"]: row for row in json.loads((tmp_path / "bundle.decisions.json").read_text())["channels"]}
+    assert rows[35]["pilot_passband"] == 0.5 and rows[29]["pilot_passband"] == 1.0
+
+
 def test_power_limit_plan_errors(plans, tmp_path):
     base = json.loads(limit_plan(plans, tmp_path, 1e-3).read_text())
     path = tmp_path / "bad.json"
@@ -1054,7 +1071,14 @@ def test_power_limit_plan_errors(plans, tmp_path):
                             (dict(power_limit={k: v for k, v in base["power_limit"].items() if k != "curvature"}),
                              r"needs \['curvature'\]"),
                             (dict(power_limit=dict(base["power_limit"], curvature={"35": [0.0, 0.0]})),
-                             r"no entry for channels \[29\]")):
+                             r"curvature has no entry for channels \[29\]"),
+                            (dict(power_limit={k: v for k, v in base["power_limit"].items() if k != "pilot_passband"}),
+                             r"needs \['pilot_passband'\]"),
+                            (dict(power_limit=dict(base["power_limit"], pilot_passband={"35": 1.0, "29": 1.0})),
+                             r"pilot_passband has no entry for channels \[37\]"),
+                            (dict(power_limit=dict(base["power_limit"],
+                                                   pilot_passband=dict(base["power_limit"]["pilot_passband"], **{"35": 0.0}))),
+                             "pilot_passband must be finite and positive")):
         path.write_text(json.dumps(dict(base, **change)))
         with pytest.raises(ValueError, match=message):
             calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
@@ -1115,13 +1139,18 @@ def test_limit_test_takes_the_largest_passing_word():
     sweep = dict(word=np.array([10, 20, 30, 40], dtype=np.uint64), kappa=np.array([0.2, 0.5, 0.8, 1.0]),
                  mean_excess=np.array([0.0, 1.0, 2.0, 30.0]), se=np.zeros(4), kept_frames=np.array([2, 5, 8, 10]),
                  kept_events=np.array([1, 3, 3, 4]))
-    common = dict(shelf=0.01, power_scale=4.0, power_limit=4.0 * 0.021**2)
+    common = dict(shelf=0.01, power_scale=4.0, power_limit=4.0 * 0.021**2, pilot_passband=1.0)
     result = limit_test(sweep, min_captures=3, **common)
     assert (result["word"], result["kappa"], result["passing_words"]) == (30, 0.8, 2)
     assert result["ratio"] == pytest.approx((0.02 / 0.021) ** 2)
     # the offset and the shift come off the estimate, and the margin goes onto it
     shifted = limit_test(sweep, min_captures=3, offset=0.005, shift=np.full(4, -0.005), margin=0.001, **common)
     assert shifted["upper_shelf"] == pytest.approx(0.021) and shifted["word"] == 30
+    # r_c divides the corrected estimate and the margin: at 0.95 word 30 reads 0.021 / 0.95 and fails
+    passband = limit_test(sweep, min_captures=3, offset=0.005, shift=np.full(4, -0.005), margin=0.001,
+                          **dict(common, pilot_passband=0.95))
+    assert passband["x"] == pytest.approx(0.01 / 0.95) and passband["upper_shelf"] == pytest.approx(0.011 / 0.95)
+    assert passband["word"] == 20 and passband["least_ratio"] == pytest.approx(shifted["least_ratio"] / 0.95**2)
     assert limit_test(sweep, min_captures=5, **common)["reason"] == "no word keeps 5 captures"
     assert limit_test(sweep, min_captures=3, coupling=1e-3, **common)["word"] == 40
     # a word with no measured shift cannot pass
@@ -1154,7 +1183,7 @@ def _power_limit_run(plans, tmp_path, decision, min_captures=2):
     table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
     (tmp_path / "inputs.json").write_text(json.dumps(dict(
         table=str(table), limits="limits.json", min_captures=min_captures,
-        curvature={"35": [0.0, 0.0], "37": [0.0, 0.0]}, margin=0.0)))
+        curvature={"35": [0.0, 0.0], "37": [0.0, 0.0]}, margin=0.0, pilot_passband={"35": 1.0, "37": 1.0})))
     common = dict(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
                   calibration_share=0.5, receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
     summary = process_run(output_dir=tmp_path / "out", threshold="power_limit", power_limit=tmp_path / "inputs.json",
@@ -1664,7 +1693,8 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
             handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 8 * 8192
     (tmp_path / "limits.json").write_text(json.dumps({"35": 1e-3}))
     table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
-    limit = dict(table=str(table), limits="limits.json", curvature={"35": [0.0, 0.0]}, margin=0.0)
+    limit = dict(table=str(table), limits="limits.json", curvature={"35": [0.0, 0.0]}, margin=0.0,
+                 pilot_passband={"35": 1.0, "37": 1.0})
     (tmp_path / "limit.json").write_text(json.dumps(limit))
     (tmp_path / "limit10.json").write_text(json.dumps(dict(limit, min_captures=10)))
 

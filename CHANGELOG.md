@@ -5,6 +5,18 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The Pathfinder run tools no longer pass a fine_decision_v3 run they could not read. `check_pathfinder_dtv_run.py`
+  reports a v3 channel with no `dtv_stat` rows as an error (exit 1) instead of reading its all-zero `dtv_mask`
+  rows as 0% masked, and counts its windows without `dtv_stat`. It and `compare_pathfinder_dtv_mask.py` refuse
+  a directory with `dtv_stat` files when `--bundle-dir` is not given, and the check stops when two different
+  windows share an `fpga_seq_num`, as acquisitions on either side of an F-engine resync do, instead of letting
+  one replace the other. `compare_pathfinder_dtv_mask.py` compares the
+  bundle's v3 channels by default, counts a block read from both a per-window and a combined file once, and exits 1
+  when a check fails or a frequency could not be compared. `analyze_dtv_run.py` reads a not-evaluated v3 row
+  `[0, 2^64 - 1]` as untested, not as a valid test, reports unequal frame counts instead of failing in a
+  reshape, and takes `--domain` for a two-domain CHIME run, whose two streams it used to read as one.
+  `pathfinder_preflight.py` requires `dtv_stat` to be sent, received and written when the detector writes it
+  (kotekan#1924). The `test` extra installs `hdf5plugin`, so the run-tool tests no longer skip in CI.
 - `test-bundle` checks each channel's masked fraction at the word the stage applies: for a v3 channel with a
   power-limit word, that word (`v3_word`), against the interval `calibrate-bundle` now also records at it
   (`applied_masked_interval`). It used to test the default word only, so a qualified BAO word had no

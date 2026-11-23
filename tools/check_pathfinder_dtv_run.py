@@ -10,13 +10,15 @@ matplotlib and the fine powers, it also plots the target fine powers in chunks, 
 blocks and over the kept blocks. The masked percent of every channel by UTC hour, from the
 window times recv writes (fpga_seq_time_nsec), goes to masked_by_hour.csv and a figure.
 A fine_decision_v3 channel of the bundle is decided from its dtv_stat rows at the word N2 applies
-(the control at its own word, so its false alarms show), since its dtv_mask rows hold 0.
+(the control at its own word, so its false alarms show), since its dtv_mask rows hold 0. Such a
+channel with no dtv_stat rows is reported with an error, and the exit status is then 1.
 Reads per-window or combined files (combine_pathfinder_dtv_run.py). Needs numpy, h5py, hdf5plugin and pilot-proxy.
 """
 import argparse
 import glob
 import json
 import os
+import sys
 from collections import defaultdict
 
 import h5py
@@ -39,14 +41,25 @@ def product_files(dtv_dir, product):
 
 
 def collect(dtv_dir, product, channels):
-    """Return {channel: {window seq: per-block array}} for one product."""
-    found = defaultdict(dict)
+    """Return {channel: {window seq: per-block array}} for one product.
+
+    A window read twice, from a per-window and a combined file, is kept once. Two different windows with one
+    fpga_seq_num, as two acquisitions on either side of an F-engine resync give, stop the check: one window
+    would silently replace the other.
+    """
+    found, origin = defaultdict(dict), {}
     for path in product_files(dtv_dir, product):
         for attrs, data in iter_windows(path):
             coarse = [int(c) for c in attrs.get("coarse_freq", [])]
+            seq = int(attrs["fpga_seq_num"])
             for channel in channels:
                 if channel in coarse:
-                    found[channel][int(attrs["fpga_seq_num"])] = data[:, coarse.index(channel)]
+                    rows = data[:, coarse.index(channel)]
+                    held = found[channel].get(seq)
+                    if held is not None and not np.array_equal(held, rows):
+                        sys.exit(f"dtv_{product} windows at fpga_seq_num {seq} differ between {origin[channel, seq]} "
+                                 f"and {path} (an F-engine resync?); check each acquisition with its own --dtv-dir")
+                    found[channel][seq], origin[channel, seq] = rows, path
     return found
 
 
@@ -214,10 +227,18 @@ def main():
     parser.add_argument("--output-dir")
     args = parser.parse_args()
 
+    if not args.bundle_dir and product_files(args.dtv_dir, "stat"):
+        # without the bundle a v3 channel would be read from its dtv_mask rows, which hold 0
+        sys.exit(f"{args.dtv_dir} holds dtv_stat files: pass --bundle-dir, or its v3 channels read as never masked")
     masks = collect(args.dtv_dir, "mask", args.channels)
     supports = collect(args.dtv_dir, "fine_support", args.channels)
     words = {c: w for c, w in v3_words(args.bundle_dir, mask_control=True).items() if c in args.channels}
-    for channel, rows in collect(args.dtv_dir, "stat", list(words)).items():
+    stats = collect(args.dtv_dir, "stat", list(words))
+    # windows of a v3 channel recorded in dtv_mask but not in dtv_stat, which would otherwise go uncounted
+    without_stat = {c: len(set(masks.get(c, {})) - set(stats.get(c, {}))) for c in words}
+    for channel in words:
+        # a v3 channel's dtv_mask rows hold 0, so only its dtv_stat rows say what was masked
+        rows = stats.get(channel, {})
         masks[channel] = {seq: masks_from_stat(stat, words[channel]) for seq, stat in rows.items()}
         supports[channel] = {seq: v3_support(stat) for seq, stat in rows.items()}
     fines = collect(args.dtv_dir, "fine_powers", args.channels)
@@ -232,6 +253,10 @@ def main():
     for channel in args.channels:
         report, spectra = check_channel(channel, masks.get(channel, {}), supports.get(channel, {}),
                                         fines.get(channel, {}), anchor.get(channel), chunk_blocks)
+        if channel in words:
+            report["windows_without_dtv_stat"] = without_stat[channel]
+            if not stats.get(channel):
+                report["error"] = "fine_decision_v3 channel with no dtv_stat rows"
         if channel in fractions:
             report["frac_dtv_mask_enabled"] = round(fractions[channel], 4)
         reports.append(report)
@@ -261,6 +286,9 @@ def main():
                 plot_by_hour(by_hour, os.path.join(args.output_dir, "masked_by_hour.png"))
             except ImportError:
                 pass
+    missing = [r["channel"] for r in reports if "error" in r]
+    if missing:
+        sys.exit(f"fine_decision_v3 channels with no dtv_stat rows: {missing}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Recorded fine decision v3 statistics: their decisions, and the Pathfinder tools that read them."""
 import importlib.util
 import json
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -113,3 +114,131 @@ def test_check_tool_reports_v3_decisions(run):
     assert reports[V3]["masked_percent"] == round(100 * 6 / (BLOCKS - 1), 3)
     assert reports[V3]["valid_test_percent"] == 100.0
     assert reports[V1]["masked_percent"] == round(100 * 4 / BLOCKS, 3)
+
+
+def test_check_tool_refuses_a_v3_channel_recorded_without_its_statistic(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
+    (run["dtv"] / "dtv_stat.0.h5").unlink()
+    out = run["tmp"] / "check"
+    done = subprocess.run([sys.executable, str(ROOT / "tools" / "check_pathfinder_dtv_run.py"), "--dtv-dir",
+                           str(run["dtv"]), "--bundle-dir", str(run["bundle"]), "--channels", str(V3), str(V1),
+                           "--output-dir", str(out)], capture_output=True, text=True)
+    assert done.returncode == 1 and str(V3) in done.stderr
+    reports = {r["channel"]: r for r in json.loads((out / "check.json").read_text())}
+    # the v3 channel's dtv_mask rows hold 0, and they must not read as a channel that masked nothing
+    assert reports[V3]["error"] and reports[V3]["windows"] == 0 and "masked_percent" not in reports[V3]
+    assert reports[V3]["windows_without_dtv_stat"] == 1
+    assert reports[V1]["masked_percent"] == round(100 * 4 / BLOCKS, 3)
+
+
+def test_compare_tool_counts_a_block_read_twice_once(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
+    tool = _tool("compare_pathfinder_dtv_mask")
+    once = tool.read_masks(str(run["dtv"]), v3_words(run["bundle"]))
+    # the same window again in a second file, as a combined file beside the per-window files would hold it
+    (run["dtv"] / "combined").mkdir()
+    for product in ("mask", "stat"):
+        with h5py.File(run["dtv"] / f"dtv_{product}.0.h5", "r") as handle:
+            rows, freqs = handle[f"dtv_{product}"][()], handle[f"dtv_{product}"].attrs["coarse_freq"]
+        _write(run["dtv"] / "combined" / f"dtv_{product}.1.h5", product, rows, freqs)
+    twice = tool.read_masks(str(run["dtv"]), v3_words(run["bundle"]))
+    for freq_id in (V3, V1):
+        assert twice[freq_id][0].tolist() == once[freq_id][0].tolist()
+        assert twice[freq_id][1].tolist() == once[freq_id][1].tolist()
+
+
+def _raw(path, rows, freqs, dtype, seq0=1 << 34):
+    """A rawFileWrite file as analyze_dtv_run.py reads it: per frame, the metadata size, metadata and payload."""
+    tool = _tool("analyze_dtv_run")
+    offset = tool.nfreq_offset()
+    with open(path, "wb") as out:
+        for index, row in enumerate(rows):
+            meta = bytearray(offset + 4 + 4 * len(freqs))
+            struct.pack_into("<q", meta, tool.SEQ_OFFSET, seq0 + index * tool.FRAME_SAMPLES)
+            struct.pack_into("<q", meta, tool.PERIOD_OFFSET, tool.FRAME_SAMPLES)
+            struct.pack_into(f"<i{len(freqs)}i", meta, offset, len(freqs), *freqs)
+            out.write(struct.pack("<I", len(meta)) + bytes(meta) + np.asarray(row, dtype).tobytes())
+
+
+def test_analyze_tool_reads_an_unevaluated_v3_row_as_untested(tmp_path):
+    frames, freqs = 4, [844, 845]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _raw(run_dir / "dtv_mask_0.raw", np.zeros((frames, 2)), freqs, np.int8)
+    _raw(run_dir / "dtv_powers_0.raw", np.ones((frames, 2, 3)), freqs, "<u8")
+    _raw(run_dir / "dtv_fine_support_0.raw", np.full((frames, 2, 2), -1), freqs, "<i4")
+    stat = np.zeros((frames, 2, 2), np.uint64)
+    stat[:, 0] = [5, 10]                                  # decided on every frame
+    stat[:, 1] = [0, MISSING_ROW]                         # the detector never evaluated this channel
+    _raw(run_dir / "dtv_stat_0.raw", stat, freqs, "<u8")
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    rows = [dict(receiver_channel_id=f, physical_channel=c, null_power_ratio=1.0,
+                 fine_calibration=dict(status="calibrated", decision_version="fine_decision_v3",
+                                       cfar_multiplier_q16=65536)) for f, c in zip(freqs, (14, 15))]
+    (bundle / "pilot_profiles.json").write_text(json.dumps(dict(profiles=rows)))
+    out = tmp_path / "out.json"
+    subprocess.run([sys.executable, str(ROOT / "tools" / "analyze_dtv_run.py"), "--run-dir", str(run_dir),
+                    "--bundle-dir", str(bundle), "--num-freq", "2", "--json", str(out)], capture_output=True)
+    result = json.loads(out.read_text())
+    assert result["channels"]["14"]["valid"] == frames
+    assert result["channels"]["15"]["valid"] == 0
+    assert result["checks"]["ch15_rank_support_valid_every_frame"] is False
+    # frame counts that differ are reported, not a crash in a reshape
+    _raw(run_dir / "dtv_stat_0.raw", stat[:3], freqs, "<u8")
+    done = subprocess.run([sys.executable, str(ROOT / "tools" / "analyze_dtv_run.py"), "--run-dir", str(run_dir),
+                           "--bundle-dir", str(bundle), "--num-freq", "2"], capture_output=True, text=True)
+    assert done.returncode == 1 and "dtv_stat has 3 frames" in done.stderr
+
+
+def test_analyze_tool_keeps_the_numa_domains_apart(tmp_path):
+    frames, freqs = 2, [844, 845]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    stat = np.zeros((frames, 2, 2), np.uint64)
+    stat[:, :, 1] = 10
+    for domain, freq_list in (("n0", freqs), ("n1", [900, 901])):
+        for product, rows, dtype in (("mask", np.zeros((frames, 2)), np.int8), ("powers", np.ones((frames, 2, 3)), "<u8"),
+                                     ("fine_support", np.full((frames, 2, 2), -1), "<i4"), ("stat", stat, "<u8")):
+            _raw(run_dir / f"cx01_dtv_{product}_{domain}_0000000.raw", rows, freq_list, dtype)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    rows = [dict(receiver_channel_id=f, physical_channel=c, null_power_ratio=1.0,
+                 fine_calibration=dict(status="calibrated", decision_version="fine_decision_v3",
+                                       cfar_multiplier_q16=65536)) for f, c in zip(freqs, (14, 15))]
+    (bundle / "pilot_profiles.json").write_text(json.dumps(dict(profiles=rows)))
+    command = [sys.executable, str(ROOT / "tools" / "analyze_dtv_run.py"), "--run-dir", str(run_dir),
+               "--bundle-dir", str(bundle), "--num-freq", "2"]
+    mixed = subprocess.run(command, capture_output=True, text=True)
+    assert mixed.returncode == 1 and "NUMA domains ['n0', 'n1']" in mixed.stderr
+    out = tmp_path / "n0.json"
+    subprocess.run(command + ["--domain", "n0", "--json", str(out)], capture_output=True)
+    result = json.loads(out.read_text())
+    assert result["frames"] == frames and result["frequencies"] == freqs
+
+
+def _run_tool(name, *args):
+    return subprocess.run([sys.executable, str(ROOT / "tools" / f"{name}.py"), *map(str, args)],
+                          capture_output=True, text=True)
+
+
+def test_run_tools_refuse_a_v3_run_without_its_bundle(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
+    # dtv_stat files are present, so without the bundle the v3 channels would read as never masked
+    check = _run_tool("check_pathfinder_dtv_run", "--dtv-dir", run["dtv"], "--channels", V3, V1)
+    assert check.returncode == 1 and "--bundle-dir" in check.stderr
+    compare = _run_tool("compare_pathfinder_dtv_mask", "--dtv-dir", run["dtv"], "--vis-dir", run["tmp"])
+    assert compare.returncode == 1 and "--bundle-dir" in compare.stderr
+
+
+def test_check_tool_stops_on_two_windows_with_one_sequence_number(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
+    # a second acquisition after an F-engine resync starts again at fpga_seq_num 0, with other data
+    acq = run["dtv"] / "acq_2"
+    acq.mkdir()
+    mask = np.zeros((BLOCKS, 2), np.int8)
+    mask[:, 1] = 1
+    _write(acq / "dtv_mask.0.h5", "mask", mask, [V3, V1])
+    done = _run_tool("check_pathfinder_dtv_run", "--dtv-dir", run["dtv"], "--bundle-dir", run["bundle"],
+                     "--channels", V1)
+    assert done.returncode == 1 and "fpga_seq_num 0 differ" in done.stderr

@@ -16,11 +16,8 @@ listed under Not CHIME data so that each one is accounted for.
 
 | Path | What it holds |
 |---|---|
-| `docs/evidence/ca_os_archive_bulk_2026-09-29/` (65 files) | Archive-bulk statistics of all 23 ATSC channels: per-channel bulk statistics, persistent-bin profiles and geometry (`data/bulk/chNN.json`), the per-channel release ledger with product SHA-256, era months and frame counts, the producer and verifier code, and the report |
-| `docs/evidence/ch37_rank_injection_2026-09-30/` (143 files) | Channel 37 control study: rank curves and real-null exceedance rates of the ch37 control product (`data/controls_summary.json`), per-geometry frame metadata, beside a synthetic rank bench; with the result, check and verifier |
 | `docs/evidence/youden_j_2026-09-07/` (2 files) | Coarse-versus-fine ROC and Youden J on the released per-pilot products: channel 35 off-era frames as the null, channels 34 to 36 from 2025 as the signal |
 | `docs/evidence/bao_word_crosscheck_2026-11-22/` (3 files) | BAO-word cross-check of `calibrate-bundle` against the dissertation on the archive frames: per-channel `mu_0` of each channel and of the control (40477 control frames), best words, least ratios and outcomes (`ratio_e135492.json`), with the README that quotes them and the script |
-| `docs/evidence/F1_INVENTORY.md` | Index of the two packages above (file counts, bytes, manifest SHA-256) |
 | `data/provenance/combine_subset_20260714/` (3 files) | Stack-subset decision record: the count of archive events per freq_id presence signature (190 signatures with counts, no event numbers) and the selected 16-channel block |
 | `data/provenance/dissertation_summary_v1.json`, `_v2.json`, `_v3.json` | Curated per-channel and per-epoch values of the archive trawl (mask fractions, retained frames, status) |
 | `tests/data/threshold_decisions_2026-10-12.json` | Threshold decisions per channel: deployed word or reason not deployed, shelf, exclusions and historical conversion inputs; a test golden for the deployment compiler |
@@ -77,11 +74,8 @@ cut keeps the empty stand-ins for `author_eras_2026-09-23.json` and `transmitter
 "withheld from the code-only cut".
 
 ```
-docs/evidence/ca_os_archive_bulk_2026-09-29/
-docs/evidence/ch37_rank_injection_2026-09-30/
 docs/evidence/youden_j_2026-09-07/
 docs/evidence/bao_word_crosscheck_2026-11-22/
-docs/evidence/F1_INVENTORY.md
 data/provenance/combine_subset_20260714/
 data/provenance/dissertation_summary_v1.json
 data/provenance/dissertation_summary_v2.json

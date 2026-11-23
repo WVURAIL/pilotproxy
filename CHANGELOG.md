@@ -5,6 +5,11 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Removed the September evidence packages `docs/evidence/ca_os_archive_bulk_2026-09-29` and
+  `ch37_rank_injection_2026-09-30`, and their index `F1_INVENTORY.md`. They chose the bulk mask and the CFAR rank
+  of fine decisions v1 and v2, which v3 does not use, and nothing reads them. Under frame-health gate v2 their bulk
+  statistics move only in the last printed digit. Git history holds them, and RFIsher a281112 reproduces their
+  ledgers.
 - Kernel core 4.2.1: `kernel_accumulate_row_sums` is gone, and a single channel launches the batched row-sum
   kernel at batch 1. Output is unchanged (117 GPU tests and the CUDA test binary pass on an RTX 5000 Ada), and the
   times are within the run-to-run spread of 4.2.0. Kotekan vendors core 4.2.0 until its copy is updated.

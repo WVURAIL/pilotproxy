@@ -23,6 +23,7 @@ from pilot_proxy.bundle_calibration import (
     capture_weights,
     control_words_at,
     default_rank,
+    iter_blocks,
     iter_run_frames,
     knee_word,
     nominal_fine_bin,
@@ -353,6 +354,68 @@ def test_run_frames_skip_untested_and_missing_blocks(tmp_path):
     with h5py.File(tmp_path / "idle.h5", "w") as handle:
         handle["dtv_fine_powers"] = np.zeros((3, 2, 3, 256), dtype=np.uint64)
     assert not list(iter_run_frames(tmp_path / "idle.h5", 521))
+
+
+def write_chord_capture(path, voltages, coarse_freq, fpga_seq_num, dish_label=None):
+    """Write a Pathfinder baseband file: uint8 [time, coarse channel, polarization, dish] in baseband_subset."""
+    with h5py.File(path, "w") as handle:
+        handle["baseband_subset"] = voltages
+        handle["baseband_subset"].attrs["coarse_freq"] = coarse_freq
+        handle["baseband_subset"].attrs["fpga_seq_num"] = fpga_seq_num
+        if dish_label is not None:
+            handle["baseband_subset"].attrs["dish_label"] = dish_label
+    return str(path)
+
+
+def test_chord_blocks_start_on_the_block_grid_and_leave_out_rfi_dishes(tmp_path):
+    block = 8
+    voltages = np.random.default_rng(4).integers(0, 256, size=(5 * block + 3, 2, 2, 3), dtype=np.uint8)
+    # 3 samples before a block edge
+    path = write_chord_capture(tmp_path / "pf.h5", voltages, [2531, 3115], 1000 * block - 3, ["D1", "RFI1", "D2"])
+    blocks = list(iter_blocks(path, "chord_baseband", 3115, block))
+    # stream = polarization * dishes + dish, over the dishes that are not RFI antennas
+    expected = voltages[3:, 1][:, :, [0, 2]].reshape(5, block, 4)
+    assert len(blocks) == 5 and all(np.array_equal(b, e) for b, e in zip(blocks, expected))
+    assert len(list(iter_blocks(path, "chord_baseband", 3115, block, max_frames=2))) == 2
+    # a file with no labels sums every dish
+    path = write_chord_capture(tmp_path / "unlabelled.h5", voltages, [2531, 3115], 0)
+    blocks = list(iter_blocks(path, "chord_baseband", 2531, block))
+    assert len(blocks) == 5 and np.array_equal(blocks[0], voltages[:block, 0].reshape(block, 6))
+    with pytest.raises(ValueError, match="does not hold coarse_freq 2869"):
+        list(iter_blocks(path, "chord_baseband", 2869, block))
+
+
+def test_chime_capture_of_another_channel_or_format_is_refused(tmp_path):
+    path = write_capture(tmp_path / "c35.h5", 35, 1, 0)
+    assert len(list(iter_blocks(path, "chime_baseband", 521, BLOCK))) == 1
+    with pytest.raises(ValueError, match="holds freq_id 521, not 614"):
+        list(iter_blocks(path, "chime_baseband", 614, BLOCK))
+    with pytest.raises(ValueError, match="unknown capture_format 'chime'"):
+        list(iter_blocks(path, "chime", 521, BLOCK))
+
+
+def test_chord_capture_gives_the_fine_powers_of_the_same_voltages_from_chime(plans, tmp_path):
+    bundle = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())
+    bank = (plans["bundle"] / "weights.bin").read_bytes()
+    reverse = bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"])
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    # the capture with the tone, its 16 inputs as 2 polarizations of 8 dishes
+    chime = plans["calibrate"]["channels"]["35"][1]
+    with h5py.File(chime, "r") as handle:
+        inputs = handle["baseband"][()].reshape(-1, 2, 8)
+    # an RFI antenna at full scale (+7 + 7j) between the dishes, and another channel beside this one
+    rfi = np.full(inputs.shape[:2] + (1,), 0xFF, dtype=np.uint8)
+    dishes = np.concatenate([inputs[:, :, :4], rfi, inputs[:, :, 4:]], axis=2)
+    voltages = np.stack([np.full_like(dishes, 0x88), dishes], axis=1)
+    labels = ["D0", "D1", "D2", "D3", "RFI0", "D4", "D5", "D6", "D7"]
+    labelled = write_chord_capture(tmp_path / "pf.h5", voltages, [600, row["receiver_channel_id"]], 0, labels)
+    unlabelled = write_chord_capture(tmp_path / "pf_all.h5", voltages, [600, row["receiver_channel_id"]], 0)
+    expected, _ = _load_fines([chime], "chime_baseband", row, bank, 128, reverse, None)
+    fines, _ = _load_fines([labelled], "chord_baseband", row, bank, 128, reverse, None)
+    assert len(fines) == 2 and np.array_equal(fines, expected)
+    # summed in, the RFI antenna changes the powers
+    fines, _ = _load_fines([unlabelled], "chord_baseband", row, bank, 128, reverse, None)
+    assert not np.array_equal(fines, expected)
 
 
 def test_run_files_keep_recording_order_across_restarts(tmp_path):

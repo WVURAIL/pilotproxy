@@ -7,9 +7,8 @@ Run each command with --help. Store new outputs separately from existing data.
   limits supplied through --power-limits. It returns conditional in-sample choices.
 - Detector validation: prepare_fine_validation_waveforms.py,
   run_fine_validation_campaign.py, reduce_fine_validation.py.
-- Estimator and SDR checks: validate_fine_detector.py, measure_fine_gain.py,
+- Estimator checks: validate_fine_detector.py, measure_fine_gain.py,
   generate_settled_atsc.py, audit_settled_waveform.py.
-- Runtime checks: validate_sdr_upgrade_adapter.py, validate_sdr_upgrade_streaming.py.
 - Archive health: audit_per_pilot.py, audit_local_archive_run.py.
 
 - Bundle workflow: extract_baseband_channels.py, analyze_dtv_run.py.
@@ -34,10 +33,7 @@ Run each command with --help. Store new outputs separately from existing data.
   framing_audit.py (baseband framing of the weight ROM).
 - Fixed-point FFT: emit_fxfft_tables.py (twiddles as C literals), generate_fxfft_goldens.py (golden vectors),
   fxfft_report.py (quantization error against float64).
-- SDR and GNU Radio: generate_gnuradio_reference.py, run_sdr_distribution_reference.py,
-  plot_gnuradio_sdr_references.py, analyze_noise_signal_references.py, lime_reference_capture.py,
-  limesdr_smoke_capture.py, prepare_sdr_protocol.py, run_sdr_antenna_controls.py, analyze_sdr_antenna_controls.py,
-  run_sdr_live_handoff.py, sdr_transfer.py.
+- GNU Radio: generate_gnuradio_reference.py, plot_gnuradio_sdr_references.py, analyze_noise_signal_references.py.
 - Repository and examples: generate_doc_specs.py (TeX macros for the formal documents), make_code_only_cut.py (the
   tree without the CHIME-derived files), make_capture_replay_example.py and make_operating_policy_example.py
   (synthetic fixtures for rehearsals), freeze_estimator_transfer.py (freeze estimator-transfer evidence).

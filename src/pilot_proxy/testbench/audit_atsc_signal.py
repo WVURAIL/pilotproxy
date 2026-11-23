@@ -13,12 +13,10 @@ import numpy as np
 
 from pilot_proxy.dtv_units import PILOT_BELOW_DATA_DB
 from pilot_proxy.json_utils import write_json_strict
-from pilot_proxy.testbench.quantize import (
-    ATSC_CHANNEL_WIDTH_HZ,
-    ATSC_PILOT_OFFSET_HZ,
-    GNU_RADIO_ATSC_SYMBOL_RATE_HZ,
-)
 
+GNU_RADIO_ATSC_SYMBOL_RATE_HZ = 4_500_000.0 / 286.0 * 684.0
+ATSC_CHANNEL_WIDTH_HZ = 6.0e6
+ATSC_PILOT_OFFSET_HZ = 309_441.0
 DB_POWER_FACTOR = 10.0
 HALF_SCALE = 2.0
 DEFAULT_AUDIT_MAX_SAMPLES = 262_144

@@ -153,10 +153,6 @@ jobs:
           /tmp/pilot-proxy-wheel-test/bin/pilot-proxy audit-atsc \
             --input-iq relative-input.cfile --output-json relative-output.json
           test -s relative-output.json
-          /tmp/pilot-proxy-wheel-test/bin/python \
-            -m pilot_proxy.testbench.quantize --help >/dev/null
-          /tmp/pilot-proxy-wheel-test/bin/python \
-            -m pilot_proxy.testbench.evaluate_snr --help >/dev/null
       - name: Test wheel through a custom user base
         run: |
           PYTHONUSERBASE=/tmp/pilot-proxy-wheel-user \

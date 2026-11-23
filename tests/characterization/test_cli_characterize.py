@@ -1,4 +1,4 @@
-"""The characterize, products, and bench command groups dispatch to their modules."""
+"""The characterize and products command groups dispatch to their modules."""
 from __future__ import annotations
 
 import json
@@ -13,10 +13,9 @@ from pilot_proxy.characterization import run
 @pytest.mark.parametrize("group,steps", [
     ("characterize", {"archive", "histogram-frames", "fine-histogram-frames", "spectrogram", "score-cache"}),
     ("products", {"check-archive"}),
-    ("bench", {"estimator-transfer", "transfer-points"}),
 ])
 def test_the_groups_name_their_steps(group, steps):
-    table = {"characterize": cli.CHARACTERIZE_STEPS, "products": cli.PRODUCTS_STEPS, "bench": cli.BENCH_STEPS}[group]
+    table = {"characterize": cli.CHARACTERIZE_STEPS, "products": cli.PRODUCTS_STEPS}[group]
     assert set(table) == steps
     for module in table.values():
         assert callable(getattr(__import__(module, fromlist=["main"]), "main"))

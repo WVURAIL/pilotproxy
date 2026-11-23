@@ -17,8 +17,7 @@ packed complex int4 input
 uint64 power accumulation
 ```
 
-The synthetic testbench can apply an explicit shelf-SNR threshold. The CHIME
-real-data path does not use that table. It forms the validity flag and the
+The CHIME real-data path forms the validity flag and the
 norm-corrected positive-excess mask from the exact integer powers:
 
 ```text

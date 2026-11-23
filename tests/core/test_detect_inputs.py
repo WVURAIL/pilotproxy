@@ -129,7 +129,7 @@ def test_validate_kernel_inputs_rejects_wrong_weights_dtype() -> None:
         )
 
 
-def test_load_detector_input_missing_file_reports_quantize_step(tmp_path) -> None:
+def test_load_detector_input_missing_file_is_reported(tmp_path) -> None:
     with pytest.raises(SystemExit) as exc:
         _load_detector_input(tmp_path / MISSING_INPUT_NAME)
 

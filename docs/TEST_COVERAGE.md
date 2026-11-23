@@ -16,15 +16,10 @@ GNU Radio uses its own Python environment on some hosts:
 
 ```sh
 PILOT_PROXY_GNURADIO_PYTHON=/usr/bin/python3 \
-  python3 -m pytest tests/testbench/test_add_awgn.py \
-  tests/testbench/test_generate_atsc_signal.py -q
-PYTHONNOUSERSITE=1 PYTHONPATH=src /usr/bin/python3 -m pytest \
-  tests/testbench/test_evaluate_dtv_snr.py::test_gnuradio_awgn_helper_hits_requested_band_snr -q
+  python3 -m pytest tests/testbench/test_generate_atsc_signal.py -q
 ```
 
-The noise tests check the sample counts on both sides of the vector-alignment
-boundary, seed reproducibility, complex noise power, and bandwidth scaling. In
-the transmitter test, the emitted pilot frequency is measured and checked
+In the transmitter test, the emitted pilot frequency is measured and checked
 against the requested RF offset, independently of the generated metadata. When a
 GNU Radio
 interpreter is configured explicitly, an import or execution error in it fails
@@ -52,8 +47,7 @@ exercise CLI routing, invalid inputs, and schema compatibility.
 | Packing, stream layouts, and quantization | `core/test_frame_geometry_adapter.py`, `core/test_packing_contract.py`, `core/test_quantization_roundtrip.py`, `core/test_integration_contract.py` | Feed/channel/window order, overlapping batches, diagnostic layouts, per-stream scales, signed nibble limits, invalid numeric inputs |
 | PFB and receiver channelizer | `core/test_reference_pfb.py`, `core/test_reference_pfb_gpu.py` | Response, channel ordering, time and phase conventions, CPU/GPU agreement |
 | Coarse statistic, fine reductions, masks, and units | `core/test_mask_zero_point.py`, `core/test_dtv_units.py`, `core/test_fine_reduction.py`, `test_mask_boundary.py` | Norm correction, strict thresholds, zero references, exact retention, CFAR, dimensional conversions |
-| ATSC generation, noise, and sensitivity | `testbench/test_generate_atsc_signal.py`, `testbench/test_add_awgn.py`, `testbench/test_audit_atsc_signal.py`, `testbench/test_evaluate_dtv_snr.py`, `testbench/test_sensitivity_study.py`, `testbench/test_quantize_paths.py` | Waveform quality checks, noise calibration, injection response, ablations, path handling; real GNU Radio requires its interpreter |
-| Result aggregation and plotting | `testbench/test_plot_results.py`, `testbench/test_summarize_results.py` | Selection, aggregation and plot contracts |
+| ATSC generation | `testbench/test_generate_atsc_signal.py`, `testbench/test_audit_atsc_signal.py` | Waveform quality checks; real GNU Radio requires its interpreter |
 | CHIME readers and adapters | `chime/test_chime_frame_adapter.py`, `chime/test_segmented_input.py`, `archive/test_packed_reader.py`, `archive/test_reader_contract_guards.py` | Native offset-binary bytes, partial frames, metadata, segmentation, bounded reading, malformed files |
 | Standalone detector and CHIME analysis | `core/test_detect_inputs.py`, `chime/test_chime_runner_small.py`, `chime/test_chime_reductions.py`, `chime/test_injection_recovery.py` | Input contracts, frame results, reference parity, and injection recovery |
 | Archive detector and real GPU scan | `archive/test_detector_analyzer_parity.py`, `archive/test_detector_resume.py`, `kernel/test_archive_scan_gpu.py` | Path from HDF5 through packing and CUDA to the retained products, independent CPU numerical check, actual SIGINT mid-file, checkpoint/resume equivalence and completed-run no-op |
@@ -95,9 +89,5 @@ The frozen-bundle rederivation also accepts `PILOT_PROXY_DEEP_BUNDLE_CHECK=1`,
 which makes it read the preserved source product archive. These checks validate
 existing artifacts and start no new campaign.
 
-Invalid packing and noise requests are rejected by the testbench. These input
-checks
-leave the CUDA arithmetic, FFT tables, shipped weights, and the quantization of
-valid inputs unchanged. The CHIME packed archive path keeps its native integer
-grid and uses neither the synthetic floating-point quantizer nor the GNU Radio
-noise generator.
+The CHIME packed archive path keeps its native integer grid and uses no
+synthetic floating-point quantizer.

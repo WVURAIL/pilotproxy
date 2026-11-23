@@ -1013,19 +1013,13 @@ python tools/threshold_rule.py --scores scores --power-limits limits.json --out 
 %======================================================================
 \section{Standalone and Synthetic Use}
 
-The standalone testbench checks the detector core on a generated ATSC signal. It needs a GPU, the CUDA library, and GNU Radio for the generator. The steps are:
+A synthetic ATSC signal is generated with GNU Radio and checked by:
 \begin{lstlisting}[style=shell]
 pilot-proxy generate-atsc --gnuradio-python /usr/bin/python3 \
   --output-iq generated/atsc/atsc_8vsb_complex64.cfile --num-iq-samples 600000
 pilot-proxy audit-atsc --input-iq generated/atsc/atsc_8vsb_complex64.cfile
-pilot-proxy quantize --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-  --physical-channel 14 --frame-size-samples 16384
-pilot-proxy detect --input-detector-matrix generated/detector_input/detector_matrix_i4.npy
-pilot-proxy evaluate-snr --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-  --physical-channel 14 --frame-size-samples 16384 --num-input-streams 1 \
-  --threshold-data-shelf-snr-db -26 --noise-trials 10 --noise-source python
 \end{lstlisting}
-\code{bash examples/quickstart.sh} runs the same chain. \code{generate-atsc} runs under the GNU Radio interpreter given by \code{--gnuradio-python}, which must be able to import PilotProxy from the checkout. \code{evaluate-snr --detector-backend cpu-reference} runs without a GPU. These commands use the shipped weight bank in \code{weights/} and the coarse frame ratio of the testbench, not a runtime bundle. Their options and outputs are described in \code{docs/USAGE.md}.
+\code{generate-atsc} runs under the GNU Radio interpreter given by \code{--gnuradio-python}, which must be able to import PilotProxy from the checkout. Their options and outputs are described in \code{docs/USAGE.md}.
 
 A development bundle for every channel is exported, with no calibration, by:
 \begin{lstlisting}[style=shell]

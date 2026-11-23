@@ -26,7 +26,6 @@ from pilot_proxy.detector_contract import (
 )
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.dtv_units import (
-    DETECTOR_WINDOW_SAMPLES,
     DTV_BANDWIDTH_HZ,
     EFFECTIVE_BIN_BW_HZ,
     PILOT_BELOW_DATA_DB,
@@ -76,10 +75,8 @@ from pilot_proxy.secondary_python import (
 DEFAULT_GNURADIO_PYTHON = "/usr/bin/python3"
 DEFAULT_CLEAN_ATSC_IQ_SAMPLES = 600_000
 DEFAULT_TS_PACKETS = 4096
-# Deterministic defaults keep quickstart output reproducible.
+# A fixed seed keeps generate-atsc output reproducible.
 DEFAULT_GENERATOR_SEED = 12345
-DEFAULT_EVALUATOR_SEED = 20260529
-DEFAULT_NOISE_TRIALS = 10
 DEFAULT_FRAME_SIZE_SAMPLES = 16_384
 DEFAULT_NUM_INPUT_STREAMS = 1
 DEFAULT_PILOT_FREQUENCY_TOLERANCE_HZ = 10.0
@@ -139,18 +136,6 @@ def _cmd_generate_atsc(args: argparse.Namespace) -> None:
     )
 
 
-def _cmd_evaluate_snr(args: argparse.Namespace) -> None:
-    from pilot_proxy.testbench.evaluate_snr import run as evaluate_snr_run
-
-    # The subparser inherits the testbench parser through parents=, so the
-    # parsed namespace is passed to the testbench unchanged. An argv rebuilt by
-    # hand here would drop any testbench option that is not mirrored in this
-    # file.
-    code = evaluate_snr_run(args)
-    if code:
-        raise SystemExit(code)
-
-
 def _cmd_audit_atsc(args: argparse.Namespace) -> None:
     argv = [
         "--input-iq",
@@ -161,26 +146,6 @@ def _cmd_audit_atsc(args: argparse.Namespace) -> None:
     if args.fail_on_quality:
         argv.append("--fail-on-quality")
     _run_module("pilot_proxy.testbench.audit_atsc_signal", argv)
-
-
-def _cmd_atsc_detector_input(args: argparse.Namespace) -> None:
-    argv = [
-        "--input-iq",
-        _caller_absolute_path(args.input_iq),
-        "--output-dir",
-        _caller_absolute_path(args.output_dir),
-        "--frame-size-samples",
-        str(args.frame_size_samples),
-        "--num-input-streams",
-        str(args.num_input_streams),
-        "--experimental-detector-window-samples",
-        str(args.detector_window_samples),
-    ]
-    if args.save_channelized:
-        argv.append("--save-channelized")
-    if args.physical_channel is not None:
-        argv.extend(["--physical-channel", str(args.physical_channel)])
-    _run_module("pilot_proxy.testbench.quantize", argv)
 
 
 def _cmd_detect(args: argparse.Namespace) -> None:
@@ -213,36 +178,6 @@ def _cmd_detect(args: argparse.Namespace) -> None:
     if args.dtv_pilot_mhz is not None:
         argv.extend(["--dtv-pilot-mhz", str(args.dtv_pilot_mhz)])
     _run_module("pilot_proxy.detect", argv)
-
-
-def _cmd_plot_results(args: argparse.Namespace) -> None:
-    argv = [
-        "--input-csv",
-        args.input_csv,
-        "--output-png",
-        args.output_png,
-        "--title",
-        args.title,
-        "--smooth-window",
-        str(args.smooth_window),
-    ]
-    if args.show:
-        argv.append("--show")
-    _run_module("pilot_proxy.testbench.plot_results", argv)
-
-
-def _cmd_summarize_results(args: argparse.Namespace) -> None:
-    argv = [
-        "--input",
-        args.input,
-        "--output-dir",
-        args.output_dir,
-        "--bins",
-        str(args.bins),
-        "--histograms",
-        str(args.histograms),
-    ]
-    _run_module("pilot_proxy.testbench.summarize_results", argv)
 
 
 def _add_optional_arg(
@@ -794,7 +729,7 @@ def _cmd_list_channels(args: argparse.Namespace) -> None:
     _print_adaptive_reference_diagnostics(layouts)
 
 
-# Steps of the characterize, products and bench groups. Each step is a module
+# Steps of the characterize and products groups. Each step is a module
 # with its own ``main(argv)``, and the group passes the remaining arguments to it.
 CHARACTERIZE_STEPS = {
     "archive": "pilot_proxy.characterization.run",
@@ -804,17 +739,14 @@ CHARACTERIZE_STEPS = {
     "spectrogram": "pilot_proxy.characterization.spectrogram",
 }
 PRODUCTS_STEPS = {"check-archive": "pilot_proxy.products.acceptance"}
-BENCH_STEPS = {"estimator-transfer": "pilot_proxy.testbench.harness.bench",
-               "transfer-points": "pilot_proxy.testbench.harness.bench"}
 
 
-def _cmd_step(steps: dict[str, str], *, pass_step: bool = False):
+def _cmd_step(steps: dict[str, str]):
     def run(args: argparse.Namespace) -> None:
         import importlib
 
         module = importlib.import_module(steps[args.step])
-        argv = ([args.step] if pass_step else []) + list(args.step_args)
-        status = module.main(argv)
+        status = module.main(list(args.step_args))
         if status:
             raise SystemExit(status)
     return run
@@ -1009,63 +941,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen.set_defaults(func=_cmd_generate_atsc)
 
-    from pilot_proxy.testbench.evaluate_snr import (
-        build_parser as _evaluate_snr_parser,
-    )
-
-    eval_parser = subparsers.add_parser(
-        "evaluate-snr",
-        help=(
-            "Sweep detection rate versus shelf SNR: inject AWGN into a reference "
-            "IQ capture and run the detector at each level."
-        ),
-        description=(
-            "Sweep detection rate versus shelf SNR: inject AWGN into a reference "
-            "IQ capture and run the detector at each level. Options are the "
-            "testbench evaluator's, inherited directly (single source of "
-            "truth)."
-        ),
-        parents=[_evaluate_snr_parser(add_help=False)],
-    )
-    eval_parser.set_defaults(func=_cmd_evaluate_snr)
-
-    plot = _add_command(
-        "plot-results",
-        "Plot detection-rate curves from an evaluate-snr summary CSV.",
-    )
-    plot.add_argument(
-        "--input-csv",
-        default=str(GENERATED_DIR / "dtv_snr_eval" / "dtv_snr_summary.csv"),
-    )
-    plot.add_argument(
-        "--output-png",
-        default=str(GENERATED_DIR / "dtv_snr_eval" / "dtv_snr_sweep.png"),
-    )
-    plot.add_argument("--title", default="PilotProxy SNR sweep")
-    plot.add_argument("--smooth-window", type=int, default=1)
-    plot.add_argument("--show", action="store_true")
-    plot.set_defaults(func=_cmd_plot_results)
-
-    summarize = _add_command(
-        "summarize-results",
-        "Write text and histogram summaries from an evaluate-snr JSON report.",
-    )
-    summarize.add_argument(
-        "--input",
-        default=str(GENERATED_DIR / "dtv_snr_eval" / "dtv_snr_eval.json"),
-    )
-    summarize.add_argument(
-        "--output-dir",
-        default=str(GENERATED_DIR / "summary"),
-    )
-    summarize.add_argument("--bins", type=int, default=40)
-    summarize.add_argument(
-        "--histograms",
-        choices=["auto", "always", "never"],
-        default="auto",
-    )
-    summarize.set_defaults(func=_cmd_summarize_results)
-
     audit = _add_command(
         "audit-atsc",
         "Verify a generated IQ capture: pilot frequency and level, occupied "
@@ -1086,44 +961,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     audit.set_defaults(func=_cmd_audit_atsc)
 
-    quantize = _add_command(
-        "quantize",
-        "Channelize and pack a clean IQ capture into the int4 "
-        "detector-input matrix.",
-    )
-    quantize.add_argument(
-        "--input-iq",
-        default=str(GENERATED_DIR / "atsc" / "atsc_8vsb_complex64.cfile"),
-    )
-    quantize.add_argument(
-        "--output-dir",
-        default=str(GENERATED_DIR / "detector_input"),
-    )
-    quantize.add_argument(
-        "--frame-size-samples",
-        dest="frame_size_samples",
-        type=int,
-        default=DEFAULT_FRAME_SIZE_SAMPLES,
-        help="Frame size, in channelized samples, to pack per detector block.",
-    )
-    quantize.add_argument(
-        "--num-input-streams",
-        dest="num_input_streams",
-        type=int,
-        default=DEFAULT_NUM_INPUT_STREAMS,
-        help="Number of input streams/feeds to combine in each detector block.",
-    )
-    quantize.add_argument(
-        "--experimental-detector-window-samples",
-        dest="detector_window_samples",
-        type=int,
-        default=DETECTOR_WINDOW_SAMPLES,
-        help="Advanced: only the locked value 128 is accepted.",
-    )
-    quantize.add_argument("--physical-channel", type=int, default=None)
-    quantize.add_argument("--save-channelized", action="store_true")
-    quantize.set_defaults(func=_cmd_atsc_detector_input)
-
     detect = _add_command(
         "detect",
         "Run the CUDA detector once over a packed detector matrix and write "
@@ -1132,7 +969,7 @@ def build_parser() -> argparse.ArgumentParser:
     detect.add_argument(
         "--input-detector-matrix",
         default=str(GENERATED_DIR / "detector_input" / "detector_matrix_i4.npy"),
-        help="Packed int4 detector matrix written by `quantize`.",
+        help="Packed int4 detector matrix.",
     )
     detect.add_argument(
         "--output-json",
@@ -1968,20 +1805,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chime_scan.set_defaults(func=_cmd_chime_scan)
 
-    for name, summary, steps, pass_step in (
+    for name, summary, steps in (
         ("characterize", "Archive characterization: the release the frame exports are keyed to (archive), "
                          "the frame exports, spectrograms and the score cache.",
-         CHARACTERIZE_STEPS, False),
+         CHARACTERIZE_STEPS),
         ("products", "Per-pilot product checks: the archive cohort acceptance gate (check-archive).",
-         PRODUCTS_STEPS, False),
-        ("bench", "Bench figures and tables from frozen releases (estimator-transfer, transfer-points).",
-         BENCH_STEPS, True),
+         PRODUCTS_STEPS),
     ):
         group = _add_command(name, summary)
         group.add_argument("step", choices=sorted(steps))
         group.add_argument("step_args", nargs=argparse.REMAINDER,
                            help="arguments of the step (see pilot-proxy %s STEP --help)" % name)
-        group.set_defaults(func=_cmd_step(steps, pass_step=pass_step))
+        group.set_defaults(func=_cmd_step(steps))
 
     return parser
 

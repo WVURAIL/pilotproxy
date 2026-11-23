@@ -8,7 +8,7 @@ Run each command with --help. Store new outputs separately from existing data.
 - Detector validation: prepare_fine_validation_waveforms.py,
   run_fine_validation_campaign.py, reduce_fine_validation.py.
 - Estimator checks: validate_fine_detector.py, measure_fine_gain.py,
-  generate_settled_atsc.py, audit_settled_waveform.py.
+  generate_settled_atsc.py.
 - Archive health: audit_per_pilot.py, audit_local_archive_run.py.
 
 - Bundle workflow: extract_baseband_channels.py, analyze_dtv_run.py.
@@ -27,7 +27,6 @@ Run each command with --help. Store new outputs separately from existing data.
 - Detector validation, further: prepare_fine_validation_cache.py (phase-preserving fixtures through the reference
   PFB), supplement_fine_campaign_plan.py (a sealed campaign plan for a supplementary channel),
   report_fine_null_validation.py (independent H0 outcomes), report_fine_sensitivity.py (frozen H1 cohorts),
-  current_geometry_sensitivity.py (the staged synthetic sensitivity experiment),
   audit_fine_native_coordinates.py (inverted native coordinates against a frozen plan),
   fused_real_receipt.py (the fused fine-mask entry point against the staged path on CHIME frames),
   framing_audit.py (baseband framing of the weight ROM).

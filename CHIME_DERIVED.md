@@ -42,7 +42,8 @@ They stay in both cuts. Review them before any public release:
 - `docs/PER_PILOT_PRODUCT_FIELDS.md`: railed-sample counts measured on real CHIME baseband
   (freq_id 506).
 - Test goldens written inline: verified off dates
-  (test_transmitter_off.py) and era literals (tests/config/test_profile_literals.py).
+  (test_transmitter_off.py), era literals (tests/config/test_profile_literals.py), and the
+  control's frame counts and 99th-percentile words (tests/core/test_default_word_pin.py).
   Tests that need the withheld files skip in the code-only cut, but their source
   still holds these values.
 

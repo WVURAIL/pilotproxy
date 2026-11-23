@@ -2,7 +2,7 @@
 
 The populated product is two years of monthly acquisitions with four
 repeating interference levels and, optionally, per-frame spectra with a
-three-bin carrier at the nominal marker. Its eras come from the section 8.1
+three-bin carrier at the nominal marker. Its eras come from the monthly-state
 rule with the support gates relaxed to one frame, one acquisition and one
 day, which the small product needs.
 """

@@ -10,7 +10,7 @@ acquisition that balances the frame counts, so calibration precedes evaluation
 as it would in use. Bootstrap replicates are drawn as whole acquisitions with
 replacement, and the random seed is recorded with each estimate.
 
-Month support follows the aggregation rule of section 8.1 of the dissertation.
+Month support follows the month aggregation of the monthly-state era rule (``eras``).
 A UTC month needs at least 30 valid frames from 5 acquisitions on 3 days. The
 registered sensitivity values of the acquisition count are 3, 5, and 10. Each
 block must meet the era's month requirements on its own. Otherwise, the split

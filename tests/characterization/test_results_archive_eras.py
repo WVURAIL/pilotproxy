@@ -1,4 +1,4 @@
-"""The section 8.1 stable-era procedure on synthetic monthly records and a synthetic product."""
+"""The monthly-state stable-era rule on synthetic monthly records and a synthetic product."""
 from __future__ import annotations
 
 import datetime as dt
@@ -437,3 +437,11 @@ def test_an_author_dated_era_list_replaces_the_rule_eras_and_keeps_its_month_rec
                     [("2019-01", "2019-06", EVIDENCE_START)], []):
             with pytest.raises(ValueError):
                 eras.impose_eras(rule, p, bad)
+
+
+def test_the_rule_does_not_claim_to_be_the_dissertation_era_rule():
+    # the dissertation's era rule of record is app:era-rule (its scripts/era_boundaries.py)
+    for module in (eras, blocks):
+        text = Path(module.__file__).read_text()
+        assert "section 8.1" not in text and "sec:calibration" not in text
+    assert eras.PREDECLARED_RULE == "monthly-state rule" and EraConfig().version.startswith("monthly-state")

@@ -73,7 +73,9 @@ FIRST_CHANNEL, LAST_CHANNEL = 14, 36        # the ATSC UHF television channels a
 CHANNEL_WIDTH_HZ = 6_000_000
 OUTCOMES = {"useful": "finite", "not useful": "reject_all"}
 # reasons of the rule that leave the detector nothing to act on, so the channel is neither deployed nor masked
-UNMASKED_REASONS = frozenset({"DTV without a matching pilot", "pilot not seen"})   # "pilot not seen" is the 2026-10-12 wording of the same reason
+# "pilot not seen" is the 2026-10-12 wording of the same reason. calibrate-bundle's "pilot not seen in the calibration
+# captures" (a run that never showed the pilot) is not in the set, so it compiles to reject_all.
+UNMASKED_REASONS = frozenset({"DTV without a matching pilot", "pilot not seen"})
 
 
 def _require(condition, message):

@@ -651,7 +651,8 @@ and \code{--output-dir}. Under v3:
         of the largest 90th-percentile \(F_2\) within \(\pm30\) bins of the
         nominal bin. It no longer places a search, since the peak takes every
         bin, but a channel whose anchor stays \code{nominal} (no pilot seen)
-        gets no BAO word, with the reason \code{pilot not seen}. A plan
+        gets no BAO word: it carries the reject word 1, with the reason
+        \code{pilot not seen in the calibration captures}. A plan
         \code{anchors} entry overrides that gate.
 \end{itemize}
 
@@ -673,7 +674,7 @@ power-limit threshold, a channel with no passing word holds the floor.
 
 \code{pilot-proxy test-bundle} then checks the bundle on other captures:
 structure and digests, values on every bound channel, no shared captures with
-calibration, a decision on every frame of each channel (a valid rank under v1
+calibration (by path, or by identity for a copy or another layout of the same data), a decision on every frame of each channel (a valid rank under v1
 and v2, a nonzero median under v3), the masked fraction against the
 calibration interval, and the false-alarm count on the control.
 

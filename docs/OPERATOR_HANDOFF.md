@@ -55,7 +55,7 @@ pilot-proxy validate-operating-policy --policy-dir policy_review
 
 Unassigned channels become `dtv_permanent_mask_freq_ids`. An assigned channel needs its bundle profile `calibrated` at the decided word. Until then, the review lists the channel as pending and is not complete. Neither command activates a bundle.
 
-A decision of `useful` means the channel passed the BAO test at its word, so a default word does not make one. A channel that fails carries no BAO word and is masked whole, unless it has no pilot for the detector to act on. A commissioning bundle with no BAO words, such as the Pathfinder's, skips the compiler. It is deployed after `test-bundle` and `qualify-bundle`, and the stage reads each word from the bundle.
+A decision of `useful` means the channel passed the BAO test at its word, so a default word does not make one. A channel that fails carries the reject word 1 as its BAO word and is masked whole, by the policy and by the bundle itself, unless the threshold rule found DTV without a matching pilot there. A commissioning bundle with no BAO words, such as the Pathfinder's, skips the compiler. It is deployed after `test-bundle` and `qualify-bundle`, and the stage reads each word from the bundle.
 
 ## 3. Validate the release bundle and configure the fine path
 

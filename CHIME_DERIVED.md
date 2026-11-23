@@ -22,6 +22,7 @@ GNU Radio benches, the designed weight banks, RFIsher's forecast tolerance table
 | `data/provenance/combine_subset_20260714/` (3 files) | Stack-subset decision record: the count of archive events per freq_id presence signature (190 signatures with counts, no event numbers) and the selected 16-channel block |
 | `data/provenance/dissertation_summary_v1.json`, `_v2.json`, `_v3.json` | Curated per-channel and per-epoch values of the archive trawl (mask fractions, retained frames, status) |
 | `tests/data/threshold_decisions_2026-10-12.json` | Threshold decisions per channel: deployed word or reason not deployed, shelf, exclusions and historical conversion inputs; a test golden for the deployment compiler |
+| `tests/data/v3_control_ch37_keep_words.npz` | The v3 keep words of the archive control, channel 37, sorted and split into night and day frames, with no frame times; a test golden for the v3 default words |
 
 ## Inline quotes
 
@@ -66,4 +67,5 @@ data/provenance/dissertation_summary_v1.json
 data/provenance/dissertation_summary_v2.json
 data/provenance/dissertation_summary_v3.json
 tests/data/threshold_decisions_2026-10-12.json
+tests/data/v3_control_ch37_keep_words.npz
 ```

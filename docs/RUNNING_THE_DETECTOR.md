@@ -150,7 +150,9 @@ Each check prints PASS or FAIL, and the exit status is 1 on any failure.
 | Test data differ from calibration data | A word tested on its own data proves nothing |
 | Every frame decided on each channel | A v3 frame whose median reference is zero, or a v1/v2 frame with too few reference bins, has no decision |
 | Masked fraction on each channel | The word the stage applies (the BAO word where set) masks other captures as it masked the calibration captures |
-| False alarms on the control | The control word gives the rate it claims. A test plan without a control fails |
+| False alarms on the control | The control word masks other control frames as it masked the calibration frames. A test plan without a control fails |
+
+Both masked-fraction checks group the frames by the UTC hour of their time and take each hour's fraction over the frames with a decision. A check passes when `|bias| <= std`: the bias is the test's mean masked fraction less the calibration's, both weighted by frames, and `std` is the standard deviation of the calibration's hourly fractions at that word (`masked_by_hour` in the report, `applied_masked_by_hour` at a BAO word). This is the rule of the dissertation's BAO test. Frames within an hour share the sky and the gains, so the hour-to-hour spread, not the count of frames, sets what the test data may differ by. A calibration of one hour has no spread and fails, and a report without these fractions asks for a recalibration. Captures that record no frame time are binned by capture, and the report says so.
 
 Kotekan's `tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh` tests the code, and `test-bundle` tests the numbers. Both are needed after a change to the detector core.
 

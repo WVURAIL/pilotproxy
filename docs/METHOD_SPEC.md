@@ -242,7 +242,10 @@ The decision paths in the repository have different operational status:
   profile never reaches a mask. `calibrate-bundle` marks them `calibrated`,
   and the control `control`. Kotekan turns the mask on only when every
   calibrated channel of the bundle carries the record of `qualify-bundle`,
-  which names a passing test report and a reviewer.
+  which names a passing test report and a reviewer. `test-bundle` passes a
+  channel, and the control, when the mean masked fraction of the held-out
+  frames differs from the calibration's by less than the standard deviation
+  of the calibration's hourly masked fractions.
 
 Thus, a decision path can be implemented and validated and still be inactive.
 A kernel entry point becomes an active observing policy only when its

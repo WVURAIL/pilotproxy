@@ -18,6 +18,7 @@ from pilot_proxy.bundle_calibration import (
     _exact_word,
     _expand,
     _load_fines,
+    bias_within_std,
     binomial_lower_tail,
     binomial_upper_tail,
     bundle_digest,
@@ -25,6 +26,7 @@ from pilot_proxy.bundle_calibration import (
     capture_weights,
     control_words_at,
     default_rank,
+    hourly_masked,
     iter_blocks,
     iter_run_frames,
     knee_word,
@@ -57,8 +59,12 @@ CELL = 3051.7578125
 CHANNELS = {35: (521, 596484375.0, 596309441.0), 29: (614, 560156250.0, 560309441.0), 37: (491, 608203125.0, 608309441.0)}
 
 
-def write_capture(path, channel, frames, seed, tone=0.0, ctime=None):
-    freq_id, centre, pilot = CHANNELS[channel]
+# 2026-06-21 00:00 UTC, on the hour
+T0 = 1782000000.0
+
+
+def _voltages(channel, frames, seed, tone=0.0):
+    _, centre, pilot = CHANNELS[channel]
     rng = np.random.default_rng(seed)
     n = frames * BLOCK
     z = rng.standard_normal((n, INPUTS)) + 1j * rng.standard_normal((n, INPUTS))
@@ -69,13 +75,31 @@ def write_capture(path, channel, frames, seed, tone=0.0, ctime=None):
     z *= 2.0
     real = np.clip(np.rint(z.real), -8, 7).astype(np.int16) + 8
     imag = np.clip(np.rint(z.imag), -8, 7).astype(np.int16) + 8
+    return ((real << 4) | imag).astype(np.uint8)
+
+
+def _write_baseband(path, channel, data, ctime):
     with h5py.File(path, "w") as handle:
-        handle.attrs["freq_id"] = freq_id
+        handle.attrs["freq_id"] = CHANNELS[channel][0]
         handle.attrs["time0_fpga_count"] = 0
         if ctime is not None:
             handle.attrs["time0_ctime"] = ctime
-        handle["baseband"] = ((real << 4) | imag).astype(np.uint8)
+        handle["baseband"] = data
     return str(path)
+
+
+def write_capture(path, channel, frames, seed, tone=0.0, ctime=None):
+    return _write_baseband(path, channel, _voltages(channel, frames, seed, tone), ctime)
+
+
+def write_hours(stem, channel, frames, seed, hours, start, tone=0.0, step=3600):
+    """Write the voltages of write_capture as `hours` captures of equal length, `step` seconds apart from `start`.
+
+    With `start` None the captures record no time.
+    """
+    data = _voltages(channel, frames, seed, tone).reshape(hours, -1, INPUTS)
+    return [_write_baseband(f"{stem}_h{i}.h5", channel, part, None if start is None else start + step * i)
+            for i, part in enumerate(data)]
 
 
 @pytest.fixture(scope="module")
@@ -87,18 +111,20 @@ def plans(tmp_path_factory):
         detector_core_profile=str(configs / "detector_core/pilotproxy_cuda_local_reference_power_ratio.json"),
         capture_format="chime_baseband",
     )
-    # strong and clean captures in turn, so the kept fraction has a knee
-    mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
-    control = [write_capture(tmp / "c37.h5", 37, 26, 3)]
+    # strong and clean captures in turn, so the kept fraction has a knee; one capture an hour, so test-bundle has
+    # the hour-to-hour spread of each masked fraction
+    mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2), ctime=T0 + 3600 * i) for i in range(6)]
+    control = write_hours(tmp / "c37", 37, 26, 3, 13, T0)
     calibrate = dict(common, epoch="synthetic", null_quantile=0.8, min_knee_captures=4, channels={
         "35": mixed,
-        "29": [write_capture(tmp / "c29.h5", 29, 6, 2)],
+        "29": write_hours(tmp / "c29", 29, 6, 2, 3, T0),
         "37": control,
     }, control=dict(channel=37, captures=control))
     test = dict(capture_format="chime_baseband",
-                channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2)) for i in range(2)],
-                          "29": [write_capture(tmp / "t29.h5", 29, 4, 5)]},
-                control=[write_capture(tmp / "t37.h5", 37, 12, 6)])
+                channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2),
+                                               ctime=T0 + 3600 * (24 + i)) for i in range(2)],
+                          "29": [write_capture(tmp / "t29.h5", 29, 4, 5, ctime=T0 + 3600 * 24)]},
+                control=[write_capture(tmp / "t37.h5", 37, 12, 6, ctime=T0 + 3600 * 24)])
     calibrate_path, test_path = tmp / "calibrate.json", tmp / "test.json"
     calibrate_path.write_text(json.dumps(calibrate))
     test_path.write_text(json.dumps(test))
@@ -266,6 +292,7 @@ def test_word_is_the_knee_above_the_floor(plans):
     assert channel["word_source"] == "knee"
     assert not channel["pilot_in_nearly_every_frame"]
     assert channel["word_q16"] == channel["knee_word_q16"] > report["floor_word_q16"]
+    assert len(channel["knee_interval_q16"]) == 2
     profiles = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())["profiles"]
     fine = {p["physical_channel"]: p["fine_calibration"] for p in profiles}
     assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
@@ -847,6 +874,81 @@ def test_binomial_tail():
     assert binomial_upper_tail(1000, 5000, 0.2) == pytest.approx(0.5, abs=0.02)
 
 
+def test_hourly_masked_is_frame_weighted_with_the_spread_of_the_bins():
+    # hour 5 holds three frames, one masked, and hour 6 one masked frame
+    record = hourly_masked(np.array([True, False, False, True]), np.array([5, 5, 5, 6]))
+    # the frame-weighted mean of 1/3 and 1 is 2/4, and the standard deviation of the two fractions is 1/3
+    assert record == dict(mean=pytest.approx(0.5), std=pytest.approx(1 / 3), bins=2)
+
+
+def test_masked_fraction_passes_within_one_hourly_std():
+    calibration = dict(word_q16=70000, mean=0.5, std=0.25, bins=24, bin="hour")
+    passed, detail = bias_within_std(calibration, 0.625)
+    assert passed and detail == "calibration 0.5000, std 0.2500 over 24 hours; bias/std 0.50"
+    # a bias of one standard deviation passes, as |b| <= sigma; a larger one fails, either way
+    assert bias_within_std(calibration, 0.75)[0]
+    for shifted in (0.76, 0.2):
+        assert not bias_within_std(calibration, shifted)[0]
+    # a channel masked in every frame has no spread, so it passes only at the same rate
+    whole = dict(calibration, mean=1.0, std=0.0)
+    assert bias_within_std(whole, 1.0)[0]
+    assert not bias_within_std(whole, 1.0 - 1e-6)[0]
+    # one calibration hour gives no spread to test against, whatever the test rate
+    passed, detail = bias_within_std(dict(calibration, bins=1, std=0.0), 0.5)
+    assert not passed and detail == "calibration has 1 hour, so no hour-to-hour spread; calibrate on more hours"
+
+
+def test_masked_fractions_are_binned_by_the_hour_of_each_frame(plans, tmp_path):
+    """The control voltages of the fixture over 13 hours, within one hour, and with no frame time."""
+    found = {}
+    for name, start, step in (("hours", T0, 3600), ("one_hour", T0, 60), ("no_time", None, 3600)):
+        captures = write_hours(tmp_path / f"{name}37", 37, 26, 3, 13, start, step=step)
+        path = tmp_path / f"{name}.json"
+        channels = dict(plans["calibrate"]["channels"], **{"37": captures})
+        path.write_text(json.dumps(dict(plans["calibrate"], channels=channels, control=dict(channel=37, captures=captures))))
+        report = calibrate_bundle(plan_path=path, output_dir=tmp_path / name)
+        checks = run_bundle_test(bundle_dir=tmp_path / name, plan_path=plans["test_path"])["checks"]
+        found[name] = (report["control"]["masked_by_hour"],
+                       next(c for c in checks if c["check"] == "false alarms on the control channel"))
+    hourly, check = found["hours"]
+    assert (hourly["bins"], hourly["bin"]) == (13, "hour") and check["passed"] and "over 13 hours" in check["detail"]
+    assert "masked 0.3333 of 12 frames over 1 test hour" in check["detail"]
+    hourly, check = found["one_hour"]
+    assert hourly["bins"] == 1 and not check["passed"] and "calibrate on more hours" in check["detail"]
+    # with no frame time each capture is a bin, and the report says why
+    hourly, check = found["no_time"]
+    assert hourly["bins"] == 13 and hourly["bin"].startswith("capture: ") and "records no time0_ctime" in hourly["bin"]
+    assert check["passed"] and "over 13 captures" in check["detail"]
+
+
+def test_bundle_test_asks_an_old_report_for_a_recalibration(plans, tmp_path):
+    import shutil
+
+    bundle = tmp_path / "bundle"
+    shutil.copytree(plans["bundle"], bundle)
+    report = json.loads(plans["bundle"].with_name("bundle.report.json").read_text())
+    names = ("masked fraction on channel 35", "masked fraction on channel 29", "false alarms on the control channel")
+
+    def checks(changed):
+        (tmp_path / "bundle.report.json").write_text(json.dumps(changed))
+        return {c["check"]: c for c in run_bundle_test(bundle_dir=bundle, plan_path=plans["test_path"])["checks"]}
+
+    assert all(checks(report)[name]["passed"] for name in names)
+    # a report from before the hourly fractions holds bootstrap intervals in their place
+    old = json.loads(json.dumps(report))
+    for record in (*old["channels"].values(), old["control"]):
+        record["masked_interval"] = [0.0, 1.0]
+        del record["masked_by_hour"]
+    found = checks(old)
+    for name in names:
+        assert not found[name]["passed"] and "recalibrate" in found[name]["detail"], found[name]
+    # fractions recorded at another word test nothing
+    other = json.loads(json.dumps(report))
+    other["channels"]["35"]["masked_by_hour"]["word_q16"] += 1
+    check = checks(other)["masked fraction on channel 35"]
+    assert not check["passed"] and "recalibrate" in check["detail"]
+
+
 def limit_plan(plans, tmp_path, limit, **given):
     """Write a power-limit plan on the captures of the knee plan and return its path."""
     limits = tmp_path / "limits.json"
@@ -1181,17 +1283,17 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
             for p in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
     assert fine[35]["power_limit_multiplier_q16"] == tested["word"]
     assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
-    # test-bundle tests the word the stage applies, against the interval calibration gave at that word
-    assert tested["word"] != channel["word_q16"] and "applied_masked_interval" in channel
+    # test-bundle tests the word the stage applies, against the hourly fractions calibration gave at that word
+    hourly = channel["applied_masked_by_hour"]
+    assert tested["word"] != channel["word_q16"] and hourly["word_q16"] == tested["word"]
     result = run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])
     check = next(c for c in result["checks"] if c["check"] == "masked fraction on channel 35")
     assert "at the power-limit word" in check["detail"]
-    low, high = channel["applied_masked_interval"]
-    assert f"calibration gave {low:.3f} to {high:.3f}" in check["detail"]
-    # a report from before this interval existed cannot test the power-limit word
+    assert f"calibration {hourly['mean']:.4f}, std {hourly['std']:.4f}" in check["detail"]
+    # a report from before these fractions existed cannot test the power-limit word
     report_path = tmp_path / "bundle.report.json"
     stale = json.loads(report_path.read_text())
-    del stale["channels"]["35"]["applied_masked_interval"]
+    del stale["channels"]["35"]["applied_masked_by_hour"]
     report_path.write_text(json.dumps(stale))
     check = next(c for c in run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])["checks"]
                  if c["check"] == "masked fraction on channel 35")
@@ -1213,7 +1315,7 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
 
 
 def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plans, tmp_path):
-    # channel 29 calibrated with no captures has a word and no masked_interval; its test captures fail the check
+    # channel 29 calibrated with no captures has a word and no hourly masked fraction; its test captures fail the check
     plan = dict(plans["calibrate"], channels=dict(plans["calibrate"]["channels"], **{"29": []}))
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
@@ -1294,10 +1396,12 @@ def test_v3_channel_with_no_passing_word_carries_the_reject_word(plans, tmp_path
                            bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"]), None)
     stats = np.array([[s.n_peak, s.d_rho] for s in map(fine_stat_v3, fines)], dtype=np.uint64)
     assert masks_from_stat(stats, v3_word(fine[35])).all()
-    assert channel["applied_masked_interval"] == [1.0, 1.0]
+    hourly = channel["applied_masked_by_hour"]
+    assert (hourly["mean"], hourly["std"]) == (1.0, 0.0)
+    # the test masks every frame too, so its bias is 0 against a spread of 0
     result = run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])
     check = next(c for c in result["checks"] if c["check"] == "masked fraction on channel 35")
-    assert check["passed"] and "masked 1.000 at the power-limit word" in check["detail"]
+    assert check["passed"] and "masked 1.0000 of 4 frames at the power-limit word" in check["detail"]
 
 
 def _v3_plan(plans, tmp_path, **extra):
@@ -1342,7 +1446,7 @@ def test_v3_default_word_is_the_scaled_control_word(plans, tmp_path):
             for r in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
     for channel in ("35", "29"):
         r = report["channels"][channel]
-        assert r["word_source"] == "control word x scale" and "knee_word_q16" not in r
+        assert r["word_source"] == "control word x scale" and not {"knee_word_q16", "knee_interval_q16"} & set(r)
         assert r["passband_factor"] == factors[channel] and r["passband_factor_source"] == "plan"
         assert r["scale"] == pytest.approx(r["mu0"] * factors[channel] / report["reference_level"], rel=1e-15)
         assert r["word_q16"] == scaled_word(q, r["scale"]) == rows[int(channel)]["cfar_multiplier_q16"]
@@ -1415,9 +1519,9 @@ def test_v3_night_default_word_takes_the_night_control(plans, tmp_path):
 
 
 def test_v3_night_needs_frame_times_and_a_night_frame(plans, tmp_path):
-    # the control of the fixture records no time0_ctime
+    timeless = write_capture(tmp_path / "u37.h5", 37, 26, 3)
     with pytest.raises(ValueError, match="time0_ctime"):
-        calibrate_bundle(plan_path=_v3_plan(plans, tmp_path, default_word=dict(night=DRAO)), output_dir=tmp_path / "b")
+        _night_calibration(plans, tmp_path, "timeless", [timeless], default_word=dict(night=DRAO))
     day = write_capture(tmp_path / "d37.h5", 37, 26, 3, ctime=DAY_CTIME)
     with pytest.raises(ValueError, match="below the horizon"):
         _night_calibration(plans, tmp_path, "day_only", [day], default_word=dict(night=DRAO))
@@ -1436,16 +1540,19 @@ def test_frame_times_of_run_windows_and_refused_formats(tmp_path):
 
 
 def test_bundle_test_counts_the_night_control(plans, tmp_path):
-    night = write_capture(tmp_path / "n37.h5", 37, 26, 3, ctime=NIGHT_CTIME)
+    # 08:00 UTC on 13 nights, and a day hour
+    night = write_hours(tmp_path / "n37", 37, 26, 3, 13, NIGHT_CTIME, step=86400)
     day = write_capture(tmp_path / "d37.h5", 37, 10, 7, tone=0.8, ctime=DAY_CTIME)
-    _night_calibration(plans, tmp_path, "bundle", [night, day], default_word=dict(night=DRAO))
+    report = _night_calibration(plans, tmp_path, "bundle", [*night, day], default_word=dict(night=DRAO))
+    # the hourly fractions of the control are over its night frames
+    assert report["control"]["masked_by_hour"]["bins"] == 13
     test = dict(plans["test"], control=[write_capture(tmp_path / "tn37.h5", 37, 12, 6, ctime=NIGHT_CTIME),
                                         write_capture(tmp_path / "td37.h5", 37, 6, 8, tone=0.8, ctime=DAY_CTIME)])
     path = tmp_path / "test.json"
     path.write_text(json.dumps(test))
     result = run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=path)
     check = next(c for c in result["checks"] if c["check"] == "false alarms on the control channel")
-    assert "of 12 night frames" in check["detail"]
+    assert check["passed"] and "of 12 night frames over 1 test hour" in check["detail"], check
     # a test control recorded only in the day cannot test a night calibration
     path.write_text(json.dumps(dict(test, control=[test["control"][1]])))
     check = next(c for c in run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=path)["checks"]

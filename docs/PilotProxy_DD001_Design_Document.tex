@@ -675,9 +675,20 @@ power-limit threshold, a channel with no passing word holds the floor.
 \code{pilot-proxy test-bundle} then checks the bundle on other captures:
 structure and digests, values on every bound channel, no shared captures with
 calibration (by path, or by identity for a copy or another layout of the same data), a decision on every frame of each channel (a valid rank under v1
-and v2, a nonzero median under v3), the masked fraction at the word
-\code{DtvRfiMask} applies against the calibration interval at that word, and
-the false-alarm count on the control.
+and v2, a nonzero median under v3), the masked fraction of each channel at
+the word \code{DtvRfiMask} applies, and that of the control at the control
+word. A masked-fraction check passes when \(|\text{bias}| \le \sigma\). The
+blocks are grouped by the UTC hour of their time, the bias is the test's mean
+masked fraction less the calibration's, both weighted by blocks, and
+\(\sigma\) is the standard deviation of the calibration's hourly fractions at
+that word. This is the rule of the dissertation's BAO test. Blocks within an
+hour share the sky and the gains, so a count test over blocks treats them as
+independent. On the Pathfinder's Run 1, the earlier binomial test of the
+control failed every calibration length (1.12\% against 1\% over 1.66~M test
+blocks, tail \(10^{-55}\)), and the earlier bootstrap interval over 43~s
+captures was as narrow. Against the hour-to-hour spread, only the 6~h
+calibration failed, which saw no Taurus A transit, and channels 18 and 29
+passed at every length. Captures with no frame time are binned by capture.
 
 %=====================================================================
 \section{Design Choices}
@@ -1280,6 +1291,13 @@ them (\code{CHIME_DERIVED.md}).
         calibration.
   \item No test shows that a word catches weak pilots. \code{test-bundle}
         tests the control word on the control and the masked fractions.
+  \item \code{test-bundle} compares the held-out mean with the
+        hour-to-hour spread of the calibration, not with the error of the
+        calibration mean. A shift smaller than that spread passes: against
+        the standard error \(\sigma/\sqrt{L}\) of the mean of \(L\) hours,
+        channel 18 of Run 1 fails at 24~h. The spread is that of the
+        calibration hours, so a calibration that misses the Taurus A transit,
+        once per sidereal day, understates it.
   \item The power-limit word is in-sample, and its corrections use an
         assumed normalization from the RFIsher table. \code{test-bundle} tests
         the masked fraction at the BAO word on held-out captures, not the

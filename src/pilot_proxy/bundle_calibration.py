@@ -66,7 +66,6 @@ MIN_KNEE_CAPTURES = 30
 BOOTSTRAP_REPLICATES = 200
 # chance of the hits under the null, kept small for the search over the window
 MAX_LINE_TAIL = 1e-4
-MIN_TAIL = 1e-3
 MIN_SIMULATED_FRAMES = 2000
 MAX_SCORE = (1 << 63) - 1
 # frames scored together, about 0.2 GB of float temporaries
@@ -322,19 +321,70 @@ def knee_word(words: np.ndarray, weights: np.ndarray) -> int:
     return int(words[words.size - 1 - int(np.argmax(height[::-1]))])
 
 
-def bootstrap_captures(words: np.ndarray, captures: np.ndarray, word: int, seed: int = 20261106) -> dict[str, list[float]]:
-    """Return the 68% knee interval and 95% masked-fraction interval over resampled captures."""
+def bootstrap_captures(words: np.ndarray, captures: np.ndarray, seed: int = 20261106) -> dict[str, list[float]]:
+    """Return the 68% knee interval over resampled captures."""
     rng = np.random.default_rng(seed)
     groups = [words[captures == c] for c in np.unique(captures)]
-    knees, masked = [], []
+    knees = []
     for _ in range(BOOTSTRAP_REPLICATES):
         picks = rng.integers(len(groups), size=len(groups))
         sample = np.concatenate([groups[i] for i in picks])
         ids = np.concatenate([np.full(groups[i].size, n) for n, i in enumerate(picks)])
         knees.append(knee_word(sample, capture_weights(ids)))
-        masked.append(float(np.sum(capture_weights(ids)[sample > word])))
-    return dict(knee_interval_q16=[float(q) for q in np.quantile(knees, [0.16, 0.84])],
-                masked_interval=[float(q) for q in np.quantile(masked, [0.025, 0.975])])
+    return dict(knee_interval_q16=[float(q) for q in np.quantile(knees, [0.16, 0.84])])
+
+
+def hourly_masked(masked: np.ndarray, bins: np.ndarray) -> dict[str, float | int]:
+    """Return the frame-weighted mean and the standard deviation of the masked fractions of the bins.
+
+    `masked` is True for each frame with a decision that the word masks, and `bins` holds the bin of each frame,
+    its UTC hour or its capture. The standard deviation is that of the bins' fractions (population, ddof 0).
+    """
+    masked = np.asarray(masked, dtype=np.float64)
+    if not masked.size:
+        raise ValueError("no frame has a decision")
+    _, inverse, counts = np.unique(np.asarray(bins), return_inverse=True, return_counts=True)
+    fractions = np.bincount(inverse, weights=masked, minlength=counts.size) / counts
+    return dict(mean=float(np.average(fractions, weights=counts)), std=float(fractions.std()), bins=int(counts.size))
+
+
+def bias_within_std(calibration: dict[str, Any], test_mean: float) -> tuple[bool, str]:
+    """Return whether a test masked fraction agrees with its calibration, and why.
+
+    `calibration` is a record of hourly_masked. bias = test mean - calibration mean, and the check passes when
+    |bias| < std, the hour-to-hour spread of the calibration, the rule of the dissertation's BAO test. With std 0
+    it passes only on a bias of 0. A calibration of fewer than two bins has no spread, so the check fails.
+    """
+    unit = "hour" if calibration.get("bin", "hour") == "hour" else "capture"
+    count, mean, std = int(calibration["bins"]), float(calibration["mean"]), float(calibration["std"])
+    if count < 2:
+        return False, f"calibration has {_count(count, unit)}, so no hour-to-hour spread; calibrate on more hours"
+    bias = test_mean - mean
+    ratio = abs(bias) / std if std > 0 else (0.0 if bias == 0 else math.inf)
+    return (abs(bias) < std or bias == 0,
+            f"calibration {mean:.4f}, std {std:.4f} over {_count(count, unit)}; bias/std {ratio:.2f}")
+
+
+def _count(n: int, unit: str) -> str:
+    return f"{n} {unit}" + ("" if n == 1 else "s")
+
+
+def _masked_record(masked: np.ndarray, bins: np.ndarray, word: int, binning: str) -> dict[str, Any]:
+    """Return the hourly masked fractions at a word, as calibrate-bundle records them for test-bundle."""
+    return dict(word_q16=int(word), **hourly_masked(masked, bins), bin=binning)
+
+
+def _agreement(masked: np.ndarray, bins: np.ndarray, binning: str, calibration: dict[str, Any], word: int,
+               label: str) -> tuple[bool, str]:
+    """Return the check of a test's masked fraction at a word against the calibration's hourly fractions."""
+    if int(calibration["word_q16"]) != word:
+        return False, f"calibration gave its masked fractions at word {calibration['word_q16']}, not {word}; recalibrate"
+    if not masked.size:
+        return False, "no test frame has a decision"
+    test = hourly_masked(masked, bins)
+    passed, verdict = bias_within_std(calibration, test["mean"])
+    unit = "hour" if binning == "hour" else "capture"
+    return passed, f"masked {test['mean']:.4f} of {masked.size} {label} over {_count(test['bins'], 'test ' + unit)}; {verdict}"
 
 
 def null_scores(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: int,
@@ -417,6 +467,15 @@ def weight_norms(weights: bytes) -> tuple[int, int]:
     return target, lower + upper
 
 
+def control_quantile_q16(words: np.ndarray, quantile: float) -> float:
+    """Return the quantile of the control's exact keep words, the v3 control word before it is rounded up.
+
+    Only frames with a decision count: a word of -1 (no decision) or MAX_SCORE (masked at every word) is left out.
+    """
+    words = np.asarray(words, dtype=np.int64)
+    return float(np.quantile(words[(words >= 0) & (words < MAX_SCORE)].astype(np.float64), quantile))
+
+
 def scaled_word(quantile_q16: float, scale: float) -> int:
     """Return the default word of fine decision v3: the control quantile times the channel scale, rounded up to Q16."""
     return int(math.ceil(quantile_q16 / Q16 * scale * Q16))
@@ -448,6 +507,12 @@ def _passband_factors(plan: dict[str, Any]) -> dict[int, float]:
 
 # the coarse-channel sample of the CHIME F-engine, 1/390625 s, which steps the frames of a baseband capture
 BASEBAND_SAMPLE_SECONDS = 1.0 / 390625.0
+# test-bundle compares masked fractions over bins of one UTC hour of frame time
+HOUR_SECONDS = 3600
+
+
+class _NoFrameTime(ValueError):
+    """A capture that records no frame time."""
 
 
 def _night_site(plan: dict[str, Any]) -> tuple[float, float] | None:
@@ -474,7 +539,8 @@ def _frame_times(paths: Sequence[str], capture_format: str, block_samples: int, 
 
     counts[i] is the number of frames _load_fines took from the i-th expanded capture. A dtv_fine_powers window
     gives all its frames the start time of the window (fpga_seq_time_nsec), within 43 s of each; a chime_baseband
-    capture steps from time0_ctime by its block. A chord_baseband capture records no time, so it is refused.
+    capture steps from time0_ctime by its block. A chord_baseband capture records no time, so it is refused, as is
+    a capture without its time attribute (_NoFrameTime).
     """
     import h5py
 
@@ -488,28 +554,47 @@ def _frame_times(paths: Sequence[str], capture_format: str, block_samples: int, 
         if capture_format == "dtv_fine_powers":
             start_ns = int(read_attrs(path).get("fpga_seq_time_nsec", -1))
             if start_ns < 0:
-                raise ValueError(f"{path} records no fpga_seq_time_nsec, so its frames have no time for the night option")
+                raise _NoFrameTime(f"{path} records no fpga_seq_time_nsec, so its frames have no time")
             times.append(np.full(n, start_ns / 1e9))
         elif capture_format == "chime_baseband":
             with h5py.File(path, "r") as handle:
                 if "time0_ctime" not in handle.attrs:
-                    raise ValueError(f"{path} records no time0_ctime, so its frames have no time for the night option")
+                    raise _NoFrameTime(f"{path} records no time0_ctime, so its frames have no time")
                 t0 = float(handle.attrs["time0_ctime"])
                 start = (-int(handle.attrs["time0_fpga_count"])) % block_samples
             times.append(t0 + (start + np.arange(n) * block_samples) * BASEBAND_SAMPLE_SECONDS)
         else:
-            raise ValueError(f"{capture_format} captures record no frame time, so the night option cannot select them")
+            raise _NoFrameTime(f"{capture_format} captures record no frame time")
     return np.concatenate(times) if times else np.empty(0)
+
+
+def _capture_times(paths: Sequence[str], capture_format: str, block_samples: int, captures: np.ndarray) -> np.ndarray:
+    """Return the Unix time of each frame of _load_fines(paths), whose capture indices are `captures`."""
+    counts = np.bincount(captures, minlength=len(_expand(paths)))
+    times = _frame_times(paths, capture_format, block_samples, counts)
+    if len(times) != len(captures):
+        raise ValueError("the frame times do not match the frames read")
+    return times
 
 
 def _night_frames(paths: Sequence[str], capture_format: str, block_samples: int, captures: np.ndarray,
                   site: tuple[float, float]) -> np.ndarray:
     """Return True for each frame of _load_fines(paths) recorded with the Sun below the horizon at the site."""
-    counts = np.bincount(captures, minlength=len(_expand(paths)))
-    times = _frame_times(paths, capture_format, block_samples, counts)
-    if len(times) != len(captures):
-        raise ValueError("the frame times do not match the frames read")
-    return is_night(times, *site)
+    return is_night(_capture_times(paths, capture_format, block_samples, captures), *site)
+
+
+def _hour_bins(paths: Sequence[str], capture_format: str, block_samples: int,
+               captures: np.ndarray) -> tuple[np.ndarray, str]:
+    """Return the bin of each frame of _load_fines(paths) for the masked fractions of test-bundle, and its kind.
+
+    A bin is the UTC hour of the frame's time ("hour"). Where the captures record no frame time, each capture is
+    a bin, and the kind says why.
+    """
+    try:
+        times = _capture_times(paths, capture_format, block_samples, captures)
+    except _NoFrameTime as missing:
+        return np.asarray(captures), f"capture: {missing}"
+    return np.floor(times / HOUR_SECONDS).astype(np.int64), "hour"
 
 
 def _expand(paths: Sequence[str]) -> list[str]:
@@ -773,6 +858,11 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             if not night.any():
                 raise ValueError("no control frame was recorded with the Sun below the horizon at the night site")
             quiet = fines[night]
+            # test-bundle compares the control's masked fraction hour by hour, over the same frames
+            control_bins, control_binning = _hour_bins(control["captures"], fmt, k * WINDOWS, control_captures)
+            control_bins = control_bins[night]
+            control_words = required_words(quiet, anchor_bin=anchor, bulk=bulk, rank=control_rank,
+                                           decision_version=decision)
             control_weights = _weights(row, bank)
             control_norms = weight_norms(control_weights)
             # the corrections of the power-limit test read the control again under the words of each channel
@@ -804,9 +894,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         factors = _passband_factors(plan) if v3 else {}
         if v3 and control:
             # the quantile of the exact keep words of the control frames that have a word
-            exact = required_words(quiet, anchor_bin=anchor, bulk=bulk, rank=control_rank, decision_version=decision)
-            exact = exact[(exact >= 0) & (exact < MAX_SCORE)]
-            quantile_q16 = float(np.quantile(exact.astype(np.float64), quantile))
+            quantile_q16 = control_quantile_q16(control_words, quantile)
             reference_level = null_power_ratio_from_weight_norms(*control_norms) * factors.get(int(control["channel"]), 1.0)
         elif v3:
             # white noise through ideal weights has the null level 1
@@ -815,6 +903,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         floor = int(plan.get("word_q16", measured_word))
         if "word_q16" in plan:
             source = "the plan"
+        if control:
+            decided = control_words >= 0
+            control_record["masked_by_hour"] = _masked_record(control_words[decided] > floor, control_bins[decided],
+                                                              floor, control_binning)
         min_captures = int(plan.get("min_knee_captures", MIN_KNEE_CAPTURES))
 
         report_channels = {}
@@ -939,11 +1031,14 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             else:
                 word, word_source = knee, "knee"
             masked = float(np.sum(weights[seen[supported] > word]))
-            intervals = bootstrap_captures(seen[supported], captures[supported], word)
+            # the knee interval is a v1 and v2 diagnostic
+            intervals = {} if v3 else bootstrap_captures(seen[supported], captures[supported])
+            bins, binning = _hour_bins(paths, fmt, k * WINDOWS, captures)
+            intervals["masked_by_hour"] = _masked_record(seen[supported] > word, bins[supported], word, binning)
             if limited is not None and limited[0] != word:
-                # Kotekan and the relay apply the power-limit word, so test-bundle tests it against this interval
-                intervals["applied_masked_interval"] = bootstrap_captures(
-                    seen[supported], captures[supported], int(limited[0]))["masked_interval"]
+                # Kotekan and the relay apply the power-limit word, so test-bundle tests that word
+                intervals["applied_masked_by_hour"] = _masked_record(seen[supported] > limited[0], bins[supported],
+                                                                     limited[0], binning)
             note = f"Word from {word_source}, {'control word' if v3 else 'floor'} from {source}."
             if limited is not None:
                 note += (f" Power-limit word from {limited[1]}." if tested["outcome"] == "useful"
@@ -1069,7 +1164,7 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
             continue
         fine_cal = rows[channel]["fine_calibration"]
         bulk, rank = calibration_geometry(fine_cal)
-        fines, _ = _load_fines(paths, fmt, rows[channel], bank, k, reverse, max_frames)
+        fines, test_captures = _load_fines(paths, fmt, rows[channel], bank, k, reverse, max_frames)
         words = required_words(fines, anchor_bin=fine_cal.get("anchor_bin", 0), bulk=bulk, rank=rank,
                                decision_version=fine_cal["decision_version"])
         valid = words >= 0
@@ -1077,7 +1172,7 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
         if str(channel) not in predicted:
             check(f"channel {channel}", False, f"{report_path} has no prediction")
             continue
-        if "masked_interval" not in predicted[str(channel)]:
+        if not predicted[str(channel)].get("frames"):
             # a channel calibrated with no captures has a word but no masked fraction to test against
             check(f"masked fraction on channel {channel}", False,
                   "calibration had no captures of this channel, so it predicts no masked fraction")
@@ -1086,34 +1181,36 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
         applied = (v3_word(fine_cal) if fine_cal["decision_version"] == FINE_DECISION_V3_VERSION
                    else int(fine_cal["cfar_multiplier_q16"]))
         limit_word = applied != int(fine_cal["cfar_multiplier_q16"])
-        key = "applied_masked_interval" if limit_word else "masked_interval"
+        key = "applied_masked_by_hour" if limit_word else "masked_by_hour"
+        label = f"frames at the {'power-limit' if limit_word else 'default'} word"
         if key not in predicted[str(channel)]:
             check(f"masked fraction on channel {channel}", False,
-                  "calibration predicts no masked fraction at the power-limit word the stage applies; recalibrate")
+                  f"calibration predicts no hourly masked fraction for the {label}; recalibrate")
             continue
-        hits = int(np.count_nonzero(words[valid] > applied))
-        trials = int(valid.sum())
-        low, high = predicted[str(channel)][key]
-        # consistent if the count could come from a rate inside the calibration interval
-        agrees = binomial_upper_tail(hits, trials, high) >= MIN_TAIL and binomial_lower_tail(hits, trials, low) >= MIN_TAIL
-        check(f"masked fraction on channel {channel}", agrees,
-              f"masked {hits / trials:.3f} at the {'power-limit' if limit_word else 'default'} word, "
-              f"calibration gave {low:.3f} to {high:.3f}")
+        # passes when |test mean - calibration mean| < the calibration's hour-to-hour standard deviation
+        bins, binning = _hour_bins(paths, fmt, k * WINDOWS, test_captures)
+        check(f"masked fraction on channel {channel}",
+              *_agreement(words[valid] > applied, bins[valid], binning, predicted[str(channel)][key], applied, label))
 
     record = calibration.get("control")
-    if plan.get("control") and record:
+    if plan.get("control") and record and "masked_by_hour" not in record:
+        check("false alarms on the control channel", False,
+              f"{report_path} has no hourly masked fraction of the control; recalibrate")
+    elif plan.get("control") and record:
         row = dict(receiver_channel_id=record["receiver_channel_id"], physical_channel=record["channel"],
                    weight_bank_offset_bytes=0, weight_bank_nbytes=len(record["weights_hex"]) // 2)
         bulk = np.zeros(FINE_BINS, dtype=bool)
         bulk[record["bulk_bins"]] = True
         fines, test_captures = _load_fines(plan["control"], fmt, row, bytes.fromhex(record["weights_hex"]), k, reverse,
                                            max_frames)
+        bins, binning = _hour_bins(plan["control"], fmt, k * WINDOWS, test_captures)
         label = "frames"
         night = record.get("night")
         if night:
             # a bundle calibrated on the night control is tested on the night control
-            fines = fines[_night_frames(plan["control"], fmt, k * WINDOWS, test_captures,
-                                        (night["latitude_deg"], night["longitude_deg_east"]))]
+            keep = _night_frames(plan["control"], fmt, k * WINDOWS, test_captures,
+                                 (night["latitude_deg"], night["longitude_deg_east"]))
+            fines, bins = fines[keep], bins[keep]
             label = "night frames"
         if not len(fines):
             check("false alarms on the control channel", False,
@@ -1123,11 +1220,9 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
             words = required_words(fines, anchor_bin=record["anchor_bin"], bulk=bulk, rank=record["cfar_rank"],
                                    decision_version=calibration.get("decision_version", FINE_DECISION_VERSION))
             word = int(calibration["floor_word_q16"])
-            rate = 1.0 - float(calibration["null_quantile"])
-            hits = int(np.count_nonzero(words > word))
-            tail = binomial_upper_tail(hits, words.size, rate)
-            check("false alarms on the control channel", tail >= MIN_TAIL,
-                  f"{hits} of {words.size} {label} masked, target {rate:.3f}, tail probability {tail:.2g}")
+            decided = words >= 0
+            check("false alarms on the control channel",
+                  *_agreement(words[decided] > word, bins[decided], binning, record["masked_by_hour"], word, label))
     elif plan.get("control"):
         # the report may exist with no control record, when calibration simulated the control
         check("false alarms on the control channel", False,

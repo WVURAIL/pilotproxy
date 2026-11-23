@@ -5,6 +5,9 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Kernel core 4.2.1: `kernel_accumulate_row_sums` is gone, and a single channel launches the batched row-sum
+  kernel at batch 1. Output is unchanged (117 GPU tests and the CUDA test binary pass on an RTX 5000 Ada), and the
+  times are within the run-to-run spread of 4.2.0. Kotekan vendors core 4.2.0 until its copy is updated.
 - `tools/threshold_rule.py` requires `--table`, the RFIsher channel table of the telescope, so the CHIME table is no
   longer used when it is left out.
 - `CHIME_DERIVED.md` lists every `docs/evidence` entry, under Code-only cut or the new Not CHIME data, and

@@ -215,3 +215,30 @@ def test_analyze_tool_keeps_the_numa_domains_apart(tmp_path):
     subprocess.run(command + ["--domain", "n0", "--json", str(out)], capture_output=True)
     result = json.loads(out.read_text())
     assert result["frames"] == frames and result["frequencies"] == freqs
+
+
+def _run_tool(name, *args):
+    return subprocess.run([sys.executable, str(ROOT / "tools" / f"{name}.py"), *map(str, args)],
+                          capture_output=True, text=True)
+
+
+def test_run_tools_refuse_a_v3_run_without_its_bundle(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
+    # dtv_stat files are present, so without the bundle the v3 channels would read as never masked
+    check = _run_tool("check_pathfinder_dtv_run", "--dtv-dir", run["dtv"], "--channels", V3, V1)
+    assert check.returncode == 1 and "--bundle-dir" in check.stderr
+    compare = _run_tool("compare_pathfinder_dtv_mask", "--dtv-dir", run["dtv"], "--vis-dir", run["tmp"])
+    assert compare.returncode == 1 and "--bundle-dir" in compare.stderr
+
+
+def test_check_tool_stops_on_two_windows_with_one_sequence_number(run):
+    pytest.importorskip("hdf5plugin")      # the tools read Kotekan's bitshuffled files
+    # a second acquisition after an F-engine resync starts again at fpga_seq_num 0, with other data
+    acq = run["dtv"] / "acq_2"
+    acq.mkdir()
+    mask = np.zeros((BLOCKS, 2), np.int8)
+    mask[:, 1] = 1
+    _write(acq / "dtv_mask.0.h5", "mask", mask, [V3, V1])
+    done = _run_tool("check_pathfinder_dtv_run", "--dtv-dir", run["dtv"], "--bundle-dir", run["bundle"],
+                     "--channels", V1)
+    assert done.returncode == 1 and "fpga_seq_num 0 differ" in done.stderr

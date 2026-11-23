@@ -41,14 +41,25 @@ def product_files(dtv_dir, product):
 
 
 def collect(dtv_dir, product, channels):
-    """Return {channel: {window seq: per-block array}} for one product."""
-    found = defaultdict(dict)
+    """Return {channel: {window seq: per-block array}} for one product.
+
+    A window read twice, from a per-window and a combined file, is kept once. Two different windows with one
+    fpga_seq_num, as two acquisitions on either side of an F-engine resync give, stop the check: one window
+    would silently replace the other.
+    """
+    found, origin = defaultdict(dict), {}
     for path in product_files(dtv_dir, product):
         for attrs, data in iter_windows(path):
             coarse = [int(c) for c in attrs.get("coarse_freq", [])]
+            seq = int(attrs["fpga_seq_num"])
             for channel in channels:
                 if channel in coarse:
-                    found[channel][int(attrs["fpga_seq_num"])] = data[:, coarse.index(channel)]
+                    rows = data[:, coarse.index(channel)]
+                    held = found[channel].get(seq)
+                    if held is not None and not np.array_equal(held, rows):
+                        sys.exit(f"dtv_{product} windows at fpga_seq_num {seq} differ between {origin[channel, seq]} "
+                                 f"and {path} (an F-engine resync?); check each acquisition with its own --dtv-dir")
+                    found[channel][seq], origin[channel, seq] = rows, path
     return found
 
 
@@ -216,6 +227,9 @@ def main():
     parser.add_argument("--output-dir")
     args = parser.parse_args()
 
+    if not args.bundle_dir and product_files(args.dtv_dir, "stat"):
+        # without the bundle a v3 channel would be read from its dtv_mask rows, which hold 0
+        sys.exit(f"{args.dtv_dir} holds dtv_stat files: pass --bundle-dir, or its v3 channels read as never masked")
     masks = collect(args.dtv_dir, "mask", args.channels)
     supports = collect(args.dtv_dir, "fine_support", args.channels)
     words = {c: w for c, w in v3_words(args.bundle_dir, mask_control=True).items() if c in args.channels}

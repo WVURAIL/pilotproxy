@@ -7,7 +7,10 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 - The Pathfinder run tools no longer pass a fine_decision_v3 run they could not read. `check_pathfinder_dtv_run.py`
   reports a v3 channel with no `dtv_stat` rows as an error (exit 1) instead of reading its all-zero `dtv_mask`
-  rows as 0% masked, and counts its windows without `dtv_stat`. `compare_pathfinder_dtv_mask.py` compares the
+  rows as 0% masked, and counts its windows without `dtv_stat`. It and `compare_pathfinder_dtv_mask.py` refuse
+  a directory with `dtv_stat` files when `--bundle-dir` is not given, and the check stops when two different
+  windows share an `fpga_seq_num`, as acquisitions on either side of an F-engine resync do, instead of letting
+  one replace the other. `compare_pathfinder_dtv_mask.py` compares the
   bundle's v3 channels by default, counts a block read from both a per-window and a combined file once, and exits 1
   when a check fails or a frequency could not be compared. `analyze_dtv_run.py` reads a not-evaluated v3 row
   `[0, 2^64 - 1]` as untested, not as a valid test, reports unequal frame counts instead of failing in a

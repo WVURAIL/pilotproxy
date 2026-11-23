@@ -249,6 +249,9 @@ def main():
     parser.add_argument("--output-dir")
     args = parser.parse_args()
 
+    if not args.bundle_dir and glob.glob(os.path.join(args.dtv_dir, "**", "dtv_stat.*.h5"), recursive=True):
+        # without the bundle a v3 channel would be read from its dtv_mask rows, which hold 0
+        raise SystemExit(f"{args.dtv_dir} holds dtv_stat files: pass --bundle-dir, or its v3 channels read as never masked")
     words = v3_words(args.bundle_dir, mask_control=args.mask_control)
     masks = read_masks(args.dtv_dir, words)
     if not masks:

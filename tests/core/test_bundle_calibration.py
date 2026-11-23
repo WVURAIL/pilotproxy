@@ -1067,6 +1067,54 @@ def test_v3_bundle_passes_on_other_captures(plans, v3_plans):
     assert result["passed"], result
 
 
+def _qualify_as_tested(bundle, test_path, tmp_path):
+    """Test a bundle, qualify it on the passing report, check the copy holds the rows that were tested, and
+    return the summary and the qualified rows."""
+    report = tmp_path / "test_report.json"
+    result = run_bundle_test(bundle_dir=bundle, plan_path=test_path, output_json=report)
+    assert result["passed"], result
+    qualified = tmp_path / "qualified"
+    summary = qualify_bundle(bundle_dir=bundle, test_report=report, reviewer="A. Reviewer", output_dir=qualified)
+    assert summary["qualified_channels"] == [29, 35]
+    assert not validate_runtime_weight_bundle(bundle_dir=qualified).get("errors")
+    for name in ("detector_contract.json", "weights.bin", "weights.manifest.json"):
+        assert (qualified / name).read_bytes() == (bundle / name).read_bytes()
+    before = {p["physical_channel"]: p for p in json.loads((bundle / "pilot_profiles.json").read_text())["profiles"]}
+    after = {p["physical_channel"]: p for p in json.loads((qualified / "pilot_profiles.json").read_text())["profiles"]}
+    assert sorted(after) == sorted(before)
+    for channel, row in after.items():
+        unqualified = json.loads(json.dumps(row))
+        record = unqualified["fine_calibration"]["provenance"].pop("mask_qualification", None)
+        expected = dict(test_report_sha256=summary["test_report_sha256"], reviewer="A. Reviewer")
+        assert record == (None if channel == 37 else expected)
+        # the words and the rest of the row are those that were tested
+        assert unqualified == before[channel]
+    return summary, after
+
+
+def test_v3_bundle_is_qualified_at_its_tested_words(plans, v3_plans, tmp_path):
+    _, rows = _qualify_as_tested(v3_plans["bundle"], plans["test_path"], tmp_path)
+    assert {row["fine_calibration"]["decision_version"] for row in rows.values()} == {"fine_decision_v3"}
+    assert not any("power_limit_multiplier_q16" in row["fine_calibration"] for row in rows.values())
+
+
+def test_v3_power_limit_bundle_is_qualified_with_its_power_limit_word(plans, tmp_path):
+    path = limit_plan(plans, tmp_path, 1e-3)
+    # 36 frames of channel 35, so its pilot is seen, as in test_v3_power_limit_word_is_the_power_limit_word
+    mixed = [write_capture(tmp_path / f"c35_{i}.h5", 35, 6, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    plan = json.loads(path.read_text())
+    plan["channels"] = dict(plan["channels"], **{"35": mixed})
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    word = report["channels"]["35"]["power_limit_word_q16"]
+    assert word is not None and report["channels"]["29"]["power_limit_word_q16"] is None
+    _, rows = _qualify_as_tested(tmp_path / "bundle", plans["test_path"], tmp_path)
+    # the stage applies the power-limit word of channel 35 and the default word of channel 29, the words tested
+    fine = {channel: row["fine_calibration"] for channel, row in rows.items()}
+    assert fine[35]["power_limit_multiplier_q16"] == v3_word(fine[35]) == word != fine[35]["cfar_multiplier_q16"]
+    assert "power_limit_multiplier_q16" not in fine[29] and v3_word(fine[29]) == fine[29]["cfar_multiplier_q16"]
+
+
 def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     path = limit_plan(plans, tmp_path, 1e-3)
     # v3 searches all 256 bins, whose noise peak on these few-input captures lies above that of the 65-bin

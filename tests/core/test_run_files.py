@@ -201,3 +201,17 @@ def test_combine_tool_combines_again_when_windows_are_added(tmp_path):
     (out / "acq_1" / "combine.json").write_text(json.dumps(record))
     done = run()
     assert done.returncode == 0 and "kept no file list" in done.stdout and len(combined()) == 3
+
+
+def test_untimed_windows_after_a_restart_keep_recording_order(tmp_path):
+    """The windows after an F-engine restart have no time and an fpga_seq_num near zero, and stay last."""
+    window = 4 * 8192
+    sources = [write_half(tmp_path / f"a{w}.h5", [2715, 3115], 10**9 + w * window, w + 1) for w in range(2)]
+    sources += [write_half(tmp_path / f"a{w}.h5", [2715, 3115], 4096 + (w - 2) * window, w + 1, t0=2 * 10**18)
+                for w in (2, 3)]
+    acq = tmp_path / "acq_1"
+    acq.mkdir()
+    path = str(write_frames_file(sources, acq / "dtv_fine_powers.00000000.h5"))
+    files = ordered_run_files([path])
+    assert [p for _, _, p in files] == [f"{path}#{i}" for i in range(4)]
+    assert [t is None for t, _, _ in files] == [False, False, True, True]

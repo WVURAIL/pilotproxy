@@ -554,7 +554,7 @@ def test_run_scores_feed_the_threshold_rule(plans, tmp_path):
         frames = rng.integers(900, 1100, size=(48, 3, 256)).astype(np.uint64)
         frames[:16, 0, anchor] *= np.uint64(1000)
         frames[40:] = np.iinfo(np.uint64).max
-        runs.append(write_run_file(tmp_path / f"run_{index}.h5", [521, 614], frames))
+        runs.append(write_run_file(tmp_path / f"run_{1 - index}.h5", [521, 614], frames))
         with h5py.File(runs[-1], "a") as handle:
             handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = (1 - index) * 48 * 8192
     result = build_run_scores(bundle_dir=plans["bundle"], runs=runs, channel=35, output_dir=tmp_path / "scores",
@@ -571,6 +571,24 @@ def test_run_scores_feed_the_threshold_rule(plans, tmp_path):
     assert sweep["x"][-1] > sweep["x"][0]
     with pytest.raises(ValueError, match="already exists"):
         build_run_scores(bundle_dir=plans["bundle"], runs=runs, channel=35, output_dir=tmp_path / "scores")
+
+
+def test_run_scores_keep_recording_order_after_a_restart(plans, tmp_path):
+    # one several-frame file: two timed windows, then two after an F-engine restart, untimed and near seq 0
+    window, sources = 4 * 8192, []
+    for w, seq in enumerate([10**9, 10**9 + 4 * 8192, 4096, 4096 + 4 * 8192]):
+        frames = np.full((4, 3, 256), 1000 + w, dtype=np.uint64)
+        sources.append(write_run_file(tmp_path / f"w{w}.h5", [521, 614], frames))
+        with h5py.File(sources[-1], "a") as handle:
+            handle["dtv_fine_powers_n0"].attrs.update(fpga_seq_num=seq, fpga_seq_time_nsec=10**18 + seq * 5120,
+                                                      seq_length_nsec=5120, dim_scalings=[8192, 1, 1, 1],
+                                                      time_downsampling_fpga=8192)
+    (tmp_path / "acq_1").mkdir()
+    path = str(write_frames_file(sources, tmp_path / "acq_1" / "dtv_fine_powers.00000000.h5"))
+    build_run_scores(bundle_dir=plans["bundle"], runs=[path], channel=35, output_dir=tmp_path / "scores")
+    with np.load(tmp_path / "scores" / "product_ch35.npz") as product:
+        target = product["fine_power_u64"][:, 0, 0]
+    assert list(target // 256) == [1000] * 4 + [1001] * 4 + [1002] * 4 + [1003] * 4
 
 
 def test_run_scores_read_the_frame_timing_from_the_file(plans, tmp_path):
@@ -640,7 +658,8 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     frames = np.ones((2, 3, 256), dtype=np.uint64)
     for index in range(6):
-        name = write_run_file(tmp_path / f"run_{index}.h5", [521, 491], frames)
+        # untimed files are in the order recv named them
+        name = write_run_file(tmp_path / f"run_{5 - index}.h5", [521, 491], frames)
         with h5py.File(name, "a") as handle:
             handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = 1000 - index
     # another half, with no bound channel
@@ -648,8 +667,8 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     result = write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "out",
                              epoch="synthetic", receiver_profile=Path(plans["calibrate"]["receiver_profile"]))
     first, last = result["calibrate"]["channels"]["37"], result["test"]["channels"]["37"]
-    assert [Path(p).name for p in first] == ["run_5.h5", "run_4.h5", "run_3.h5", "run_2.h5"]
-    assert [Path(p).name for p in last] == ["run_1.h5", "run_0.h5"]
+    assert [Path(p).name for p in first] == ["run_0.h5", "run_1.h5", "run_2.h5", "run_3.h5"]
+    assert [Path(p).name for p in last] == ["run_4.h5", "run_5.h5"]
     assert result["calibrate"]["control"] == dict(channel=37, captures=first)
     assert result["test"]["control"] == last
     assert json.loads((tmp_path / "out" / "test.json").read_text()) == result["test"]

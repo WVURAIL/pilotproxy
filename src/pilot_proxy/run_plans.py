@@ -8,6 +8,7 @@ from typing import Any, Sequence
 
 from pilot_proxy.bundle_calibration import _expand, _rows
 from pilot_proxy.paths import CONFIGS_DIR
+from pilot_proxy.run_files import split
 
 # from the checkout or the installed package, so the commands run from any directory
 CORE_PROFILE = str(CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json")
@@ -31,7 +32,8 @@ def ordered_run_files(runs: list[str]) -> list[tuple[int | None, list[int], str]
 
     The order is by the first frame's time when every file with data records it, so a recording that an
     F-engine restart split, which resets fpga_seq_num, keeps its order. Otherwise it is by acquisition
-    directory, whose name holds the start time of its Kotekan run, then by fpga_seq_num.
+    directory, whose name holds the start time of its Kotekan run, then by file and window within it, the
+    order recv wrote them. fpga_seq_num is not used, since it restarts near zero after an F-engine restart.
     """
     infos = [(*_file_info(path), path) for path in _expand(runs)]
     if all(time_ns is not None for _, time_ns, coarse, _ in infos if coarse):
@@ -39,7 +41,8 @@ def ordered_run_files(runs: list[str]) -> list[tuple[int | None, list[int], str]
             return (-1 if item[1] is None else item[1], item[3])
     else:
         def key(item):
-            return (str(Path(item[3]).parent), item[0], item[3])
+            file, index = split(item[3])
+            return (str(Path(file).parent), file, -1 if index is None else index)
     return [(time_ns, coarse, path) for _, time_ns, coarse, path in sorted(infos, key=key)]
 
 

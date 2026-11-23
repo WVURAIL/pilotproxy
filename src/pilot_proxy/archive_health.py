@@ -21,7 +21,6 @@ two's-complement 0x88.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import datetime as dt
 import hashlib
 import json
@@ -29,23 +28,19 @@ import math
 import os
 import re
 import subprocess
-import tempfile
 import weakref
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import NormalDist
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import numpy as np
 
 from pilot_proxy import wvu_palette as wvu
-from pilot_proxy.archived_product_keys import (
-    ARCHIVED_TO_CURRENT,
-    measurement,
-)
+from pilot_proxy.archived_product_keys import measurement
 from pilot_proxy.atomic_io import (
     atomic_write_json,
     create_temporary_sibling,
@@ -86,7 +81,6 @@ ARCHIVE_HEALTH_SUMMARY_SCHEMA_VERSION = "pilotproxy_archive_health_summary_v1"
 EXCLUSION_LEDGER_SCHEMA_VERSION = "pilotproxy_archive_exclusion_ledger_v1"
 DIAGNOSTIC_MANIFEST_SCHEMA_VERSION = "pilotproxy_archive_diagnostic_manifest_v1"
 CORRECTED_SPECTRA_SCHEMA_VERSION = "pilotproxy_archive_corrected_spectra_v1"
-RESIDUAL_HEALTH_VIEW_SCHEMA_VERSION = "pilotproxy_baonoise_health_view_v1"
 
 # Site of the project's instrument (CHIME at DRAO): east-positive longitude for
 # local mean sidereal time, and the IANA zone of local civil time.
@@ -174,31 +168,6 @@ SPECTRAL_LIMITATION = (
 _REASON_ORDER = tuple(REASON_DEFINITIONS)
 _VERSION_TOKEN = re.compile(r"(?P<key>[^=\s]+)=(?P<value>[^\s]+)")
 
-_RESIDUAL_FRAME_FIELDS = (
-    "frame_index",
-    "valid",
-    "reject_mask",
-    "coarse_power_ratio",
-    # RFIsher's residual reader needs the per-frame shelf estimate beside
-    # the statistic. Without it, every health view is refused as neither a
-    # current product nor a supported archived one.
-    "estimated_data_shelf_snr_db",
-    "frame_unit_index",
-)
-_RESIDUAL_METADATA_FIELDS = (
-    "physical_channel",
-    "freq_id",
-    "chime_frequency_hz",
-    "unit_time0_ctime",
-    "detector_version",
-    "detector_contract_json",
-    "mask_rule",
-    "pilot_below_data_db",
-    "dtv_bandwidth_hz",
-    "bin_enbw_hz",
-)
-
-
 class ArchiveHealthError(ValueError):
     """The archive cannot be interpreted safely under the v1 gate."""
 
@@ -272,10 +241,6 @@ class CorrectedSpectrumResult:
     # Healthy valid frames whose stored reject_mask (the one the after-mask
     # spectrum was accumulated with) differs from the current decision.
     accumulation_reject_disagreements: int = 0
-
-
-# current spelling to the spelling of the 2020-2026 archive
-_ARCHIVED_SPELLING = {v: k for k, v in ARCHIVED_TO_CURRENT.items()}
 
 
 def _array(product: Mapping[str, Any], name: str) -> np.ndarray:
@@ -474,103 +439,6 @@ def evaluate_frame_health(product: Mapping[str, Any]) -> FrameHealthResult:
     for mask in reasons.values():
         excluded |= mask
     return FrameHealthResult(include=~excluded, reasons=reasons)
-
-
-def _residual_view_key(name: str) -> str:
-    """Return the published column name of an internal field.
-
-    The view publishes the archived spellings and schema value so older
-    consumers can read it.
-    """
-    return _ARCHIVED_SPELLING.get(name, name)
-
-
-def write_residual_health_view(source: Path, destination: Path) -> Path:
-    """Write the health-filtered columns required by the residual-analysis APIs.
-
-    Those APIs load a path themselves. Giving them the original product
-    would restore rows excluded by the v1 health check, so a derived view is
-    written with only their coarse-policy and residual fields. Every frame
-    column is sliced by the inclusion mask, and the source hash and
-    health-check identity are recorded.
-
-    The view is written only as an input for these APIs and does not replace
-    the archive product. The run's superseded fine-decision fields are not
-    copied into it.
-    """
-
-    source_path = Path(source)
-    source_digest = file_sha256(source_path)
-    if source_digest is None:
-        raise ArchiveHealthError(f"not a readable product file: {source_path}")
-    with np.load(source_path, allow_pickle=False) as product:
-        health = evaluate_frame_health(product)
-        n_frames = int(health.include.size)
-        arrays: dict[str, np.ndarray] = {}
-        for name in _RESIDUAL_FRAME_FIELDS:
-            value = (
-                _frame_vector(product, name, n_frames).reshape(n_frames, 1)
-                if name in _FINE_DERIVED_COLUMNS
-                else _array(product, name)
-            )
-            if value.ndim == 0 or value.shape[0] != n_frames:
-                raise ArchiveHealthError(
-                    f"residual frame field {name!r} must have leading length "
-                    f"{n_frames}; got {value.shape}"
-                )
-            arrays[_residual_view_key(name)] = np.asarray(value[health.include])
-        for name in _RESIDUAL_METADATA_FIELDS:
-            arrays[_residual_view_key(name)] = np.asarray(_array(product, name))
-        # the product stores only the integer pair, so the ratio is derived here
-        arrays[_residual_view_key("null_power_ratio")] = np.asarray(
-            [null_power_ratio_of(product)], dtype=np.float64
-        )
-
-    included = int(np.count_nonzero(health.include))
-    arrays["frame_index"] = np.arange(included, dtype=np.int64)
-    if not np.all(np.asarray(arrays["valid"]) == 1):
-        raise ArchiveHealthError(
-            "health-filtered residual view unexpectedly retains an invalid row"
-        )
-    arrays.update(
-        schema_version=np.asarray(RESIDUAL_HEALTH_VIEW_SCHEMA_VERSION),
-        archive_health_gate_schema_version=np.asarray(
-            FRAME_HEALTH_GATE_SCHEMA_VERSION
-        ),
-        source_product_name=np.asarray(source_path.name),
-        source_product_sha256=np.asarray(source_digest),
-        source_frame_count=np.asarray(n_frames, dtype=np.int64),
-        health_included_frame_count=np.asarray(included, dtype=np.int64),
-        health_excluded_frame_count=np.asarray(
-            int(np.count_nonzero(health.excluded)), dtype=np.int64
-        ),
-        health_reason_counts_json=np.asarray(
-            json.dumps(health.reason_counts, sort_keys=True)
-        ),
-    )
-    output = Path(destination)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    return atomic_savez_compressed(output, **arrays)
-
-
-@contextlib.contextmanager
-def temporary_residual_health_views(
-    product_paths: Sequence[Path],
-) -> Iterator[list[Path]]:
-    """Yield transient, v1-filtered inputs for path-only residual APIs."""
-
-    paths = [Path(path) for path in product_paths]
-    names = [path.name for path in paths]
-    if len(names) != len(set(names)):
-        raise ArchiveHealthError(
-            "cannot materialize residual health views with duplicate basenames"
-        )
-    with tempfile.TemporaryDirectory(prefix="pilotproxy-residual-health-") as root:
-        root_path = Path(root)
-        views = [
-            write_residual_health_view(path, root_path / path.name) for path in paths
-        ]
-        yield views
 
 
 def _product_nyquist_zone(product: Mapping[str, Any]) -> int:
@@ -3810,7 +3678,6 @@ if __name__ == "__main__":
 
 __all__ = [
     "ARCHIVE_HEALTH_SUMMARY_SCHEMA_VERSION",
-    "RESIDUAL_HEALTH_VIEW_SCHEMA_VERSION",
     "ArchiveHealthError",
     "CORRECTED_SPECTRA_SCHEMA_VERSION",
     "DIAGNOSTIC_MANIFEST_SCHEMA_VERSION",
@@ -3838,9 +3705,7 @@ __all__ = [
     "health_correct_integrated_spectra",
     "proportion_summary",
     "recompute_corrected_fine_diagnostics",
-    "temporary_residual_health_views",
     "unix_utc_to_lmst_hours",
     "verify_supporting_evidence",
-    "write_residual_health_view",
     "write_archive_audit",
 ]

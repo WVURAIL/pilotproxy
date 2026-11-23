@@ -20,7 +20,6 @@ from pilot_proxy.archived_product_keys import (
 )
 from pilot_proxy.archive_health import (
     ARCHIVE_HEALTH_SUMMARY_SCHEMA_VERSION,
-    RESIDUAL_HEALTH_VIEW_SCHEMA_VERSION,
     CORRECTED_SPECTRA_SCHEMA_VERSION,
     ENCODING_INTERPRETATION,
     EXCLUSION_LEDGER_SCHEMA_VERSION,
@@ -40,9 +39,7 @@ from pilot_proxy.archive_health import (
     main,
     proportion_summary,
     recompute_corrected_fine_diagnostics,
-    temporary_residual_health_views,
     unix_utc_to_lmst_hours,
-    write_residual_health_view,
 )
 from pilot_proxy import archive_health
 from pilot_proxy.fine_reduction import calibrate_cfar
@@ -453,42 +450,6 @@ def test_proportion_summary_reports_wilson_uncertainty() -> None:
     assert summary["fraction"] == pytest.approx(0.2)
     assert summary["standard_error"] == pytest.approx(0.04)
     assert summary["wilson_95"]["low"] < 0.2 < summary["wilson_95"]["high"]
-
-
-def test_residual_view_filters_frames_and_records_source(tmp_path) -> None:
-    product = _product(
-        valid=[1, 0, 1, 1],
-        reject=[0, 0, 0, 1],
-        baseband_power=[4.0, 0.0, 128.0, 5.0],
-        p_target=[10, 0, 10, 20],
-        p_reference=[20, 0, 20, 20],
-    )
-    source = _save_product(tmp_path / "798.npz", product)
-    destination = tmp_path / "view" / source.name
-    assert write_residual_health_view(source, destination) == destination
-    with np.load(destination, allow_pickle=False) as view:
-        assert str(view["schema_version"].item()) == RESIDUAL_HEALTH_VIEW_SCHEMA_VERSION
-        assert str(view["archive_health_gate_schema_version"].item()) == (
-            FRAME_HEALTH_GATE_SCHEMA_VERSION
-        )
-        assert int(view["source_frame_count"]) == 4
-        assert int(view["health_included_frame_count"]) == 2
-        assert int(view["health_excluded_frame_count"]) == 2
-        assert view["frame_index"].tolist() == [0, 1]
-        # The view is a published interface, so the archived column names are
-        # kept until the rename is coordinated with its readers.
-        assert view[ARCHIVED_COARSE_POWER_RATIO][:, 0].tolist() == [1.0, 2.0]
-        assert "coarse_power_ratio" not in view.files
-        # RFIsher's residual reader rejects a view that lacks the per-frame
-        # shelf estimate next to the statistic.
-        assert view[ARCHIVED_DATA_SHELF_SNR_DB].shape == (2, 1)
-        assert np.all(view["valid"] == 1)
-        assert ARCHIVED_FINE_POWER_RATIO not in view.files
-
-    with temporary_residual_health_views([source]) as paths:
-        transient = paths[0]
-        assert transient.is_file()
-    assert not transient.exists()
 
 
 def test_cli_writes_versioned_summary_ledger_and_corrected_spectra(

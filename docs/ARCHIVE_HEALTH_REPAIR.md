@@ -325,13 +325,8 @@ arrays. If only the surrounding report code were filtered, the residual floor,
 correlation time, threshold sweep, and mask-fraction routines would silently
 read the excluded rows again.
 
-To prevent this, `temporary_residual_health_views` applies the same v1 gate and
-writes short-lived NPZ views. Each view is incomplete by design and contains
-only the coarse-policy and residual columns used by RFIsher, the source product
-hash, and the health counts. The fine-decision fields are dropped, and the views
-never replace the canonical survey product. A science-side consumer routes every
-call through these views and applies `evaluate_frame_health` to its per-frame
-policy denominators.
+No consumer applies the health gate to RFIsher's inputs. A caller of those
+path-based APIs must filter the frames with `evaluate_frame_health` itself.
 
 On channels 22 and 24, every frame kept by the stored coarse rule is one of the
 full-scale rows excluded by v1. With no health-included kept or null frame left

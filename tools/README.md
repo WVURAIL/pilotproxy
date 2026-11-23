@@ -9,7 +9,7 @@ Run each command with --help. Store new outputs separately from existing data.
   run_fine_validation_campaign.py, reduce_fine_validation.py.
 - Estimator checks: validate_fine_detector.py, measure_fine_gain.py,
   generate_settled_atsc.py.
-- Archive health: audit_per_pilot.py, audit_local_archive_run.py.
+- Product integrity: audit_per_pilot.py (re-derives what a per-pilot product can check against itself).
 
 - Bundle workflow: extract_baseband_channels.py, analyze_dtv_run.py.
 - Pathfinder runs: pathfinder_dtv_switch.py (mask and recording switches over REST),

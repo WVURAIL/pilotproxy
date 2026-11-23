@@ -1,9 +1,11 @@
 # CHIME Detector Workflow
 
-`pilot-proxy chime-scan` runs the detector over CHIME baseband HDF5 files:
-already-staged local files with `--source local`, or the CADC archive (see
-`docs/LOCAL_PROCESSING.md` and `docs/CANFAR_RUNBOOK.md`). This page describes
-the data contract, the weight convention and the products.
+A CHIME run directory holds the detector's results over CHIME baseband HDF5
+files. The archive scans of record were made with `chime-scan` of an earlier
+release; the tag `pre-purge-2026-11-23` holds the survey, scan and combine
+code. This page describes the data contract, the weight convention and the
+products, which `pilot-proxy validate-products` and `pilot-proxy chime-plot`
+read.
 
 The adapter connects segmented CHIME HDF5 baseband data to the
 fixed-point detector. It does not change the CUDA kernel contract:
@@ -73,7 +75,7 @@ with the metadata of the dataset being processed.
 
 The adapter converts each CHIME offset-binary int4 byte to the detector's
 two's-complement packed complex int4 representation. Each frame is identified
-by its source event and its position in the file, and the combine step stacks
+by its source event and its position in the file, and the combine step stacked
 the pilots on the frames they have in common.
 
 The software profile and the commands below use an analysis frame of 16384
@@ -106,7 +108,7 @@ input-coordinate manifest when time reversal is active.
 
 ## Output Products
 
-The combine step of `chime-scan` writes:
+A run directory holds:
 
 ```text
 run_config.json
@@ -126,8 +128,7 @@ beside the authoritative per-pilot products (see
 Generated metadata can contain absolute paths for the receiver profile, stream
 map, weight bank, kernel library, input manifest, and output directory. Those
 paths describe the machine that produced the run and may not be portable. Use
-the corresponding SHA-256 fields to compare artifact contents across local,
-CANFAR, and review systems.
+the corresponding SHA-256 fields to compare artifact contents across systems.
 
 `run_config.json` and `stats.json` use schema versions
 `pilotproxy_chime_run_config_v1` and `pilotproxy_chime_stats_v1`. Both carry a matching
@@ -239,25 +240,9 @@ binary mask over all frames. When the valid-frame denominator must be explicit,
 use `reject_mask` in the authoritative per-pilot products and
 `mask_summary_by_pilot.csv`.
 
-## Injection recovery
+## Figures
 
-Three analysis commands operate on the staged files or the `chime-scan`
-products:
-
-```text
-pilot-proxy inject-pilot-tone
-pilot-proxy analyze-injection-recovery
-pilot-proxy chime-combine
-```
-
-`inject-pilot-tone` works in the file's native offset-binary 4+4-bit integer
-domain, with component range `[-8, 7]`. It adds the tone dithered, `floor(tone + U)` with `U` uniform on
-[0, 1), so the mean added signal is the tone even below one LSB. A zero-amplitude pass preserves the
-baseband bytes, and a nonzero pass records saturation, the realized tone amplitude and the added dither
-variance while preserving sibling datasets, attributes, and filenames. Therefore the output can be read by
-`chime-scan --source local`.
-
-The plotting code uses Computer Modern mathtext by default. Set
+`pilot-proxy chime-plot` regenerates the figures of a run directory. The plotting code uses Computer Modern mathtext by default. Set
 `PILOT_PROXY_USE_TEX=1` for full TeX rendering. The default output is a 300 dpi
 PNG, and `PILOT_PROXY_FIGURE_FORMATS=png,pdf` adds a vector PDF copy. JPEG
 output is not implemented.

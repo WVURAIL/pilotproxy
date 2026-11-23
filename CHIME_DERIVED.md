@@ -29,8 +29,7 @@ GNU Radio benches, the designed weight banks, RFIsher's forecast tolerance table
 These files are code or documentation, but they quote CHIME-derived numbers inline.
 They stay in both cuts. Review them before any public release:
 
-- `docs/ARCHIVE_HEALTH_REPAIR.md`, `docs/CANFAR_RUNBOOK.md` and
-  the archived inventory records: archive accounting (units, events,
+- The archived inventory records: archive accounting (units, events,
   exclusions, frame counts).
 - `docs/DESIGN_DECISIONS.md`: archive measurements behind design choices (for example
   the coarse flag's false-alarm rate on quiet frames).

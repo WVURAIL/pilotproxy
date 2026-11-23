@@ -997,9 +997,9 @@ be applied to a recorded run.}
 \subsection{Source stamp memoized per process}
 \choice{\code{detector_version} embeds a hash of every \code{*.py} under
 \code{src/pilot_proxy}, computed once per process.}
-{The imported code cannot change during a process. Resume compares the full
-stamp and aborts on any change, so a new build needs a clean
-\code{--output-dir}. Combine and stacking compare only the geometry tokens.}
+{The imported code cannot change during a process. The archive scan's resume
+compared the full stamp and aborted on any change, and its combine compared
+only the geometry tokens (the scan is at the tag \code{pre-purge-2026-11-23}).}
 {The commit behind a stamp is recovered by recomputing the hash at candidate
 checkouts.}
 
@@ -1011,8 +1011,7 @@ checkouts.}
 
 A receiver profile (\code{pilotproxy_receiver_profile_v1}) describes one
 telescope above the kernel boundary. Every field is required, unknown fields
-are refused, and there is no implicit frame or zone fallback
-(\code{INTEGRATION.md}).
+are refused, and there is no implicit frame or zone fallback.
 
 \begin{longtable}{|L{0.30\linewidth}|L{0.62\linewidth}|}
 \hline
@@ -1161,7 +1160,7 @@ qualification check above.
 \hline
 \textbf{Product} & \textbf{Definition}\\ \hline
 \endhead
-Per-pilot archive product & \code{_per_pilot/<freq_id>.npz}, schema \code{pilotproxy_per_pilot_product_v6}. Fields in \code{docs/PRODUCT_SCHEMA.md}, \code{docs/PER_PILOT_PRODUCT_FIELDS.md} and \code{docs/FINE_REDUCTION_PRODUCTS.md}. The writer, the reader and \code{tools/audit_per_pilot.py} enforce \(P_n=\sum_bS[n,b]\) exactly.\\ \hline
+Per-pilot archive product & \code{_per_pilot/<freq_id>.npz}, schema \code{pilotproxy_per_pilot_product_v6}. Fields in \code{docs/PRODUCT_SCHEMA.md}, \code{docs/PER_PILOT_PRODUCT_FIELDS.md} and \code{docs/FINE_REDUCTION_PRODUCTS.md}. The reader and \code{tools/audit_per_pilot.py} enforce \(P_n=\sum_bS[n,b]\) exactly; the v6 writer is at the tag \code{pre-purge-2026-11-23}.\\ \hline
 Archive products of record & Schema v5, detector contract v1: \code{chime_pilots_rebuild_20260829} (core 2.3.0) and the channel 37 control \code{ch37_control_491_20260924}. Never edited. Readers recompute the frame powers from \code{fine_power_u64}.\\ \hline
 Detect-only run, CHIME & Raw files \code{dtv_mask}, and with \code{dtv_calibration_mode} also \code{dtv_powers} and \code{dtv_fine_support}, 1024 frames per file; HDF5 \code{dtv_fine_powers}, about 43\,s per file, about 2.3\,MB/s per NUMA domain.\\ \hline
 Detect-only run, Pathfinder & Files on the recv node under \code{/mnt/cs00/data/dtv/acq_<start time>/}, one per NUMA half and window of about 43\,s. A v3 run also records \code{dtv_stat}.\\ \hline
@@ -1243,7 +1242,6 @@ C ABI & \code{cuda/tests/} with the CPU reference (\code{make -C cuda test}).\\ 
 Bundles & \code{tests/core/test_runtime_bundle.py}, \code{tests/core/test_bundle_calibration.py}, \code{tests/core/test_bundle_cli_workflow.py}; \code{validate-runtime-weight-bundle}; \code{test-bundle} on held-out captures.\\ \hline
 Placement & Synthesized pilot and reference tones over channels 14--36, Nyquist zone, edge and DC (\code{tests/core/test_chord_tone_injection.py}, \code{tests/core/test_atsc_channels.py}).\\ \hline
 Kotekan & \code{tests/test_pilotproxy_integration.py} against integer CPU references; \code{tests/test_dtv_rfi_mask.py} for visibilities and counts across ring wrap; \code{tests/boost/test_DtvRfiMask.cpp}; \code{tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh}; the production-geometry soak with 2048 inputs (\code{docs/sphinx/dev/dev_pilotproxy_chime.rst}).\\ \hline
-Archive run & The gates of \code{docs/VALIDATION_GATES.md}: clean source, full test tree, CPU reference, pinned library digest, real-file and resume gates.\\ \hline
 \end{longtable}
 
 The GPU gate (\code{make test-gpu}) fails when a GPU test skips. The component
@@ -1332,12 +1330,12 @@ them (\code{CHIME_DERIVED.md}).
 \code{src/pilot_proxy/capture_replay.py} & \code{replay-fine-capture}.\\ \hline
 \pathcode{src/pilot_proxy/detectors/narrowband_marker/} & Archive anchors, scores and rescoring.\\ \hline
 \code{src/pilot_proxy/characterization/} & Archive threshold rule, score cache, eras.\\ \hline
-\code{src/pilot_proxy/archive/}, \code{chime/} & Archive scan, inventory, readers and runners.\\ \hline
+\code{src/pilot_proxy/chime/} & CHIME run-directory products, validation and plots; the archive scan of record is at the tag \code{pre-purge-2026-11-23}.\\ \hline
 \code{src/pilot_proxy/testbench/} & GNU Radio ATSC bench and synthetic validation.\\ \hline
 \code{src/pilot_proxy/cli.py} & The \code{pilot-proxy} command.\\ \hline
 \code{configs/} & Receiver profiles, core profile, stream maps.\\ \hline
 \code{tools/} & Audits, extraction, threshold rule script, doc specs.\\ \hline
-\code{tests/} & Python, kernel and archive tests.\\ \hline
+\code{tests/} & Python and kernel tests.\\ \hline
 \end{longtable}
 \normalsize
 
@@ -1447,8 +1445,7 @@ This document does not repeat them.
   \item \code{docs/CHANNEL_OPERATING_POLICY.md}: operating policy compiler.
   \item \code{docs/METHOD_SPEC.md}, \code{docs/TERMINOLOGY.md},
         \code{docs/PRODUCT_SCHEMA.md}: method, names and product schema.
-  \item \code{docs/VALIDATION_GATES.md}, \code{docs/TEST_COVERAGE.md}:
-        validation.
+  \item \code{docs/TEST_COVERAGE.md}: validation.
 \end{itemize}
 
 \begin{thebibliography}{9}

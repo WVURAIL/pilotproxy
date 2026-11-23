@@ -5,16 +5,16 @@ Tests for instrument config resolution with `extends:` inheritance and `scopes`.
 The CHIME outriggers share the channelization of CHIME, so the config of each
 outrigger is a few lines (`extends: chime` plus the feed count and its scope)
 instead of a near-duplicate YAML. These tests cover that inheritance and the
-scope list that sets the survey default. They run offline.
-
-Run:  PYTHONPATH=src python tests/archive/test_instruments_extends.py
+scope list. They run offline.
 """
 from __future__ import annotations
 
 import os
 import tempfile
 
-from pilot_proxy.archive import instruments as inst_mod
+import pytest
+
+from pilot_proxy.config import instrument as inst_mod
 
 
 # extends: the shipped outriggers inherit the CHIME geometry and override only
@@ -106,8 +106,12 @@ def test_readiness_tracks_scopes():
         assert rd.status == "geometry-only"
 
 
-if __name__ == "__main__":
-    for fn in sorted(k for k in dict(globals()) if k.startswith("test_")):
-        globals()[fn]()
-        print(f"  ok: {fn}")
-    print("INSTRUMENTS EXTENDS/SCOPES TESTS PASSED")
+
+@pytest.mark.parametrize("name", ["", " chime", "../chime", "a/b", "a..b", ".", "-chime", 7])
+def test_instrument_names_are_refused_when_not_plain_identifiers(name):
+    with pytest.raises(ValueError, match="invalid instrument name"):
+        inst_mod.validate_identifier(name, label="instrument name")
+
+
+def test_plain_identifiers_pass_unchanged():
+    assert inst_mod.validate_identifier("chime-fid614_706.v2") == "chime-fid614_706.v2"

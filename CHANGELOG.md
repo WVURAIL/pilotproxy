@@ -5,6 +5,18 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Removed the v6 archive pipeline (`src/pilot_proxy/archive/`, `products/acceptance.py`) and the commands
+  `chime-survey`, `chime-inventory`, `chime-scan`, `chime-combine`, `audit-archive-health` and `products
+  check-archive`, with the CANFAR scripts, `setup_env.sh`, `launch_gpu_session.py`, the archive freeze and monitor
+  scripts, `tools/audit_local_archive_run.py`, the `archive` pip extra and its docs. The archive scans of record were
+  made with an earlier release; tag `pre-purge-2026-11-23` holds the code, and every path is in
+  `tests/data/removed_paths.txt`. The `archive-integration` CI job keeps its name and runs the current-identity
+  checks.
+- Removed the injection workflow: `inject-pilot-tone`, `analyze-injection-recovery`, `chime/injection.py`,
+  `chime/injection_recovery.py` and `characterization/injection.py`.
+- `archive_health.py` keeps only the v2 frame-health gate (`evaluate_frame_health`); the archive health audit is
+  removed. `validate_identifier` moved to `pilot_proxy.config.instrument`, and `chime/baseband_format.py` reads the
+  instrument from there. UG001 and DD001 no longer describe the removed commands, and their PDFs are rebuilt.
 - The archive frame-health gate is `pilotproxy_archive_frame_health_gate_v2`. It adds the reason
   `fill_samples_above_one_percent`, which excludes a frame whose `fill_sample_count` is more than 1% of
   `railed_sample_total`, so a frame that only partly overlaps absent baseband is no longer counted as healthy. The

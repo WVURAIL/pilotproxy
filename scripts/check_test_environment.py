@@ -4,13 +4,11 @@
 
 from __future__ import annotations
 
-import argparse
 import importlib
 import sys
 from pathlib import Path
 
 BASE_MODULES = ("h5py", "matplotlib", "yaml", "scipy", "cryptography")
-INTEGRATION_MODULES = ("cadcdata", "cadcutils", "dtcli")
 
 
 def _module_path(module: object) -> str:
@@ -19,18 +17,9 @@ def _module_path(module: object) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--integration",
-        action="store_true",
-        help="also require archive dependencies for the integration test suite",
-    )
-    args = parser.parse_args(argv)
-
-    names = BASE_MODULES + (INTEGRATION_MODULES if args.integration else ())
     missing: list[str] = []
     loaded: list[tuple[str, str]] = []
-    for name in names:
+    for name in BASE_MODULES:
         try:
             module = importlib.import_module(name)
         except Exception as exc:  # noqa: BLE001 - report the import failure exactly.
@@ -46,11 +35,6 @@ def main(argv: list[str] | None = None) -> int:
             'install test dependencies with: python -m pip install -e ".[test]"',
             file=sys.stderr,
         )
-        if args.integration:
-            print(
-                'install archive dependencies with: python -m pip install -e ".[archive,test]"',
-                file=sys.stderr,
-            )
         return 1
 
     for name, path in loaded:

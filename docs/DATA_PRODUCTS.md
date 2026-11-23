@@ -1,9 +1,11 @@
 # PilotProxy Data Products
 
-This document defines the canonical files produced by the CHIME real-data
-workflow. `chime-scan` first writes one authoritative `<freq_id>.npz` product
-per coarse channel and then combines those products on a shared event/frame
-identity. Run directories of the removed `chime-run` command, which wrote the
+This document defines the canonical files of a CHIME run directory, which
+`validate-products` and `chime-plot` read. `chime-scan` first wrote one
+authoritative `<freq_id>.npz` product per coarse channel and then combined those
+products on a shared event/frame identity. The archive scans of record were made
+with that earlier release; the tag `pre-purge-2026-11-23` holds the survey, scan
+and combine code. Run directories of the removed `chime-run` command, which wrote the
 products directly from one staged directory, use the same canonical formats
 where those formats apply and are still validated; this page names where they
 differ.
@@ -75,7 +77,7 @@ This file records the HDF5 inputs using one of two explicit document shapes:
 
 - the staged runner writes `pilotproxy_chime_input_manifest_v1` with
   `input_dir`, `absolute_time_used`, and discovered `datasets` metadata;
-- the archive combine writes receiver-neutral
+- the archive combine wrote receiver-neutral
   `pilotproxy_scan_input_manifest_v1` with `source`, `physical_channels`, and
   the `input_files` unit keys collected from the per-pilot products.
 
@@ -93,12 +95,12 @@ running the detector alone does not create it. Its principal fields are:
 - `detector_contract_revision`: 2 for a current run. A run written before
   kernel core 3.0.0 carries revision 1 (row-domain frame powers, with no fine
   powers to recompute them from). Such a run is validated as a record, and the
-  report adds a `record_note`. The CHIME plots and `injection_recovery` refuse
+  report adds a `record_note`. The CHIME plots refuse
   such a run instead of analyzing it under the current definition.
 
 ### `.pilotproxy-combine-generation.json`
 
-`chime-scan` and `chime-combine` publish this hidden generation manifest last.
+`chime-scan` and `chime-combine` published this hidden generation manifest last.
 It contains a unique generation ID and a SHA-256 digest for every canonical
 file in the combined output set. A failed publication that is rolled back also
 advances the generation ID. `validate-products` reads the identity before and
@@ -199,7 +201,7 @@ are not restored, so it must not be read as wall-clock time.
 
 ### `chime_integrated_spectra.npz`
 
-The `chime-scan` combine writes a reporting stack of the integrated spectra in
+The `chime-scan` combine wrote a reporting stack of the integrated spectra in
 the per-pilot products. The analyzer uses a rectangular-window FFT, sums
 `|FFT|^2` over input streams, and accumulates over frames. `before` is
 accumulated over valid frames, and `after` over valid frames with
@@ -260,7 +262,7 @@ product field, and it makes no claim that all interference has been removed.
 
 ### `chime_frame_identity.npz`
 
-An event-keyed `chime-scan` combine writes the identities retained in the
+An event-keyed `chime-scan` combine wrote the identities retained in the
 canonical stack:
 
 | Array | Shape | Dtype | Meaning |
@@ -275,7 +277,7 @@ Products without those tags are rejected and are never aligned by position.
 
 Tables are written under `tables/`:
 
-- `mask_summary_by_pilot.csv` is written by the detector/combine path;
+- `mask_summary_by_pilot.csv` was written by the detector/combine path;
 - `spectrum_before_after.csv` is written by the baseband spectrum plot;
 - `normalized_coarse_power_ratio_summary_by_channel.csv` and
   `data_shelf_snr_histogram_summary.csv` are written by `chime-plot`.

@@ -15,9 +15,9 @@ name of v5 and redefines the frame powers. The fields `p_target_u64`,
 the derived columns (`coarse_power_ratio`, `normalized_coarse_power_ratio_db`,
 `normalized_pilot_excess`, `pilot_excess_db`, `estimated_data_shelf_snr_db`,
 `reject_mask`, `valid`) are formed from those sums with the same formulas as
-in v5. The exact invariant is enforced by the writer,
-`validate_current_product_identity`, `products/reader.py`, and
-`tools/audit_per_pilot.py`:
+in v5. The exact invariant is enforced by `products/reader.py` and
+`tools/audit_per_pilot.py` (the v6 writer was removed with the archive pipeline;
+the tag `pre-purge-2026-11-23` holds it):
 
 ```text
 fine_status == "enabled":  p_r_u64[:, 0] == fine_power_u64[:, r, :].sum(axis=1)   (exact integers)
@@ -40,19 +40,17 @@ the row-domain powers `sum_m |z[n, m]|^2`. The products are never edited,
 migrated, or copied. Every v5 product of record carries `fine_power_u64` for
 every frame, so the current definition is computed on read:
 
-- `products/reader.py` and `products/acceptance.py` open v5 (detector contract
-  v1) and v6 (contract v2). A v5 view replaces the stored row-domain columns
+- `products/reader.py` opens v5 (detector contract v1) and v6 (contract v2).
+  A v5 view replaces the stored row-domain columns
   by `coarse_columns_from_fine(product)` and records
   `frame_power_definition = "recomputed_from_fine_power_u64 (v5 stored
   row-domain powers ignored)"`. A v6 view asserts that the stored columns
-  equal them. A cohort with both v5 and v6 products is refused.
+  equal them.
 - `product_contract.frame_powers_from_fine`,
   `pilot_excess_from_fine_powers`, and `coarse_columns_from_fine` are the one
   route from an `.npz` to the frame powers and every derived column, and the
   analysis modules (`threshold_rule.load_frames`, `archive_health`) read
   through them. The score caches bind the unchanged v5 files by path and size.
-- Resume and combine accept only v6, so a v5 checkpoint cannot be resumed
-  under kernel core 3.0.0.
 
 On the channel 30 product (598.npz) the recomputation changes the valid and
 reject flags on 0 frames and moves `Q` by a median relative `-1.2e-6` (max
@@ -111,10 +109,10 @@ recomputed in post-processing at the operating point calibrated there.
 
 ## Resume and combine boundary
 
-Resume and combine require the exact schema identity, decision contract,
-geometry, timing identity, weights, and detector provenance. A mismatch is an
-error. Runtime code contains no aliases, adapters, repair paths, or fallback
-readers for other products.
+The scan's resume and combine (tag `pre-purge-2026-11-23`) required the exact
+schema identity, decision contract, geometry, timing identity, weights, and
+detector provenance. A mismatch was an error. Runtime code contains no aliases,
+adapters, repair paths, or fallback readers for other products.
 
 The source-event identity version is required and is versioned independently of
 the enclosing product schema, which is at revision 6. It requires keys that keep

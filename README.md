@@ -19,8 +19,6 @@ the rank-based detection score, and the conditional forecast quantities.
 |---|---|
 | Get a first result in a clean environment | [First-run walkthrough](docs/FIRST_RUN.md) |
 | Understand or reproduce the paper calculations | [Pipeline guide](docs/START_HERE.md), [paper/code map](docs/PAPER_CODE_MAP.md) |
-| Process a local CHIME archive inventory | [Local runbook](docs/LOCAL_PROCESSING.md) |
-| Process archive data on CANFAR | [CANFAR runbook](docs/CANFAR_RUNBOOK.md) |
 | Install, build CUDA, or run a synthetic bench | [Installation and usage](docs/USAGE.md) |
 | Compile a receiver policy | [Operating policy](docs/CHANNEL_OPERATING_POLICY.md) |
 | Calibrate, test and run the detector on a telescope | [Running the detector](docs/RUNNING_THE_DETECTOR.md), [user guide](docs/pdf/PilotProxy_UG001_User_Guide.pdf) |
@@ -74,14 +72,14 @@ of earlier cores are mapped in
 | Location | Purpose |
 |---|---|
 | `cuda/` | Fixed-point detector, C ABI, CPU reference, native tests |
-| `src/pilot_proxy/` | Supported package, CLI, archive adapters, calibration and policy compiler |
+| `src/pilot_proxy/` | Supported package, CLI, product reader, calibration and policy compiler |
 | `configs/`, `weights/` | Receiver profiles, layouts and shipped packed weights |
 | `projects/chime_atsc/` | Frequency plan and dated era definitions |
-| `tests/` | Numerical contracts, archive integrity, and runtime interface tests |
-| `scripts/` | Installation, CI and archive operating scripts |
+| `tests/` | Numerical contracts, product integrity, and runtime interface tests |
+| `scripts/` | CI and release checks |
 | `tools/` | Explicit analysis, validation and maintenance commands |
 | `docs/` | Contracts and operating guides |
-| `docs/evidence/`, `docs/runtime_freezes/` | Frozen receipts and provenance records |
+| `docs/evidence/` | Frozen receipts and provenance records |
 
 The detector package imports no development tool, and the frozen records are
 kept apart from the guides. Generated data, figures and shared libraries are
@@ -90,9 +88,10 @@ design document into `docs/out`; the committed copies are in `docs/pdf`.
 
 ## Scientific and compatibility boundaries
 
-Each frame power is the all-bin sum of its fixed-point fine spectrum. Products
-use schema v6. Readers also open the papers' schema-v5 archives and form the
-same powers from their stored fine spectra.
+Each frame power is the all-bin sum of its fixed-point fine spectrum. Readers
+open the papers' schema-v5 archives and form the same powers from their stored
+fine spectra. The CHIME archive scans of record were made with an earlier
+release; the tag `pre-purge-2026-11-23` holds the survey, scan and combine code.
 
 The threshold rule compares the signed shelf-power proxy, converted explicitly
 to additive covariance units, with the RFIsher schema-v3 response table.
@@ -116,8 +115,7 @@ Dated evidence is never regenerated to make a refactor pass.
 
 Use [CITATION.cff](CITATION.cff), the version from `pilot-proxy --version`, and
 the actual source and build identities of a run. See [CHANGELOG.md](CHANGELOG.md)
-for interface changes and [the survey trust contract](docs/survey_trust.md)
-for provenance and recovery rules.
+for interface changes.
 
 ### Figure colors
 

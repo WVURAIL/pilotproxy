@@ -178,9 +178,8 @@ the CUDA detector does not need to be rerun.
 The analyzer runs one 16384-point FFT over all 2048 feeds in every frame and
 sums its power. Schemas v1 and v2 folded that array into
 `integrated_spectrum_*` and discarded the per-frame result.
-`archive_health.SPECTRAL_LIMITATION` states the consequence: the gate "cannot
-apply an arbitrary new frame mask, FFT window, or threshold to the archived
-spectra."
+As a consequence, an arbitrary new frame mask, FFT window or threshold cannot
+be applied to the archived spectra.
 
 Keeping the per-frame PSD therefore costs storage and no extra computation. It
 is decoded with:
@@ -405,7 +404,7 @@ samples, which are the native CHIME offset-binary raw byte `0x00`, or
 equivalently the two's-complement byte `0x88` of the detector input after
 repacking. Its rectangular-FFT contribution is therefore reconstructible and
 can be subtracted from the accumulated spectra. Detector-invalid rows were
-never accumulated (see [`ARCHIVE_HEALTH_REPAIR.md`](ARCHIVE_HEALTH_REPAIR.md)).
+never accumulated (see `docs/ARCHIVE_HEALTH_REPAIR.md@89577ee`).
 Any other new frame exclusion still requires the original HDF5 data for a
 spectral correction.
 

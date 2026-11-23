@@ -55,14 +55,6 @@ chime = [
   "pyyaml",
   "matplotlib",
 ]
-archive = [
-  "cadcdata>=2.5.0",
-  "cadcutils>=1.5.1.1",
-  "datatrail-cli>=0.11",
-  "h5py",
-  "pyyaml",
-  "requests>=2.29.0",
-]
 n2 = [
   "h5py",
   "hdf5plugin",

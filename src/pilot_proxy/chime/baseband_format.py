@@ -17,7 +17,7 @@ from __future__ import annotations
 import h5py
 import numpy as np
 
-from pilot_proxy.archive.instruments import load_instrument as _load_instrument
+from pilot_proxy.config.instrument import load_instrument as _load_instrument
 
 # The native CHIME baseband geometry is read from chime.yaml so that it is
 # declared in one place. FS is bandwidth / n_channels, and NFFT is the configured

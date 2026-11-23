@@ -60,7 +60,7 @@
       "status": "locked",
       "rationale": "A false-alarm rate is estimated only on a control population with at least ten expected false alarms, N_valid >= 10 / P_fa.",
       "evidence": [
-        "src/pilot_proxy/chime/injection_recovery.py"
+        "src/pilot_proxy/chime/injection_recovery.py@89577ee"
       ],
       "sensitivity_values": []
     },

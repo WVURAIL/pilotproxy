@@ -7,7 +7,7 @@ bank is a binary and its adjacent manifest, built from a receiver profile in
 - `chime_dtv_weights_k128.bin` is the CHIME bank (profile `chime_dtv_fengine`,
   128-sample detector window). It uses the DC-centered CHIME baseband
   convention, which was confirmed by the frame correction and the 23-channel
-  parity census in `docs/VALIDATION_GATES.md`.
+  parity census in `docs/VALIDATION_GATES.md@89577ee`.
 - `chord_dtv_weights_k64.bin` is the CHORD bank (profile `chord_dtv_fengine`,
   64-sample detector window) for the CHORD channelizer geometry of 8192 coarse
   channels.

@@ -20,7 +20,6 @@ SCAN_ROOTS = (
 )
 EXTRA_FILES = (
     ROOT / "README.md",
-    ROOT / "INTEGRATION.md",
     ROOT / "Makefile",
     ROOT / "pyproject.toml",
     ROOT / "CITATION.cff",

@@ -7,7 +7,7 @@ CUDA_LIB := cuda/libpilotproxy.so
 CACHED_CUDA_LIB := $(CUDA_CACHE_DIR)/libpilotproxy.so
 PYTHON_TEST_ENV := MPLBACKEND=Agg PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PILOT_PROXY_USE_TEX=0 PYTHONPATH=src
 
-.PHONY: build-kernel test-kernel test-python test-gpu test lint archive-integration-check generate-atsc audit-atsc detect release-check commit-check code-only-cut release-clean freeze-check clean-cache clean docs docs-specs docs-specs-check
+.PHONY: build-kernel test-kernel test-python test-gpu test lint generate-atsc audit-atsc detect release-check commit-check code-only-cut release-clean freeze-check clean-cache clean docs docs-specs docs-specs-check
 
 build-kernel:
 	$(MAKE) -C cuda
@@ -30,15 +30,6 @@ test-gpu: test-kernel
 
 lint:
 	$(PYTHON) -m ruff check .
-
-archive-integration-check:
-	$(PYTHON) scripts/check_test_environment.py --integration
-	$(PYTHON) scripts/check_current_layout_vocabulary.py
-	$(PYTHON) scripts/check_current_profile_contract.py
-	$(PYTHON) scripts/check_current_measurement_vocabulary.py
-	$(PYTHON) scripts/check_current_configuration_identity.py
-	$(PYTHON) scripts/check_current_schema_identity.py
-	$(PYTHON_TEST_ENV) $(PYTHON) -m pytest tests/archive -q -rs
 
 docs-specs:
 	$(PYTHON) tools/generate_doc_specs.py

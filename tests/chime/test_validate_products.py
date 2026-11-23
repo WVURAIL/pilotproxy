@@ -17,7 +17,6 @@ from pilot_proxy.detector_contract import (
 )
 from pilot_proxy.chime.validate_products import validate_products
 import pilot_proxy.chime.validate_products as validate_products_module
-from pilot_proxy.archive import combine as combine_module
 from pilot_proxy.chime.products import (
     CHIME_INPUT_MANIFEST_SCHEMA_TOKEN,
     SCAN_INPUT_MANIFEST_SCHEMA_TOKEN,
@@ -592,50 +591,6 @@ def test_validate_products_refuses_interrupted_combine_generation(tmp_path) -> N
     }
 
 
-def test_validate_products_accepts_stable_combine_generation(tmp_path) -> None:
-    run_dir = tmp_path / "run"
-    _write_products(run_dir)
-    combine_module._write_recovery_generation_manifest(run_dir)
-
-    report = validate_products(run_dir=run_dir)
-
-    assert report["valid"] is True, report["errors"]
-
-
-def test_validate_products_detects_fast_generation_publish(
-    tmp_path, monkeypatch
-) -> None:
-    run_dir = tmp_path / "run"
-    _write_products(run_dir)
-    combine_module._write_recovery_generation_manifest(run_dir)
-    original_load_json = validate_products_module.load_json_object
-    published = False
-
-    def publish_complete_generation_between_checks(path, errors):
-        nonlocal published
-        result = original_load_json(path, errors)
-        if not published:
-            published = True
-            # All canonical bytes are unchanged, but a complete generation is
-            # committed between the identity reads that the validator makes
-            # before and after its checks.
-            combine_module._write_recovery_generation_manifest(run_dir)
-        return result
-
-    monkeypatch.setattr(
-        validate_products_module,
-        "load_json_object",
-        publish_complete_generation_between_checks,
-    )
-
-    report = validate_products(run_dir=run_dir)
-
-    assert report["valid"] is False
-    assert "publish.generation_stability" in {
-        error["check"] for error in report["errors"]
-    }
-
-
 def test_validate_products_checks_for_journal_after_reading(
     tmp_path, monkeypatch
 ) -> None:
@@ -658,39 +613,6 @@ def test_validate_products_checks_for_journal_after_reading(
         validate_products_module,
         "load_json_object",
         begin_partial_publish_between_checks,
-    )
-
-    report = validate_products(run_dir=run_dir)
-
-    assert report["valid"] is False
-    assert "publish.transaction" in {
-        error["check"] for error in report["errors"]
-    }
-
-
-def test_validate_products_journal_check_is_final_observation(
-    tmp_path, monkeypatch
-) -> None:
-    run_dir = tmp_path / "run"
-    _write_products(run_dir)
-    combine_module._write_recovery_generation_manifest(run_dir)
-    original_snapshot = validate_products_module._read_generation_snapshot
-    started = False
-
-    def begin_publish_after_final_generation_read(*args, **kwargs):
-        nonlocal started
-        result = original_snapshot(*args, **kwargs)
-        if kwargs.get("phase") == "after" and not started:
-            started = True
-            (run_dir / ".pilotproxy-combine-publish.json").write_text(
-                "{}\n", encoding="utf-8"
-            )
-        return result
-
-    monkeypatch.setattr(
-        validate_products_module,
-        "_read_generation_snapshot",
-        begin_publish_after_final_generation_read,
     )
 
     report = validate_products(run_dir=run_dir)

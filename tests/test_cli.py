@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
@@ -519,42 +518,3 @@ def test_validate_products_wrapper(monkeypatch, tmp_path) -> None:
     assert cmd[:3] == [cli.sys.executable, "-m", "pilot_proxy.chime.validate_products"]
     assert cmd[cmd.index("--run-dir") + 1].endswith("run")
     assert cmd[cmd.index("--output-json") + 1].endswith("validation.json")
-
-
-def test_chime_scan_forwards_explicit_allow_partial(monkeypatch, tmp_path) -> None:
-    calls = []
-    fake_scan = ModuleType("pilot_proxy.archive.scan")
-
-    def fake_run_chime_scan(**kwargs):
-        calls.append(kwargs)
-
-    fake_scan.run_chime_scan = fake_run_chime_scan  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, fake_scan.__name__, fake_scan)
-
-    result = cli.main(
-        [
-            "chime-scan",
-            "--input-dir",
-            str(tmp_path / "input"),
-            "--output-dir",
-            str(tmp_path / "output"),
-            "--select",
-            "844",
-            "--download-workers",
-            "3",
-            "--max-staged-files",
-            "5",
-            "--staging-dir",
-            str(tmp_path / "staging"),
-            "--source-event-regex",
-            r"baseband_(evt\d+)_",
-            "--allow-partial",
-        ]
-    )
-
-    assert result == 0
-    assert calls[0]["allow_partial"] is True
-    assert calls[0]["download_workers"] == 3
-    assert calls[0]["max_staged_files"] == 5
-    assert calls[0]["staging_dir"] == tmp_path / "staging"
-    assert calls[0]["source_event_regex"] == r"baseband_(evt\d+)_"

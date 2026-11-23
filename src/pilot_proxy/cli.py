@@ -323,45 +323,6 @@ def _cmd_audit_archive_health(args: argparse.Namespace) -> None:
     raise SystemExit(archive_health_main(argv))
 
 
-def _cmd_inject_pilot_tone(args: argparse.Namespace) -> None:
-    from pilot_proxy.chime.injection import inject_directory
-
-    if args.input.is_dir():
-        paths = sorted(args.input.glob(args.glob))
-        if not paths:
-            raise SystemExit(f"no files matching {args.glob!r} under {args.input}")
-    else:
-        paths = [args.input]
-    entries = inject_directory(
-        paths,
-        args.output_dir,
-        amplitude_lsb=args.amplitude_lsb,
-        phase_seed=args.phase_seed,
-        baseband_frequency_hz=args.baseband_frequency_hz,
-        pilot_frequency_hz=args.pilot_frequency_hz,
-        physical_channel=args.physical_channel,
-    )
-    total_clip = sum(entry["clip_count"] for entry in entries)
-    print(
-        f"Injected {len(entries)} file(s) -> {args.output_dir} "
-        f"(amplitude {args.amplitude_lsb} LSB, total clipped samples {total_clip})"
-    )
-
-
-def _cmd_analyze_injection_recovery(args: argparse.Namespace) -> None:
-    from pilot_proxy.chime.injection_recovery import main as recovery_main
-
-    argv: list[str] = []
-    for point in args.points:
-        argv += ["--point", str(point)]
-    for pfa in args.false_alarm_rates or []:
-        argv += ["--false-alarm-rate", str(pfa)]
-    argv += ["--output-dir", str(args.output_dir)]
-    raise SystemExit(recovery_main(argv))
-
-
-
-
 def _cmd_chime_plot(args: argparse.Namespace) -> None:
     argv = ["--run-dir", str(args.run_dir)]
     if args.clean_figures:
@@ -1470,38 +1431,6 @@ def build_parser() -> argparse.ArgumentParser:
     archive_health.add_argument("--expect-invalid-frames", type=int, default=None)
     archive_health.add_argument("--expect-ceiling-frames", type=int, default=None)
     archive_health.set_defaults(func=_cmd_audit_archive_health)
-
-    inject = _add_command(
-        "inject-pilot-tone",
-        "Copy real baseband files with a known pilot tone injected "
-        "(integer-domain; amplitude 0 is a byte-identical control).",
-    )
-    inject.add_argument("--input", type=Path, required=True,
-                        help="A baseband .h5 file or a directory of them.")
-    inject.add_argument("--glob", default="*.h5",
-                        help="Filename glob when --input is a directory.")
-    inject.add_argument("--output-dir", type=Path, required=True)
-    inject.add_argument("--amplitude-lsb", type=float, required=True,
-                        help="Tone amplitude in raw 4-bit LSB units; 0 = identity control.")
-    inject_frequency = inject.add_mutually_exclusive_group(required=True)
-    inject_frequency.add_argument("--baseband-frequency-hz", type=float, default=None)
-    inject_frequency.add_argument("--pilot-frequency-hz", type=float, default=None)
-    inject_frequency.add_argument("--physical-channel", type=int, default=None)
-    inject.add_argument("--phase-seed", type=int, default=20260701)
-    inject.set_defaults(func=_cmd_inject_pilot_tone)
-
-    recovery = _add_command(
-        "analyze-injection-recovery",
-        "Analyze injection-ladder run products: response linearity plus the "
-        "power-ratio vs radiometer comparison at matched false-alarm rates.",
-    )
-    recovery.add_argument("--point", type=Path, action="append", required=True,
-                          dest="points",
-                          help="Ladder-point run dir (repeat; one must be a=0).")
-    recovery.add_argument("--false-alarm-rate", type=float, action="append",
-                          dest="false_alarm_rates", default=None)
-    recovery.add_argument("--output-dir", type=Path, required=True)
-    recovery.set_defaults(func=_cmd_analyze_injection_recovery)
 
     chime_plot = _add_command(
         "chime-plot",

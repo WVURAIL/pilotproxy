@@ -261,8 +261,8 @@ LITERALS = {
         lambda: P.eras.overrides_sha256()),
     # register
     "min_frames_per_false_alarm": (
-        "pilot-proxy src/pilot_proxy/chime/injection_recovery.py:48 MIN_FRAMES_PER_FALSE_ALARM",
-        "replaced", 10.0, lambda: P.register.value("detection.minimum_frames_per_false_alarm")),
+        "pilot-proxy src/pilot_proxy/chime/injection_recovery.py@89577ee:65 MIN_FRAMES_PER_FALSE_ALARM",
+        "deleted", 10.0, lambda: P.register.value("detection.minimum_frames_per_false_alarm")),
     "rfisher_min_retained_frames": (
         "RFIsher src/rfisher/selection_policy.py selection.minimum_retained_frames",
         "pinned", 30, lambda: P.register.value("selection.minimum_retained_frames")),
@@ -315,9 +315,6 @@ REPLACED_NAMES = {
     "archive_health.py": {
         "DRAO_LONGITUDE_DEGREES_EAST": "drao_longitude",
         "LOCAL_CIVIL_TIME_ZONE": "local_time_zone",
-    },
-    "chime/injection_recovery.py": {
-        "MIN_FRAMES_PER_FALSE_ALARM": "min_frames_per_false_alarm",
     },
     "chime/products.py": {
         "SAMPLE_RATE_HZ": "chime_products_sample_rate",

@@ -746,3 +746,15 @@ src/pilot_proxy/runtime_candidate.py	7b45b12
 tests/core/test_runtime_candidate.py	7b45b12
 docs/ARCHIVE_POLICY_CANDIDATE.md	7b45b12
 tests/archive/test_instruments_extends.py	89577ee
+src/pilot_proxy/characterization/injection.py	89577ee
+src/pilot_proxy/chime/injection.py	89577ee
+src/pilot_proxy/chime/injection_recovery.py	89577ee
+tests/archive/test_injection.py	89577ee
+tests/characterization/test_injection_fit_domain.py	89577ee
+tests/characterization/test_injection_numerics.py	89577ee
+tests/characterization/test_injection_statistics.py	89577ee
+tests/chime/test_injection_detection_chain.py	89577ee
+tests/chime/test_injection_failure_paths.py	89577ee
+tests/chime/test_injection_recovery.py	89577ee
+tests/chime/test_injection_workflow.py	89577ee
+tests/chime/test_recovery_failures.py	89577ee

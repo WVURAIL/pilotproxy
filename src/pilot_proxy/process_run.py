@@ -55,7 +55,8 @@ def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: 
     # fine decision v3 has no search geometry, and its default word is the control word scaled to each channel
     v3 = report.get("decision_version") == "fine_decision_v3"
     word = "Control word" if v3 else "Floor"
-    lines = [f"# Run {epoch}", "",
+    # the first line names the decision version, since the summary's columns and words depend on it
+    lines = [f"# Run {epoch}, {report['decision_version']}", "",
              f"Test {'PASSED' if tested['passed'] else 'FAILED'}. {word} eta {report['floor_eta']:.4f} "
              f"from the {report['floor_source']}.",
              f"Control: {control['detail'] if control else 'no check'}.", "",

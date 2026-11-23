@@ -101,6 +101,21 @@ def test_score_receipt_failure_removes_only_the_new_archive(tmp_path, monkeypatc
     assert list(tmp_path.iterdir()) == []
 
 
+def test_score_receipt_collision_after_the_archive_keeps_the_competing_receipt(tmp_path, monkeypatch):
+    path = tmp_path / "score.npz"
+    receipt = path.with_suffix(".json")
+
+    def competing_receipt(target, data):
+        Path(target).write_bytes(b"competing receipt\n")
+        raise FileExistsError(target)
+
+    monkeypatch.setattr(REDUCER, "write_json", competing_receipt)
+    with pytest.raises(FileExistsError):
+        REDUCER.save_scores(path, {"values": np.ones(2)}, {})
+    assert not path.exists()
+    assert receipt.read_bytes() == b"competing receipt\n"
+
+
 @pytest.mark.parametrize("suffix", [".npz", ".json"])
 def test_score_hash_failure_rolls_back_new_outputs(tmp_path, monkeypatch, suffix):
     path = tmp_path / "score.npz"

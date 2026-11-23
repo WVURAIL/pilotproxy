@@ -28,7 +28,6 @@ Run each command with --help. Store new outputs separately from existing data.
   PFB), supplement_fine_campaign_plan.py (a sealed campaign plan for a supplementary channel),
   report_fine_null_validation.py (independent H0 outcomes), report_fine_sensitivity.py (frozen H1 cohorts),
   audit_fine_native_coordinates.py (inverted native coordinates against a frozen plan),
-  fused_real_receipt.py (the fused fine-mask entry point against the staged path on CHIME frames),
   framing_audit.py (baseband framing of the weight ROM).
 - Fixed-point FFT: emit_fxfft_tables.py (twiddles as C literals), generate_fxfft_goldens.py (golden vectors),
   fxfft_report.py (quantization error against float64).

@@ -392,22 +392,13 @@ def null_scores(fines: np.ndarray, *, anchor_bin: int, bulk: np.ndarray, rank: i
     """Return Q16 null scores at pseudo-searches over the bins clear of the real search of each frame.
 
     Version 1 scores the bin ratio against the ratio of rank `rank` in the background, and version 2
-    scores the target alone against the reference of that rank. Version 3 searches every bin, so it
-    gives one score per frame, the largest target over the median reference of the even bins, and reads
-    neither `anchor_bin`, `bulk` nor `rank`.
+    scores the target alone against the reference of that rank. Version 3 searches every bin, so it has
+    no pseudo-search; its null words are required_words of the null frames.
     """
-    decision_functions(decision_version)
-    if decision_version == FINE_DECISION_V3_VERSION:
-        bulk, rank = v3_geometry()
+    if decision_version not in (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION):
+        raise ValueError(f"null scores are of fine_decision_v1 and v2, not {decision_version}")
     bins = np.flatnonzero(bulk)
-    if decision_version == FINE_DECISION_V3_VERSION:
-        fines = np.asarray(fines, dtype=np.float64)
-        ratios = 2.0 * fines[:, 0]
-        reference = np.sort((fines[:, 1] + fines[:, 2])[:, bins], axis=1)[:, rank]
-        # v3 searches every bin, so each frame gives one null score; one with a zero median gives none
-        good = reference > 0
-        return ratios[good].max(axis=1) / reference[good] * Q16
-    elif decision_version == FINE_DECISION_V2_VERSION:
+    if decision_version == FINE_DECISION_V2_VERSION:
         fines = np.asarray(fines, dtype=np.float64)
         ratios = 2.0 * fines[:, 0]
         den = fines[:, 1] + fines[:, 2]
@@ -428,16 +419,14 @@ def clear_searches() -> int:
     return FINE_BINS // (2 * SEARCH_HALF_WIDTH + 1) - 1
 
 
-def simulated_null_scores(num_inputs: int, frames: int = MIN_SIMULATED_FRAMES, seed: int = 20261105, *,
-                          decision_version: str) -> np.ndarray:
-    """Return null scores for white noise summed over num_inputs streams."""
+def simulated_powers(num_inputs: int, frames: int = MIN_SIMULATED_FRAMES, seed: int = 20261105) -> np.ndarray:
+    """Return the fine powers of white noise summed over num_inputs streams."""
     rng = np.random.default_rng(seed)
-    bulk, rank = _geometry(0, (), decision_version)
     powers = np.empty((frames, 3, FINE_BINS))
     for frame in range(frames):
         z = rng.standard_normal((3, num_inputs, WINDOWS, 2), dtype=np.float32).view(np.complex64)[..., 0]
         powers[frame] = (np.abs(np.fft.fft(z, FINE_BINS, axis=2)) ** 2).sum(axis=1)
-    return null_scores(powers, anchor_bin=0, bulk=bulk, rank=rank, decision_version=decision_version)
+    return powers
 
 
 def _geometry(anchor: int, excluded: Sequence[int], decision_version: str) -> tuple[np.ndarray, int]:
@@ -867,11 +856,6 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             control_norms = weight_norms(control_weights)
             # the corrections of the power-limit test read the control again under the words of each channel
             control_frames = (fines, control_captures, control_norms) if inputs else None
-            # in chunks, so the float ratios of a long control never sit in memory at once
-            scores = np.concatenate([
-                null_scores(quiet[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=control_rank,
-                            decision_version=decision)
-                for lo in range(0, len(quiet), NULL_CHUNK)])
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=control_rank,
                                   weights_hex=control_weights.hex(), frames=len(fines),
@@ -882,24 +866,34 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                                                frames=int(night.sum()))
             source = "control channel" if night_site is None else "control channel, night frames"
         else:
-            scores = simulated_null_scores(int(plan["num_inputs"]), decision_version=decision)
+            anchor = 0
+            bulk, control_rank = _geometry(anchor, (), decision)
+            quiet = simulated_powers(int(plan["num_inputs"]))
             control_record = None
             source = f"white noise, {int(plan['num_inputs'])} inputs"
         # v3 searches every bin, so a frame holds one independent null score, not clear_searches()
         per_frame = 1 if decision == FINE_DECISION_V3_VERSION else clear_searches()
-        independent = (len(quiet) if control else MIN_SIMULATED_FRAMES) * per_frame
+        independent = len(quiet) * per_frame
         if independent * (1.0 - quantile) < 1:
             raise ValueError(f"{independent} independent null scores are too few for quantile {quantile}")
         v3 = decision == FINE_DECISION_V3_VERSION
         factors = _passband_factors(plan) if v3 else {}
-        if v3 and control:
-            # the quantile of the exact keep words of the control frames that have a word
-            quantile_q16 = control_quantile_q16(control_words, quantile)
-            reference_level = null_power_ratio_from_weight_norms(*control_norms) * factors.get(int(control["channel"]), 1.0)
-        elif v3:
+        if v3:
+            # the quantile of the exact keep words of the null frames that have a word
+            words = control_words if control else required_words(quiet, anchor_bin=anchor, bulk=bulk, rank=control_rank,
+                                                                  decision_version=decision)
+            quantile_q16 = control_quantile_q16(words, quantile)
             # white noise through ideal weights has the null level 1
-            quantile_q16, reference_level = float(np.quantile(scores, quantile)), 1.0
-        measured_word = int(math.ceil(quantile_q16)) if v3 else int(math.ceil(float(np.quantile(scores, quantile))))
+            reference_level = (null_power_ratio_from_weight_norms(*control_norms) * factors.get(int(control["channel"]), 1.0)
+                               if control else 1.0)
+            measured_word = int(math.ceil(quantile_q16))
+        else:
+            # in chunks, so the float ratios of a long control never sit in memory at once
+            scores = np.concatenate([
+                null_scores(quiet[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=control_rank,
+                            decision_version=decision)
+                for lo in range(0, len(quiet), NULL_CHUNK)])
+            measured_word = int(math.ceil(float(np.quantile(scores, quantile))))
         floor = int(plan.get("word_q16", measured_word))
         if "word_q16" in plan:
             source = "the plan"

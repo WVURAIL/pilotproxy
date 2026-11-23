@@ -5,9 +5,10 @@ CHIME real-data workflow. We state the operations in the order they are
 applied so that a result can be reproduced from the recorded powers and
 weight norms.
 
-The detector decides each frame with an exact integer fine-bin comparison
+Each frame is decided by an exact integer fine-bin comparison
 (`fine_decision.py`). It has three versions, and "Decision status" below gives
-where each one runs. The frame ratio and the positive-excess flag are
+where each one runs. Under v3 the detector writes the statistic, and the
+consumer decides. The frame ratio and the positive-excess flag are
 measurements and diagnostics. The weight norms set a normalization by the
 ratio of expected powers, which differs from the exact expectation of a noisy
 ratio.
@@ -221,7 +222,8 @@ The decision paths in the repository have different operational status:
   no anchor or search width. The kernel writes the pair `[n_peak, d_rho]`: the
   largest target power over all 256 fine bins and the median reference power
   over the 128 even bins. The consumer keeps a frame when
-  `n_peak * 2^16 <= word * d_rho`, with the Q16 keep word of the channel.
+  `n_peak * 2^16 <= word * d_rho`, with the Q16 keep word of the channel. A
+  frame with `d_rho = 0` has no decision, and `DtvRfiMask` rejects it.
 - On 2026-11-22, every bundle installed in Kotekan, on `develop` and on
   `chord`, is fine decision v1 with a designated half-width of 32. Kotekan
   `develop` runs v1 and v2 bundles. Fine decision v3 needs kotekan#1924, which

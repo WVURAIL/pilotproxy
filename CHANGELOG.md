@@ -5,6 +5,13 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Every site that applies a fine_decision_v3 word uses the word the stage applies (`v3_word`): the power-limit
+  word where calibration wrote one, and the default word otherwise. `compile-operating-policy` binds a v3 channel
+  or control at that word, so a v3 control and a v3 channel with no power-limit word now compile; it used to
+  require `power_limit_multiplier_q16` on every v3 row. `run-spectrogram`, `run-scores` and the `process-run`
+  summary keep v3 frames at that word and name it in `word_q16`, `current_threshold` and `masked_summary.csv`, and
+  `analyze_dtv_run.py` matches archive ranges at it. Bundles with no power-limit word, and v1 and v2 bundles, give
+  the same outputs as before.
 - A fine_decision_v3 channel with no passing BAO word, or with no captures, carries the reject word 1 as its
   `power_limit_multiplier_q16` (`REJECT_WORD_Q16`) instead of no power-limit word. DtvRfiMask and the relay apply
   that word, and it keeps only a frame with no target power, so they mask the channel whole without a permanent

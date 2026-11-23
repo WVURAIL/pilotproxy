@@ -8,7 +8,6 @@ such as feed count and Datatrail baseband scopes.
 
 The Nyquist zone sets the direction within each channel: odd zones are upright
 and even zones are mirrored. The CHIME-family instruments here use zone 2.
-A survey determines which frequency channels have data at a given site.
 
 Analysis choices, such as the carrier to detect, RFI model, or selected feeds,
 belong to the analyzer. The instrument file supplies geometry and data access.
@@ -18,11 +17,11 @@ from __future__ import annotations
 import glob
 import math
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import List, Optional
 
-from pilot_proxy.archive.names import validate_identifier
 from pilot_proxy.detector_geometry import nyquist_zone_is_mirrored
 
 try:
@@ -42,6 +41,23 @@ _FEED_LAYOUT_KEYS = ("ew_spacing_m", "ns_spacing_m", "inputs_per_cylinder", "pos
 _BAND_KEYS = frozenset({
     "f0_mhz", "bandwidth_mhz", "n_channels", "descending",
 })
+_IDENTIFIER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
+
+
+def validate_identifier(value: object, *, label: str = "name") -> str:
+    """Return an exact filesystem-safe identifier or raise ``ValueError``.
+
+    An instrument or reader name selects a file under ``pilot_proxy/instruments/``,
+    so a path separator or ``..`` is refused.
+    """
+    text = value.strip() if isinstance(value, str) else ""
+    if (value != text or not text or text in {".", ".."}
+            or not _IDENTIFIER_RE.fullmatch(text)
+            or ".." in text):
+        raise ValueError(
+            f"invalid {label} {value!r}: use letters, digits, '_', '-', or '.', "
+            "starting with a letter or digit; path components are not allowed")
+    return text
 
 
 # Instrument geometry

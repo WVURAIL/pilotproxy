@@ -745,3 +745,4 @@ tests/characterization/test_spectrogram.py	63e72e8
 src/pilot_proxy/runtime_candidate.py	7b45b12
 tests/core/test_runtime_candidate.py	7b45b12
 docs/ARCHIVE_POLICY_CANDIDATE.md	7b45b12
+tests/archive/test_instruments_extends.py	89577ee

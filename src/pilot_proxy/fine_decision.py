@@ -645,8 +645,8 @@ def calibration_geometry(calibration: dict) -> tuple[np.ndarray, int]:
 
 
 FINE_DECISION_VERSIONS = (FINE_DECISION_VERSION, FINE_DECISION_V2_VERSION, FINE_DECISION_V3_VERSION)
-# New calibrations write version 2 until Kotekan runs version 3; a bundle of any version stays valid.
-CALIBRATION_DECISION_VERSION = FINE_DECISION_V2_VERSION
+# New calibrations write version 3, which Kotekan runs since kotekan#1924; a bundle of any version stays valid.
+CALIBRATION_DECISION_VERSION = FINE_DECISION_V3_VERSION
 
 
 def decision_functions(version: str):

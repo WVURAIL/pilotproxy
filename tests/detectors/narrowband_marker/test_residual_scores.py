@@ -83,9 +83,13 @@ def test_randomized_exact_arithmetic_matches_oracle():
             powers[0, bulk_bins[1]] = 0
         if bulk_bins.size > 3:
             powers[:, bulk_bins[3]] = powers[:, bulk_bins[2]]
-        powers[0, anchor] = limit
-        powers[1, anchor] = 1
-        powers[2, anchor] = 0
+        if case % 5 == 0:  # no uint64 multiplier keeps
+            powers[0, anchor] = limit
+            powers[1, anchor] = 1
+            powers[2, anchor] = 0
+        elif case % 5 == 1:  # boundaries past float64 precision
+            powers[1, anchor] = generator.integers(1 << 20, 1 << 24, dtype=np.uint64)
+            powers[2, anchor] = 0
 
         expected = _exact_oracle(
             powers, anchor=anchor, width=width, bulk=bulk)
@@ -94,3 +98,6 @@ def test_randomized_exact_arithmetic_matches_oracle():
             bulk_mask=bulk)
 
         assert actual == expected
+        finite = [v for v in actual if 1 < v < ALWAYS_MASKED_Q16]
+        assert case % 5 == 0 or finite
+        assert case % 5 != 1 or max(finite) > 1 << 53

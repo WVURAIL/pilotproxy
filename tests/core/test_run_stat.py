@@ -189,3 +189,29 @@ def test_analyze_tool_reads_an_unevaluated_v3_row_as_untested(tmp_path):
     done = subprocess.run([sys.executable, str(ROOT / "tools" / "analyze_dtv_run.py"), "--run-dir", str(run_dir),
                            "--bundle-dir", str(bundle), "--num-freq", "2"], capture_output=True, text=True)
     assert done.returncode == 1 and "dtv_stat has 3 frames" in done.stderr
+
+
+def test_analyze_tool_keeps_the_numa_domains_apart(tmp_path):
+    frames, freqs = 2, [844, 845]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    stat = np.zeros((frames, 2, 2), np.uint64)
+    stat[:, :, 1] = 10
+    for domain, freq_list in (("n0", freqs), ("n1", [900, 901])):
+        for product, rows, dtype in (("mask", np.zeros((frames, 2)), np.int8), ("powers", np.ones((frames, 2, 3)), "<u8"),
+                                     ("fine_support", np.full((frames, 2, 2), -1), "<i4"), ("stat", stat, "<u8")):
+            _raw(run_dir / f"cx01_dtv_{product}_{domain}_0000000.raw", rows, freq_list, dtype)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    rows = [dict(receiver_channel_id=f, physical_channel=c, null_power_ratio=1.0,
+                 fine_calibration=dict(status="calibrated", decision_version="fine_decision_v3",
+                                       cfar_multiplier_q16=65536)) for f, c in zip(freqs, (14, 15))]
+    (bundle / "pilot_profiles.json").write_text(json.dumps(dict(profiles=rows)))
+    command = [sys.executable, str(ROOT / "tools" / "analyze_dtv_run.py"), "--run-dir", str(run_dir),
+               "--bundle-dir", str(bundle), "--num-freq", "2"]
+    mixed = subprocess.run(command, capture_output=True, text=True)
+    assert mixed.returncode == 1 and "NUMA domains ['n0', 'n1']" in mixed.stderr
+    out = tmp_path / "n0.json"
+    subprocess.run(command + ["--domain", "n0", "--json", str(out)], capture_output=True)
+    result = json.loads(out.read_text())
+    assert result["frames"] == frames and result["frequencies"] == freqs

@@ -10,9 +10,10 @@ All notable changes to PilotProxy are recorded here. The project follows
   rows as 0% masked, and counts its windows without `dtv_stat`. `compare_pathfinder_dtv_mask.py` compares the
   bundle's v3 channels by default, counts a block read from both a per-window and a combined file once, and exits 1
   when a check fails or a frequency could not be compared. `analyze_dtv_run.py` reads a not-evaluated v3 row
-  `[0, 2^64 - 1]` as untested, not as a valid test, and reports unequal frame counts instead of failing in a
-  reshape. `pathfinder_preflight.py` requires `dtv_stat` to be sent, received and written when the detector writes
-  it (kotekan#1924).
+  `[0, 2^64 - 1]` as untested, not as a valid test, reports unequal frame counts instead of failing in a
+  reshape, and takes `--domain` for a two-domain CHIME run, whose two streams it used to read as one.
+  `pathfinder_preflight.py` requires `dtv_stat` to be sent, received and written when the detector writes it
+  (kotekan#1924). The `test` extra installs `hdf5plugin`, so the run-tool tests no longer skip in CI.
 - `test-bundle` checks each channel's masked fraction at the word the stage applies: for a v3 channel with a
   power-limit word, that word (`v3_word`), against the interval `calibrate-bundle` now also records at it
   (`applied_masked_interval`). It used to test the default word only, so a qualified BAO word had no

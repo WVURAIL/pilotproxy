@@ -38,6 +38,7 @@ test = [
   "cryptography",
   "scipy",
   "h5py",
+  "hdf5plugin",
   "matplotlib",
   "pyyaml",
   "pytest>=8",

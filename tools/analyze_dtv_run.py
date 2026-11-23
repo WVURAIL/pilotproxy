@@ -3,7 +3,10 @@
 config/chime/dtv.j2 in Kotekan, run with dtv_calibration_mode) and apply the hello-world pass criteria.
 
     analyze_dtv_run.py --run-dir /scratch/dtv/<run> --bundle-dir <bundle> \
-        [--strong 35] [--quiet 29] [--ranges analysis/archive_ranges.json] [--json out.json]
+        [--strong 35] [--quiet 29] [--ranges analysis/archive_ranges.json] [--domain n0] [--json out.json]
+
+A two-domain run (chime_upgrade_2numa.j2) writes one stream per NUMA domain into one directory, and
+--domain picks one; the tool refuses to mix them.
 
 Checks, all from the files alone:
   mechanics  three products with equal frame counts; FPGA sequence advancing by 16384 per frame, no gaps;
@@ -21,6 +24,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import struct
 import sys
 
@@ -39,10 +43,13 @@ def nfreq_offset():
     return 24 + 4 + 4 + 8 + 8 + 24 + 4 + 4 + 40 + 240 + 80 + 80 + 8
 
 
-def read_product(run_dir, name, frame_bytes):
-    paths = sorted(glob.glob(os.path.join(run_dir, f"*dtv_{name}_*.raw")) +
-                   glob.glob(os.path.join(run_dir, f"dtv_{name}_*.raw")))
-    paths = sorted(set(paths))
+def read_product(run_dir, name, frame_bytes, domain=None):
+    # rawFileWrite names a file [<host>_]dtv_<name>[_n<numa>]_<7 digits>.raw, one stream per NUMA domain
+    stem = f"dtv_{name}_{domain}_" if domain else f"dtv_{name}_"
+    paths = sorted(set(glob.glob(os.path.join(run_dir, f"*{stem}*.raw"))))
+    found = {m.group(1) for p in paths if (m := re.search(rf"dtv_{name}_(n\d+)_\d{{7}}\.raw$", os.path.basename(p)))}
+    if domain is None and len(found) > 1:
+        sys.exit(f"{run_dir} holds dtv_{name} files of NUMA domains {sorted(found)}; choose one with --domain")
     seqs, periods, freqs, payloads, meta_size = [], [], None, [], None
     nf_off = nfreq_offset()
     for path in paths:
@@ -94,12 +101,13 @@ def main():
     ap.add_argument("--ranges", default=os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                      "..", "analysis", "archive_ranges.json"))
     ap.add_argument("--num-freq", type=int, default=16)
+    ap.add_argument("--domain", help="NUMA domain of a two-domain run, as its file names give it (n0 or n1)")
     ap.add_argument("--json")
     a = ap.parse_args()
     F = a.num_freq
-    mask = read_product(a.run_dir, "mask", F)
-    powers = read_product(a.run_dir, "powers", F * 3 * 8)
-    support = read_product(a.run_dir, "fine_support", F * 2 * 4)
+    mask = read_product(a.run_dir, "mask", F, a.domain)
+    powers = read_product(a.run_dir, "powers", F * 3 * 8, a.domain)
+    support = read_product(a.run_dir, "fine_support", F * 2 * 4, a.domain)
     checks, report = {}, {}
     n = len(mask["seq"])
     checks["frames_present"] = n > 0
@@ -126,7 +134,7 @@ def main():
         from pilot_proxy.run_files import v3_words
 
         v3 = v3_words(a.bundle_dir, mask_control=True)
-        stat = read_product(a.run_dir, "stat", F * 2 * 8)
+        stat = read_product(a.run_dir, "stat", F * 2 * 8, a.domain)
         checks["stat_frames_match"] = len(stat["seq"]) == n and bool((stat["seq"] == mask["seq"]).all())
         if not checks["stat_frames_match"]:
             sys.exit(f"dtv_stat has {len(stat['seq'])} frames, dtv_mask {n}, or their sequences differ: {checks}")

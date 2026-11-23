@@ -1113,12 +1113,12 @@ def test_v3_power_limit_bundle_is_qualified_with_its_power_limit_word(plans, tmp
     path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     word = report["channels"]["35"]["power_limit_word_q16"]
-    assert word is not None and report["channels"]["29"]["power_limit_word_q16"] is None
+    assert word not in (None, REJECT_WORD_Q16) and report["channels"]["29"]["power_limit_word_q16"] == REJECT_WORD_Q16
     _, rows = _qualify_as_tested(tmp_path / "bundle", plans["test_path"], tmp_path)
-    # the stage applies the power-limit word of channel 35 and the default word of channel 29, the words tested
+    # the stage applies the power-limit word of channel 35 and the reject word of channel 29, the words tested
     fine = {channel: row["fine_calibration"] for channel, row in rows.items()}
     assert fine[35]["power_limit_multiplier_q16"] == v3_word(fine[35]) == word != fine[35]["cfar_multiplier_q16"]
-    assert "power_limit_multiplier_q16" not in fine[29] and v3_word(fine[29]) == fine[29]["cfar_multiplier_q16"]
+    assert fine[29]["power_limit_multiplier_q16"] == v3_word(fine[29]) == REJECT_WORD_Q16
 
 
 def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):

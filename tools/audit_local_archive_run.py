@@ -184,10 +184,19 @@ def check_scope(
         "checkpoint_every": checkpoint_every,
         "staging_dir": str(staging_dir),
     }
-    require(scope.get("execution") == execution, "execution settings differ")
+
+    def same_settings(record: Any) -> bool:
+        # chime-scan also records storage_service: None for the default locator, or the replica it used.
+        if not isinstance(record, dict) or set(record) - set(execution) - {"storage_service"}:
+            return False
+        service = record.get("storage_service")
+        return ({key: record.get(key) for key in execution} == execution
+                and (service is None or (isinstance(service, str) and bool(service))))
+
+    require(same_settings(scope.get("execution")), "execution settings differ")
     attempts = scope.get("execution_attempts")
     require(isinstance(attempts, list) and attempts, "execution attempts are missing")
-    require(all(attempt == execution for attempt in attempts), "an execution attempt used different settings")
+    require(all(same_settings(attempt) for attempt in attempts), "an execution attempt used different settings")
 
     totals = scope.get("totals")
     require(isinstance(totals, dict), "scan totals are missing")

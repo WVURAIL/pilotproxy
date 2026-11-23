@@ -1092,8 +1092,14 @@ def _qualify_as_tested(bundle, test_path, tmp_path):
     return summary, after
 
 
-def test_v3_bundle_is_qualified_at_its_tested_words(plans, v3_plans, tmp_path):
-    _, rows = _qualify_as_tested(v3_plans["bundle"], plans["test_path"], tmp_path)
+def test_v3_bundle_is_qualified_at_its_tested_words(plans, tmp_path):
+    # the control is bound, as in the bundle of a run, and qualification leaves its row as it was
+    channels = dict(plans["calibrate"]["channels"], **{"37": plans["calibrate"]["control"]["captures"]})
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], channels=channels, decision_version="fine_decision_v3")))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    _, rows = _qualify_as_tested(tmp_path / "bundle", plans["test_path"], tmp_path)
+    assert sorted(rows) == [29, 35, 37] and rows[37]["fine_calibration"]["status"] == "control"
     assert {row["fine_calibration"]["decision_version"] for row in rows.values()} == {"fine_decision_v3"}
     assert not any("power_limit_multiplier_q16" in row["fine_calibration"] for row in rows.values())
 

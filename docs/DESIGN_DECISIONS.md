@@ -261,7 +261,17 @@ word when there is none. A backend can set its own word from its own residual
 analysis.
 
 The v3 default word is a CFAR word set on the control, not the knee of a
-channel's own kept fraction. `calibrate-bundle` takes the 99th percentile
+channel's own kept fraction. With the plan block `default_word.night` (a site's
+latitude and east longitude; `--night` of `plan-run` and `process-run`), the
+quantile reads only the control frames recorded with the Sun below the horizon
+there, as CHIME's 21 cm analyses use the data. In the day the Sun is common to
+every input, its fluctuations add coherently in the summed fine powers, and the
+whole null of the control moves up: on the CHIME archive the all-frame 99th
+percentile is 1.716, set by the Sun's transits, and the night one 1.133, which
+the dissertation takes. The power-limit corrections still read every control
+frame, and `test-bundle` tests the night frames of its control. On the
+Pathfinder, Taurus A transits near local midnight in November and raises the
+night false alarms too, so a calibration of whole sidereal days covers it. `calibrate-bundle` takes the 99th percentile
 (`null_quantile`) of the control's exact keep words and scales it to each
 channel's null level, `mu_0,c g_c / (mu_0,37 g_37)`, rounded up to Q16.
 `mu_0 = 2 |w_t|^2 / (|w_lo|^2 + |w_up|^2)` comes from the stored weights and
@@ -270,7 +280,7 @@ the plan's `default_word.passband_factor` (1 where not given; it moves the
 archive words by under 2%). The word then means a fixed share of pilot-free
 frames masked, and it needs no captures of the channel, so every channel of a
 first bundle gets it. On the archive this reproduces the dissertation's v3
-default words exactly (`default_words_v3.json`). Bundles of v1 and v2 keep the
+default words of its all-frame rule (`default_words_v3.json`). Bundles of v1 and v2 keep the
 knee and floor. The power-limit test reads the control at the same scale: a control
 frame counts as kept at the channel word `u` when its keep word is at most
 `floor(u / lambda_c)`, so its selection shift and the default word map the control onto

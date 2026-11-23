@@ -49,6 +49,7 @@ from pilot_proxy.runtime_bundle import (
     export_runtime_weight_bundle,
     validate_runtime_weight_bundle,
 )
+from pilot_proxy.sun import is_night
 
 FINE_BINS = 256
 WINDOWS = 128
@@ -428,13 +429,79 @@ def control_words_at(words: np.ndarray, scale: float) -> np.ndarray:
 def _passband_factors(plan: dict[str, Any]) -> dict[int, float]:
     """Return the passband factors g = 1 + o/C of the plan's "default_word" block, by physical channel."""
     given = plan.get("default_word", {})
-    unknown = set(given) - {"passband_factor"}
+    unknown = set(given) - {"passband_factor", "night"}
     if unknown:
         raise ValueError(f"unknown default_word keys {sorted(unknown)}")
     factors = {int(c): float(v) for c, v in given.get("passband_factor", {}).items()}
     if any(not np.isfinite(v) or v <= 0 for v in factors.values()):
         raise ValueError("every passband factor must be finite and positive")
     return factors
+
+
+# the coarse-channel sample of the CHIME F-engine, 1/390625 s, which steps the frames of a baseband capture
+BASEBAND_SAMPLE_SECONDS = 1.0 / 390625.0
+
+
+def _night_site(plan: dict[str, Any]) -> tuple[float, float] | None:
+    """Return the site (latitude, east longitude in degrees) of the plan's "default_word": {"night": ...}, or None.
+
+    With it, the control quantile of the default word is taken over the control frames recorded with the Sun below
+    the horizon at the site (sun.py), the data that CHIME's 21 cm analyses use.
+    """
+    night = plan.get("default_word", {}).get("night")
+    if night is None:
+        return None
+    if not isinstance(night, dict) or set(night) != {"latitude_deg", "longitude_deg_east"}:
+        raise ValueError('default_word night takes {"latitude_deg": ..., "longitude_deg_east": ...}')
+    latitude, longitude = float(night["latitude_deg"]), float(night["longitude_deg_east"])
+    if not (np.isfinite(latitude) and -90.0 <= latitude <= 90.0):
+        raise ValueError("the night latitude must lie between -90 and 90 degrees")
+    if not (np.isfinite(longitude) and -180.0 <= longitude <= 360.0):
+        raise ValueError("the night longitude must lie between -180 and 360 degrees east")
+    return latitude, longitude
+
+
+def _frame_times(paths: Sequence[str], capture_format: str, block_samples: int, counts: np.ndarray) -> np.ndarray:
+    """Return the Unix time in seconds of each frame that _load_fines returns for the same paths.
+
+    counts[i] is the number of frames _load_fines took from the i-th expanded capture. A dtv_fine_powers window
+    gives all its frames the start time of the window (fpga_seq_time_nsec), within 43 s of each; a chime_baseband
+    capture steps from time0_ctime by its block. A chord_baseband capture records no time, so it is refused.
+    """
+    import h5py
+
+    from pilot_proxy.run_files import read_attrs
+
+    times = []
+    for index, path in enumerate(_expand(paths)):
+        n = int(counts[index]) if index < len(counts) else 0
+        if not n:
+            continue
+        if capture_format == "dtv_fine_powers":
+            start_ns = int(read_attrs(path).get("fpga_seq_time_nsec", -1))
+            if start_ns < 0:
+                raise ValueError(f"{path} records no fpga_seq_time_nsec, so its frames have no time for the night option")
+            times.append(np.full(n, start_ns / 1e9))
+        elif capture_format == "chime_baseband":
+            with h5py.File(path, "r") as handle:
+                if "time0_ctime" not in handle.attrs:
+                    raise ValueError(f"{path} records no time0_ctime, so its frames have no time for the night option")
+                t0 = float(handle.attrs["time0_ctime"])
+                start = (-int(handle.attrs["time0_fpga_count"])) % block_samples
+            times.append(t0 + (start + np.arange(n) * block_samples) * BASEBAND_SAMPLE_SECONDS)
+        else:
+            raise ValueError(f"{capture_format} captures record no frame time, so the night option cannot select them")
+    return np.concatenate(times) if times else np.empty(0)
+
+
+def _night_frames(paths: Sequence[str], capture_format: str, block_samples: int, captures: np.ndarray,
+                  site: tuple[float, float]) -> np.ndarray:
+    """Return True for each frame of _load_fines(paths) recorded with the Sun below the horizon at the site."""
+    counts = np.bincount(captures, minlength=len(_expand(paths)))
+    times = _frame_times(paths, capture_format, block_samples, counts)
+    if len(times) != len(captures):
+        raise ValueError("the frame times do not match the frames read")
+    return is_night(times, *site)
 
 
 def _expand(paths: Sequence[str]) -> list[str]:
@@ -641,6 +708,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
     if decision not in FINE_DECISION_VERSIONS:
         raise ValueError(f"decision_version must be one of {FINE_DECISION_VERSIONS}, got {decision!r}")
 
+    night_site = _night_site(plan)
+    if night_site is not None and not control:
+        raise ValueError("the night option of default_word takes its quantile from a control channel, and the plan has none")
+
     with tempfile.TemporaryDirectory() as temp:
         wanted = sorted({*channels, *([int(control["channel"])] if control else [])})
         bundle, bank = _export(plan, base, wanted, Path(temp) / "all")
@@ -652,34 +723,43 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             anchor = nominal_fine_bin(row["pilot_frequency_hz"], row["coarse_channel_center_hz"], cell_hz, descending)
             bulk, control_rank = _geometry(anchor, (), decision)
             fines, control_captures = _load_fines(control["captures"], fmt, row, bank, k, reverse, max_frames)
+            # the quantile reads the night frames only, when the plan asks; the corrections read every frame
+            night = (_night_frames(control["captures"], fmt, k * WINDOWS, control_captures, night_site)
+                     if night_site is not None else np.ones(len(fines), dtype=bool))
+            if not night.any():
+                raise ValueError("no control frame was recorded with the Sun below the horizon at the night site")
+            quiet = fines[night]
             control_weights = _weights(row, bank)
             control_norms = weight_norms(control_weights)
             # the corrections of the power-limit test read the control again under the words of each channel
             control_frames = (fines, control_captures, control_norms) if inputs else None
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
-                null_scores(fines[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=control_rank,
+                null_scores(quiet[lo:lo + NULL_CHUNK], anchor_bin=anchor, bulk=bulk, rank=control_rank,
                             decision_version=decision)
-                for lo in range(0, len(fines), NULL_CHUNK)])
+                for lo in range(0, len(quiet), NULL_CHUNK)])
             control_record = dict(channel=int(control["channel"]), receiver_channel_id=int(row["receiver_channel_id"]),
                                   anchor_bin=anchor, bulk_bins=_bin_list(bulk), cfar_rank=control_rank,
                                   weights_hex=control_weights.hex(), frames=len(fines),
                                   captures=[str(Path(p).resolve()) for p in _expand(control["captures"])])
-            source = "control channel"
+            if night_site is not None:
+                control_record["night"] = dict(latitude_deg=night_site[0], longitude_deg_east=night_site[1],
+                                               frames=int(night.sum()))
+            source = "control channel" if night_site is None else "control channel, night frames"
         else:
             scores = simulated_null_scores(int(plan["num_inputs"]), decision_version=decision)
             control_record = None
             source = f"white noise, {int(plan['num_inputs'])} inputs"
         # v3 searches every bin, so a frame holds one independent null score, not clear_searches()
         per_frame = 1 if decision == FINE_DECISION_V3_VERSION else clear_searches()
-        independent = (len(fines) if control else MIN_SIMULATED_FRAMES) * per_frame
+        independent = (len(quiet) if control else MIN_SIMULATED_FRAMES) * per_frame
         if independent * (1.0 - quantile) < 1:
             raise ValueError(f"{independent} independent null scores are too few for quantile {quantile}")
         v3 = decision == FINE_DECISION_V3_VERSION
         factors = _passband_factors(plan) if v3 else {}
         if v3 and control:
             # the quantile of the exact keep words of the control frames that have a word
-            exact = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=control_rank, decision_version=decision)
+            exact = required_words(quiet, anchor_bin=anchor, bulk=bulk, rank=control_rank, decision_version=decision)
             exact = exact[(exact >= 0) & (exact < MAX_SCORE)]
             quantile_q16 = float(np.quantile(exact.astype(np.float64), quantile))
             reference_level = null_power_ratio_from_weight_norms(*control_norms) * factors.get(int(control["channel"]), 1.0)
@@ -954,16 +1034,28 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
                    weight_bank_offset_bytes=0, weight_bank_nbytes=len(record["weights_hex"]) // 2)
         bulk = np.zeros(FINE_BINS, dtype=bool)
         bulk[record["bulk_bins"]] = True
-        fines, _ = _load_fines(plan["control"], fmt, row, bytes.fromhex(record["weights_hex"]), k, reverse, max_frames)
-        # a report written before version 2 calibrated version 1
-        words = required_words(fines, anchor_bin=record["anchor_bin"], bulk=bulk, rank=record["cfar_rank"],
-                               decision_version=calibration.get("decision_version", FINE_DECISION_VERSION))
-        word = int(calibration["floor_word_q16"])
-        rate = 1.0 - float(calibration["null_quantile"])
-        hits = int(np.count_nonzero(words > word))
-        tail = binomial_upper_tail(hits, words.size, rate)
-        check("false alarms on the control channel", tail >= MIN_TAIL,
-              f"{hits} of {words.size} frames masked, target {rate:.3f}, tail probability {tail:.2g}")
+        fines, test_captures = _load_fines(plan["control"], fmt, row, bytes.fromhex(record["weights_hex"]), k, reverse,
+                                           max_frames)
+        label = "frames"
+        night = record.get("night")
+        if night:
+            # a bundle calibrated on the night control is tested on the night control
+            fines = fines[_night_frames(plan["control"], fmt, k * WINDOWS, test_captures,
+                                        (night["latitude_deg"], night["longitude_deg_east"]))]
+            label = "night frames"
+        if not len(fines):
+            check("false alarms on the control channel", False,
+                  "the test control has no frame recorded with the Sun below the horizon, and the bundle was calibrated at night")
+        else:
+            # a report written before version 2 calibrated version 1
+            words = required_words(fines, anchor_bin=record["anchor_bin"], bulk=bulk, rank=record["cfar_rank"],
+                                   decision_version=calibration.get("decision_version", FINE_DECISION_VERSION))
+            word = int(calibration["floor_word_q16"])
+            rate = 1.0 - float(calibration["null_quantile"])
+            hits = int(np.count_nonzero(words > word))
+            tail = binomial_upper_tail(hits, words.size, rate)
+            check("false alarms on the control channel", tail >= MIN_TAIL,
+                  f"{hits} of {words.size} {label} masked, target {rate:.3f}, tail probability {tail:.2g}")
     elif plan.get("control"):
         # the report may exist with no control record, when calibration simulated the control
         check("false alarms on the control channel", False,

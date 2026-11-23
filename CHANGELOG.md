@@ -5,6 +5,14 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `calibrate-bundle` takes an optional night site, `"default_word": {"night": {"latitude_deg": ...,
+  "longitude_deg_east": ...}}`, and then sets the control word over the control frames recorded with the Sun below
+  the horizon there (`sun.py`), as CHIME's 21 cm analyses use the data. In the day the Sun is common to every input
+  and raises the control's scores; on the CHIME archive the all-frame 99th percentile is 1.716 and the night one
+  1.133. The power-limit corrections still read every control frame, the report's control record gives the site and
+  the night frame count, and `test-bundle` counts the control's false alarms over its night frames. `plan-run` and
+  `process-run` write the block with `--night LATITUDE LONGITUDE`. Frame times come from each `dtv_fine_powers`
+  window and each `chime_baseband` capture (`time0_ctime`); `chord_baseband` captures record none and are refused.
 - Removed files nothing used: the v1-geometry rescoring CLI `detectors/narrowband_marker/rescore.py` and its
   tests, `scripts/check_scan.py`, three SDR tools (`audit_sdr_streaming_throughput.py`,
   `benchmark_sdr_upgrade_streaming.py`, `plot_sdr_antenna_controls.py`) and the two standalone figure wrappers.

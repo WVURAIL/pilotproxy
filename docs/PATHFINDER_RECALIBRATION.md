@@ -96,8 +96,12 @@ it follows the good inputs.
 ```bash
 ~/pp-venv/bin/pilot-proxy process-run --bundle-dir <bundle of the run> \
     --run "/mnt/cs00/data/dtv/acq_<start>/dtv_fine_powers*.h5" --epoch "<date> Pathfinder" \
-    --calibration-share <calibration_share of the chosen length> --output-dir run1
+    --calibration-share <calibration_share of the chosen length> --night 49.3208 -119.6236 --output-dir run1
 ```
+
+`--night` sets the control word over the night frames at DRAO, as the dissertation does. Taurus A transits near
+local midnight in November and still raises the night false alarms, so the calibration part should cover whole
+sidereal days.
 
 kotekan#1914 is in `develop` since 2026-11-20. Add `--decision-version fine_decision_v1` only for a stage
 built without it, and `--decision-version fine_decision_v3` for a stage with kotekan#1924. Read

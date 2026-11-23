@@ -602,7 +602,11 @@ and \code{--output-dir}. Under v3:
   \item \textbf{Control word.} The \code{null_quantile} (default 0.99) of the
         exact keep words of the control frames. With no control in the plan,
         the frames are simulated white noise over \code{num_inputs} streams,
-        with null level 1, and the word is only a first guess.
+        with null level 1, and the word is only a first guess. With the plan block
+        \code{"default_word": {"night": {...}}} (a site's latitude and east
+        longitude), only the control frames recorded with the Sun below the horizon
+        there enter, as CHIME's 21~cm analyses use the data; in the day the Sun
+        raises the scores of the control.
   \item \textbf{Default word.} The control word times the channel scale
         \(\lambda_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16, written
         as \code{cfar_multiplier_q16}. \(\mu_0\) comes from the stored weight

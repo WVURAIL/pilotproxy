@@ -93,10 +93,11 @@ open the papers' schema-v5 archives and form the same powers from their stored
 fine spectra. The CHIME archive scans of record were made with an earlier
 release; the tag `pre-purge-2026-11-23` holds the survey, scan and combine code.
 
-The threshold rule compares the signed shelf-power proxy, converted explicitly
-to additive covariance units, with the RFIsher schema-v3 response table.
-It selects the maximum-retention supported threshold satisfying the upper
-bias criterion. The exposure cost is 1/kappa. Follow docs/START_HERE.md.
+The power-limit test of `calibrate-bundle` converts the signed shelf-power proxy,
+corrected by the channel-37 control, to additive covariance units with the RFIsher
+schema-v3 response table. It selects the word that keeps the most frames while the
+upper residual power meets the checked limit. The exposure cost is 1/kappa. Follow
+docs/START_HERE.md.
 
 ## Maintainer checks
 

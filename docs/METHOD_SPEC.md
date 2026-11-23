@@ -179,8 +179,12 @@ The float prototype `fine_reduction.fine_reduce` uses `numpy.fft` or
 `sum_b S[n, b] = pad * windows * sum_m |z[n, m]|^2` is a property of that
 float prototype only, gated at ULP tolerance in its own tests.
 
-Detection over the fine bins uses a pre-registered null-bulk constant
-false-alarm rate (CFAR) test. The null is calibrated on the independent
+### Archive fine-bin diagnostic
+
+The archive post-processing reads the fine bins with a pre-registered null-bulk
+constant false-alarm rate (CFAR) test. It is a diagnostic of the stored fine
+powers and is not the deployed decision, which is fine decision v3 (see
+"Decision status" below). The null is calibrated on the independent
 non-designated bins, which are every `pad`-th bin with the designated
 transmitter bins, their guard margin, and any census-excluded bins removed. The
 location is the median, and the scale is the left-side spread (the median minus
@@ -188,8 +192,8 @@ the 15.87th percentile). When that bulk is itself contaminated (flag fraction
 above 0.2), the calibration falls back to lower quantiles (location = P25,
 scale = (P25 - P2.275)/2) and records the mode.
 
-Detections are declared on all bins against this calibration (the any-bin
-rule), which removes the census dependence of rules that test only the
+The diagnostic declares detections on all bins against this calibration (the
+any-bin rule), which removes the census dependence of rules that test only the
 designated bins. The flag rate over the non-designated independent bins is
 returned as `null_bulk_exceedance_fraction` on the `CfarCalibration` from
 `calibrate_cfar`. This rate is not stored in the per-pilot product, which keeps

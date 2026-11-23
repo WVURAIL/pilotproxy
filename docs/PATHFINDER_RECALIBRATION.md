@@ -38,9 +38,15 @@ From the choco host, which keeps the switches and pushes them to the nodes (a PO
 can be undone):
 
 ```bash
-choco set cx dtv_mask_enabled '{"enabled": false, "valid_at_time_ns": 0}'
+at=$(( ($(date +%s) + 20) * 1000000000 ))
+choco set cx dtv_mask_enabled "{\"enabled\": false, \"valid_at_time_ns\": $at}"
 choco set cx dtv_write_enabled '{"enabled": true}'
 ```
+
+A mask change carries a `valid_at_time_ns` a few seconds ahead, so every node switches at the same frame
+(`tools/pathfinder_mask_schedule.sh` and `tools/pathfinder_dtv_switch.py` do the same). With kotekan#1927 a
+posted 0, or a time already passed, applies from the next whole 5 s. An earlier build applies it at each
+stage's next frame, and `frac_dtv_mask_enabled` then records the switch up to about a second early.
 
 recv1 writes under `/mnt/cs00/data/dtv/acq_<start>/`, about 27 GB a day (1.14 GB in a calibration-mode
 hour, 2026-11-20). Record for longer than the calibration and test could need. Interruptions are fine:
@@ -129,7 +135,8 @@ With calibration mode on and `dtv_mask_control: true` (kotekan#1915, so the cont
 pilot), switch the mask on from the choco host and keep it on for at least a day:
 
 ```bash
-choco set cx dtv_mask_enabled '{"enabled": true, "valid_at_time_ns": 0}'
+at=$(( ($(date +%s) + 20) * 1000000000 ))
+choco set cx dtv_mask_enabled "{\"enabled\": true, \"valid_at_time_ns\": $at}"
 choco set cx dtv_write_enabled '{"enabled": true}'
 ```
 

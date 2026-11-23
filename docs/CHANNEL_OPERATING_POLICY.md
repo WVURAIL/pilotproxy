@@ -131,16 +131,18 @@ acceptance work that remains.
 
 The review exports disjoint `permanent_mask_freq_ids` and
 `require_fine_freq_ids`, exact `required_threshold_bindings`, and
-`pending_freq_ids`. `permanent_mask_freq_ids` is the consumer encoding of the
-reject-all threshold limit and adds no scientific category. Missing or invalid
-measurements remain validity conditions, and the threshold limit must never
+`pending_freq_ids`. When the channel 37 control is compiled, it also exports
+`control_freq_ids` and `control_bindings`, the control's binding at its word.
+`permanent_mask_freq_ids` is the consumer encoding of the reject-all threshold
+limit and adds no scientific category. Missing or invalid measurements remain
+validity conditions, and the threshold limit must never
 turn them into valid data or retained exposure.
 
 `deployment_configuration_complete` is true only when no deployed channel is
 pending. Only then is
-`kotekan_parameters` populated with the two consumer lists, and otherwise it is
-null. Every review keeps `activation_authorized: false` and
-`science_certification: false`.
+`kotekan_parameters` populated with the two consumer lists, and with
+`control_freq_ids` when a control is compiled. Otherwise it is null. Every
+review keeps `activation_authorized: false` and `science_certification: false`.
 
 Before activation, independently check the named consumer implementation, live
 receiver IDs and input state, exact bundle and threshold bindings, era, full-rate

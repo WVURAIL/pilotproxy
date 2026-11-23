@@ -742,7 +742,8 @@ Every capture has equal total weight in the knee, so a long capture does not set
 \pfield{channels.<ch>.masked_fraction}, \pfield{masked_at_floor} & The share of blocks masked at the word and at the control word.\\ \hline
 \pfield{channels.<ch>.pilot_share}, \pfield{pilot_in_nearly_every_frame} & Estimated share of blocks with a pilot, and whether it is above 0.9.\\ \hline
 \pfield{channels.<ch>.knee_interval_q16} & 16th and 84th percentiles of the knee over resampled captures. A wide interval means more captures are needed. A diagnostic only under v3.\\ \hline
-\pfield{channels.<ch>.masked_interval} & 2.5th and 97.5th percentiles of the masked fraction over resampled captures. \code{test-bundle} tests against it.\\ \hline
+\pfield{channels.<ch>.masked_interval} & 2.5th and 97.5th percentiles of the masked fraction over resampled captures, at the default word. \code{test-bundle} tests against it.\\ \hline
+\pfield{channels.<ch>.applied_masked_interval} & v3 with a BAO word other than the default word. The same interval at the BAO word, which \code{DtvRfiMask} applies. \code{test-bundle} tests against it.\\ \hline
 \pfield{channels.<ch>.strongest_bin_median_ratio}, \pfield{strongest_bin_masked_fraction} & Median fine ratio at the strongest bin, and the share of blocks above the control word. These show faint lines.\\ \hline
 \end{longtable}
 
@@ -800,11 +801,11 @@ structure and digests & \code{validate-runtime-weight-bundle} reports no errors.
 every bound channel has values & No profile is \code{pending_campaign}.\\ \hline
 test data differ from calibration data & No test capture is in the report's calibration or control captures, by path or by identity: a copy, a hard link or another layout of the same windows is the same capture.\\ \hline
 rank support on channel \(c\) & Every block of the channel has a decision: \(d_\rho > 0\) under v3, a valid rank under v1 and v2.\\ \hline
-masked fraction on channel \(c\) & The masked count at the default word is consistent with a rate inside the calibration's \code{masked_interval}. A channel calibrated with no captures has no interval and fails: recalibrate it with captures, or leave it out of the bundle. \code{qualify-bundle} needs this check to pass on every calibrated channel.\\ \hline
+masked fraction on channel \(c\) & The masked count at the word \code{DtvRfiMask} applies is consistent with a rate inside the calibration's interval at that word: \code{applied_masked_interval} at the BAO word where the bundle carries one, and \code{masked_interval} at the default word otherwise. A report with no interval at the BAO word fails, and the channel needs a recalibration. A channel calibrated with no captures has no interval and fails: recalibrate it with captures, or leave it out of the bundle. \code{qualify-bundle} needs this check to pass on every calibrated channel.\\ \hline
 false alarms on the control channel & The control's masked count at the control word is not above the rate \(1-\)\code{null_quantile} (an upper-tail test). A test plan without a control fails this check.\\ \hline
 \end{longtable}
 
-The control check tests the control word on new data. Under v3 every default word is that word scaled to its channel, and under v1 and v2 every word is at or above it, so the check stands for the false alarms of every channel at its default word. Neither check tests the BAO word that \code{DtvRfiMask} applies where the bundle carries one: that word is in-sample until a run on independent data tests it. The masked-fraction check shows that the test data are masked like the calibration data. Neither check can show that a word catches weak pilots, since the captures do not say which blocks hold one. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is qualified.
+The control check tests the control word on new data. Under v3 every default word is that word scaled to its channel, and under v1 and v2 every word is at or above it, so the check stands for the false alarms of every channel at its default word. Where the bundle carries a BAO word, the masked-fraction check tests it on the held-out captures. It does not test the power limit the word was chosen to meet, which rests on the calibration captures. The masked-fraction check shows that the test data are masked like the calibration data. Neither check can show that a word catches weak pilots, since the captures do not say which blocks hold one. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is qualified.
 
 \subsection{Processing a Run in One Step}
 
@@ -996,7 +997,7 @@ python tools/analyze_dtv_run.py --run-dir /scratch/dtv/<run> --bundle-dir <bundl
   \item \code{combine_pathfinder_dtv_run.py} stacks the per-window files of each closed acquisition into one file per half and product, \code{dtv_<product>.<half>.combined.h5}, and reads every window back against its source. A day of a calibration-mode run is about 56\,000 files. The run commands and \code{check_pathfinder_dtv_run.py} read either form.
   \item \code{check_pathfinder_dtv_run.py} reads the recv node's files. For each channel it reports windows and gaps, missing blocks, valid tests, the masked percent, the peak fine bin (against the bundle anchor under v1 and v2), and the visibilities' \code{frac_dtv_mask_enabled}.
   \item \code{analyze_dtv_run.py} reads the raw CHIME products. It needs all three of \code{dtv_mask}, \code{dtv_powers} and \code{dtv_fine_support}, so the run must have \code{dtv_calibration_mode}. It checks equal frame counts, gaps in \code{fpga_seq_num}, the zero rows of unbound frequencies, rank support (v1 and v2), and the masked fraction of each channel. With \code{--bundle-dir}, it decides the v3 channels from \code{dtv_stat} at each channel's word.
-  \item \code{pilot-proxy replay-fine-capture} compares the stage with the reference bit for bit, from a baseband dump taken during the run (\code{docs/CAPTURE_FINE_REPLAY.md}).
+  \item \code{pilot-proxy replay-fine-capture} compares the stage with the reference bit for bit, from a raw capture of the voltages and the stage's products: the mask under v1 and v2, and \code{dtv_stat} under v3 (\code{docs/CAPTURE_FINE_REPLAY.md}). Its reader takes only the metadata layout of an older Kotekan build, so it cannot yet replay a capture from a build that writes \code{dtv_stat}.
 \end{itemize}
 
 \subsection{Score Cache}

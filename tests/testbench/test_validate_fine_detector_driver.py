@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 from types import SimpleNamespace
 
 import numpy as np
@@ -430,11 +431,34 @@ def minimal_calibration(tmp_path, monkeypatch):
     return plan, artifact
 
 
-def test_calibration_requires_full_completed_raw_coverage(tmp_path, monkeypatch):
+def test_calibration_refuses_a_missing_bound_input(tmp_path, monkeypatch):
     plan, artifact = minimal_calibration(tmp_path, monkeypatch)
     assert d.verify_calibration(tmp_path, plan) == artifact
     (tmp_path / "raw/null_calibration/000000.json").unlink()
-    with pytest.raises((ValueError, FileNotFoundError)):
+    with pytest.raises(FileNotFoundError):
+        d.verify_calibration(tmp_path, plan)
+
+
+@pytest.mark.parametrize(
+    "damage,message",
+    [
+        ("extra", "Unexpected or incomplete null-calibration raw inventory"),
+        ("unbound", "lacks full raw null-calibration coverage"),
+    ],
+)
+def test_calibration_requires_exact_null_shard_coverage(
+    tmp_path, monkeypatch, damage, message
+):
+    plan, artifact = minimal_calibration(tmp_path, monkeypatch)
+    raw = tmp_path / "raw/null_calibration/000000.npz"
+    if damage == "extra":
+        shutil.copy(raw, raw.with_name("000032.npz"))
+    else:
+        del artifact["calibration_inputs_sha256"]["raw/null_calibration/000000.json"]
+        (tmp_path / "calibration.json").unlink()
+        (tmp_path / "calibration.sha256").unlink()
+        save_json(tmp_path / "calibration.json", artifact)
+    with pytest.raises(ValueError, match=message):
         d.verify_calibration(tmp_path, plan)
 
 

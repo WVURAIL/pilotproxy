@@ -114,12 +114,15 @@ the exact fine powers (`capture_reference.expected_products`). A capture
 recorded by a stage that vendors a core before 3.0.0 carries row-domain sums
 and fails power parity, while its masks can still agree.
 
-The submitted loader binds physical channels 14 to 36. Unbound frequencies,
-such as a captured CH37 control, must have zero saved masks and coarse powers,
-and they receive parity checks but no fine score. In `stat` files, the rows of
+The submitted loader binds physical channels 14 to 36 and the CH37 control
+row of the bundle. A bound control is scored like a pilot, and its saved mask
+must be zero, as the stage writes it without `mask_control`. Unbound
+frequencies must have zero saved masks and coarse powers, and they receive
+parity checks but no fine score. In `stat` files, the rows of
 unbound, v1 and v2 frequencies must hold `[0, 2^64 - 1]`, the pair of a row
 the detector does not evaluate. Every bound captured profile
-must be in the export with `fine_calibration.status: calibrated`. That label is
+must be in the export with `fine_calibration.status: calibrated`, or
+`control` on CH37. That label is
 checked as configuration only and is never accepted as scientific evidence.
 
 The native metadata field `stream_ids` labels the received packets, while the

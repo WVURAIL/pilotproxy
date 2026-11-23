@@ -110,11 +110,14 @@ def make_example(
     decision_version=FINE_DECISION_VERSION,
     stat=None,
     v3_words=None,
+    control=False,
+    frequency_ids=(2408, 1600),
 ):
     """Write a new example directory and return its replay plan path.
 
     The dtv_stat frames are written when ``stat`` is true. By default they are written for fine_decision_v3 only.
     ``v3_words`` replaces the Q16 words of a fine_decision_v3 calibration.
+    ``control`` adds the channel-37 control row (chord id 3115), bound when 3115 is in ``frequency_ids``.
     """
     if decision_version not in FINE_DECISION_VERSIONS:
         raise ValueError(f"unknown decision version {decision_version!r}")
@@ -159,7 +162,7 @@ def make_example(
         receiver_profile_path=output / "receiver.json",
         detector_core_profile_path=REPO
         / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json",
-        physical_channels=[14],
+        physical_channels=[14, 37] if control else [14],
         weight_coordinate_system=weight_coordinate_system,
         output_dir=output / "bundle",
     )
@@ -180,18 +183,19 @@ def make_example(
             "cfar_rank": int(sum(bulk) // 2),
             "cfar_multiplier_q16": 196608,
         }
-    bundle["profiles"][0]["fine_calibration"] = {
-        "status": "calibrated",
-        "decision_version": decision_version,
-        **fields,
-        "provenance": {
-            "epochs": ["synthetic_fixture_only"],
-            "null_quantile": 0.99,
-            "source_product_sha256": [
-                file_ref(output / "synthetic_evidence.json", output)["sha256"]
-            ],
-        },
-    }
+    for row in bundle["profiles"]:
+        row["fine_calibration"] = {
+            "status": "control" if row["physical_channel"] == 37 else "calibrated",
+            "decision_version": decision_version,
+            **fields,
+            "provenance": {
+                "epochs": ["synthetic_fixture_only"],
+                "null_quantile": 0.99,
+                "source_product_sha256": [
+                    file_ref(output / "synthetic_evidence.json", output)["sha256"]
+                ],
+            },
+        }
     write_json(bundle_path, bundle)
     sums = output / "bundle" / DEFAULT_SHA256SUMS_FILENAME
     sums.write_text(
@@ -202,7 +206,7 @@ def make_example(
         )
     )
     geometry = CaptureGeometry(
-        num_times=8192, k=64, frequency_ids=(2408, 1600), num_dishes=1
+        num_times=8192, k=64, frequency_ids=tuple(frequency_ids), num_dishes=1
     )
     first_sequence = 1000000
     packing = {
@@ -381,7 +385,12 @@ def make_example(
                     ],
                 },
             }
-        ],
+        ]
+        + (
+            [{"physical_channel": 37, "profile_id": "synthetic-CH37"}]
+            if control and 3115 in geometry.frequency_ids
+            else []
+        ),
     }
     write_json(output / "plan.json", plan)
     return output / "plan.json"

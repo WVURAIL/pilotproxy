@@ -32,13 +32,13 @@ STAND_INS = {
 }
 
 
-def withheld_paths(text: str) -> list[str]:
-    """Return the paths in the fenced block that follows the "## Code-only cut" heading."""
+def withheld_paths(text: str, heading: str = "## Code-only cut") -> list[str]:
+    """Return the paths in the fenced block that follows `heading`."""
     lines = text.splitlines()
     try:
-        start = next(i for i, line in enumerate(lines) if line.strip() == "## Code-only cut")
+        start = next(i for i, line in enumerate(lines) if line.strip() == heading)
     except StopIteration:
-        raise SystemExit(f"{LIST_FILE.name}: no '## Code-only cut' section") from None
+        raise SystemExit(f"{LIST_FILE.name}: no '{heading}' section") from None
     fence = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("```"))
     end = next(i for i in range(fence + 1, len(lines)) if lines[i].startswith("```"))
     return [line.strip() for line in lines[fence + 1:end] if line.strip() and not line.startswith("#")]

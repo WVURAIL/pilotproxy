@@ -8,8 +8,9 @@ its papers reproduce from them.
 
 Their public release needs CHIME collaboration clearance under its publication policy.
 Until that clearance is given, a public copy of this repository must be the code-only
-cut described at the end of this page. Material that is not CHIME data (the synthetic
-GNU Radio benches, the designed weight banks, RFIsher's forecast tolerance table) is not listed.
+cut described at the end of this page. Material that is not CHIME data (the designed weight
+banks, RFIsher's forecast tolerance table) is not listed, except evidence folders, which are
+listed under Not CHIME data so that each one is accounted for.
 
 ## Data files
 
@@ -35,10 +36,13 @@ They stay in both cuts. Review them before any public release:
 - `docs/DESIGN_DECISIONS.md`: archive measurements behind design choices (for example
   the coarse flag's false-alarm rate on quiet frames, the control's all-frame and night
   99th percentiles, and the least ratios of the BAO-word cross-check).
-- `docs/PilotProxy_DD001_Design_Document.tex` and its PDF: the BAO-word cross-check on the
-  archive (channels 21, 29 and 32 under the worst case).
+- `docs/PilotProxy_DD001_Design_Document.tex` and its PDF: the coarse operating points and
+  receiver operating characteristic measured on the archive, and the BAO-word cross-check
+  (the channels a plan without its offset and margin would pass).
 - `CHANGELOG.md`: archive results quoted in release notes (for example the control's
   99th percentiles 1.716 all-frame and 1.133 at night).
+- `docs/METHOD_SPEC.md`: the difference of the two fine-power definitions on the archive
+  frames (median relative 2.75e-6, p99 1.65e-5).
 - `docs/PER_PILOT_PRODUCT_FIELDS.md`: railed-sample counts measured on real CHIME baseband
   (freq_id 506).
 - Test goldens written inline: verified off dates
@@ -46,6 +50,15 @@ They stay in both cuts. Review them before any public release:
   control's frame counts and 99th-percentile words (tests/core/test_default_word_pin.py).
   Tests that need the withheld files skip in the code-only cut, but their source
   still holds these values.
+
+## Not CHIME data
+
+These evidence folders hold no CHIME-derived values and stay in the code-only cut. Every
+entry of `docs/evidence/` is listed either here or under Code-only cut, and a test checks it.
+
+```
+docs/evidence/v3_timing_laptop_2026-11-21/
+```
 
 ## Era lists
 

@@ -500,17 +500,19 @@ def _instrument_boundaries(pop: Sequence[MonthRecord], config: EraConfig) -> tup
     established = set(pop[0].input_maps) if pop else set()
     for k, record in enumerate(pop[1:], start=1):
         maps = set(record.input_maps)
-        new = sorted(maps - established)
+        changed = maps ^ established
         window = pop[k: k + config.persistence_months]
-        held = [v for v in new
-                if len(window) == config.persistence_months and all(v in r.input_maps for r in window)]
-        failed = [v for v in new if v not in held]
-        excursions.extend(Excursion(record.month, "instrument", v[:8]) for v in failed)
-        if held:
+        # a map that enters or leaves must stay so for persistence_months; only an entering map is a change
+        held = {v for v in changed
+                if len(window) == config.persistence_months and all((v in r.input_maps) == (v in maps) for r in window)}
+        failed = changed - held
+        # flag the maps that entered for one month, or the ones that left for one month if none entered
+        flagged = sorted(failed & maps) or sorted(failed)
+        excursions.extend(Excursion(record.month, "instrument", v[:8]) for v in flagged)
+        if held & maps:
             boundaries.append(Boundary(EVIDENCE_INSTRUMENT, pop[k - 1].month, record.month, (),
                                        ";".join(sorted(established)), ";".join(sorted(maps))))
-        if held or not failed:
-            established = maps - set(failed)
+        established ^= held
     return boundaries, excursions
 
 

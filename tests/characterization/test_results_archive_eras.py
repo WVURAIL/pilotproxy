@@ -190,6 +190,10 @@ def test_the_old_map_returning_after_a_one_month_excursion_is_not_a_change():
     assert [(e.month - M0, e.detail) for e in seg.excursions if e.kind == "instrument"] == [(2, "b")]
     seg = segment([_rec(i, 2.0, maps=(m,)) for i, m in enumerate("aabbb")])
     assert _spans(seg) == [(0, 1, PROXY_HIGH), (2, 4, PROXY_HIGH)] and seg.instrument_change_months == (M0 + 2,)
+    # an established map missing for one month is an excursion too
+    seg = segment([_rec(i, 2.0, maps=m) for i, m in enumerate(["ab", "ab", "a", "ab", "ab", "ab"])])
+    assert _spans(seg) == [(0, 5, PROXY_HIGH)] and seg.instrument_change_months == ()
+    assert [(e.month - M0, e.detail) for e in seg.excursions if e.kind == "instrument"] == [(2, "b")]
 
 
 def test_coincident_boundaries_join_their_evidence_and_records_name_transitions():

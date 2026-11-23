@@ -159,8 +159,11 @@ def test_grid_preserves_downward_and_plateau_crossings_and_fallback():
     records = details["curves"]
     half = next(r for r in records if r["target"] == .5)
     assert half["downward_brackets"] and half["plateau_segments"]
-    assert -66 in grid and -52.5 in grid
+    assert grid == list(np.arange(-66, -49.49, .75))
     assert not details["fallback_discovery_grid"]
+    # Only the downward bracket [-57, -54] reaches -54.75 to -52.5.
+    grid1, _ = REDUCER.curve_grid(snrs, {"down": np.array([0] * 3 + [1, .2] + [0] * 11)})
+    assert grid1 == list(np.arange(-61.5, -52.49, .75))
     grid2, details2 = REDUCER.curve_grid(snrs, {"oscillating": rates, "unbracketed": np.zeros(16)})
     assert details2["fallback_discovery_grid"]
     assert set(snrs) <= set(grid2)

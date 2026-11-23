@@ -77,7 +77,7 @@ V=/mnt/cs00/data/kotekan_vis_files/subset
 ~/pp-venv/bin/python tools/pathfinder_input_counts.py --vis "$V/acq_<run>*/vis_*.h5" "$V/acq_<run>*/.partial/vis_*.h5" \
     --output inputs.npz
 ~/pp-venv/bin/python tools/calibration_length.py --bundle-dir <bundle of the run> \
-    --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --hours 3 6 12 24 48 --input-counts inputs.npz \
+    --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --hours 23.93 47.87 71.8 --input-counts inputs.npz \
     --night 49.3208 -119.6236 --output-dir length
 ```
 
@@ -90,10 +90,13 @@ files of the run's acquisitions and prints each change. The detector sums only t
 `--input-counts` adds each channel's good inputs to every row.
 
 Each length calibrates on the first part and tests on the rest. Lengths are clock hours from the first
-capture, so a gap leaves its hours empty; the tool prints each gap. Take the shortest length whose words
-still pass, and its `calibration_share` in `length/length.json`. Conditions change within a day, so expect
-at least one: on 2026-11-20 one hour gave channel 29's v2 knee as eta 3.90 from its first half and 2.22 from
-its second. `--block-hours 4` shows how each word follows the time of day, and with `--input-counts` how
+capture, so a gap leaves its hours empty; the tool prints each gap. Calibrate on whole sidereal days, 23.93 h
+each. Taurus A transits once per sidereal day and raises the control's false alarms to about 30% for about
+30 minutes. `test-bundle` compares each masked fraction with the hour-to-hour spread of the calibration, and a
+calibration with no transit in it understates that spread: on Run 1 the 6 h calibration failed the control
+check (bias/std 1.69), and 12, 18 and 24 h passed. Take the shortest number of sidereal days whose words still
+pass, and its `calibration_share` in `length/length.json`. Conditions also change within a day: on 2026-11-20
+one hour gave channel 29's v2 knee as eta 3.90 from its first half and 2.22 from its second. `--block-hours 4` shows how each word follows the time of day, and with `--input-counts` how
 it follows the good inputs.
 
 ## 4. Calibrate, test and qualify
@@ -105,8 +108,8 @@ it follows the good inputs.
 ```
 
 `--night` sets the control word over the night frames at DRAO, as the dissertation does. Taurus A transits near
-local midnight in November and still raises the night false alarms, so the calibration part should cover whole
-sidereal days.
+local midnight in November and still raises the night false alarms, so the calibration part covers whole
+sidereal days (step 3).
 
 kotekan#1914 is in `develop` since 2026-11-20. Add `--decision-version fine_decision_v1` only for a stage
 built without it, and `--decision-version fine_decision_v3` for a stage with kotekan#1924. Read

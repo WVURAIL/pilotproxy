@@ -1314,7 +1314,7 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
 
 
 def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plans, tmp_path):
-    # channel 29 calibrated with no captures has a word and no masked_interval; its test captures fail the check
+    # channel 29 calibrated with no captures has a word and no hourly masked fraction; its test captures fail the check
     plan = dict(plans["calibrate"], channels=dict(plans["calibrate"]["channels"], **{"29": []}))
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))

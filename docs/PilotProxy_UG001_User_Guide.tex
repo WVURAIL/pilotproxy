@@ -555,7 +555,7 @@ A bundle directory is named \code{<purpose>-<digest>}. The digest is the first 8
 \begin{tabularx}{\linewidth}{|L{0.30\linewidth}|Y|}
 \hline
 \textbf{File} & \textbf{Contents}\\ \hline
-\code{<dir>.report.json} & The calibration report (Table~\ref{tab:report}). \code{test-bundle} reads it for the predicted masked fractions, the calibration captures and the control record.\\ \hline
+\code{<dir>.report.json} & The calibration report (Table~\ref{tab:report}). \code{test-bundle} reads it for the hourly masked fractions, the calibration captures and the control record.\\ \hline
 \code{<dir>.decisions.json} & Only with \code{"threshold": "power_limit"}. The outcome of each channel in the form \code{compile-operating-policy} reads (schema \code{pilotproxy-power-decisions-v4}).\\ \hline
 test JSON (\code{--output-json}) & The \code{test-bundle} checks: \code{passed} and a list of \code{check}, \code{passed}, \code{detail}.\\ \hline
 \end{tabularx}
@@ -732,7 +732,7 @@ Every capture has equal total weight in the knee, so a long capture does not set
 \pfield{floor_source} & \code{control channel}, \code{white noise, <n> inputs}, or \code{the plan}.\\ \hline
 \pfield{control_quantile_q16}, \pfield{reference_level}, \pfield{default_word_rule} & v3 only. The control's quantile before rounding, the control's \(\mu_0 g\), and the rule of the default word.\\ \hline
 \pfield{null_quantile}, \pfield{null_scores} & The quantile, and the number of independent null scores behind it.\\ \hline
-\pfield{control} & The control record: channel, weights, captures, and the reference it was scored with. \code{test-bundle} uses it.\\ \hline
+\pfield{control} & The control record: channel, weights, captures, the reference it was scored with, and \code{masked_by_hour} at the control word over the frames the control word is taken from (the night frames with the night option). \code{test-bundle} uses it.\\ \hline
 \pfield{calibration_captures}, \pfield{calibration_capture_ids} & Every capture used, as an absolute path and as an identity: a recorded window by its time, sequence number and frequencies, any other file by its size and a digest of its ends. \code{test-bundle} compares both.\\ \hline
 \pfield{channels.<ch>.word_q16}, \pfield{eta}, \pfield{word_source} & The default word and its source.\\ \hline
 \pfield{channels.<ch>.mu0}, \pfield{passband_factor}, \pfield{scale} & v3 only. The channel's null level, passband factor, and scale \(\lambda_c\).\\ \hline
@@ -741,9 +741,9 @@ Every capture has equal total weight in the knee, so a long capture does not set
 \pfield{channels.<ch>.knee_word_q16} & v1 and v2 only. The knee.\\ \hline
 \pfield{channels.<ch>.masked_fraction}, \pfield{masked_at_floor} & The share of blocks masked at the word and at the control word.\\ \hline
 \pfield{channels.<ch>.pilot_share}, \pfield{pilot_in_nearly_every_frame} & Estimated share of blocks with a pilot, and whether it is above 0.9.\\ \hline
-\pfield{channels.<ch>.knee_interval_q16} & 16th and 84th percentiles of the knee over resampled captures. A wide interval means more captures are needed. A diagnostic only under v3.\\ \hline
-\pfield{channels.<ch>.masked_interval} & 2.5th and 97.5th percentiles of the masked fraction over resampled captures, at the default word. \code{test-bundle} tests against it.\\ \hline
-\pfield{channels.<ch>.applied_masked_interval} & v3 with a BAO word other than the default word. The same interval at the BAO word, which \code{DtvRfiMask} applies. \code{test-bundle} tests against it.\\ \hline
+\pfield{channels.<ch>.knee_interval_q16} & v1 and v2 only. 16th and 84th percentiles of the knee over resampled captures. A wide interval means more captures are needed.\\ \hline
+\pfield{channels.<ch>.masked_by_hour} & The hourly masked fractions at the default word: \code{word_q16}, their frame-weighted \code{mean} and standard deviation \code{std}, the number of bins \code{bins}, and \code{bin}. A bin is a UTC hour of frame time (\code{hour}), or a capture where the captures record no frame time (\code{capture: <reason>}). \code{test-bundle} tests against it.\\ \hline
+\pfield{channels.<ch>.applied_masked_by_hour} & v3 with a BAO word other than the default word. The same record at the BAO word, which \code{DtvRfiMask} applies. \code{test-bundle} tests against it.\\ \hline
 \pfield{channels.<ch>.strongest_bin_median_ratio}, \pfield{strongest_bin_masked_fraction} & Median fine ratio at the strongest bin, and the share of blocks above the control word. These show faint lines.\\ \hline
 \end{longtable}
 
@@ -801,9 +801,11 @@ structure and digests & \code{validate-runtime-weight-bundle} reports no errors.
 every bound channel has values & No profile is \code{pending_campaign}.\\ \hline
 test data differ from calibration data & No test capture is in the report's calibration or control captures, by path or by identity: a copy, a hard link or another layout of the same windows is the same capture.\\ \hline
 rank support on channel \(c\) & Every block of the channel has a decision: \(d_\rho > 0\) under v3, a valid rank under v1 and v2.\\ \hline
-masked fraction on channel \(c\) & The masked count at the word \code{DtvRfiMask} applies is consistent with a rate inside the calibration's interval at that word: \code{applied_masked_interval} at the BAO word where the bundle carries one, and \code{masked_interval} at the default word otherwise. A report with no interval at the BAO word fails, and the channel needs a recalibration. A channel calibrated with no captures has no interval and fails: recalibrate it with captures, or leave it out of the bundle. \code{qualify-bundle} needs this check to pass on every calibrated channel.\\ \hline
-false alarms on the control channel & The control's masked count at the control word is not above the rate \(1-\)\code{null_quantile} (an upper-tail test). A test plan without a control fails this check.\\ \hline
+masked fraction on channel \(c\) & At the word \code{DtvRfiMask} applies, \(|\text{bias}| < \text{std}\). The bias is the test's mean masked fraction less the calibration's, and std is the standard deviation of the calibration's hourly masked fractions at that word: \code{applied_masked_by_hour} at the BAO word where the bundle carries one, and \code{masked_by_hour} at the default word otherwise. With a std of 0, as on a channel masked in every block, only a bias of 0 passes. A calibration of fewer than two hours has no std and fails. A report without the hourly fractions fails, and the channel needs a recalibration. A channel calibrated with no captures fails: recalibrate it with captures, or leave it out of the bundle. \code{qualify-bundle} needs this check to pass on every calibrated channel.\\ \hline
+false alarms on the control channel & The same test on the control at the control word, against the control record's \code{masked_by_hour}. A test plan without a control fails this check.\\ \hline
 \end{longtable}
+
+Both masked-fraction tests group the blocks by the UTC hour of their time and take each hour's fraction over its blocks with a decision. The mean is weighted by blocks. Blocks within an hour share the sky and the gains, so a count test that treats them as independent fails on the normal change of the sky from hour to hour. The hour-to-hour spread holds that change, and the rule is the one the dissertation's BAO test uses: a bias below one standard deviation. Where the captures record no frame time (\code{chord_baseband}), each capture is a bin, and the report and the check say so. On the Pathfinder, the Taurus A transit raises the control's false alarms once per sidereal day, so calibrate on whole sidereal days (\code{docs/PATHFINDER_RECALIBRATION.md}).
 
 The control check tests the control word on new data. Under v3 every default word is that word scaled to its channel, and under v1 and v2 every word is at or above it, so the check stands for the false alarms of every channel at its default word. Where the bundle carries a BAO word, the masked-fraction check tests it on the held-out captures. It does not test the power limit the word was chosen to meet, which rests on the calibration captures. The masked-fraction check shows that the test data are masked like the calibration data. Neither check can show that a word catches weak pilots, since the captures do not say which blocks hold one. The \code{word_source} and \code{pilot_share} of each channel, and its spectrogram, are read before a bundle is qualified.
 
@@ -1103,7 +1105,9 @@ HDF5 filter error on a \code{dtv_fine_powers} file & Install \code{hdf5plugin} (
 \code{did not pass}, \code{is not a test of}, \code{has no passing control check} & \code{qualify-bundle} needs a passing \code{--output-json} report of the same bundle, with a control.\\ \hline
 \code{has no passing masked-fraction check of channel} & The test plan left the channel out. Add captures of it to the test plan and test again, or leave the channel out of the bundle.\\ \hline
 \code{calibration had no captures of this channel} & The channel was calibrated from parameters alone. Recalibrate with captures of it before testing.\\ \hline
-Control false alarms fail in \code{test-bundle} & Control word too low, or a line on the control. Check the control spectrogram, then recalibrate with more epochs.\\ \hline
+\code{calibrate on more hours} & The calibration covers one hour, or one capture with no frame time, so it has no hour-to-hour spread. Calibrate on whole sidereal days.\\ \hline
+\code{no hourly masked fraction} & The report is from before the hourly masked fractions. Run \code{calibrate-bundle} again.\\ \hline
+Control false alarms fail in \code{test-bundle} & The control's masked fraction moved by more than its hourly spread: a line on the control, or a calibration that missed a source transit. Check the control spectrogram, then recalibrate on whole sidereal days.\\ \hline
 Masked fraction fails in \code{test-bundle} & The test captures differ from the calibration captures. Read the report and the spectrogram, then recalibrate with captures that cover both. A pilot that fades during the run can fail on the last part.\\ \hline
 \end{longtable}
 

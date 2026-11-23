@@ -5,6 +5,24 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `test-bundle` accepts a masked fraction when `|bias| < std`, the rule of the dissertation's BAO test. Frames are
+  grouped by the UTC hour of their time. The bias is the test's mean masked fraction less the calibration's, both
+  weighted by frames, and `std` is the standard deviation of the calibration's hourly fractions at the same word.
+  The rule applies to each channel at the word the stage applies and to the control at the control word, over its
+  night frames with the night option. With `std` 0 only a bias of 0 passes, and a calibration of fewer than two
+  hours fails. Captures that record no frame time (`chord_baseband`) are binned by capture, and the report says so.
+  `calibrate-bundle` records `masked_by_hour` for each channel and for the control, and `applied_masked_by_hour` at
+  a BAO word. A report without them fails and asks for a recalibration. Both checks stay blocking. They used to be a
+  binomial tail on the control and a bootstrap interval over captures, which treat the frames as independent; on
+  Pathfinder Run 1 they failed every calibration length. `masked_interval` and `applied_masked_interval` are no
+  longer written, and `knee_interval_q16` only for v1 and v2 channels. `PATHFINDER_RECALIBRATION.md` asks for
+  whole sidereal days of calibration, since Taurus A transits once per sidereal day.
+- `tests/core/test_v3_default_word_pin.py` pins the v3 default words against the dissertation
+  (`data/assembly/default_words.json` at 03ca6bb): the control's night and all-frame 99th percentiles and the 24
+  default words, from the control's keep words of the v3 score cache (`tests/data/v3_control_ch37_keep_words.npz`,
+  withheld from the code-only cut). `bundle_calibration.control_quantile_q16` is the quantile step that
+  `calibrate-bundle` uses.
+
 - Fixes from the 2026-11-22 review:
   - CHORD and Pathfinder weights in raw input coordinates are the mirror of the post bank; they were the post bank,
     blind to an upright pilot. `pack_channelized_streams_for_detector` takes a required `time_reverse_windows` flag

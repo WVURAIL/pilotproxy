@@ -5,6 +5,11 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `tools/threshold_rule.py` requires `--table`, the RFIsher channel table of the telescope, so the CHIME table is no
+  longer used when it is left out.
+- `CHIME_DERIVED.md` lists every `docs/evidence` entry, under Code-only cut or the new Not CHIME data, and
+  `tests/core/test_chime_derived.py` fails on one that is in neither. Its Inline quotes add `METHOD_SPEC.md` and DD001's
+  coarse operating points.
 - The power-limit test divides the corrected estimate and its margin by the pilot passband factor `r_c`, as the
   dissertation's BAO test does. A power-limit plan (and the `--power-limit` file) must give `pilot_passband` for every
   channel, the control included; for CHIME it is `r_c` of the dissertation's `pilot_passband.json`. Without it the test

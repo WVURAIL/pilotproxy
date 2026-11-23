@@ -1008,9 +1008,10 @@ To study the threshold of a channel by itself, \code{run-scores} writes each blo
 \begin{lstlisting}[style=shell]
 pilot-proxy run-scores --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
   --channel 18 24 29 --jobs 32 --output-dir scores
-python tools/threshold_rule.py --scores scores --power-limits limits.json --out thresholds
+python tools/threshold_rule.py --scores scores --table channel_table.json --channels 18,24,29 \
+  --power-limits limits.json --out thresholds
 \end{lstlisting}
-\code{run-scores} reads the block length and the sample period from each file. The result of \code{threshold_rule.py} is in-sample, so it is checked on a later part of the run or on another run.
+\code{--table} is the RFIsher channel table of this telescope; the tool has no default, so the CHIME table is never picked up by mistake. \code{run-scores} reads the block length and the sample period from each file. The result of \code{threshold_rule.py} is in-sample, so it is checked on a later part of the run or on another run.
 
 %======================================================================
 \section{Standalone and Synthetic Use}

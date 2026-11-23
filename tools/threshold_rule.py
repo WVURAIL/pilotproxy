@@ -15,7 +15,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--scores", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--table", type=Path)
+    ap.add_argument("--table", type=Path, required=True,
+                    help="RFIsher channel table of the telescope the scores come from")
     ap.add_argument("--channels", help="comma-separated channel numbers")
     ap.add_argument("--power-limits", type=Path, required=True,
                     help="JSON object mapping channel numbers to checked maximum additive powers in mK^2")

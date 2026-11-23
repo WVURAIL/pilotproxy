@@ -190,7 +190,7 @@ def test_candidate_cli_binds_relative_inputs_and_keeps_review_only_status(
                   "consumer_capability_implementation_verified", "null_quantile_threshold_claim"):
         assert report[field] is False
     assert report["kotekan_parameters"] is None
-    assert report["permanent_mask_channels"] == report["unmasked_channels"] == []
+    assert report["permanent_mask_channels"] == report["no_pilot_channels"] == []
     assert report["control_channel_37_bound"] is False
     proof = report["profiles"][0]
     assert proof["physical_channel"] == 29 and proof["receiver_channel_id"] == 614

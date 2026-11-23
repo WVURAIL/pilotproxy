@@ -13,11 +13,15 @@ one assignment at its receiver frequency ID:
   `threshold.kind: reject_all`, never as `eta_q16: 0`: the frozen detector
   uses a strict comparison, zero scores would not fire at zero, and zero is
   not a legal runtime multiplier. The row keeps the rule's reason.
-- **not deployed and not masked**: a not-useful decision whose reason is
-  `DTV without a matching pilot` (channel 19). The detector has no pilot to act
-  on there and would never fire, so the channel is `threshold.kind: pass_all`,
-  listed under `unmasked_freq_ids`, and absent from both consumer lists. Its
-  residual DTV is left to the other flaggers of the consumer. The 2026-10-12
+- **not deployed, no pilot**: a not-useful decision whose reason is
+  `DTV without a matching pilot` (channel 19). The stage still decides the
+  channel's calibrated profile whenever the mask is on, so the channel is
+  compiled at the word the stage applies (`v3_word` under v3,
+  `cfar_multiplier_q16` otherwise). At the reject word 1 it is `reject_all`.
+  At any other word it is a finite threshold in `require_fine_freq_ids`,
+  masked at least at the null false-alarm rate; `expected_masked_fraction` is
+  `1 - null_quantile` when the word is the default word. The channel is listed
+  under `no_pilot_freq_ids`, and its profile must be calibrated. The 2026-10-12
   decisions write this reason as `pilot not seen`. `calibrate-bundle`'s
   `pilot not seen in the calibration captures` is a different reason, a run that
   never showed the pilot, and is `reject_all`.
@@ -153,5 +157,5 @@ owner must approve activation. No review output changes a live configuration.
 
 `tests/core/test_operating_policy.py` compiles the frozen decisions in
 `tests/data/threshold_decisions_2026-10-12.json` on the CHIME
-receiver profile. Eight channels go to the permanent mask, channel 19 is left
-unmasked, and fourteen go to their words.
+receiver profile. Eight channels go to the permanent mask, channel 19 goes to
+its bundle word, and fourteen go to their words.

@@ -93,6 +93,30 @@ def test_decisions_compile_to_the_permanent_mask_and_the_deployed_word(case):
         op.write_policy(path, tmp / "review")
 
 
+def test_a_no_pilot_channel_compiles_at_the_word_the_stage_applies(case):
+    change_decisions(case, lambda rows: rows[14].update(reason="DTV without a matching pilot"))
+    # the stage decides the profile at its word, so a pending profile leaves nothing to compile
+    with pytest.raises(ValueError, match="channel 14: DTV without a matching pilot.*must be calibrated"):
+        analyze(case)
+    change_bundle(case, lambda rows: rows[14].update(fine_calibration=calibrated(70000, "a" * 64)))
+    report = analyze(case)
+    (row,) = [row for row in report["channels"] if row["physical_channel"] == 14]
+    assert row["threshold"] == {"kind": "finite", "eta_q16": "70000"} and row["reason"] == "DTV without a matching pilot"
+    assert row["expected_masked_fraction"] == pytest.approx(0.05)
+    assert report["no_pilot_freq_ids"] == [844] and report["permanent_mask_freq_ids"] == []
+    assert report["require_fine_freq_ids"] == [614, 844] and report["deployment_configuration_complete"]
+    # under v3 the reject word is the permanent mask
+    v3 = {"status": "calibrated", "decision_version": "fine_decision_v3", "cfar_multiplier_q16": 70000,
+          "power_limit_multiplier_q16": 1, "provenance": calibrated(1, "a" * 64)["provenance"]}
+    change_bundle(case, lambda rows: rows[14].update(fine_calibration=v3))
+    case[1]["consumer"]["capabilities"] = sorted(op.REQUIRED_CAPABILITIES | {op.V3_CAPABILITY})
+    report = analyze(case)
+    (row,) = [row for row in report["channels"] if row["physical_channel"] == 14]
+    assert row["threshold"] == {"kind": "reject_all"} and row["expected_masked_fraction"] == 1.0
+    assert report["no_pilot_freq_ids"] == report["permanent_mask_freq_ids"] == [844]
+    assert report["require_fine_freq_ids"] == [614]
+
+
 def test_the_control_band_is_reported_not_assigned(case):
     report = analyze(case)
     assert [row["physical_channel"] for row in report["not_in_policy"]] == [37]
@@ -234,11 +258,19 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
                 for ch, row in decisions.items() if row["outcome"] == "useful" and ch <= 36}
     # not deployed: above tolerance (17, 24), out of time (22, 30, 31, 35, 36), excluded (19, 33)
     assert sorted(ch for ch, row in decisions.items() if row["outcome"] == "not useful") == [17, 19, 22, 24, 30, 31, 33, 35, 36]
-    permanent = [506, 521, 552, 583, 598, 690, 721, 798]        # channel 19 (767) is left unmasked
+    permanent = [506, 521, 552, 583, 598, 690, 721, 798]
+    # channel 19 (767) has no pilot, and the stage decides it at its bundle word
+    profiles = read(bundle / "pilot_profiles.json")
+    for profile in profiles["profiles"]:
+        if profile["physical_channel"] == 19:
+            profile["fine_calibration"] = calibrated(70000, rc.sha256(FROZEN))
+    write(bundle / "pilot_profiles.json", profiles)
+    plan["bundle_files"] = refresh_bundle(bundle)
 
     write(plan_path, plan)
     report = op.analyze_policy(plan_path)
-    assert report["permanent_mask_freq_ids"] == permanent and report["unmasked_freq_ids"] == [767]
+    assert report["permanent_mask_freq_ids"] == permanent and report["no_pilot_freq_ids"] == [767]
+    assert report["require_fine_freq_ids"] == [767]
     assert report["pending_freq_ids"] == sorted(deployed) and report["kotekan_parameters"] is None
     assert [row["physical_channel"] for row in report["not_in_policy"]] == [37]
     for row in report["channels"]:
@@ -246,8 +278,8 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
         assert row["frequency_ids"] == [project.target_freq_id(str(row["physical_channel"]))]
         if decision["outcome"] == "useful":
             assert row["threshold"] == {"kind": "finite", "eta_q16": str(decision["deployed_word"])}
-        elif decision["reason"] in op.UNMASKED_REASONS:
-            assert row["threshold"] == {"kind": "pass_all"} and row["reason"] == decision["reason"]
+        elif decision["reason"] in op.NO_PILOT_REASONS:
+            assert row["threshold"] == {"kind": "finite", "eta_q16": "70000"} and row["reason"] == decision["reason"]
         else:
             assert row["threshold"] == {"kind": "reject_all"} and row["reason"] == decision["reason"]
 
@@ -261,10 +293,10 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
     report = op.analyze_policy(plan_path)
     assert report["deployment_configuration_complete"] is True
     assert report["kotekan_parameters"] == {"permanent_mask_freq_ids": permanent,
-                                            "require_fine_freq_ids": sorted(deployed)}
-    assert {int(b["receiver_channel_id"]): int(b["eta_q16"]) for b in report["required_threshold_bindings"]} == deployed
+                                            "require_fine_freq_ids": sorted({*deployed, 767})}
+    assert ({int(b["receiver_channel_id"]): int(b["eta_q16"]) for b in report["required_threshold_bindings"]}
+            == {**deployed, 767: 70000})
     assert not set(report["permanent_mask_freq_ids"]) & set(report["require_fine_freq_ids"])
-    assert not set(report["unmasked_freq_ids"]) & (set(permanent) | set(deployed))
 
 
 def with_control(case, *, word=72850, capability=True):

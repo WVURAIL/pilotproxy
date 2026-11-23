@@ -1155,7 +1155,7 @@ Archive products of record & Schema v5, detector contract v1: \code{chime_pilots
 Detect-only run, CHIME & Raw files \code{dtv_mask}, and with \code{dtv_calibration_mode} also \code{dtv_powers} and \code{dtv_fine_support}, 1024 frames per file; HDF5 \code{dtv_fine_powers}, about 43\,s per file, about 2.3\,MB/s per NUMA domain.\\ \hline
 Detect-only run, Pathfinder & Files on the recv node under \code{/mnt/cs00/data/dtv/acq_<start time>/}, one per NUMA half and window of about 43\,s. A v3 run also records \code{dtv_stat}.\\ \hline
 Calibration outputs & \code{bundle/}, \code{bundle.report.json}, and for the power-limit threshold \code{bundle.decisions.json} (\code{pilotproxy-power-decisions-v4}).\\ \hline
-Operating policy & \code{policy.json} from \code{compile-operating-policy}: a finite word, \code{reject_all} or \code{pass_all} per channel, with \code{permanent_mask_freq_ids} and \code{require_fine_freq_ids} for the consumer (\code{docs/CHANNEL_OPERATING_POLICY.md}).\\ \hline
+Operating policy & \code{policy.json} from \code{compile-operating-policy}: a finite word or \code{reject_all} per channel, with \code{permanent_mask_freq_ids} and \code{require_fine_freq_ids} for the consumer (\code{docs/CHANNEL_OPERATING_POLICY.md}).\\ \hline
 \end{longtable}
 
 Masked frames are dropped from averages and never replaced with zeros.

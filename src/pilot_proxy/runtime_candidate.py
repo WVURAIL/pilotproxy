@@ -302,8 +302,8 @@ def build_archive_candidate(plan_path, output_dir):
         "profiles": proofs,
         "permanent_mask_channels": sorted(ch for ch, decision in decisions.items()
                                           if operating_policy._threshold_kind(decision) == "reject_all"),
-        "unmasked_channels": sorted(ch for ch, decision in decisions.items()
-                                    if operating_policy._threshold_kind(decision) == "pass_all"),
+        "no_pilot_channels": sorted(ch for ch, decision in decisions.items()
+                                    if operating_policy._threshold_kind(decision) == "no_pilot"),
         "control_channel_37_bound": control, "runtime_bundle_validation": validation,
         "input_files_sha256": bindings,
         "source_plan": str(plan_path), "builder_source_sha256": runtime_calibration.sha256(__file__),

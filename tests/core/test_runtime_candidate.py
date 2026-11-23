@@ -103,7 +103,7 @@ def test_candidate_is_exactly_bound_but_not_a_deployment_configuration(case):
     assert report["kotekan_parameters"] is None
     assert report["selection_granularity"] == "detector_frame"
     assert report["permanent_mask_channels"] == [14]
-    assert report["unmasked_channels"] == []
+    assert report["no_pilot_channels"] == []
     assert not report["control_channel_37_bound"]
     bundle = case["output"] / "bundle"
     assert validate_runtime_weight_bundle(bundle_dir=bundle)["valid"]
@@ -122,30 +122,31 @@ def test_candidate_is_exactly_bound_but_not_a_deployment_configuration(case):
         op.write_policy(policy_path, case["output"] / "policy", require_complete=True)
 
 
-@pytest.mark.parametrize("reason,kind,permanent,unmasked", [
-    ("synthetic permanent-mask example", "reject_all", [14], []),
-    ("DTV without a matching pilot", "pass_all", [], [14]),
-    ("pilot not seen", "pass_all", [], [14]),
-])
-def test_candidate_mask_report_matches_compiled_policy(case, reason, kind, permanent, unmasked):
+def test_candidate_mask_report_matches_compiled_policy(case):
+    report = build_archive_candidate(case["plan_path"], case["output"])
+    policy = op.analyze_policy(policy_plan(case, case["output"] / "bundle"))
+    channels = {row["physical_channel"]: row for row in policy["channels"]}
+    assert channels[14]["threshold"] == {"kind": "reject_all"}
+    assert report["permanent_mask_channels"] == [14]
+    frequencies = sorted(channels[ch]["frequency_ids"][0] for ch in report["permanent_mask_channels"])
+    assert frequencies == policy["permanent_mask_freq_ids"]
+    assert channels[29]["threshold"] == {"kind": "finite", "eta_q16": "65536"}
+    assert report["profiles"][0]["word_q16"] == 65536
+    assert policy["required_threshold_bindings"][0]["eta_q16"] == "65536"
+
+
+@pytest.mark.parametrize("reason", ["DTV without a matching pilot", "pilot not seen"])
+def test_candidate_lists_a_no_pilot_channel_which_the_policy_decides_at_its_bundle_word(case, reason):
     path = Path(case["plan"]["decisions"]["path"])
     decisions = json.loads(path.read_text())
     decisions["channels"][0]["reason"] = reason
     case["plan"]["decisions"] = write(path, decisions)
     write(case["plan_path"], case["plan"])
     report = build_archive_candidate(case["plan_path"], case["output"])
-    policy = op.analyze_policy(policy_plan(case, case["output"] / "bundle"))
-    channels = {row["physical_channel"]: row for row in policy["channels"]}
-    assert channels[14]["threshold"] == {"kind": kind}
-    assert report["permanent_mask_channels"] == permanent
-    assert report["unmasked_channels"] == unmasked
-    for report_field, policy_field in (("permanent_mask_channels", "permanent_mask_freq_ids"),
-                                       ("unmasked_channels", "unmasked_freq_ids")):
-        frequencies = sorted(channels[ch]["frequency_ids"][0] for ch in report[report_field])
-        assert frequencies == policy[policy_field]
-    assert channels[29]["threshold"] == {"kind": "finite", "eta_q16": "65536"}
-    assert report["profiles"][0]["word_q16"] == 65536
-    assert policy["required_threshold_bindings"][0]["eta_q16"] == "65536"
+    assert report["no_pilot_channels"] == [14] and report["permanent_mask_channels"] == []
+    # the candidate leaves channel 14 pending, so the policy has no word to compile it at
+    with pytest.raises(ValueError, match="must be calibrated"):
+        op.analyze_policy(policy_plan(case, case["output"] / "bundle"))
 
 
 @pytest.mark.parametrize("field,value,match", [

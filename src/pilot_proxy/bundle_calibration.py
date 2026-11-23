@@ -87,7 +87,7 @@ PASSING_FIELDS = ("word", "kappa", "ratio", "x", "upper_shelf", "kept_frames", "
 # channel whole without a permanent list.
 REJECT_WORD_Q16 = 1
 # The reason of a channel whose calibration captures never showed its pilot, so its estimate reads only noise. It is
-# not the threshold rule's "DTV without a matching pilot", which the operating policy leaves unmasked.
+# not the threshold rule's "DTV without a matching pilot", which the operating policy compiles at the bundle word.
 NO_PILOT_REASON = "pilot not seen in the calibration captures"
 
 

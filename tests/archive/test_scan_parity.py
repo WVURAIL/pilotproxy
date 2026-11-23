@@ -41,7 +41,7 @@ K = 128
 N_FRAMES = 2
 N_FILES = 2
 N_FEEDS = 4
-CHANNELS = {14: 470.3125, 15: 476.3125}  # coarse-channel center (MHz) by ATSC channel
+CHANNELS = {14: 470.3125, 15: 476.171875}  # coarse-channel center (MHz) by ATSC channel
 # the same centers as CHIME freq_id, the namespace of the files and inventory
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
 

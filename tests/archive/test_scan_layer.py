@@ -834,7 +834,7 @@ def test_checkpoint_every_reaches_pipeline(tmp_path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     fmt.make_synth_file(str(data / "baseband_e_829.h5"), n_time=NFFT, n_feeds=N_FEEDS,
-                        f_center_mhz=476.3125, f_tone_bb=1200.0, seed=1)
+                        f_center_mhz=476.171875, f_tone_bb=1200.0, seed=1)
 
     with pytest.raises(_Stop):                       # explicit value is passed through
         run_chime_scan(input_dir=data, output_dir=tmp_path / "o1", source="local",
@@ -1128,7 +1128,7 @@ def test_scan_scope_records_the_storage_service_override(tmp_path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     fmt.make_synth_file(str(data / "baseband_e_829.h5"), n_time=NFFT,
-                        n_feeds=N_FEEDS, f_center_mhz=476.3125, f_tone_bb=1200.0,
+                        n_feeds=N_FEEDS, f_center_mhz=476.171875, f_tone_bb=1200.0,
                         seed=1)
 
     with pytest.raises(_Stop):

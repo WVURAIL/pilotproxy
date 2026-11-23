@@ -12,18 +12,28 @@ check_pathfinder_dtv_run.py read the combined files as they read the per-window 
 "<file>#<index>". The per-window files are not changed; delete them only once the combined ones are checked.
 Files of several frames with per-frame metadata (kotekan#1925) need no combining and are left out.
 An acquisition with a file changed in the last --settle-minutes (10) is taken as still being written and skipped,
-so the run's current acquisition is left for later. Writes combine.json beside each one.
+so the run's current acquisition is left for later. Writes combine.json beside each one, with the names of the
+files it combined. recv can add windows to an acquisition after a quiet gap, so an acquisition with files not in
+its combine.json is combined again. If files it combined before are gone (deleted once combined), combining again
+would drop their windows, so it is refused and the tool exits 1.
 """
 import argparse
 import glob
 import json
+import sys
 import time
 from pathlib import Path
 
-from pilot_proxy.run_files import combine
+from pilot_proxy.run_files import COMBINED, combine
 
 # stat is the [n_peak, d_rho] pair of fine decision v3 (dtv_stat), which a v3 run sends in place of the decision
 PRODUCTS = ["fine_powers", "mask", "powers", "fine_support", "stat"]
+
+
+def source_names(acq: Path, products: list[str]) -> list[str]:
+    """The per-window files of these products that combine() reads."""
+    return sorted(p.name for product in products for p in acq.glob(f"dtv_{product}.*.h5")
+                  if not p.name.endswith(COMBINED))
 
 
 def main():
@@ -37,11 +47,27 @@ def main():
     args = parser.parse_args()
     dirs = sorted({Path(p) for pattern in args.acq for p in glob.glob(pattern)} | {Path(p) for p in args.acq
                    if not glob.has_magic(p)})
+    refused = 0
     for acq in dirs:
         out = args.out / acq.name
+        names = source_names(acq, args.products)
         if (out / "combine.json").exists():
-            print(f"{acq.name}: already combined; skipped", flush=True)
-            continue
+            done = json.loads((out / "combine.json").read_text()).get("sources")
+            if done is None:
+                print(f"{acq.name}: combined by a version that kept no file list; delete its combine.json to "
+                      "combine it again; skipped", flush=True)
+                continue
+            new, gone = sorted(set(names) - set(done)), sorted(set(done) - set(names))
+            if not new:
+                print(f"{acq.name}: already combined; skipped", flush=True)
+                continue
+            if gone:
+                print(f"{acq.name}: {len(new)} new files, but {len(gone)} files combined before are gone, so "
+                      f"combining again would drop their windows; not combined. Combine the new files into another "
+                      f"--out.", file=sys.stderr, flush=True)
+                refused += 1
+                continue
+            print(f"{acq.name}: {len(new)} files written since it was combined; combining again", flush=True)
         newest = max((p.stat().st_mtime for p in acq.glob("dtv_*.h5")), default=0.0)
         if time.time() - newest < 60 * args.settle_minutes:
             print(f"{acq.name}: a file changed in the last {args.settle_minutes:g} min, so still being written; skipped",
@@ -54,9 +80,10 @@ def main():
                 if "file" in row:
                     print(f"{acq.name} {Path(row['file']).name}: {row['windows']} windows", flush=True)
         record = dict(acquisition=str(acq.resolve()), products=args.products, files=summary,
-                      verified=not args.no_verify, seconds=time.monotonic() - start)
+                      verified=not args.no_verify, seconds=time.monotonic() - start, sources=names)
         (out / "combine.json").write_text(json.dumps(record, indent=1) + "\n")
         print(f"{acq.name}: done in {record['seconds']:.0f} s", flush=True)
+    sys.exit(1 if refused else 0)
 
 
 if __name__ == "__main__":

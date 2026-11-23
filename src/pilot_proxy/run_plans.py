@@ -66,7 +66,8 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
     """Split the files of each bound channel in time, and write calibrate.json and test.json.
 
     decision_version, when given, names the test the words are set for, in place of the calibration
-    default: fine_decision_v1 for a Kotekan stage that runs only that test. night_site, when given as (latitude,
+    default fine_decision_v3: fine_decision_v2 for a Kotekan stage without kotekan#1924, and fine_decision_v1 for
+    one that runs only that test. night_site, when given as (latitude,
     east longitude) in degrees, takes the control quantile of the default word over the night frames there.
     """
     if not 0.0 < calibration_share < 1.0:

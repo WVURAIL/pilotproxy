@@ -117,8 +117,8 @@ it follows the good inputs.
 local midnight in November and still raises the night false alarms, so the calibration part covers whole
 sidereal days (step 3).
 
-kotekan#1914 is in `develop` since 2026-11-20. Add `--decision-version fine_decision_v1` only for a stage
-built without it, and `--decision-version fine_decision_v3` for a stage with kotekan#1924. Read
+New bundles are fine decision v3, which needs kotekan#1924. Add `--decision-version fine_decision_v2` for a
+stage built without it, and `--decision-version fine_decision_v1` for one built without kotekan#1914. Read
 `run1/summary.md` and the spectrograms, then qualify the bundle with the test report `run1/test.json`
 (Step 3 of the run guide).
 

@@ -169,8 +169,8 @@ procedures for running the detector are in the PilotProxy-UG001 User Guide
   \item No channel is qualified for masking. Every bundle in Kotekan is a
         detect-only commissioning bundle.
   \item The design is fine decision v3 (core 4.2.1). Kotekan \code{develop}
-        runs v1 and v2 bundles, and v3 waits on kotekan\#1924, so new
-        calibrations write v2 until it merges.
+        runs v1, v2 and, since kotekan\#1924, v3 bundles. New calibrations
+        write v3, and v2 is chosen explicitly.
   \item On Kotekan \code{develop}, the Pathfinder configuration runs the
         detector on every X-engine node, and the CHIME upgrade configuration
         runs it detect only.
@@ -592,10 +592,10 @@ captures of each channel with the deployed integer path. Each frame has a
 default word for every channel, and a BAO word where the power-limit test sets one. The BAO word is the point of the system. The default word
 is the generic threshold beside it.
 
-New bundles are \code{fine_decision_v2} until Kotekan runs v3
+New bundles are \code{fine_decision_v3}
 (\code{CALIBRATION_DECISION_VERSION} in \code{src/pilot_proxy/fine_decision.py}).
-The plan key \code{decision_version} writes v3, as does
-\code{--decision-version fine_decision_v3} of \code{plan-run} and
+The plan key \code{decision_version} writes v2 or v1 instead, as does
+\code{--decision-version} of \code{plan-run} and
 \code{process-run}; \code{calibrate-bundle} itself takes only \code{--plan}
 and \code{--output-dir}. Under v3:
 
@@ -759,7 +759,7 @@ probability near 1 but discards 48.5\% of verified-quiet time by construction.
 Products record their rule in \code{mask_rule}.}
 
 \subsection{The fine decision is the deployed decision}
-\choice{The deployed decision is the fine decision, and its design is v3 (Section~\ref{ssec:fine_decision}). The bundles shipped in Kotekan run v1. Kotekan \code{develop} runs v2 since kotekan\#1914, and v3 needs kotekan\#1924. New calibrations write v2 until Kotekan runs v3.}
+\choice{The deployed decision is the fine decision, and its design is v3 (Section~\ref{ssec:fine_decision}). The bundles shipped in Kotekan run v1. Kotekan \code{develop} runs v2 since kotekan\#1914, and v3 since kotekan\#1924. New calibrations write v3, and v2 is chosen explicitly.}
 {The receiver operating characteristic was measured on the archive. The
 coarse null bulk and the weak-signal bulk overlap almost completely, so each
 coarse operating point either discards about half the clean time or misses
@@ -854,8 +854,8 @@ residual analysis. The comparison is one header-only function in exact
 integers, so every consumer reaches the same keep bit.}
 {A consumer must reject \(d_\rho=0\) and keep the unevaluated row
 \((0,2^{64}-1)\). The pair is two \code{uint64} per channel and block instead
-of one mask byte. Kotekan \code{develop} does not read the pair until
-kotekan\#1924 merges, and until then new bundles are v2.}
+of one mask byte. Kotekan \code{develop} reads the pair since
+kotekan\#1924.}
 
 \subsection{The default word is the control's 1\% word}
 \choice{Under v3, the default word is the word of the control channel (37)
@@ -1076,7 +1076,7 @@ and a \code{fine_calibration} block:
 \textbf{Field} & \textbf{Meaning}\\ \hline
 \endhead
 \code{status} & \code{pending_campaign}, \code{calibrated}, or \code{control} (channel 37 only).\\ \hline
-\code{decision_version} & \code{fine_decision_v3}. \code{fine_decision_v2}, the calibration default until Kotekan runs v3, and \code{fine_decision_v1}, in earlier bundles, stay valid.\\ \hline
+\code{decision_version} & \code{fine_decision_v3}, the calibration default. \code{fine_decision_v2}, chosen explicitly, and \code{fine_decision_v1}, in earlier bundles, stay valid.\\ \hline
 \code{cfar_multiplier_q16} & The default word, in \([1,2^{64}-1]\), for any backend with no word of its own. Under v1 and v2, the only word.\\ \hline
 \code{power_limit_multiplier_q16} & v3 only, optional. The BAO word from the power-limit test, in \([1,2^{64}-1]\), applied by the correlator (N2) path.\\ \hline
 \code{provenance} & \code{epochs}, \code{source_product_sha256}, \code{null_quantile}, optional \code{note}, \code{summed_inputs} and \code{mask_qualification}. A pending block has empty lists and a null quantile. \code{mask_qualification} holds \code{test_report_sha256} and \code{reviewer}, and only a \code{calibrated} block may carry it.\\ \hline

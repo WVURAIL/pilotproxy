@@ -122,9 +122,8 @@ the operating documentation in these paths:
 - `docs/PRODUCT_SCHEMA.md` - the only supported per-pilot product contract.
 - `docs/PER_PILOT_PRODUCT_FIELDS.md` - detailed shared-field reference.
 - `docs/FINE_REDUCTION_PRODUCTS.md` - fine-measurement and diagnostic fields.
-- `docs/CHIME_RUN_WORKFLOW.md` - staged-data workflow (`chime-run`) for
-  already-staged HDF5 directories. Archive-scale `chime-scan` runs follow the
-  local or CANFAR guide below.
+- `docs/CHIME_RUN_WORKFLOW.md` - CHIME data contract, weight convention and
+  products of `chime-scan`, whose runs follow the local or CANFAR guide below.
 - `docs/DATA_PRODUCTS.md` - emitted file, array, and table definitions.
 - `docs/LOCAL_PROCESSING.md` - authoritative local WSL archive procedure.
 - `docs/CANFAR_RUNBOOK.md` - bounded CANFAR operating procedure.
@@ -269,7 +268,7 @@ each command that consumes it:
 
 ```bash
 pilot-proxy list-channels --weights-path weights/chime_dtv_weights_k128.bin
-pilot-proxy chime-run --weights-path weights/chime_dtv_weights_k128.bin --help
+pilot-proxy chime-scan --weights-path weights/chime_dtv_weights_k128.bin --help
 ```
 
 `list-channels` reports the reference placement for each physical channel.

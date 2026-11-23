@@ -33,8 +33,6 @@ from pilot_proxy.dtv_units import (
 )
 from pilot_proxy.fine_decision import FINE_DECISION_VERSIONS
 from pilot_proxy.integration import (
-    DEFAULT_CHIME_DTV_RECEIVER_PROFILE,
-    DEFAULT_CHIME_STREAM_MAP,
     DEFAULT_DETECTOR_CORE_PROFILE,
     default_reference_receiver_profile,
     layout_uint64_bound_check,
@@ -218,13 +216,6 @@ def _parse_chime_scan_set_options(values: Sequence[str] | None) -> dict[str, obj
     return out
 
 
-def _cmd_chime_inspect(args: argparse.Namespace) -> None:
-    argv = [str(args.input_dir), "--max-files", str(args.max_files)]
-    _add_optional_arg(argv, "--dataset-path", args.dataset_path)
-    _add_optional_arg(argv, "--filename-pattern", args.filename_pattern)
-    _run_module("pilot_proxy.chime.inspect", argv)
-
-
 def _cmd_chime_survey(args: argparse.Namespace) -> None:
     from pilot_proxy.archive.commands import survey_chime
 
@@ -260,46 +251,6 @@ def _cmd_chime_inventory(args: argparse.Namespace) -> None:
         source_freq_id_regex=args.source_freq_id_regex,
         source_event_regex=args.source_event_regex,
     )
-
-
-def _cmd_chime_run(args: argparse.Namespace) -> None:
-    argv = [
-        "--input-dir",
-        str(args.input_dir),
-        "--output-dir",
-        str(args.output_dir),
-        "--receiver-profile",
-        str(args.receiver_profile),
-        "--weights-path",
-        str(args.weights_path),
-        "--lib-path",
-        str(args.lib_path),
-        "--frame-size-samples",
-        str(args.frame_size_samples),
-        "--frames-per-chunk",
-        str(args.frames_per_chunk),
-        "--pilot-below-data-db",
-        str(args.pilot_below_data_db),
-        "--bin-enbw-hz",
-        str(args.bin_enbw_hz),
-        "--dtv-bandwidth-hz",
-        str(args.dtv_bandwidth_hz),
-        "--pilot-capture-efficiency",
-        str(args.pilot_capture_efficiency),
-        "--calibration-seconds",
-        str(args.calibration_seconds),
-    ]
-    if args.stream_map is not None:
-        argv.extend(["--stream-map", str(args.stream_map)])
-    _add_optional_arg(argv, "--dataset-path", args.dataset_path)
-    _add_optional_arg(argv, "--filename-pattern", args.filename_pattern)
-    for channel in args.physical_channel or []:
-        argv.extend(["--physical-channel", str(channel)])
-    _add_optional_arg(argv, "--physical-channel-range", args.physical_channel_range)
-    _add_optional_arg(argv, "--max-frames", args.max_frames)
-    if args.plot:
-        argv.append("--plot")
-    _run_module("pilot_proxy.chime.runner", argv)
 
 
 def _cmd_chime_combine(args: argparse.Namespace) -> None:
@@ -1282,18 +1233,6 @@ def build_parser() -> argparse.ArgumentParser:
     validate_operating_policy.add_argument("--policy-dir", type=Path, required=True)
     validate_operating_policy.set_defaults(func=_cmd_validate_operating_policy)
 
-    chime_inspect = _add_command(
-        "chime-inspect",
-        "Summarize CHIME baseband HDF5 files in a directory (shapes, dtypes, "
-        "frequency metadata).",
-    )
-    chime_inspect.add_argument("--input-dir", type=Path, required=True,
-                               help="Directory of CHIME baseband .h5 files.")
-    chime_inspect.add_argument("--max-files", type=int, default=20)
-    chime_inspect.add_argument("--dataset-path", default=None)
-    chime_inspect.add_argument("--filename-pattern", default=None)
-    chime_inspect.set_defaults(func=_cmd_chime_inspect)
-
     chime_survey = _add_command(
         "chime-survey",
         "Build or resume a CHIME archive inventory.",
@@ -1421,64 +1360,6 @@ def build_parser() -> argparse.ArgumentParser:
     chime_inventory.add_argument("--source-freq-id-regex", default=None)
     chime_inventory.add_argument("--source-event-regex", default=None)
     chime_inventory.set_defaults(func=_cmd_chime_inventory)
-
-    chime_run = _add_command(
-        "chime-run",
-        "Run the detector over a directory of already-staged CHIME baseband "
-        "HDF5 files (batch runner; for archive-scale runs use chime-scan).",
-    )
-    chime_run.add_argument("--input-dir", type=Path, required=True,
-                           help="Directory of CHIME baseband .h5 files.")
-    chime_run.add_argument("--output-dir", type=Path, required=True,
-                           help="Run directory for products and figures.")
-    chime_run.add_argument(
-        "--receiver-profile",
-        type=Path,
-        default=DEFAULT_CHIME_DTV_RECEIVER_PROFILE,
-    )
-    chime_run.add_argument(
-        "--stream-map",
-        type=Path,
-        default=DEFAULT_CHIME_STREAM_MAP,
-    )
-    chime_run.add_argument(
-        "--weights-path",
-        dest="weights_path",
-        type=Path,
-        default=DEFAULT_WEIGHTS_PATH,
-    )
-    chime_run.add_argument("--lib-path", type=Path, default=DEFAULT_LIB_PATH)
-    chime_run.add_argument("--dataset-path", default=None)
-    chime_run.add_argument("--filename-pattern", default="*.h5")
-    chime_run.add_argument(
-        "--physical-channel",
-        type=int,
-        action="append",
-        default=None,
-    )
-    chime_run.add_argument("--physical-channel-range", default=None)
-    chime_run.add_argument(
-        "--frame-size-samples",
-        type=int,
-        default=DEFAULT_FRAME_SIZE_SAMPLES,
-    )
-    chime_run.add_argument("--frames-per-chunk", type=int, default=1)
-    chime_run.add_argument("--max-frames", type=int, default=None)
-    chime_run.add_argument(
-        "--pilot-below-data-db",
-        type=float,
-        default=PILOT_BELOW_DATA_DB,
-    )
-    chime_run.add_argument("--bin-enbw-hz", type=float, default=EFFECTIVE_BIN_BW_HZ)
-    chime_run.add_argument(
-        "--pilot-capture-efficiency",
-        type=float,
-        default=PILOT_CAPTURE_EFFICIENCY,
-    )
-    chime_run.add_argument("--dtv-bandwidth-hz", type=float, default=DTV_BANDWIDTH_HZ)
-    chime_run.add_argument("--calibration-seconds", type=float, default=2.0)
-    chime_run.add_argument("--plot", action="store_true")
-    chime_run.set_defaults(func=_cmd_chime_run)
 
     chime_combine = _add_command(
         "chime-combine",
@@ -1629,8 +1510,7 @@ def build_parser() -> argparse.ArgumentParser:
         "directory.",
     )
     chime_plot.add_argument("--run-dir", type=Path, required=True,
-                            help="Run directory written by chime-run or "
-                                 "chime-scan.")
+                            help="Run directory written by chime-scan.")
     chime_plot.add_argument(
         "--clean-figures",
         action="store_true",
@@ -1644,8 +1524,7 @@ def build_parser() -> argparse.ArgumentParser:
         "schema.",
     )
     validate_products.add_argument("--run-dir", type=Path, required=True,
-                                   help="Run directory written by chime-run "
-                                        "or chime-scan.")
+                                   help="Run directory written by chime-scan.")
     validate_products.add_argument("--output-json", type=Path, default=None,
                                    help="Also write the validation report as "
                                         "JSON.")
@@ -1654,9 +1533,7 @@ def build_parser() -> argparse.ArgumentParser:
     chime_scan = _add_command(
         "chime-scan",
         "Stream CHIME data through the archive engine (one resumable "
-        "product per pilot), then combine compatible products. The "
-        "recommended archive-scale entry point; chime-run remains for "
-        "pre-staged local directories.",
+        "product per pilot), then combine compatible products.",
     )
     chime_scan.add_argument("--input-dir", type=Path, default=None,
                             help="Directory of CHIME baseband .h5 files (required for "

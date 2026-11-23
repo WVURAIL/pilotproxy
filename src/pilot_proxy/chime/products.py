@@ -7,7 +7,7 @@ import csv
 import json
 import os
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Sequence
 
 import numpy as np
 
@@ -21,11 +21,8 @@ from pilot_proxy.detector_contract import (
     DETECTOR_CONTRACT_V1_SCHEMA_TOKEN,
     NORMALIZED_POSITIVE_EXCESS_MASK_RULE,
 )
-from pilot_proxy.json_utils import write_json_strict
 from pilot_proxy.product_contract import frame_powers_from_fine
 from pilot_proxy.schema_identity import schema_token
-
-from .hdf5_input import ChimePilotDataset, dataset_manifest
 
 CHIME_DETECTOR_OUTPUTS_FILENAME = "chime_detector_outputs.npz"
 CHIME_SPECTROGRAM_CACHE_FILENAME = "chime_spectrogram_cache.npz"
@@ -334,7 +331,7 @@ def write_detector_outputs(
     The file holds the frame-level columns, the reference split
     ``p_ref_lower_u64`` and ``p_ref_upper_u64``, and, when given, the fine
     powers ``fine_power_u64`` (num_frames, num_pilots, 3, 256), whose all-bin
-    sums are the frame powers. ``chime-run`` always gives the fine powers.
+    sums are the frame powers.
     Arrays that disagree raise ValueError (:func:`check_detector_frame_powers`).
     """
     problems = check_detector_frame_powers(
@@ -594,35 +591,6 @@ def write_mask_summary(
     return path
 
 
-def write_input_manifest(
-    run_dir: Path,
-    *,
-    datasets: Sequence[ChimePilotDataset],
-    input_dir: Path,
-) -> Path:
-    path = Path(run_dir) / "input_manifest.json"
-    payload = {
-        "schema_version": CHIME_INPUT_MANIFEST_SCHEMA_TOKEN,
-        "input_dir": str(input_dir),
-        "absolute_time_used": False,
-        "datasets": [dataset_manifest(dataset) for dataset in datasets],
-    }
-    write_json_strict(path, payload, indent=2, sort_keys=True)
-    return path
-
-
-def write_stats(run_dir: Path, stats: dict[str, Any]) -> Path:
-    path = Path(run_dir) / "stats.json"
-    write_json_strict(path, stats, indent=2, sort_keys=True)
-    return path
-
-
-def write_run_config(run_dir: Path, config: dict[str, Any]) -> Path:
-    path = Path(run_dir) / "run_config.json"
-    write_json_strict(path, config, indent=2, sort_keys=True)
-    return path
-
-
 __all__ = [
     "atomic_savez_compressed",
     "CHIME_DETECTOR_OUTPUTS_FILENAME",
@@ -647,10 +615,7 @@ __all__ = [
     "valid_mask_counts",
     "check_detector_frame_powers",
     "write_detector_outputs",
-    "write_input_manifest",
     "write_mask_summary",
-    "write_run_config",
     "write_spectrogram_cache",
     "write_spectrum_table",
-    "write_stats",
 ]

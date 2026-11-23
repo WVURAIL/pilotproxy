@@ -7,16 +7,14 @@ resumable engine, and the per-pilot products are then stacked into the
 canonical PilotProxy products by the event-keyed combine step. If no event is
 common to every completed channel, the scan still succeeds with its per-pilot
 products, and stacking is left to ``chime-combine`` (``--report`` and
-``--drop``). ``pilot-proxy chime-run`` (the ``run_chime_analysis`` batch path)
-is used for pre-staged local directories.
+``--drop``).
 
 * ``--source local``: files already on disk (a 10 s chunk, /arc, ...).
 * ``--source cadc-datatrail``: storage-safe streaming from the CADC archive.
 
 The detector analyzer defaults to the CUDA kernel on a GPU. For tests, the
-detector, kernel, and weights can be injected through ``analyzer_options``, the
-same hooks that ``run_chime_analysis`` exposes. The GPU-free parity tests run
-this way.
+detector, kernel, and weights can be injected through ``analyzer_options``. The
+GPU-free parity tests run this way.
 """
 from __future__ import annotations
 

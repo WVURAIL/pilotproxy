@@ -401,3 +401,13 @@ tests/testbench/test_sensitivity_columns.py	63e72e8
 docs/figures/validation_flow.svg	63e72e8
 docs/figures/validation_flow.tikz	63e72e8
 docs/figures/validation_flow_standalone.tex	63e72e8
+src/pilot_proxy/chime/runner.py	63e72e8
+src/pilot_proxy/chime/segmented_input.py	63e72e8
+src/pilot_proxy/chime/inspect.py	63e72e8
+scripts/run_chime_local_detector.sh	63e72e8
+tests/chime/test_chime_runner_small.py	63e72e8
+tests/chime/test_runner_settings.py	63e72e8
+tests/chime/test_inspect_hdf5.py	63e72e8
+tests/chime/test_inspect_workflow.py	63e72e8
+tests/chime/test_segmented_input.py	63e72e8
+tests/kernel/test_chime_run_fine_powers_gpu.py	63e72e8

@@ -133,3 +133,29 @@ def exact_cpu_detector_fn(*, packed, weights, kernel=None, emit_row_projections=
     if emit_row_projections:
         out["matched_filter_row_projections"] = np.stack(projections)
     return out
+
+
+def reference_fine_powers(path, weights, *, frame_size=16384):
+    """Fine powers ``(frames, 3, 256)`` of a synthetic CHIME file, computed from its bytes.
+
+    The offset-binary 4+4-bit samples are unpacked, each 128-sample window is
+    time-reversed (the CHIME second Nyquist zone), and the rows of the packed
+    weights are applied in integer arithmetic before the fxfft256 transform. No
+    pilot_proxy packing or detector code is used, so the analyzer, scan and
+    combine are checked against an independent chain.
+    """
+    import h5py
+
+    from pilot_proxy.fxfft import fine_power_fx
+
+    w = np.asarray(weights).astype(np.int64) & 255
+    wr, wi = ((w >> 4) ^ 8) - 8, ((w & 15) ^ 8) - 8
+    with h5py.File(path, "r") as handle:
+        data = handle["baseband"][:]
+    fine = []
+    for start in range(0, data.shape[0] - frame_size + 1, frame_size):
+        x = data[start:start + frame_size].T.reshape(-1, K)[:, ::-1].astype(np.int64)
+        xr, xi = (x >> 4) - 8, (x & 15) - 8
+        rows = np.stack(((xr @ wr.T + xi @ wi.T).T, (xi @ wr.T - xr @ wi.T).T), axis=-1)
+        fine.append(fine_power_fx(rows, num_streams=data.shape[1]))
+    return np.asarray(fine, dtype=np.uint64)

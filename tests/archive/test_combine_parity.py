@@ -1,18 +1,15 @@
 # coding=utf-8
-"""The combine step reproduces PilotProxy's multi-pilot detector products exactly.
+"""The combine step stacks per-pilot detector products into PilotProxy's canonical products.
 
-Two synthetic channels are processed two ways. The reference is one
-``run_chime_analysis`` pass over both pilots. The candidate is the archive
-detector analyzer run per pilot, followed by ``combine_detector_products``.
-The combined ``chime_detector_outputs``, ``chime_spectrogram_cache``, and
-``chime_reductions_10s`` products must match the single-process run exactly,
-since both use the same writers and stack the same arrays. No GPU is needed,
-because the CPU-reference ``detector_fn`` of the other archive tests is
-injected.
+Two synthetic channels are processed by the archive detector analyzer per
+pilot, followed by ``combine_detector_products``. The combined
+``chime_detector_outputs`` powers must equal the per-pilot products' powers and
+those computed directly from the files' bytes
+(``cpu_detector.reference_fine_powers``). No GPU is needed, because the
+CPU-reference ``detector_fn`` of the other archive tests is injected.
 """
 from __future__ import annotations
 
-import dataclasses
 import json
 
 import numpy as np
@@ -24,16 +21,13 @@ from pilot_proxy.chime import baseband_format as fmt
 from pilot_proxy.archive.instruments import load_instrument
 from pilot_proxy.archive.interfaces import RunContext
 
-from pilot_proxy.chime.runner import run_chime_analysis
 from pilot_proxy.chime.products import SCAN_INPUT_MANIFEST_SCHEMA_TOKEN
-from pilot_proxy.detector_geometry import MIRRORED_NYQUIST_ZONE
-from pilot_proxy.integration.receiver_profile import default_reference_receiver_profile
 from pilot_proxy.archive.detector import PilotProxyDetectorAnalyzer
 from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader
 from pilot_proxy.archive.combine import combine_detector_products
 from pilot_proxy.archive.chime_coarse import chime_freq_id_from_hz
 
-from cpu_detector import exact_cpu_detector_fn, stub_kernel  # noqa: E402
+from cpu_detector import exact_cpu_detector_fn, reference_fine_powers, stub_kernel  # noqa: E402
 
 NFFT = 16384
 K = 128
@@ -43,25 +37,7 @@ CHANNELS = {14: 470.3125, 15: 476.171875}  # ATSC channel to coarse-channel cent
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
 
 
-def _assert_npz_equal(ref_path, got_path):
-    a = np.load(ref_path)
-    b = np.load(got_path)
-    # chime-run stores the fine powers that are summed into its frame powers. A
-    # combine leaves them in the per-pilot products, which are compared with the
-    # runner output below.
-    only_runner = {"fine_power_u64"} if ref_path.name == "chime_detector_outputs.npz" else set()
-    assert set(a.files) - only_runner == set(b.files), (set(a.files) ^ set(b.files))
-    for key in b.files:
-        x = np.asarray(a[key])
-        y = np.asarray(b[key])
-        assert x.shape == y.shape, f"{key}: {x.shape} != {y.shape}"
-        if x.dtype.kind in "fc":
-            assert np.array_equal(x, y, equal_nan=True), f"{key} differs"
-        else:
-            assert np.array_equal(x, y), f"{key} differs"
-
-
-def test_combine_matches_multipilot_runner(tmp_path):
+def test_combine_stacks_the_per_pilot_products(tmp_path):
     rng = np.random.default_rng(7)
     weights_by_channel = {
         ch: rng.integers(-120, 121, size=(3, K)).astype(np.int8) for ch in CHANNELS
@@ -79,26 +55,7 @@ def test_combine_matches_multipilot_runner(tmp_path):
             h.attrs["time0_ctime"] = 1.0e9
         files[ch] = p
 
-    profile = dataclasses.replace(
-        default_reference_receiver_profile(frame_size_samples=NFFT,
-                                           num_input_streams=N_FEEDS),
-        nyquist_zone=MIRRORED_NYQUIST_ZONE,
-        stream_map_required=False,
-    )
-    profile_path = tmp_path / "receiver_profile.json"
-    profile_path.write_text(json.dumps(profile.to_dict()), encoding="utf-8")
-
-    # reference is one runner pass over both pilots
-    ref_dir = tmp_path / "ref"
-    run_chime_analysis(
-        input_dir=input_dir, output_dir=ref_dir, receiver_profile_path=profile_path,
-        stream_map_path=None, physical_channels=sorted(CHANNELS),
-        frame_size_samples=NFFT, detector_window_samples=K, frames_per_chunk=1,
-        max_frames=N_FRAMES, kernel=stub_kernel(K), detector_fn=exact_cpu_detector_fn,
-        weights_by_channel=weights_by_channel,
-    )
-
-    # candidate is the analyzer per pilot, followed by a combine
+    # the analyzer per pilot, followed by a combine
     inst = load_instrument("chime")
     reader = ChimeBasebandPackedReader()
     per_pilot = []
@@ -120,15 +77,17 @@ def test_combine_matches_multipilot_runner(tmp_path):
     out_dir = tmp_path / "combined"
     combine_detector_products(per_pilot, out_dir)
 
-    for name in ("chime_detector_outputs.npz", "chime_spectrogram_cache.npz",
-                 "chime_reductions_10s.npz"):
-        _assert_npz_equal(ref_dir / name, out_dir / name)
-    # The runner's fine powers are the per-pilot products' fine powers.
-    runner_fine = np.load(ref_dir / "chime_detector_outputs.npz")["fine_power_u64"]
-    per_pilot_fine = np.stack(
-        [np.load(p)["fine_power_u64"] for p in per_pilot], axis=1
-    )
-    np.testing.assert_array_equal(runner_fine, per_pilot_fine)
+    got = np.load(out_dir / "chime_detector_outputs.npz")
+    for pilot, ch in enumerate(sorted(CHANNELS)):
+        z = np.load(per_pilot[pilot])
+        powers = reference_fine_powers(files[ch], weights_by_channel[ch]).sum(axis=-1, dtype=np.uint64)
+        for term, name in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
+            np.testing.assert_array_equal(got[name][:, pilot], powers[:, term], err_msg=f"{ch} {name}")
+        for name in ("p_ref_sum_u64", "valid", "coarse_power_ratio", "pilot_excess_db"):
+            np.testing.assert_array_equal(got[name][:, pilot], z[name][:, 0], err_msg=f"{ch} {name}")
+        np.testing.assert_array_equal(got["mask"][:, pilot], z["reject_mask"][:, 0])
+    for name in ("chime_spectrogram_cache.npz", "chime_reductions_10s.npz"):
+        assert (out_dir / name).is_file(), name
 
     # The integrated_spectra stack holds the spectra of each per-pilot product in
     # the sorted channel order of the combined product, with the frequency-axis

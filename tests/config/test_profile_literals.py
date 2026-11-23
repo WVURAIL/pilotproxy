@@ -161,8 +161,8 @@ LITERALS = {
         "pilot-proxy src/pilot_proxy/archive/detector.py:504 800_000_000.0 (reset from the "
         "instrument in begin())", "pinned", 800_000_000.0, lambda: P.instrument.f0_hz),
     "runner_sample_rate": (
-        "pilot-proxy src/pilot_proxy/chime/runner.py:342 390_625.0",
-        "pinned", 390_625.0, lambda: P.instrument.sample_rate_hz),
+        "pilot-proxy src/pilot_proxy/chime/runner.py@63e72e8:354 390_625.0",
+        "deleted", 390_625.0, lambda: P.instrument.sample_rate_hz),
     "reference_bandwidth": (
         "pilot-proxy src/pilot_proxy/dtv_units.py:24 REFERENCE_BANDWIDTH_HZ (detector)",
         "pinned", 400.0e6, lambda: P.instrument.bandwidth_mhz * 1e6),

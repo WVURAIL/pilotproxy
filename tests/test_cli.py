@@ -521,35 +521,6 @@ def test_validate_products_wrapper(monkeypatch, tmp_path) -> None:
     assert cmd[cmd.index("--output-json") + 1].endswith("validation.json")
 
 
-def test_chime_run_wrapper_does_not_forward_detector_window(monkeypatch, tmp_path) -> None:
-    calls = []
-
-    # noinspection PyShadowingNames
-
-    def fake_run(cmd, *, cwd, env):
-        calls.append((cmd, cwd, env))
-        return SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(cli.subprocess, "run", fake_run)
-
-    result = cli.main(
-        [
-            "chime-run",
-            "--input-dir",
-            str(tmp_path / "input"),
-            "--output-dir",
-            str(tmp_path / "run"),
-            "--physical-channel",
-            CHANNEL_14,
-        ]
-    )
-
-    assert result == 0
-    cmd = calls[0][0]
-    assert cmd[:3] == [cli.sys.executable, "-m", "pilot_proxy.chime.runner"]
-    assert "--detector-window-samples" not in cmd
-
-
 def test_chime_scan_forwards_explicit_allow_partial(monkeypatch, tmp_path) -> None:
     calls = []
     fake_scan = ModuleType("pilot_proxy.archive.scan")

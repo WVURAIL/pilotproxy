@@ -10,7 +10,7 @@ import h5py
 import numpy as np
 import pytest
 
-from pilot_proxy import cli
+from pilot_proxy import cli, run_scores
 from pilot_proxy.bundle_calibration import bundle_digest
 from pilot_proxy.characterization import threshold_rule
 from pilot_proxy.run_plans import CORE_PROFILE
@@ -139,12 +139,36 @@ def run_bundle(calibrated):
     return dict(bundle=tmp / "run_bundle", anchor=anchor)
 
 
+def option_arguments(directory):
+    """Write copies of the profiles and the power-limit inputs under directory, and return the plan options of
+    plan-run and process-run, each set to a value other than its default."""
+    receiver, core = directory / "receiver.json", directory / "core.json"
+    receiver.write_bytes(RECEIVER.read_bytes())
+    core.write_bytes(CORE.read_bytes())
+    (directory / "limits.json").write_text(json.dumps({"35": 1e-5}))
+    inputs = directory / "inputs.json"
+    inputs.write_text(json.dumps(dict(table=str(ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"),
+                                      limits="limits.json", curvature={"35": [0.0, 0.0]}, margin=0.0)))
+    return ["--receiver-profile", receiver, "--detector-core-profile", core, "--null-quantile", "0.9",
+            "--threshold", "power_limit", "--power-limit", inputs, "--decision-version", "fine_decision_v3",
+            "--night", *DRAO]
+
+
+def assert_plan_options(calibrate, directory):
+    """Check that the calibration plan holds each option of option_arguments(directory)."""
+    assert calibrate["receiver_profile"] == str((directory / "receiver.json").resolve())
+    assert calibrate["detector_core_profile"] == str((directory / "core.json").resolve())
+    assert calibrate["null_quantile"] == 0.9 and calibrate["decision_version"] == "fine_decision_v3"
+    assert calibrate["threshold"] == "power_limit"
+    assert calibrate["power_limit"]["limits"] == str((directory / "limits.json").resolve())
+    assert calibrate["default_word"] == dict(night=dict(latitude_deg=49.3208, longitude_deg_east=-119.6236))
+
+
 def test_plan_run_splits_each_channel_and_passes_its_options(run_bundle, tmp_path):
     frames = np.ones((2, 2, 3, 256))
     for index in range(6):
         write_run(tmp_path / f"run_{index}.h5", frames, index * 2 * 8192)
-    common = ["plan-run", "--bundle-dir", run_bundle["bundle"], "--run", tmp_path / "run_*.h5", "--epoch", "synthetic",
-              "--receiver-profile", RECEIVER]
+    common = ["plan-run", "--bundle-dir", run_bundle["bundle"], "--run", tmp_path / "run_*.h5", "--epoch", "synthetic"]
     code, out = run_cli(common + ["--output-dir", tmp_path / "plans"])
     assert code == 0
     assert out.splitlines() == ["channel 35: 4 files to calibrate, 2 to test", "channel 37: 4 files to calibrate, 2 to test"]
@@ -153,22 +177,15 @@ def test_plan_run_splits_each_channel_and_passes_its_options(run_bundle, tmp_pat
     assert [Path(p).name for p in calibrate["channels"]["35"]] == [f"run_{i}.h5" for i in range(4)]
     assert test["channels"]["35"] == test["control"] == [str(tmp_path / f"run_{i}.h5") for i in (4, 5)]
     assert calibrate["control"]["channel"] == 37 and calibrate["null_quantile"] == 0.99
+    # the bundle's receiver profile and the default core profile
+    assert calibrate["receiver_profile"] == str(RECEIVER.resolve())
     assert calibrate["detector_core_profile"] == str(Path(CORE_PROFILE).resolve())
     assert not {"threshold", "decision_version", "default_word"} & set(calibrate)
     # every option of the command reaches the plan
-    limits = tmp_path / "limits.json"
-    limits.write_text(json.dumps({"35": 1e-5}))
-    inputs = tmp_path / "inputs.json"
-    inputs.write_text(json.dumps(dict(table=str(ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"),
-                                      limits="limits.json", curvature={"35": [0.0, 0.0]}, margin=0.0)))
     code, out = run_cli(common + ["--output-dir", tmp_path / "options", "--calibration-share", "0.5",
-                                  "--null-quantile", "0.9", "--threshold", "power_limit", "--power-limit", inputs,
-                                  "--decision-version", "fine_decision_v3", "--night", *DRAO])
+                                  *option_arguments(tmp_path)])
     assert code == 0 and "channel 35: 3 files to calibrate, 3 to test" in out
-    calibrate = json.loads((tmp_path / "options" / "calibrate.json").read_text())
-    assert calibrate["null_quantile"] == 0.9 and calibrate["decision_version"] == "fine_decision_v3"
-    assert calibrate["threshold"] == "power_limit" and calibrate["power_limit"]["limits"] == str(limits.resolve())
-    assert calibrate["default_word"] == dict(night=dict(latitude_deg=49.3208, longitude_deg_east=-119.6236))
+    assert_plan_options(json.loads((tmp_path / "options" / "calibrate.json").read_text()), tmp_path)
 
 
 def write_process_run(directory, anchor, pilot):
@@ -221,9 +238,21 @@ def test_process_run_exits_1_when_the_test_fails(run_bundle, tmp_path):
     assert "- masked fraction on channel 35: " in (out_dir / "summary.md").read_text()
 
 
+def test_process_run_passes_its_options_to_the_plans(run_bundle, tmp_path):
+    runs = write_process_run(tmp_path / "run", run_bundle["anchor"], lambda index: True)
+    out_dir = tmp_path / "processed"
+    # the run files record no frame time, so calibration stops at the night option, after the plans are written
+    with pytest.raises(ValueError, match="records no fpga_seq_time_nsec"):
+        run_cli(["process-run", "--bundle-dir", run_bundle["bundle"], "--run", runs, "--epoch", "synthetic",
+                 "--output-dir", out_dir, "--calibration-share", "0.5", *option_arguments(tmp_path)])
+    calibrate = json.loads((out_dir / "plans" / "calibrate.json").read_text())
+    assert_plan_options(calibrate, tmp_path)
+    assert len(calibrate["channels"]["35"]) == 4
+
+
 def loud_run(path, anchor, seq=0, missing=False):
     """Write 48 frames of channels 35 and 29 in which channel 35's pilot fills the first 16 frames, far above any
-    word of the bundle, and the other frames hold noise far below one."""
+    word of the bundle, and the other frames hold noise far below every word."""
     rng = np.random.default_rng(7)
     frames = rng.integers(900, 1100, size=(48, 2, 3, 256)).astype(np.uint64)
     frames[:16, 0, 0, anchor] *= np.uint64(1000)
@@ -254,16 +283,28 @@ def test_run_spectrogram_writes_each_channel_and_the_masked_summary(calibrated, 
     assert summary["29"]["masked_frames"] == "0"
 
 
-def test_run_scores_write_the_cache_of_each_channel(calibrated, tmp_path):
+def test_run_scores_write_the_cache_of_each_channel(calibrated, tmp_path, monkeypatch):
     profiles = json.loads((calibrated["bundle"] / "pilot_profiles.json").read_text())["profiles"]
     anchor = next(p for p in profiles if p["physical_channel"] == 35)["fine_calibration"]["anchor_bin"]
     # the second file was recorded first
     runs = [loud_run(tmp_path / f"run_{index}.h5", anchor, seq=(1 - index) * 48 * 8192, missing=True)
             for index in range(2)]
     out_dir = tmp_path / "scores"
+    workers = []
+
+    class SerialPool:
+        """The process pool of run_scores, which records its workers and maps in this process."""
+        def __init__(self, jobs, mp_context=None): workers.append(jobs)
+        def __enter__(self): return self
+        def __exit__(self, *exc): return False
+        def map(self, function, *args): return map(function, *args)
+
+    monkeypatch.setattr(run_scores, "ProcessPoolExecutor", SerialPool)
     code, out = run_cli(["run-scores", "--bundle-dir", calibrated["bundle"], "--run", *runs, "--channel", "35", "29",
-                         "--event-seconds", 8 * FRAME_SECONDS, "--output-dir", out_dir])
+                         "--event-seconds", 8 * FRAME_SECONDS, "--jobs", "3", "--output-dir", out_dir])
     assert code == 0
+    # the files of each channel are scored by --jobs workers
+    assert workers == [3, 3]
     lines = out.splitlines()
     # 40 recorded frames of each file, and 16 of them hold the pilot
     assert lines[0].startswith("channel 35: 80 frames, 10 events, 40.0% masked")

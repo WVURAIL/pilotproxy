@@ -26,8 +26,11 @@ from pilot_proxy.capture_reference import (
 from pilot_proxy.fine_decision import (
     ALWAYS_MASKED_Q16,
     decision_functions,
+    fine_keep_word_v3,
+    fine_required_multiplier_q16_v3,
+    fine_stat_v3,
 )
-from pilot_proxy.fxfft import fxfft256_scalar
+from pilot_proxy.fxfft import fine_power_fx, fxfft256_scalar
 
 
 class BeamCoord(ctypes.LittleEndianStructure):
@@ -66,6 +69,7 @@ def metadata(geometry, kind="voltage", sequence=100, downsampling=4):
         "voltage": (b"E", 8, (geometry.num_times, geometry.num_freq, 2, geometry.num_dishes), (b"T", b"F", b"P", b"D")),
         "mask": (b"dtv_mask", 9, (geometry.num_freq,), (b"F",)),
         "power": (b"dtv_powers", 6, (geometry.num_freq, 3), (b"F", b"W")),
+        "stat": (b"dtv_stat", 6, (geometry.num_freq, 2), (b"F", b"S")),
     }
     m.name, m.type, dims, names = layouts[kind]
     m.dims = len(dims)
@@ -209,6 +213,22 @@ def test_frame_configuration_and_timing_refusals(tmp_path, geometry, kind, field
         validate_frames(*frames, 2, geometry=geometry)
 
 
+def test_stat_frames_are_checked_like_the_products(tmp_path, geometry):
+    frames = captured_frames(tmp_path, geometry)
+    path = write_frames(tmp_path / "stat.raw", [
+        (metadata(geometry, "stat", downsampling=geometry.block_samples * 4), bytes(geometry.stat_frame_size)),
+    ])
+    stats = read_raw_frames([path], geometry.stat_frame_size)
+    assert validate_frames(*frames, 2, geometry=geometry, stats=stats) == 1
+    with pytest.raises(ValueError, match="stat frame count"):
+        validate_frames(*frames, 2, geometry=geometry, stats=stats * 2)
+    for field, value in (("array_name", "dtv_powers"), ("data_type", 9), ("dimensions", (2, 3)),
+                         ("dimension_names", ("F", "W")), ("dimension_scaling", (1, 2)), ("fpga_seq_num", 101),
+                         ("time_downsampling_fpga", 4), ("frequency_ids", (1600, 2408))):
+        with pytest.raises(ValueError, match="stat frame 0"):
+            validate_frames(*frames, 2, geometry=geometry, stats=[dataclasses.replace(stats[0], **{field: value})])
+
+
 def test_whole_blocks_and_complete_counts_required(tmp_path, geometry):
     frames = captured_frames(tmp_path, geometry)
     with pytest.raises(ValueError, match="whole"):
@@ -276,6 +296,47 @@ def test_exact_reference_matches_scalar_projection_and_fft(k, reverse, version):
     np.testing.assert_array_equal(result.powers[0], fine.sum(axis=1, dtype=np.uint64))
     assert result.decisions[1] is None and result.masks[1] == 0
     assert result.powers[1].tolist() == [0, 0, 0]
+
+
+def v3_bundle(k, **words):
+    config = bundle(k)
+    config["profiles"][0]["fine_calibration"] = {"status": "calibrated", "decision_version": "fine_decision_v3", **words}
+    return config
+
+
+def test_v3_reference_is_the_stat_and_the_decision_at_the_applied_word(geometry):
+    rng = np.random.default_rng(504)
+    raw = rng.integers(0, 256, geometry.block_samples * geometry.num_freq * geometry.num_streams, dtype=np.uint8)
+    weights = rng.integers(0, 256, 3 * geometry.k, dtype=np.uint8).tobytes()
+    real, imag = detector_rows_from_voltage(raw, 0, False, geometry=geometry)
+    fine = fine_power_fx(expected_matched_filter_row_projections(real, imag, weights), num_streams=geometry.num_streams)
+    stat = fine_stat_v3(fine)
+    keep = fine_keep_word_v3(stat.n_peak, stat.d_rho)
+    result = expected_products(raw, v3_bundle(64, cfar_multiplier_q16=keep), weights, geometry=geometry)
+    assert result.stats.tolist() == [[stat.n_peak, stat.d_rho], [0, 2**64 - 1]]
+    assert result.decisions[0] == fine_required_multiplier_q16_v3(fine)
+    # the detector does not decide a v3 row, so its mask stays 0, kept or flagged
+    assert result.masks.tolist() == [0, 0]
+    assert result.stat_decisions == (0, None)
+    # the power-limit word is the one applied where calibration wrote one
+    strict = v3_bundle(64, cfar_multiplier_q16=keep, power_limit_multiplier_q16=keep - 1)
+    flagged = expected_products(raw, strict, weights, geometry=geometry)
+    assert flagged.stat_decisions == (1, None)
+    assert flagged.masks.tolist() == [0, 0]
+    # without a power-limit word the default word is applied, and a frame it flags still has mask 0
+    default = expected_products(raw, v3_bundle(64, cfar_multiplier_q16=keep - 1), weights, geometry=geometry)
+    assert default.stat_decisions == (1, None)
+    assert default.masks.tolist() == [0, 0]
+
+
+def test_v3_zero_reference_is_masked(geometry):
+    raw = np.full(geometry.block_samples * geometry.num_freq * geometry.num_streams, 0x88, dtype=np.uint8)
+    result = expected_products(raw, v3_bundle(64, cfar_multiplier_q16=65536), bytes([0x10]) * 192, geometry=geometry)
+    assert result.stats[0].tolist() == [0, 0]
+    # d_rho = 0 has no decision: invalid support, rejected as in DtvRfiMask, and mask 0
+    assert not result.decisions[0].valid
+    assert result.stat_decisions[0] == 1
+    assert result.masks[0] == 0
 
 
 def test_invalid_rows_are_retained_distinct_from_unbound(geometry):

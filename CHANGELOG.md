@@ -38,6 +38,15 @@ All notable changes to PilotProxy are recorded here. The project follows
   reshape, and takes `--domain` for a two-domain CHIME run, whose two streams it used to read as one.
   `pathfinder_preflight.py` requires `dtv_stat` to be sent, received and written when the detector writes it
   (kotekan#1924). The `test` extra installs `hdf5plugin`, so the run-tool tests no longer skip in CI.
+- `replay-fine-capture` checks fine_decision_v3 captures against `dtv_stat`, listed in the plan's optional
+  `raw_files.stat`; a v3 plan without it is refused. A v3 row's recorded pair must equal `fine_stat_v3` of the
+  reference fine powers bit for bit, and its `dtv_mask` row must be 0, as the detector writes it. The decision at the
+  applied word (`masks_from_stat` at `v3_word`, `d_rho = 0` masked) is exported as `expected_decision`, and
+  `bundle_multiplier_q16` of a v3 row is that word. The replay used to compare the recorded mask with the v3
+  decision at the default word, so every frame flagged at that word was a mismatch, a `d_rho = 0` frame was expected
+  kept, and the pair was never read. The reader still takes only the pinned metadata ABI, which predates
+  `dtv_stat`, and only `rawFileWrite` files with `chord_freq_id` bundles. CHORD writes `dtv_stat` with
+  `hdf5FileWrite`, so the command cannot yet replay a recorded v3 capture.
 - `test-bundle` checks each channel's masked fraction at the word the stage applies: for a v3 channel with a
   power-limit word, that word (`v3_word`), against the interval `calibrate-bundle` now also records at it
   (`applied_masked_interval`). It used to test the default word only, so a qualified BAO word had no

@@ -270,7 +270,7 @@ The first check is the log. Each pilot must have a `bound ATSC physical channel`
 | N2 products | No new frame drops |
 | Disk use on CHIME | About 38 GB per hour |
 
-`tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support (v1 and v2), and the masked fraction of each channel. With `--bundle-dir`, it decides the v3 channels from `dtv_stat` at each channel's word. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`.
+`tools/analyze_dtv_run.py` reads the raw CHIME products and checks equal frame counts, gaps in `fpga_seq_num`, rank support (v1 and v2), and the masked fraction of each channel. With `--bundle-dir`, it decides the v3 channels from `dtv_stat` at each channel's word. The masked fractions should agree with the `test-bundle` result. To compare the stage with the reference bit for bit, a baseband dump taken during the run is passed through `pilot-proxy replay-fine-capture`. That command reads only CHORD `rawFileWrite` captures in the layout of Kotekan `c81def55`, so it cannot yet replay a CHIME run or a run of a current build ([capture replay guide](CAPTURE_FINE_REPLAY.md#supported-capture-format)).
 
 A run with `dtv_calibration_mode` also gives a spectrogram of each bound channel with and without the mask, in 10 s chunks:
 

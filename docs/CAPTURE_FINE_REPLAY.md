@@ -1,10 +1,25 @@
 # Capture-specific fine replay and score export
 
 The purpose of `replay-fine-capture` is to recompute the submitted fine
-decision from synchronized native voltage, mask, and coarse-power files. It
-exports the exact decimal Q16 keep boundary, the usable reference count, the
-validity, and the source frame provenance. The runtime bundle is left
-unchanged, and no operating threshold is chosen.
+decision from synchronized native voltage, mask, and coarse-power files, and,
+for `fine_decision_v3`, `dtv_stat` files. It exports the exact decimal Q16
+keep boundary, the usable reference count, the validity, and the source frame
+provenance. The runtime bundle is left unchanged, and no operating threshold
+is chosen.
+
+The detector does not decide a `fine_decision_v3` channel. It writes the pair
+`[n_peak, d_rho]` to `dtv_stat` and leaves the channel's `dtv_mask` row at 0.
+Kotekan's `DtvRfiMask` then applies the channel's word. For such a channel the
+replay recomputes the pair with `fine_stat_v3` and requires the recorded pair
+to match it bit for bit. It requires the recorded mask row to be 0. It also
+exports `expected_decision`, the decision that `DtvRfiMask` makes from the
+reference pair at the word the stage applies (`v3_word`: the power-limit word
+where calibration wrote one, and the default word otherwise). `masks_from_stat`
+computes it: 1 rejects and 0 keeps, and a frame with `d_rho = 0` is rejected.
+The permanent-mask list and the mask switch of `DtvRfiMask` are not part of it.
+`DtvRfiMask` writes its decision only into the combined RFI mask, which the
+capture does not hold, so `expected_decision` is exported and not compared. A
+plan with a v3 profile and no `stat` files is refused.
 
 Install this branch in its own environment and run:
 
@@ -16,7 +31,7 @@ pilot-proxy validate-fine-capture-replay --replay-dir replay
 
 For validation, the capture files and the contracts must both stay available.
 The output directory must be new. Identity, geometry, and configuration errors
-stop the command before results are written. A mask or power mismatch is
+stop the command before results are written. A mask, power or stat mismatch is
 preserved in the output and returns a nonzero exit status. Invalid fine support
 is a recorded outcome and is never treated as a file-format error. Those rows
 remain in the export, and the report states `invalid_support`. A successful
@@ -49,6 +64,14 @@ point. In the example, the saved products come from the CPU reference, and the
 binary and configuration evidence is labeled synthetic. Exact arithmetic and
 the refusal paths are checked by the component tests.
 
+`--decision-version fine_decision_v3` calibrates the bound channel for fine
+decision v3 and also writes `stat.raw`. The bundle has a default word of
+393216 (6.0 in Q16) and a power-limit word of 278528 (4.25), and the stage
+applies the power-limit word. At that word the random block is flagged, and
+its recorded mask is 0. The zero block has `d_rho = 0`, so its row is invalid
+and its `expected_decision` is 1. With `--valid-only`, the second random block
+is kept. The default word keeps both random blocks.
+
 ## Supported capture format
 
 This command supports `rawFileWrite` files from the little-endian, 64-bit CHORD
@@ -70,17 +93,32 @@ The plan specifies K=64 or K=128 and exactly 128 windows per stream, so the
 detector block has 8192 or 16384 samples. Voltage frames must divide a complete
 block, and the supplied capture must contain whole, contiguous blocks. A mask
 frame contains `[F]` int8 values, and a power frame contains the frame powers
-as `[F,3]` little-endian uint64 values. The FPGA sequence of a mask or power
-frame is that of the first voltage sample in the block, and its downsampling is
-the input downsampling times the block length. The replay expects the frame
-powers to be the all-bin sums of the exact fine powers
-(`capture_reference.expected_products`). A capture recorded by a stage that
-vendors a core before 3.0.0 carries row-domain sums and fails power parity,
-while its masks can still agree.
+as `[F,3]` little-endian uint64 values. A stat frame contains the pairs
+`[n_peak, d_rho]` as `[F,2]` little-endian uint64 values, with array name
+`dtv_stat` and dimension names `F` and `S`. The pinned commit predates
+`dtv_stat`, so a stat frame follows the layout of the mask and power frames.
+Every Kotekan build that writes `dtv_stat` also has the int64
+`time_downsampling_fpga` of kotekan#1787 and a leading `T` axis of length 1 on
+each product (kotekan#1840). The reader refuses that metadata. The CHORD
+configurations also write `dtv_stat` with `hdf5FileWrite`, not
+`rawFileWrite`: the Pathfinder recv node in frames of 1024 blocks, and the
+F-engine one block per frame. CHIME's `dtv.j2` writes raw frames, but its
+bundles use `chime_freq_id`, which the replay refuses. The command cannot yet
+replay a recorded v3 capture. The v3 checks run on captures in the pinned
+layout, such as the synthetic example.
+
+The FPGA sequence of a mask, power or stat frame is that of the first voltage
+sample in the block, and its downsampling is the input downsampling times the
+block length. The replay expects the frame powers to be the all-bin sums of
+the exact fine powers (`capture_reference.expected_products`). A capture
+recorded by a stage that vendors a core before 3.0.0 carries row-domain sums
+and fails power parity, while its masks can still agree.
 
 The submitted loader binds physical channels 14 to 36. Unbound frequencies,
 such as a captured CH37 control, must have zero saved masks and coarse powers,
-and they receive parity checks but no fine score. Every bound captured profile
+and they receive parity checks but no fine score. In `stat` files, the rows of
+unbound, v1 and v2 frequencies must hold `[0, 2^64 - 1]`, the pair of a row
+the detector does not evaluate. Every bound captured profile
 must be in the export with `fine_calibration.status: calibrated`. That label is
 checked as configuration only and is never accepted as scientific evidence.
 
@@ -110,7 +148,7 @@ The plan has schema `pilotproxy_capture_fine_replay_plan_v1` and contains:
 | `input_state_contract` | Fixed ordered inputs, gains, quantization, preprocessing, and validity interval |
 | `producer` | Recorded runtime producer and configuration contract |
 | `bundle_files` | All five runtime bundle members, individually pinned, retaining their names in one directory |
-| `raw_files` | Explicit ordered arrays named `voltage`, `masks`, and `powers`; no globs or inferred sorting |
+| `raw_files` | Explicit ordered arrays named `voltage`, `masks`, and `powers`, and `stat` for the `dtv_stat` frames; no globs or inferred sorting. `stat` is required when a bound profile uses `fine_decision_v3`, and optional otherwise |
 | `profiles` | One `{physical_channel, profile_id}` entry per bound captured profile, with optional population declaration |
 
 Packing schema `pilotproxy_capture_packing_v1` specifies `layout: TFPD`,
@@ -154,7 +192,10 @@ The output contains `replay.json`, `manifest.json`, `producer.json`,
 runtime producer and the exact installed reference sources and environment.
 Every score keeps the raw file paths, byte offsets, metadata hashes, timing and
 frequency identity, recorded and expected masks and coarse powers, support, and
-the exact Q16 boundary. A valid always-masked boundary is written as the
+the exact Q16 boundary. With `stat` files it also keeps the recorded and
+expected pairs. A v3 score also has `expected_decision`. `bundle_multiplier_q16`
+is the word the stage applies: `cfar_multiplier_q16` for v1 and v2, and
+`v3_word` for v3. A valid always-masked boundary is written as the
 decimal string `18446744073709551616`, and an invalid row has a null boundary.
 
 The optional `population` declaration of a profile supplies `role`,

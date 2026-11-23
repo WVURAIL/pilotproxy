@@ -115,6 +115,33 @@ def test_two_trial_engineering_report_has_full_denominators_and_failing_gates(tm
         REPORT.run(out)
 
 
+@pytest.mark.parametrize("cap,width", [(True, True), (True, False), (False, True)])
+def test_primary_gate_passes_only_when_every_criterion_is_met(tmp_path, monkeypatch, cap, width):
+    out, plan = study(tmp_path)
+    validation(out, plan)
+    real = REPORT.false_alarm_validation
+
+    def statistics(*args, **kwargs):
+        result = real(*args, **kwargs)
+        result.update(cap_demonstrated=cap, pointwise_width_at_most_nominal=width)
+        return result
+
+    monkeypatch.setattr(REPORT, "false_alarm_validation", statistics)
+    result = REPORT.run(out)
+    reasons = ([] if cap else ["simultaneous_cap_not_demonstrated"]) + ([] if width else ["pointwise_precision_not_met"])
+    passed = cap and width
+    assert result["all_primary_gates_passed"] is passed
+    assert result["passed_primary_rows"] == (58 if passed else 0)
+    assert result["failed_primary_rows"] == (0 if passed else 58)
+    for row in result["rows"]:
+        if row["primary_family"]:
+            assert row["gate_failure_reasons"] == reasons
+            assert row["gate_passed"] is passed
+            assert row["gate_status"] == ("passed" if passed else "failed")
+        else:
+            assert row["gate_status"] == "diagnostic_only" and row["gate_passed"] is False
+
+
 def test_frame_level_rows_use_the_fine_sums_not_the_raw_coarse_members(tmp_path):
     out, plan = study(tmp_path)
     validation(out, plan, coarse_members=0)  # zero row-domain powers would be invalid
@@ -189,8 +216,18 @@ def test_zero_float_response_is_kept_nan_is_invalid_and_infinity_masks():
     assert result["valid_zero_response_trials"] == result["undefined_float_trials"] == 1
 
 
-@pytest.mark.parametrize("change", ["future", "naive", "early", "wrong_seed", "extra", "marker", "calibration_scope", "omitted_dependency", "source"])
-def test_integrity_failures_refuse_before_report_creation(tmp_path, change):
+@pytest.mark.parametrize("change,message", [
+    ("future", "Independent null shard chronology differs"),
+    ("naive", "Receipt timestamps must include a timezone"),
+    ("early", "Independent null shard chronology differs"),
+    ("wrong_seed", "Independent null shard identity differs"),
+    ("extra", "Independent null coverage has missing or extra shards"),
+    ("marker", "Calibration completion marker differs"),
+    ("calibration_scope", "A complete correctly scoped frozen calibration is required"),
+    ("omitted_dependency", "Calibration omits or changes a required dependency"),
+    ("source", "Bound input changed"),
+])
+def test_integrity_failures_refuse_before_report_creation(tmp_path, change, message):
     out, plan = study(tmp_path)
     raw = validation(out, plan)
     receipt = raw.with_suffix(".json")
@@ -215,6 +252,6 @@ def test_integrity_failures_refuse_before_report_creation(tmp_path, change):
         (out / "calibration.sha256").write_text(REDUCER.sha(out / "calibration.json") + "\n")
     elif change == "source":
         (tmp_path / "generator-source.py").write_text("# altered after freeze\n")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=message):
         REPORT.run(out)
     assert not (out / "reports/null_validation").exists()

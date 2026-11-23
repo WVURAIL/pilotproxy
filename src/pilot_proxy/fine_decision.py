@@ -1,12 +1,17 @@
 # coding=utf-8
 """Compare fine-bin power ratios using exact integer arithmetic.
 
-This module is the Python reference for fine decision v1 in the fused
-kernel epilogue (kernel core 4.0.0, PilotProxy_Compute_FusedFineMask_U64).
-For the same fine powers and calibration constants, the CUDA
-implementation must return the same mask bit. Python's arbitrary-precision
+This module is the Python reference for the three fine decisions of the
+kernel. Fine decision v1 is the fused epilogue of kernel core 4.0.0
+(PilotProxy_Compute_FusedFineMask_U64), and v2 its median-reference form
+(PilotProxy_Compute_FusedFineMaskV2_U64). Fine decision v3 is the statistic
+of kernel core 4.2.0 (PilotProxy_Compute_FineStatV3_U64). For the same fine
+powers and calibration constants, the CUDA implementation must return the
+same mask bit, or under v3 the same statistic. Python's arbitrary-precision
 integers give the reference for the 128-bit and 192-bit products of the
 kernel.
+
+The sections up to "Fine decision v2" describe v1.
 
 Measured ratios
 ---------------
@@ -64,8 +69,36 @@ sensitivity to contamination in the upper background tail is reduced.
 
 This module and the kernel fix the arithmetic, and the bundle supplies
 the rank and the multiplier. The rank in use is the bulk median.
-characterization.threshold_rule selects the supported word with the greatest
-retained fraction among those meeting the bias tolerance.
+
+Fine decision v2
+----------------
+
+v2 keeps the v1 geometry and compares the target with the reference power
+den_r of rank cfar_rank over the background bins. A frame is rejected when
+any designated bin satisfies num[b] * 2**16 > multiplier_q16 * den_r.
+
+Fine decision v3
+----------------
+
+v3 has no anchor, search width, bulk mask or bundle rank. The statistic of
+a frame is the pair [n_peak, d_rho]: n_peak is the largest num[b] over all
+256 bins, and d_rho the den[b] of rank 63 over the 128 even bins, zeros
+included. A frame is kept when n_peak * 2**16 <= multiplier_q16 * d_rho,
+and d_rho = 0 gives no decision. The kernel writes the pair, and the
+consumer decides (fine_keep_v3, pilotproxy_v3_keep in
+cuda/pilotproxy_decision.h). masks_from_stat decides recorded rows.
+
+Words
+-----
+
+calibrate-bundle (bundle_calibration.py) writes the words. Under v1 and v2
+a channel's word is its knee or the floor. With the power-limit threshold it
+is the power-limit word, or the floor where no word passes. Under v3 each
+channel gets a default word, the control's 1% word scaled to the channel.
+With the power-limit threshold each channel also gets a power-limit word
+(power_limit_word.py): its passing word, or the reject word 1, which masks
+the channel whole, where no word passes. v3_word returns the word that
+Kotekan's DtvRfiMask applies to a v3 channel.
 """
 from __future__ import annotations
 

@@ -26,6 +26,11 @@ All notable changes to PilotProxy are recorded here. The project follows
   frequencies, any other capture by its size and the SHA-256 of its first and last MiB. A copy, a hard link, or the
   same windows read per window, combined or from a several-frame file no longer pass as new test data. A report
   without the identities is compared by path alone.
+- `tools/calibration_length.py` gives the fine decision v3 words with no floor or anchor: each channel's default
+  word and, with `--power-limit` (the `power_limit` threshold), its power-limit word. With `--power-limit` each
+  part of a split needs the `min_captures` that a power-limit word must keep, 30 unless the power-limit plan sets
+  another. The v3 default word needs no captures of the channel, and with no power limit the tool sets 30 for the
+  masked fractions. The v1 and v2 output without `--power-limit` is unchanged.
 - The Pathfinder run tools no longer pass a fine_decision_v3 run they could not read. `check_pathfinder_dtv_run.py`
   reports a v3 channel with no `dtv_stat` rows as an error (exit 1) instead of reading its all-zero `dtv_mask`
   rows as 0% masked, and counts its windows without `dtv_stat`. It and `compare_pathfinder_dtv_mask.py` refuse

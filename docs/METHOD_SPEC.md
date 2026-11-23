@@ -5,10 +5,12 @@ CHIME real-data workflow. We state the operations in the order they are
 applied so that a result can be reproduced from the recorded powers and
 weight norms.
 
-The production decision is the rank-based fine-bin comparison described below.
-The frame ratio and the positive-excess flag are measurements and diagnostics.
-The weight norms set a normalization by the ratio of expected powers, which
-differs from the exact expectation of a noisy ratio.
+The detector decides each frame with an exact integer fine-bin comparison
+(`fine_decision.py`). It has three versions, and "Decision status" below gives
+where each one runs. The frame ratio and the positive-excess flag are
+measurements and diagnostics. The weight norms set a normalization by the
+ratio of expected powers, which differs from the exact expectation of a noisy
+ratio.
 
 ## Detector geometry
 
@@ -211,10 +213,33 @@ The decision paths in the repository have different operational status:
   the robust per-frame null-bulk threshold, and any threshold exceedances are
   recomputed from those terms in post-processing and leave `reject_mask`
   unchanged.
-- Kernel core 4.0.0 implements the fixed-point designated-set order-statistic
-  CFAR decision, with bit-equality tests against the Python reference. Its
-  per-channel runtime-bundle calibration is still `pending_campaign`, and a
-  pending profile must never enable that rejection path.
+- Kernel core 4.2.0 implements three exact integer fine decisions, each with
+  bit-equality tests against its Python reference in `fine_decision.py`. Fine
+  decisions v1 and v2 test the designated bins
+  `anchor_bin +/- designated_half_width` against a ranked reference over the
+  bundle's bulk bins, and the kernel writes the mask bit. Fine decision v3 has
+  no anchor or search width. The kernel writes the pair `[n_peak, d_rho]`: the
+  largest target power over all 256 fine bins and the median reference power
+  over the 128 even bins. The consumer keeps a frame when
+  `n_peak * 2^16 <= word * d_rho`, with the Q16 keep word of the channel.
+- On 2026-11-22, every bundle installed in Kotekan, on `develop` and on
+  `chord`, is fine decision v1 with a designated half-width of 32. Kotekan
+  `develop` runs v1 and v2 bundles. Fine decision v3 needs kotekan#1924, which
+  is open. Until it merges, `calibrate-bundle` writes v2 unless the plan names
+  a version.
+- Under v3, `calibrate-bundle` writes the default word of each channel. It is
+  the control's 1% word (`null_quantile` 0.99 by default), over the night
+  frames when the plan asks for them, scaled by the channel's
+  `null_power_ratio * g` over the control's. `g` is a passband factor of the
+  plan, 1 when the plan gives none. With the power-limit threshold,
+  `calibrate-bundle` also writes a power-limit word. Kotekan's `DtvRfiMask`
+  applies the power-limit word where the bundle has one, and the default word
+  otherwise.
+- An exported bundle marks its profiles `pending_campaign`, and a pending
+  profile never reaches a mask. `calibrate-bundle` marks them `calibrated`,
+  and the control `control`. Kotekan turns the mask on only when every
+  calibrated channel of the bundle carries the record of `qualify-bundle`,
+  which names a passing test report and a reviewer.
 
 Thus, a decision path can be implemented and validated and still be inactive.
 A kernel entry point becomes an active observing policy only when its

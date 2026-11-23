@@ -47,6 +47,8 @@ from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
 
 ROOT = Path(__file__).resolve().parents[2]
+# a v3 power-limit bundle: channel 35 at its power-limit word, 29 at the reject word, 37 the control
+GOLDEN = ROOT / "tests" / "data" / "v3_bundle_golden"
 BLOCK = 16384
 INPUTS = 16
 FS = 390625.0
@@ -1190,6 +1192,18 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     assert not check["passed"] and "recalibrate" in check["detail"]
     # a channel with no passing word carries the reject word, so every consumer masks it whole
     assert fine[29]["power_limit_multiplier_q16"] == REJECT_WORD_Q16
+    # the bundle is the golden v3 bundle the consumers test their readers on; after a deliberate change of the
+    # writer, copy this bundle's pilot_profiles.json there and rewrite expected_roles.json
+    written, golden = (json.loads(Path(d, "pilot_profiles.json").read_text()) for d in (tmp_path / "bundle", GOLDEN))
+    for bundle in (written, golden):
+        for row in bundle["profiles"]:
+            row["fine_calibration"]["provenance"].pop("source_product_sha256")   # the hash of the plan, with its paths
+    assert written == golden
+    roles = {str(p["receiver_channel_id"]): dict(physical_channel=p["physical_channel"], word=v3_word(p["fine_calibration"]),
+                                                 control=p["fine_calibration"]["status"] == "control")
+             for p in golden["profiles"]}
+    assert roles == json.loads((GOLDEN / "expected_roles.json").read_text())
+    assert {r["word"] for r in roles.values()} >= {REJECT_WORD_Q16, fine[35]["power_limit_multiplier_q16"]}
 
 
 def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plans, tmp_path):

@@ -1,0 +1,17 @@
+{
+  "491": {
+    "control": true,
+    "physical_channel": 37,
+    "word": 126880
+  },
+  "521": {
+    "control": false,
+    "physical_channel": 35,
+    "word": 153117
+  },
+  "614": {
+    "control": false,
+    "physical_channel": 29,
+    "word": 1
+  }
+}

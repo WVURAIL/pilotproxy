@@ -242,3 +242,34 @@ def test_check_tool_stops_on_two_windows_with_one_sequence_number(run):
     done = _run_tool("check_pathfinder_dtv_run", "--dtv-dir", run["dtv"], "--bundle-dir", run["bundle"],
                      "--channels", V1)
     assert done.returncode == 1 and "fpga_seq_num 0 differ" in done.stderr
+
+
+def test_analyze_tool_finds_the_archive_ranges_at_the_words_n2_applies(tmp_path):
+    bundle = _bundle(tmp_path)
+    profiles = json.loads((bundle / "pilot_profiles.json").read_text())
+    for row in profiles["profiles"]:
+        row["null_power_ratio"] = 1.0
+    (bundle / "pilot_profiles.json").write_text(json.dumps(profiles))
+    frames, freqs = 4, [V3, V1]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _raw(run_dir / "dtv_mask_0.raw", np.zeros((frames, 2)), freqs, np.int8)
+    _raw(run_dir / "dtv_powers_0.raw", np.ones((frames, 2, 3)), freqs, "<u8")
+    _raw(run_dir / "dtv_fine_support_0.raw", np.ones((frames, 2, 2)), freqs, "<i4")
+    stat = np.zeros((frames, 2, 2), np.uint64)
+    stat[:, 0] = [10, 10]                                 # kept at every word
+    stat[:, 1] = [0, MISSING_ROW]                         # the v1 channel has no statistic
+    _raw(run_dir / "dtv_stat_0.raw", stat, freqs, "<u8")
+
+    def entry(label, words):
+        return {str(c): dict(word_q16=w, monthly_p05=0.0, monthly_p95=1.0, label=label) for c, w in words.items()}
+    # channel 18 carries a power-limit word, which N2 applies, so the ranges at its default word are not this bundle's
+    ranges = {"default": entry("default", {18: 65536, 24: 3 * 65536, 29: 65536, 37: 65536}),
+              "applied": entry("applied", {18: 2 * 65536, 24: 3 * 65536, 29: 65536, 37: 65536})}
+    (tmp_path / "ranges.json").write_text(json.dumps(ranges))
+    out = tmp_path / "out.json"
+    _run_tool("analyze_dtv_run", "--run-dir", run_dir, "--bundle-dir", bundle, "--num-freq", 2,
+              "--ranges", tmp_path / "ranges.json", "--json", out)
+    result = json.loads(out.read_text())
+    assert result["checks"]["archive_ranges_found_for_bundle"]
+    assert {c: r["archive_range"]["label"] for c, r in result["channels"].items()} == {"18": "applied", "29": "applied"}

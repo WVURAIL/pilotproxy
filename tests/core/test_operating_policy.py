@@ -255,7 +255,7 @@ def test_the_frozen_decisions_compile_for_the_chime_upgrade(tmp_path):
         receiver_profile_path=receiver,
         detector_core_profile_path=ROOT / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json",
         weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
-        physical_channels=list(range(14, 37)), output_dir=bundle,
+        physical_channels=list(range(14, 37)), output_dir=bundle, decision_version="fine_decision_v1",
     )
     evidence = write(tmp_path / "evidence.json", {"scope": "test of the frozen decisions"})
     plan_path = tmp_path / "plan.json"
@@ -317,7 +317,7 @@ def with_control(case, *, word=72850, capability=True):
         receiver_profile_path=directory / "receiver_profile.json",
         detector_core_profile_path=directory / "detector_core_profile.json",
         weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
-        physical_channels=[14, 29, 37], output_dir=bundle,
+        physical_channels=[14, 29, 37], output_dir=bundle, decision_version="fine_decision_v1",
     )
     profiles = read(bundle / "pilot_profiles.json")
     rows = {row["physical_channel"]: row for row in profiles["profiles"]}
@@ -423,8 +423,9 @@ def test_a_v3_control_binds_at_its_default_word(case):
 
 
 def test_a_v3_bundle_is_refused_without_the_v3_capability(case):
+    # the export is pending v3, so channel 14 needs the statistic as well
     with_v3(case, capability=False)
-    with pytest.raises(ValueError, match="dtv_stat_v3_v1.*channels \\[29\\]"):
+    with pytest.raises(ValueError, match="dtv_stat_v3_v1.*channels \\[14, 29\\]"):
         analyze(case)
 
 

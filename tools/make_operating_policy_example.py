@@ -3,8 +3,8 @@
 
 The decisions are synthetic threshold-rule output for three channels. Channel
 14 is not deployed, channel 29 is deployed at Q16=65536, and the channel 37
-control band is reported with no DTV assignment. The bundle is exported on the
-CHIME receiver profile, and the profile of channel 29 is given the deployed
+control band is reported with no DTV assignment. The bundle is a fine decision
+v1 bundle exported on the CHIME receiver profile, and the profile of channel 29 is given the deployed
 word as its CFAR multiplier.
 """
 
@@ -66,7 +66,7 @@ def make_example(output_dir):
     export_runtime_weight_bundle(
         receiver_profile_path=receiver_path, detector_core_profile_path=core_path,
         weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
-        physical_channels=[14, 29], output_dir=bundle,
+        physical_channels=[14, 29], output_dir=bundle, decision_version="fine_decision_v1",
     )
     mask = np.zeros(256, dtype=bool)
     mask[::2] = True

@@ -43,6 +43,8 @@ def test_export_runtime_weight_bundle_writes_compact_profiles(tmp_path) -> None:
         physical_channels=[14, 21],
         weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
+        # the reference profile has no receiver channel ids, which a v3 profile needs
+        decision_version="fine_decision_v2",
     )
 
     for path in outputs.values():
@@ -261,7 +263,9 @@ def test_validate_runtime_weight_bundle_reports_input_coordinate_mismatch(
     assert "pilot_profiles.input_coordinate_system" in checks
 
 
-def _export_reference_bundle(tmp_path):
+def _export_reference_bundle(tmp_path, decision_version="fine_decision_v2"):
+    # the reference profile has no receiver channel ids, so its pending profiles are v2: Kotekan maps v3 words by
+    # receiver channel id
     output_dir = tmp_path / "bundle"
     outputs = export_runtime_weight_bundle(
         receiver_profile_path=(
@@ -273,6 +277,7 @@ def _export_reference_bundle(tmp_path):
         physical_channels=[14, 21],
         weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
+        decision_version=decision_version,
     )
     return output_dir, outputs
 
@@ -380,19 +385,59 @@ def test_bundle_accepts_runtime_hex_case_and_short_words(tmp_path, uppercase):
     assert validate_runtime_weight_bundle(bundle_dir=output_dir)["valid"]
 
 
-def test_exported_bundle_carries_pending_fine_calibration(tmp_path) -> None:
-    output_dir, outputs = _export_reference_bundle(tmp_path)
+@pytest.mark.parametrize("version", ["fine_decision_v1", "fine_decision_v2"])
+def test_exported_bundle_carries_pending_fine_calibration(tmp_path, version) -> None:
+    output_dir, outputs = _export_reference_bundle(tmp_path, version)
     profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
     for row in profiles["profiles"]:
         block = row["fine_calibration"]
         assert block["status"] == "pending_campaign"
-        assert block["decision_version"] == "fine_decision_v2"
+        assert block["decision_version"] == version
         assert block["anchor_bin"] is None
         assert block["designated_half_width"] == 2
         assert block["cfar_rank"] is None
+        assert block["bulk_mask_words_hex"] is None
         assert block["cfar_multiplier_q16"] is None
     report = validate_runtime_weight_bundle(bundle_dir=output_dir)
     assert report["valid"] is True
+
+
+@pytest.mark.parametrize("profile, namespace", [("chime_dtv_fengine.json", "chime_freq_id"),
+                                                ("chord_pathfinder_dtv_fengine.json", "chord_freq_id")])
+def test_exported_bundle_is_pending_v3_by_default(tmp_path, profile, namespace) -> None:
+    outputs = export_runtime_weight_bundle(
+        receiver_profile_path=CONFIGS_DIR / "receiver_profiles" / profile,
+        detector_core_profile_path=(
+            CONFIGS_DIR / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json"
+        ),
+        physical_channels=[14, 29, 37],
+        weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
+        output_dir=tmp_path / "bundle",
+    )
+    profiles = json.loads(outputs["pilot_profiles"].read_text("utf-8"))
+    assert profiles["receiver_channel_id_namespace"] == namespace
+    for row in profiles["profiles"]:
+        # v3 has no search geometry, and the validator refuses its fields
+        assert row["fine_calibration"]["status"] == "pending_campaign"
+        assert row["fine_calibration"]["decision_version"] == "fine_decision_v3"
+        assert row["fine_calibration"]["cfar_multiplier_q16"] is None
+        assert not {"anchor_bin", "designated_half_width", "bulk_mask_words_hex", "cfar_rank"} & set(
+            row["fine_calibration"])
+    report = validate_runtime_weight_bundle(bundle_dir=tmp_path / "bundle")
+    assert report["valid"] is True, report["errors"]
+
+
+def test_v3_export_of_a_profile_without_channel_ids_is_refused(tmp_path) -> None:
+    # Kotekan refuses a v3 row without a receiver namespace, and so does the validator
+    output_dir, _ = _export_reference_bundle(tmp_path, "fine_decision_v3")
+    report = validate_runtime_weight_bundle(bundle_dir=output_dir)
+    assert not report["valid"]
+    assert [e["check"] for e in report["errors"]] == ["pilot_profiles.receiver_channel_id_namespace"]
+
+
+def test_export_refuses_an_unknown_decision_version(tmp_path) -> None:
+    with pytest.raises(ValueError, match="decision_version"):
+        _export_reference_bundle(tmp_path, "fine_decision_v9")
 
 
 def test_current_bundle_rejects_missing_norm_and_fine_fields(tmp_path) -> None:
@@ -825,6 +870,7 @@ def _export_bundle_with_control(tmp_path):
         physical_channels=[14, 37],
         weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
         output_dir=output_dir,
+        decision_version="fine_decision_v2",  # as _export_reference_bundle
     )
     return output_dir, outputs
 

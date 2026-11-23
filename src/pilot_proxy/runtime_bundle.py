@@ -797,27 +797,31 @@ def _validate_mask_qualification(*, qualification: object, status: str, field: s
         _add_error(errors, f"{field}.reviewer", "must be a non-empty string")
 
 
-def _default_fine_calibration_block() -> dict[str, Any]:
+def _default_fine_calibration_block(decision_version: str = CALIBRATION_DECISION_VERSION) -> dict[str, Any]:
     """Return the per-channel fine decision calibration, exported as pending_campaign.
 
     These values are passed as runtime arguments to the fused entry points of
     the block's decision version: ``PilotProxy_Compute_FusedFineMask_U64`` and
     ``PilotProxy_Compute_FusedFineMaskWithSupport_U64`` for ``fine_decision_v1``,
     and their ``V2`` forms for ``fine_decision_v2``. The ``WithSupport`` entry
-    is called by kotekan when its support buffer is bound. The arithmetic of
+    is called by kotekan when its support buffer is bound. A ``fine_decision_v3``
+    block has no search geometry and carries only its words. The arithmetic of
     each version is frozen, and the operating point is bundle data. New blocks
-    take version 2.
+    take the calibration default, version 3.
     The calibration campaign fills the null fields, sets
     ``status`` to ``calibrated``, and records the provenance. Until then, a
     consumer must treat the channel's fine mask path as not deployable.
     """
-    return {
-        "status": FINE_CALIBRATION_STATUS_PENDING,
-        "decision_version": CALIBRATION_DECISION_VERSION,
+    geometry = {} if decision_version == FINE_DECISION_V3_VERSION else {
         "anchor_bin": None,
         "designated_half_width": FINE_CALIBRATION_DEFAULT_HALF_WIDTH,
         "bulk_mask_words_hex": None,
         "cfar_rank": None,
+    }
+    return {
+        "status": FINE_CALIBRATION_STATUS_PENDING,
+        "decision_version": decision_version,
+        **geometry,
         "cfar_multiplier_q16": None,
         "provenance": {
             "epochs": [],
@@ -1608,8 +1612,16 @@ def export_runtime_weight_bundle(
     physical_channels: Sequence[int],
     weight_coordinate_system: str,
     output_dir: Path,
+    decision_version: str = CALIBRATION_DECISION_VERSION,
 ) -> dict[str, Path]:
-    """Write a compact runtime detector bundle for selected DTV pilots."""
+    """Write a compact runtime detector bundle for selected DTV pilots.
+
+    Its profiles are pending under ``decision_version``, the calibration default unless named. A
+    ``fine_decision_v3`` profile needs the receiver profile's ``metadata.channel_id_map``, since Kotekan maps v3
+    words by receiver channel id.
+    """
+    if decision_version not in FINE_DECISION_VERSIONS:
+        raise ValueError(f"decision_version must be one of {FINE_DECISION_VERSIONS}, got {decision_version!r}")
     profile = load_receiver_profile(receiver_profile_path)
     core = load_detector_core_profile(detector_core_profile_path)
     validate_integration_compatibility(profile=profile, detector_core=core)
@@ -1706,7 +1718,7 @@ def export_runtime_weight_bundle(
                 # Fine decision calibration (kernel core 2.3.0), with frozen
                 # arithmetic and a data-driven operating point. It is exported
                 # pending until the campaign supplies measured values.
-                "fine_calibration": _default_fine_calibration_block(),
+                "fine_calibration": _default_fine_calibration_block(decision_version),
             }
         )
         offset += profile_nbytes

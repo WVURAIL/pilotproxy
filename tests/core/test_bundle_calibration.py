@@ -577,7 +577,7 @@ def test_run_scores_feed_the_threshold_rule(plans, tmp_path):
 
 def test_run_scores_keep_recording_order_after_a_restart(plans, tmp_path):
     # one several-frame file: two timed windows, then two after an F-engine restart, untimed and near seq 0
-    window, sources = 4 * 8192, []
+    sources = []
     for w, seq in enumerate([10**9, 10**9 + 4 * 8192, 4096, 4096 + 4 * 8192]):
         frames = np.full((4, 3, 256), 1000 + w, dtype=np.uint64)
         sources.append(write_run_file(tmp_path / f"w{w}.h5", [521, 614], frames))
@@ -587,10 +587,16 @@ def test_run_scores_keep_recording_order_after_a_restart(plans, tmp_path):
                                                       time_downsampling_fpga=8192)
     (tmp_path / "acq_1").mkdir()
     path = str(write_frames_file(sources, tmp_path / "acq_1" / "dtv_fine_powers.00000000.h5"))
-    build_run_scores(bundle_dir=plans["bundle"], runs=[path], channel=35, output_dir=tmp_path / "scores")
+    build_run_scores(bundle_dir=plans["bundle"], runs=[path], channel=35, output_dir=tmp_path / "scores",
+                     event_seconds=0.1)
     with np.load(tmp_path / "scores" / "product_ch35.npz") as product:
         target = product["fine_power_u64"][:, 0, 0]
     assert list(target // 256) == [1000] * 4 + [1001] * 4 + [1002] * 4 + [1003] * 4
+    # the untimed windows follow the timed ones in time and in events
+    with np.load(tmp_path / "scores" / "ch35.npz") as scores:
+        time, event = scores["frame_time"], scores["frame_event_index"]
+    assert (np.diff(time) > 0).all() and time[-1] - time[0] < 1.0
+    assert event[8:].min() > event[:8].max()
 
 
 def test_run_scores_read_the_frame_timing_from_the_file(plans, tmp_path):

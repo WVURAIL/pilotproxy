@@ -15,10 +15,14 @@ decisions becomes one assignment at its receiver frequency ID:
   refused. While the profile is still ``pending_campaign``, the channel is
   pending and the configuration is incomplete.
 - not deployed (outcome ``not useful``): ``reject_all``, the permanent mask,
-  with the rule's reason. A channel whose reason is in ``UNMASKED_REASONS``
-  is DTV without a matching pilot, so the detector has no pilot to act on
-  and would never fire. Such a channel is compiled as ``pass_all``, left
-  unmasked, and listed under ``unmasked_freq_ids``.
+  with the rule's reason. A channel whose reason is in ``NO_PILOT_REASONS``
+  is DTV without a matching pilot. The stage still decides its calibrated
+  profile whenever the mask is on, so it is compiled at the word the stage
+  applies (``v3_word`` under v3, ``cfar_multiplier_q16`` otherwise):
+  ``reject_all`` when that word is the reject word 1, and otherwise a finite
+  threshold at that word. It is listed under ``no_pilot_freq_ids``. While its
+  profile is still ``pending_campaign`` it reaches no mask, so the channel is
+  pending and the configuration is incomplete.
 
 A decision for any channel other than 14 to 36 (the channel 37 control
 band) is not a DTV channel and is reported with no assignment. When the
@@ -46,6 +50,7 @@ from pathlib import Path
 
 from pilot_proxy import runtime_calibration as calibration
 from pilot_proxy.atsc_channels import physical_channel_to_lower_edge_hz
+from pilot_proxy.bundle_calibration import REJECT_WORD_Q16
 from pilot_proxy.config.project import default_project
 from pilot_proxy.fine_decision import (
     FINE_DECISION_V3_VERSION,
@@ -60,6 +65,7 @@ from pilot_proxy.runtime_bundle import (
     CHANNEL_ID_NAMESPACE_FIELD_ALIASES,
     CONTROL_PHYSICAL_CHANNEL,
     FINE_CALIBRATION_STATUS_CONTROL,
+    FINE_CALIBRATION_STATUS_PENDING,
     REQUIRED_RUNTIME_BUNDLE_FILES,
     validate_runtime_weight_bundle,
 )
@@ -79,10 +85,10 @@ NAMESPACES = tuple(sorted(CHANNEL_ID_NAMESPACE_FIELD_ALIASES))
 FIRST_CHANNEL, LAST_CHANNEL = 14, 36        # the ATSC UHF television channels a DTV policy covers
 CHANNEL_WIDTH_HZ = 6_000_000
 OUTCOMES = {"useful": "finite", "not useful": "reject_all"}
-# reasons of the rule that leave the detector nothing to act on, so the channel is neither deployed nor masked
+# reasons of the rule that give the detector no pilot. The stage still decides such a channel at its bundle word.
 # "pilot not seen" is the 2026-10-12 wording of the same reason. calibrate-bundle's "pilot not seen in the calibration
 # captures" (a run that never showed the pilot) is not in the set, so it compiles to reject_all.
-UNMASKED_REASONS = frozenset({"DTV without a matching pilot", "pilot not seen"})
+NO_PILOT_REASONS = frozenset({"DTV without a matching pilot", "pilot not seen"})
 
 
 def _require(condition, message):
@@ -130,8 +136,8 @@ def _q16(value):
 def _threshold_kind(decision):
     """The consumer action for one television-channel decision."""
     kind = OUTCOMES[decision["outcome"]]
-    if kind == "reject_all" and decision["reason"] in UNMASKED_REASONS:
-        return "pass_all"
+    if kind == "reject_all" and decision["reason"] in NO_PILOT_REASONS:
+        return "no_pilot"
     return kind
 
 
@@ -269,7 +275,7 @@ def analyze_policy(plan_path):
     _require(not v3_channels or V3_CAPABILITY in caps,
              f"Consumer lacks {V3_CAPABILITY}, needed for the fine_decision_v3 profiles of channels {v3_channels}")
     project = default_project() if namespace == "chime_freq_id" else None
-    permanent, unmasked, pending, thresholds, rows, outside = [], [], [], [], [], []
+    permanent, no_pilot, pending, thresholds, rows, outside = [], [], [], [], [], []
     review_candidates, controls = [], []
     for channel, decision in sorted(decisions.items()):
         if not FIRST_CHANNEL <= channel <= LAST_CHANNEL:
@@ -300,9 +306,24 @@ def analyze_policy(plan_path):
         row = {"physical_channel": channel, "frequency_ids": [freq], "outcome": decision["outcome"],
                "frequency_mapping": [mapping]}
         kind = _threshold_kind(decision)
-        if kind == "pass_all":
-            row.update(threshold={"kind": "pass_all"}, reason=decision["reason"])
-            unmasked.append(freq)
+        if kind == "no_pilot":
+            # not deployed, but the stage decides a calibrated profile at its word whenever the mask is on
+            fine = bound["fine_calibration"]
+            no_pilot.append(freq)
+            row["reason"] = decision["reason"]
+            if fine["status"] == FINE_CALIBRATION_STATUS_PENDING:
+                # a pending profile never reaches a mask, so the channel waits for its word, as a deployed one does
+                row["bundle_status"] = "pending: the bundle's profile does not carry a word yet"
+                pending.append(freq)
+            else:
+                word = v3_word(fine) if fine["decision_version"] == FINE_DECISION_V3_VERSION else fine["cfar_multiplier_q16"]
+                if word == REJECT_WORD_Q16:
+                    row["threshold"] = {"kind": "reject_all"}
+                    permanent.append(freq)
+                else:
+                    row.update(threshold={"kind": "finite", "eta_q16": str(word)},
+                               bundle_status="no pilot: decided at the bundle's word")
+                    thresholds.append(_binding(channel, freq, word, bound))
         elif kind == "reject_all":
             row.update(threshold={"kind": "reject_all"}, reason=decision["reason"])
             permanent.append(freq)
@@ -325,7 +346,7 @@ def analyze_policy(plan_path):
         rows.append(row)
     _require(len(rows) > len(controls), "The decisions name no ATSC channel 14-36")
     permanent.sort()
-    unmasked.sort()
+    no_pilot.sort()
     pending.sort()
     thresholds.sort(key=lambda r: r["receiver_channel_id"])
     required = [r["receiver_channel_id"] for r in thresholds]
@@ -346,11 +367,11 @@ def analyze_policy(plan_path):
         "decisions_sha256": calibration.sha256(decisions_path),
         "bundle_files_sha256": {name: calibration.sha256(p) for name, p in files.items()},
         "channels": rows, "not_in_policy": outside,
-        "permanent_mask_freq_ids": permanent, "unmasked_freq_ids": unmasked, "require_fine_freq_ids": required,
+        "permanent_mask_freq_ids": permanent, "no_pilot_freq_ids": no_pilot, "require_fine_freq_ids": required,
         "pending_freq_ids": pending, "required_threshold_bindings": thresholds,
         "kotekan_parameters": parameters if complete else None,
         "input_files_sha256": bindings,
-        "interpretation": "reject_all is the permanent-mask limit of the threshold family, explicitly encoded rather than eta=0: the threshold rule's not-deployed channels. A deployed channel's word is the threshold rule's; it is pending until the bundle carries it. A pass_all channel is not deployed and not masked: the rule's reason leaves the detector nothing to act on, so it is absent from both consumer lists. No word certifies physical recovery or minimum observing time.",
+        "interpretation": "reject_all is the permanent-mask limit of the threshold family, explicitly encoded rather than eta=0: the threshold rule's not-deployed channels. A deployed channel's word is the threshold rule's; it is pending until the bundle carries it. A no-pilot channel is not deployed, but the stage decides its profile at the bundle's word: it is permanently masked at the reject word 1, and otherwise masked at that word; it is pending while its profile is. No word certifies physical recovery or minimum observing time.",
         "remaining_runtime_acceptance": [
             "Verify that the named consumer build implements every declared capability; compilation checks declarations and hashes, not implementation.",
             "Match live receiver frequency IDs, input population/state, exact bundle files, frozen threshold bindings, and era to this review record.",

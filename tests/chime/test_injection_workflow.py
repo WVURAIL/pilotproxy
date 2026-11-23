@@ -263,3 +263,47 @@ def test_injection_cli_nonfinite_frequency_does_not_publish(tmp_path):
                         "--amplitude-lsb", "0", "--baseband-frequency-hz", "nan"])
     assert not (output / source.name).exists()
     assert not (output / injection.INJECTION_MANIFEST_FILENAME).exists()
+
+
+def _noise_source(path: Path, n_time: int, n_feeds: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    packed = np.random.default_rng(5).integers(0, 256, (n_time, n_feeds), dtype=np.uint8)
+    with h5py.File(path, "w") as handle:
+        handle.attrs["freq"] = 470.3125
+        handle.create_dataset("baseband", data=packed)
+
+
+def test_injection_in_slabs_matches_one_whole_pass(tmp_path):
+    source = tmp_path / "capture_844.h5"
+    _noise_source(source, 50, 3)
+    entries, data = [], []
+    for rows in (7, 50):
+        output = tmp_path / f"rows{rows}" / source.name
+        output.parent.mkdir()
+        entries.append(injection._inject_tone_copy(
+            source, output, baseband_frequency_hz=-3059.0, amplitude_lsb=6.3, phase_seed=17,
+            center_hz=470.3125e6, chunk_rows=rows))
+        with h5py.File(output) as handle:
+            data.append(handle["baseband"][...])
+    np.testing.assert_array_equal(data[0], data[1])
+    slabs, whole = entries
+    assert slabs["clip_count"] == whole["clip_count"] > 0
+    assert slabs["rms_lsb_per_component"] == whole["rms_lsb_per_component"]
+    for key in ("realized_amplitude_lsb", "dither_variance_lsb2_per_component"):
+        assert slabs[key] == pytest.approx(whole[key], rel=1e-12)
+
+
+def test_injection_memory_does_not_grow_with_the_file(tmp_path):
+    import tracemalloc
+
+    source = tmp_path / "capture_844.h5"
+    _noise_source(source, 262144, 32)            # 8 MB of samples
+    tracemalloc.start()
+    try:
+        injection.inject_tone_into_baseband_file(
+            source, tmp_path / "out" / source.name, baseband_frequency_hz=-3059.0,
+            amplitude_lsb=2.5, phase_seed=3)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 5 * 262144 * 32, peak

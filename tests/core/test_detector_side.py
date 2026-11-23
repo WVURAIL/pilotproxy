@@ -13,11 +13,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src" / "pilot_proxy"
 TOKENS = re.compile(r"redshift|\br_tol\b|fisher|cosmolog|bao|omega", re.IGNORECASE)
-# Frozen on-disk values are exempted by name, and no other value is exempt.
-FROZEN = (
-    # the archive health view's schema name, written into every view
-    "pilotproxy_baonoise_health_view_v1",
-)
 # The name of the sibling repository (in a provenance path, in a command it runs, or the repository itself) is not a
 # cosmology term. An import of it is refused by test_no_rfisher_import.
 REPOSITORY = re.compile(r"\bRFIsher\b|\brfisher\b")
@@ -35,14 +30,9 @@ def _files():
 @pytest.mark.parametrize("path", list(_files()), ids=lambda p: str(p.relative_to(ROOT)))
 def test_no_cosmology_token(path):
     text = path.read_text(encoding="utf-8")
-    for token in FROZEN:
-        text = text.replace(token, "")
     if path.suffix != ".py":
         text = PROVENANCE.sub("", text)
     text = REPOSITORY.sub("", text)
     found = sorted({m.group(0) for m in TOKENS.finditer(text)})
     assert not found, found
 
-
-def test_the_frozen_tokens_are_still_written():
-    assert '"pilotproxy_baonoise_health_view_v1"' in (SRC / "archive_health.py").read_text(encoding="utf-8")

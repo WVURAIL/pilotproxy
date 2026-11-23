@@ -1,0 +1,121 @@
+{
+  "detector_contract_sha256": "b2c503e2edc7b96ab69f4d27b7b8fa2345df5201185f893b43e49b4cf2f5041e",
+  "input_coordinate_system": "post_nyquist_zone_normalized",
+  "input_preprocessing": {
+    "time_reverse_detector_windows_before_kernel": true
+  },
+  "profiles": [
+    {
+      "chime_channel_id": 614,
+      "chord_channel_id": null,
+      "coarse_channel_center_hz": 560156250.0,
+      "coarse_channel_index": 613,
+      "fine_calibration": {
+        "status": "calibrated",
+        "decision_version": "fine_decision_v3",
+        "cfar_multiplier_q16": 126831,
+        "provenance": {
+          "epochs": [
+            "synthetic"
+          ],
+          "source_product_sha256": [
+            "28af7169db7b5178c4ec2c2dcdb6333071a6ba5939eb911c9103e09b0dd43ce5"
+          ],
+          "null_quantile": 0.8,
+          "note": "Word from control word x scale, control word from control channel. Reject word 1, masked whole (reject, power limit: pilot not seen in the calibration captures). Detect-only, not a calibration."
+        },
+        "power_limit_multiplier_q16": 1
+      },
+      "null_power_ratio": 1.0024384488319042,
+      "physical_channel": 29,
+      "pilot_frequency_hz": 560309441.0,
+      "placement_warnings": "",
+      "positive_excess_half_threshold_den": 12713,
+      "positive_excess_half_threshold_num": 6372,
+      "receiver_channel_id": 614,
+      "receiver_channel_id_namespace": "chime_freq_id",
+      "reference_norm_sum_sq": 12713,
+      "reference_placement_status": "nominal",
+      "target_norm_sq": 6372,
+      "weight_bank_index": 0,
+      "weight_bank_nbytes": 384,
+      "weight_bank_offset_bytes": 0
+    },
+    {
+      "chime_channel_id": 521,
+      "chord_channel_id": null,
+      "coarse_channel_center_hz": 596484375.0,
+      "coarse_channel_index": 520,
+      "fine_calibration": {
+        "status": "calibrated",
+        "decision_version": "fine_decision_v3",
+        "cfar_multiplier_q16": 126204,
+        "provenance": {
+          "epochs": [
+            "synthetic"
+          ],
+          "source_product_sha256": [
+            "28af7169db7b5178c4ec2c2dcdb6333071a6ba5939eb911c9103e09b0dd43ce5"
+          ],
+          "null_quantile": 0.8,
+          "note": "Word from control word x scale, control word from control channel. Power-limit word from power limit. Detect-only, not a calibration."
+        },
+        "power_limit_multiplier_q16": 153117
+      },
+      "null_power_ratio": 0.9974882260596546,
+      "physical_channel": 35,
+      "pilot_frequency_hz": 596309441.0,
+      "placement_warnings": "",
+      "positive_excess_half_threshold_den": 12740,
+      "positive_excess_half_threshold_num": 6354,
+      "receiver_channel_id": 521,
+      "receiver_channel_id_namespace": "chime_freq_id",
+      "reference_norm_sum_sq": 12740,
+      "reference_placement_status": "nominal",
+      "target_norm_sq": 6354,
+      "weight_bank_index": 1,
+      "weight_bank_nbytes": 384,
+      "weight_bank_offset_bytes": 384
+    },
+    {
+      "chime_channel_id": 491,
+      "chord_channel_id": null,
+      "coarse_channel_center_hz": 608203125.0,
+      "coarse_channel_index": 490,
+      "fine_calibration": {
+        "status": "control",
+        "decision_version": "fine_decision_v3",
+        "cfar_multiplier_q16": 126880,
+        "provenance": {
+          "epochs": [
+            "synthetic"
+          ],
+          "source_product_sha256": [
+            "28af7169db7b5178c4ec2c2dcdb6333071a6ba5939eb911c9103e09b0dd43ce5"
+          ],
+          "null_quantile": 0.8,
+          "note": "Word from control word x scale, control word from control channel. Detect-only, not a calibration."
+        }
+      },
+      "null_power_ratio": 1.002831524303917,
+      "physical_channel": 37,
+      "pilot_frequency_hz": 608309441.0,
+      "placement_warnings": "",
+      "positive_excess_half_threshold_den": 12714,
+      "positive_excess_half_threshold_num": 6375,
+      "receiver_channel_id": 491,
+      "receiver_channel_id_namespace": "chime_freq_id",
+      "reference_norm_sum_sq": 12714,
+      "reference_placement_status": "nominal",
+      "target_norm_sq": 6375,
+      "weight_bank_index": 2,
+      "weight_bank_nbytes": 384,
+      "weight_bank_offset_bytes": 768
+    }
+  ],
+  "receiver_channel_id_namespace": "chime_freq_id",
+  "receiver_profile_id": "chime_dtv_fengine",
+  "schema_version": "pilotproxy_runtime_pilot_profiles_v1",
+  "weight_coordinate_system": "post_nyquist_zone_normalization",
+  "weights_sha256": "8ca60b0b744e9e60906a276b925faa244f9c05729871763cd69f0c48a7af4dc2"
+}

@@ -150,6 +150,20 @@ def test_unbound_frequency_must_also_match(tmp_path):
     assert "population_CH14.json" not in artifacts
 
 
+def test_bundle_with_the_control_row_replays(tmp_path):
+    # an unbound control row is left alone
+    plan = make_plan(tmp_path / "unbound", control=True)
+    assert replay.replay_capture(plan)["replay.json"]["status"] == "invalid_support"
+    # a bound control row is decided like a pilot, and its saved mask is zero as without mask_control
+    plan = make_plan(tmp_path / "bound", control=True, frequency_ids=(2408, 3115), valid_only=True)
+    artifacts = replay.replay_capture(plan)
+    assert artifacts["replay.json"]["status"] == "matched"
+    control = artifacts["scores_CH37.json"]["scores"]
+    assert len(control) == 2 and all(row["recorded_mask"] == row["expected_mask"] == 0 for row in control)
+    # the fixture's word rejects at least one block, so the zero mask is not the decision
+    assert any(int(row["required_multiplier_q16"]) > int(row["bundle_multiplier_q16"]) for row in control)
+
+
 @pytest.mark.parametrize(
     ("field", "mutate", "message"),
     (

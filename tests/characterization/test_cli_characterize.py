@@ -11,7 +11,7 @@ from pilot_proxy.characterization import run
 
 
 @pytest.mark.parametrize("group,steps", [
-    ("characterize", {"archive", "histogram-frames", "fine-histogram-frames", "spectrogram", "score-cache"}),
+    ("characterize", {"archive", "histogram-frames", "fine-histogram-frames", "score-cache"}),
     ("products", {"check-archive"}),
 ])
 def test_the_groups_name_their_steps(group, steps):
@@ -21,7 +21,7 @@ def test_the_groups_name_their_steps(group, steps):
         assert callable(getattr(__import__(module, fromlist=["main"]), "main"))
 
 
-@pytest.mark.parametrize("argv", [["characterize", "spectrogram", "--help"], ["characterize", "archive", "--help"],
+@pytest.mark.parametrize("argv", [["characterize", "histogram-frames", "--help"], ["characterize", "archive", "--help"],
                                   ["products", "check-archive", "--help"]])
 def test_step_help_is_the_steps_own(argv, capsys):
     with pytest.raises(SystemExit) as exit_info:

@@ -405,6 +405,8 @@ def expected_products(
     in the stage's ``d_power_out``.
     Unbound frequencies have zero mask/powers and a ``None`` decision, as in
     the submitted stage. Every bound frequency must have a fine calibration.
+    A bound control row (channel 37) is decided like a pilot and its mask is
+    zero, as the stage writes it without ``mask_control``.
     Invalid rank support remains a decision with ``valid=False`` and mask zero.
 
     ``stats`` holds the dtv_stat rows. A fine_decision_v3 row is ``[n_peak, d_rho]``
@@ -439,7 +441,7 @@ def expected_products(
             stat_decisions.append(None)
             continue
         calibration = profile["fine_calibration"]
-        if calibration.get("status") != "calibrated" or calibration.get("decision_version") not in FINE_DECISION_VERSIONS:
+        if calibration.get("status") not in ("calibrated", "control") or calibration.get("decision_version") not in FINE_DECISION_VERSIONS:
             raise ValueError("bound profile requires a calibrated decision version; leave an uncalibrated channel unbound")
         decide, boundary = decision_functions(calibration["decision_version"])
         offset = _integer(profile["weight_bank_offset_bytes"], "weight_bank_offset_bytes")
@@ -468,7 +470,9 @@ def expected_products(
             stats[index] = stat.n_peak, stat.d_rho
             stat_decisions.append(int(masks_from_stat(stats[index:index + 1], v3_word(calibration))[0]))
         else:
-            masks[index] = decide(fine, multiplier_q16=calibration["cfar_multiplier_q16"], **args).mask
+            # the stage decides the control but, without mask_control, never writes its mask
+            if calibration["status"] != "control":
+                masks[index] = decide(fine, multiplier_q16=calibration["cfar_multiplier_q16"], **args).mask
             stat_decisions.append(None)
         decisions.append(boundary(fine, **args))
     for array in (masks, powers, stats):

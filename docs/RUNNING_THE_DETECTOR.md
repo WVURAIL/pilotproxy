@@ -76,7 +76,7 @@ Calibration and testing use different epochs, at different times of day. The nul
   "capture_format": "chime_baseband",
   "epoch": "2026-11 CHIME upgrade commissioning",
   "null_quantile": 0.99,
-  "channels": {"35": ["capture_521.h5"], "29": ["capture_614.h5"]},
+  "channels": {"35": ["capture_521.h5"], "29": ["capture_614.h5"], "37": ["capture_491.h5"]},
   "control": {"channel": 37, "captures": ["capture_491.h5"]},
   "exclude_bins": {"29": []}
 }
@@ -86,7 +86,7 @@ Calibration and testing use different epochs, at different times of day. The nul
 pilot-proxy calibrate-bundle --plan calibrate.json --output-dir bundle
 ```
 
-Paths to profiles are relative to the plan, and capture lists take glob patterns such as `"/scratch/dtv/run1/dtv_fine_powers*.h5"`. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first word. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, and a capture with the pilot on should replace it before its BAO word is trusted. Under v3 the anchor search only decides whether the pilot was seen, and a `nominal` channel gets no BAO word and carries the reject word (`pilot not seen in the calibration captures`). It counts the frames whose keep word passes the channel's default word, and a v3 keep word takes every bin, so a line anywhere in the channel counts as well.
+The control channel is also listed under `channels`, so the bundle carries it. Paths to profiles are relative to the plan, and capture lists take glob patterns such as `"/scratch/dtv/run1/dtv_fine_powers*.h5"`. For a telescope with no captures yet, `"control": null` and `"num_inputs": 32` give a simulated first word. The command writes `bundle/` and `bundle.report.json`, and the report must be read. A channel marked `nominal` showed no pilot in the capture, and a capture with the pilot on should replace it before its BAO word is trusted. Under v3 the anchor search only decides whether the pilot was seen, and a `nominal` channel gets no BAO word and carries the reject word (`pilot not seen in the calibration captures`). It counts the frames whose keep word passes the channel's default word, and a v3 keep word takes every bin, so a line anywhere in the channel counts as well.
 
 The report gives `word_source` for each channel's default word: `control word x scale` under v3, or `plan`. The BAO word of a v3 channel is kept apart, in `power_limit_word_q16` with `power_limit_word_source` `power limit`, or the reject word 1 with `reject, power limit: <reason>` for a channel with no passing word. It also gives `control_quantile_q16`, `reference_level`, and each channel's `mu0`, `passband_factor` and `scale`. The default word needs no captures of the channel, so a first bundle from a short control capture already holds it on every channel, which is enough for a detect-only run. `pilot_share` estimates the share of frames with a pilot. For a v1 or v2 bundle, the word is the knee when the pilot was seen in at least 30 captures, in at most 90% of the frames, and the knee lies above the floor, and otherwise the floor; `knee_word_q16` and `knee_interval_q16` report it.
 

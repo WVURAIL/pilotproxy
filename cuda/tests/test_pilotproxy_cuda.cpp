@@ -422,8 +422,12 @@ void test_weight_cache_reuse_and_change()
     assert(got.fine == want1.fine && got.powers == want1.powers);
     got = gpu_fused(handle, w2, rows, 1, 0);  // cache invalidated
     assert(got.fine == want2.fine && got.powers == want2.powers);
+    got = gpu_fused(handle, w1, rows, 1, 0);  // back to w1's address
+    assert(got.fine == want1.fine && got.powers == want1.powers);
     // The host buffer can change without its address changing.
-    w1 = w2;
+    const InputType* address = w1.data();
+    std::memcpy(w1.data(), w2.data(), w1.size() * sizeof(InputType));
+    assert(w1.data() == address);
     got = gpu_fused(handle, w1, rows, 1, 0);
     assert(got.fine == want2.fine && got.powers == want2.powers);
 

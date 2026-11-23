@@ -15,13 +15,14 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from pilot_proxy.bundle_calibration import _expand, _rows, required_words
+from pilot_proxy.bundle_calibration import _rows, required_words
 from pilot_proxy.characterization.score_cache import sha, write_json
 from pilot_proxy.fine_decision import (
     FINE_DECISION_V3_VERSION,
     calibration_geometry,
     v3_word,
 )
+from pilot_proxy.run_plans import ordered_run_files
 
 # Pathfinder timing, used when a file does not state its own
 BLOCK_SAMPLES = 8192
@@ -42,13 +43,15 @@ def _file_scores(path: str, channel_id: int, anchor: int, bulk: np.ndarray, rank
     sample_ns = int(attrs.get("seq_length_nsec", SAMPLE_NS))
     scalings = attrs.get("dim_scalings")
     block_samples = int(scalings[0]) if scalings is not None and len(scalings) else BLOCK_SAMPLES
-    start_ns = int(attrs.get("fpga_seq_time_nsec", int(attrs["fpga_seq_num"]) * sample_ns))
+    start = attrs.get("fpga_seq_time_nsec")
+    length = len(rows) * block_samples * sample_ns
     # zeros were not tested, and 0xFF fills a block missing from the concat window
     present = np.flatnonzero(rows.any(axis=(1, 2)) & ~(rows == MISSING).all(axis=(1, 2)))
     rows = rows[present]
     return dict(words=required_words(rows, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision_version),
-                powers=rows.sum(axis=2, dtype=np.uint64),
-                time=(start_ns + present * block_samples * sample_ns) * 1e-9)
+                powers=rows.sum(axis=2, dtype=np.uint64), start=None if start is None else int(start),
+                seq=int(attrs["fpga_seq_num"]), sample_ns=sample_ns, length=length,
+                offset=present * block_samples * sample_ns)
 
 
 def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, output_dir: Path,
@@ -66,7 +69,8 @@ def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, out
     anchor = int(calibration.get("anchor_bin", 0))
     word = v3_word(calibration) if v3 else int(calibration["cfar_multiplier_q16"])
     bulk, rank = calibration_geometry(calibration)
-    paths = _expand(runs)
+    # recording order, as a window after an F-engine restart may record no time
+    paths = [path for _, _, path in ordered_run_files(runs)]
     decision = calibration["decision_version"]
     args = [(p, int(row["receiver_channel_id"]), anchor, bulk, rank, decision) for p in paths]
     if jobs > 1:
@@ -79,9 +83,17 @@ def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, out
         raise ValueError(f"no recorded frames for channel {channel}")
     words = np.concatenate([p["words"] for p in parts])
     powers = np.concatenate([p["powers"] for p in parts])
-    time = np.concatenate([p["time"] for p in parts])
-    order = np.argsort(time, kind="stable")
-    words, powers, time = words[order], powers[order], time[order]
+    # a window after an F-engine restart records no time, and its fpga_seq_num restarts near zero, so it starts
+    # where its fpga_seq_num puts it after the window before, or at that window's end when fpga_seq_num went back
+    time, last = [], None
+    for p in parts:
+        start = p["start"]
+        if start is None:
+            start = p["seq"] * p["sample_ns"] if last is None else max(
+                last["start"] + last["length"], last["start"] + (p["seq"] - last["seq"]) * p["sample_ns"])
+        time.append((start + p["offset"]) * 1e-9)
+        last = dict(p, start=start)
+    time = np.concatenate(time)
 
     supported = words >= 0
     required = np.where(supported, words, 0).astype(np.uint64)

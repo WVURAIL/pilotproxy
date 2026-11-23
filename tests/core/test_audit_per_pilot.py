@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from pilot_proxy.detector_contract import NORMALIZED_POSITIVE_EXCESS_MASK_RULE
 from pilot_proxy.product_contract import (
@@ -119,8 +120,10 @@ def test_audit_accepts_a_v6_product_and_enforces_the_fine_sum_invariant(tmp_path
     assert "frame powers == all-bin sums of fine_power_u64 (v6 invariant)" in audit.failures
 
 
-def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
-    product = _consistent(_product())
+def _v5_product(frame_powers=(3, 2, 2)) -> dict[str, np.ndarray]:
+    product = _product()
+    product["fine_power_u64"][0, :, 0] = frame_powers
+    product = _consistent(product)
     product["schema_version"] = np.asarray(PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN)
     product["detector_version"] = np.asarray(
         f"pilot-proxy/0 kernel=2.3.0 K=128 {PER_PILOT_PRODUCT_V5_SCHEMA_TOKEN} source={'1' * 64}"
@@ -134,6 +137,11 @@ def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
     # A v5 product stores row-domain powers that differ from the fine sums. The
     # audit records this in its notes and passes the product.
     product["fine_power_u64"] = product["fine_power_u64"] * np.uint64(256)
+    return product
+
+
+def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
+    product = _v5_product()
     path = tmp_path / "844.npz"
     np.savez(path, **product)
     audit, _stats = audit_per_pilot.audit_file(path, None, None)
@@ -148,6 +156,37 @@ def test_audit_reads_a_v5_product_of_record(tmp_path: Path) -> None:
     np.savez(path, **product)
     audit, _stats = audit_per_pilot.audit_file(path, None, None)
     assert "decision_contract_json" in audit.failures
+
+
+@pytest.mark.parametrize("frame_powers", [(3, 2, 2), (2, 2, 2), (1, 2, 2), (3, 0, 0)],
+                         ids=["rejected", "equal-kept", "kept", "invalid"])
+def test_audit_checks_the_stored_v5_mask_and_valid_flag(tmp_path: Path, frame_powers) -> None:
+    # On a v5 product the integer rule is the only check of the stored mask.
+    product = _v5_product(frame_powers)
+    path = tmp_path / "844.npz"
+    np.savez(path, **product)
+    audit, _stats = audit_per_pilot.audit_file(path, None, None)
+    assert audit.failures == []
+    for field, label in (("reject_mask", "reject_mask exact integer rule"),
+                         ("valid", "valid == (p_ref_sum != 0)")):
+        flipped = dict(product)
+        flipped[field] = 1 - product[field]
+        np.savez(path, **flipped)
+        audit, _stats = audit_per_pilot.audit_file(path, None, None)
+        assert label in audit.failures
+
+
+def test_audit_checks_the_weight_hashes(tmp_path: Path) -> None:
+    product = _consistent(_product())
+    product["weight_bank_sha256"] = np.asarray("b" * 64)
+    product["weight_manifest_sha256"] = np.asarray("c" * 64)
+    path = tmp_path / "844.npz"
+    np.savez(path, **product)
+    audit, _stats = audit_per_pilot.audit_file(path, "b" * 64, "c" * 64)
+    assert audit.failures == []
+    audit, _stats = audit_per_pilot.audit_file(path, "c" * 64, "b" * 64)
+    assert "weight_bank_sha256 vs the weight bank" in audit.failures
+    assert "weight_manifest_sha256 vs its manifest" in audit.failures
 
 
 def test_v5_decision_contract_is_the_stored_record() -> None:

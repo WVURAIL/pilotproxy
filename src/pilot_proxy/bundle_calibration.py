@@ -87,7 +87,7 @@ PASSING_FIELDS = ("word", "kappa", "ratio", "x", "upper_shelf", "kept_frames", "
 # channel whole without a permanent list.
 REJECT_WORD_Q16 = 1
 # The reason of a channel whose calibration captures never showed its pilot, so its estimate reads only noise. It is
-# not the threshold rule's "DTV without a matching pilot", which the operating policy leaves unmasked.
+# not the threshold rule's "DTV without a matching pilot", which the operating policy compiles at the bundle word.
 NO_PILOT_REASON = "pilot not seen in the calibration captures"
 
 
@@ -112,8 +112,8 @@ def iter_blocks(path: str | Path, capture_format: str, channel_id: int, block_sa
                 raise ValueError(f"{path} does not hold coarse_freq {channel_id}")
             index = coarse.index(channel_id)
             # rfi antennas never enter the detector sum
-            labels = data.attrs.get("dish_label", [])
-            dishes = [j for j in range(data.shape[3]) if not (len(labels) and str(labels[j]).startswith("RFI"))]
+            labels = [l.decode() if isinstance(l, bytes) else str(l) for l in data.attrs.get("dish_label", [])]
+            dishes = [j for j in range(data.shape[3]) if not (labels and labels[j].startswith("RFI"))]
             start = (-int(data.attrs["fpga_seq_num"])) % block_samples
 
             def read(lo: int, hi: int) -> np.ndarray:
@@ -735,6 +735,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         raise ValueError("null_quantile must lie between 0 and 1")
     channels = sorted(int(c) for c in plan["channels"])
     control = plan.get("control")
+    if control and int(control["channel"]) not in channels:
+        raise ValueError(f"the control channel {control['channel']} must also be listed under channels, "
+                         "with its captures, so the bundle carries it")
     if control is None and "num_inputs" not in plan:
         raise ValueError("a plan needs a control channel or num_inputs for a simulated first word")
     threshold = plan.get("threshold", "knee")
@@ -887,7 +890,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 anchor = nominal if given is None else int(given)
                 origin = "nominal" if given is None else "plan"
                 bulk, rank = _geometry(anchor, excluded, decision)
-                seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
+                if not v3:  # v3 words do not depend on the anchor
+                    seen = required_words(fines, anchor_bin=anchor, bulk=bulk, rank=rank, decision_version=decision)
 
             supported = seen >= 0
             if not supported.any():

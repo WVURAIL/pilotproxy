@@ -173,6 +173,25 @@ def test_control_cli_manifest_remains_readable_by_the_fine_exporter(tmp_path):
             np.testing.assert_equal(fine[name], coarse[name])
 
 
+def test_screened_and_control_exports_share_one_layout(tmp_path):
+    products, release = _release(tmp_path)
+    export.run(products, release, tmp_path / "screened")
+    export.main(["--control-product", str(_product(tmp_path / "491.npz", 37)), "--output", str(tmp_path / "control")])
+    screened = json.loads((tmp_path / "screened/ch14.json").read_text())
+    control = json.loads((tmp_path / "control/ch37.json").read_text())
+    with np.load(tmp_path / "screened/ch14.npz") as a, np.load(tmp_path / "control/ch37.npz") as b:
+        assert a.files == b.files
+    # only the role, the band and the saved-era configuration differ between the two
+    assert set(screened) - set(control) == {"era_config_digest", "era_config"}
+    assert set(control) - set(screened) == {"role", "band"}
+    for key in ("histogram_rule", "timestamp_rule", "acquisition_rule", "health"):
+        assert screened[key] == control[key], key
+    assert screened["geometry"].keys() == control["geometry"].keys()
+    assert set(screened["decoded_npz_members"]) == set(control["decoded_npz_members"])
+    assert screened["counts"].keys() == control["counts"].keys()
+    assert screened["era_definitions"][0].keys() - control["era_definitions"][0].keys() == set()
+
+
 @pytest.mark.parametrize("record,expected", [
     ("product", "product differs"),
     ("ledger", "ledger mismatch:selected"),

@@ -1,11 +1,13 @@
-"""Find the stable eras of each channel by the section 8.1 procedure, with every policy value in a versioned configuration.
+"""Find the stable eras of each channel by the monthly-state rule, with every policy value in a versioned configuration.
 
-The dissertation (chapter 8, ``sec:calibration:eras``) fixes a predeclared,
-calibration-free rule that reads each channel's era record from the survey
-products. This module implements that rule, and every policy value is a field
-of :class:`EraConfig`. The configuration is versioned, and the sha256 digest of
-its canonical JSON is recorded in every output row. The definitions below are
-quoted from the text.
+This is the earlier, predeclared monthly-state era rule that ``characterize
+archive`` runs on the survey products. It is not the dissertation's era rule
+of record: that is ``app:era-rule``, made by the dissertation's
+``scripts/era_boundaries.py`` (vendored from pilotproxy 2f28287), and no
+dissertation record reads the eras written here. Every policy value is a
+field of :class:`EraConfig`. The configuration is versioned, and the sha256
+digest of its canonical JSON is recorded in every output row. The definitions
+below are quoted from the earlier draft that set the rule.
 
 Inputs
     "Per valid frame: UTC; the exact normalized coarse ratio
@@ -97,15 +99,15 @@ EVIDENCE_SIGN_ON = "transmitter sign-on"
 EVIDENCE_SIGN_OFF = "transmitter sign-off"
 EVIDENCE_POWER = "power transition"
 
-PREDECLARED_RULE = "section 8.1 rule"
+PREDECLARED_RULE = "monthly-state rule"
 SOURCE_AUTHOR = "author-dated"
 
 # configuration
 @dataclass(frozen=True)
 class EraConfig:
-    """Every policy value of the section 8.1 procedure, versioned and digested."""
+    """Every policy value of the monthly-state rule, versioned and digested."""
 
-    version: str = "section-8.1-eras-v2"
+    version: str = "monthly-state-eras-v3"
     min_frames: int = blocks.MONTH_MIN_FRAMES
     min_units: int = blocks.MONTH_MIN_UNITS
     min_days: int = blocks.MONTH_MIN_DAYS
@@ -153,7 +155,7 @@ DEFAULT_CONFIG = EraConfig()
 
 
 def state_of(level_db: float, config: EraConfig = DEFAULT_CONFIG) -> str:
-    """The section 8.1 state of a monthly median level (NaN is ambiguous)."""
+    """The monthly state of a monthly median level (NaN is ambiguous)."""
     if not math.isfinite(level_db):
         return AMBIGUOUS
     if level_db >= config.high_db:
@@ -494,21 +496,23 @@ def _station_boundaries(pop: Sequence[MonthRecord], raw: list[str], positions: l
 def _instrument_boundaries(pop: Sequence[MonthRecord], config: EraConfig) -> tuple[list[Boundary], list[Excursion]]:
     boundaries: list[Boundary] = []
     excursions: list[Excursion] = []
-    previous: set[str] | None = None
-    for k, record in enumerate(pop):
+    # compare with the established maps, so the old map returning after an excursion is not a change
+    established = set(pop[0].input_maps) if pop else set()
+    for k, record in enumerate(pop[1:], start=1):
         maps = set(record.input_maps)
-        if previous is not None:
-            opened = False
-            for value in sorted(maps - previous):
-                window = pop[k: k + config.persistence_months]
-                holds = len(window) == config.persistence_months and all(value in r.input_maps for r in window)
-                if holds and not opened:
-                    boundaries.append(Boundary(EVIDENCE_INSTRUMENT, pop[k - 1].month, record.month, (),
-                                               ";".join(sorted(previous)), ";".join(sorted(maps))))
-                    opened = True
-                elif not holds:
-                    excursions.append(Excursion(record.month, "instrument", value[:8]))
-        previous = maps
+        changed = maps ^ established
+        window = pop[k: k + config.persistence_months]
+        # a map that enters or leaves must stay so for persistence_months; only an entering map is a change
+        held = {v for v in changed
+                if len(window) == config.persistence_months and all((v in r.input_maps) == (v in maps) for r in window)}
+        failed = changed - held
+        # flag the maps that entered for one month, or the ones that left for one month if none entered
+        flagged = sorted(failed & maps) or sorted(failed)
+        excursions.extend(Excursion(record.month, "instrument", v[:8]) for v in flagged)
+        if held & maps:
+            boundaries.append(Boundary(EVIDENCE_INSTRUMENT, pop[k - 1].month, record.month, (),
+                                       ";".join(sorted(established)), ";".join(sorted(maps))))
+        established ^= held
     return boundaries, excursions
 
 
@@ -698,7 +702,7 @@ def _software_tag_changes(product: Product, mask) -> tuple[int, int]:
 def era_table(product: Product, mask=None, config: EraConfig = DEFAULT_CONFIG, *,
               campaign_last_month: int | None = None,
               station_record: Mapping[str, str] | None = None) -> EraTable:
-    """The section 8.1 procedure on one product over the given frame mask.
+    """The monthly-state rule on one product over the given frame mask.
 
     ``mask`` defaults to ``product.selected`` (valid frames passing the health
     gate). ``campaign_last_month`` is the last populated month over the whole
@@ -780,7 +784,7 @@ def impose_eras(table: EraTable, product: Product, spec: Sequence[Sequence[str]]
     last of them. A populated month between the first and last eras that lies
     in no span belongs to no era and is reported as a transition-zone month,
     which is the rule's own placement convention. The state of an era is the
-    section 8.1 state of its frame-median level. Everything the rule recorded
+    monthly state of its frame-median level. Everything the rule recorded
     per month (states, excursions, instrument changes, and peak locations) is
     kept as it is. The rule's sensitivity outcomes are dropped, because its
     thresholds no longer place the eras, and the rule's own current era is kept

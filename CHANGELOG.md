@@ -5,6 +5,33 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Fixes from the 2026-11-22 review:
+  - CHORD and Pathfinder weights in raw input coordinates are the mirror of the post bank; they were the post bank,
+    blind to an upright pilot. `pack_channelized_streams_for_detector` takes a required `time_reverse_windows` flag
+    (the bundle's `time_reverse_detector_windows_before_kernel`) in place of `nyquist_zone`, so CHORD packing
+    reverses in zone 1. CHIME banks and packing are unchanged.
+  - The operating policy compiles a no-pilot channel at the word the stage applies (`reject_all` at the reject
+    word 1, otherwise finite) and lists it under `no_pilot_freq_ids`, instead of recording it as unmasked; a pending
+    no-pilot channel leaves the policy incomplete. `expected_masked_fraction` is removed.
+  - `calibrate-bundle` leaves out RFI dishes whose `dish_label` is stored as bytes, and refuses a plan whose control
+    channel is not also under `channels`, which gave a bundle without the channel-37 row.
+  - Capture replay accepts bundles with the channel-37 control row and scores a bound control like a pilot.
+  - Good-input counts drop the `-1` rows the writer fills for a mask frame that has not arrived.
+  - Plans and score caches of a run with untimed windows follow recording order, not `fpga_seq_num`.
+  - The era rule no longer opens an instrument-change boundary when the input map returns after a one-month
+    excursion; `characterize archive` eras are named the monthly-state rule (`monthly-state-eras-v3`), not the
+    dissertation's era rule.
+  - `PRODUCT_SCHEMA.md` and `products/reader.py` name the writer of the v5 products of record (pilot-proxy
+    2.0.0.dev0, core 2.3.0, in the private development repository), not the code on main.
+  - `inject-pilot-tone` works in slabs of 8192 rows; peak memory was about 50 times the baseband dataset.
+  - `analyze_dtv_run.py --ranges` has no default (the default file was deleted); `calibration_length.py` takes
+    `--night`, as `process-run` does; `prepare_fine_validation_waveforms.py` runs the generator from the checkout
+    and records each source's sha256.
+  - Removed with no callers: `characterize spectrogram`, the anchor estimator, bootstrap and contrast writers in
+    `anchors.py` (the marker bins and bulk mask stay), the residual health views, and `tools/fused_real_receipt.py`,
+    whose input has had no producer since `d3a3749`.
+  - Tests that could not fail now can, and a golden v3 bundle (`tests/data/v3_bundle_golden/`) pins the applied
+    word and role of each channel.
 - Removed code and data that neither the live system nor the dissertation uses. Every removed path is listed in
   `tests/data/removed_paths.txt`, and tag `pre-purge-2026-11-23` (63e72e8) holds them:
   - the LimeSDR/SDR bench: transfer sweep, live handoff, antenna controls, smoke and reference captures,

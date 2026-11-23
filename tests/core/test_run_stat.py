@@ -290,6 +290,12 @@ def test_analyze_tool_finds_the_archive_ranges_of_a_v1_bundle_at_its_words(tmp_p
     _raw(run_dir / "dtv_mask_0.raw", np.zeros((frames, 2)), freqs, np.int8)
     _raw(run_dir / "dtv_powers_0.raw", np.ones((frames, 2, 3)), freqs, "<u8")
     _raw(run_dir / "dtv_fine_support_0.raw", np.ones((frames, 2, 2)), freqs, "<i4")
+    # without --ranges the mechanics checks alone decide the result
+    out = tmp_path / "plain.json"
+    done = _run_tool("analyze_dtv_run", "--run-dir", run_dir, "--bundle-dir", bundle, "--num-freq", 2, "--json", out)
+    assert done.returncode == 0, done.stdout
+    result = json.loads(out.read_text())
+    assert result["result"] == "PASS" and "archive_ranges_found_for_bundle" not in result["checks"]
 
     def entry(label, words):
         return {str(c): dict(word_q16=w, monthly_p05=0.0, monthly_p95=1.0, label=label) for c, w in words.items()}

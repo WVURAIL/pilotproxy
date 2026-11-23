@@ -29,7 +29,11 @@ from pilot_proxy.detector_contract import (
     null_power_ratio_from_weight_norms,
     weight_term_norms_sq,
 )
-from pilot_proxy.detector_geometry import DEFAULT_NYQUIST_ZONE
+from pilot_proxy.detector_geometry import (
+    DEFAULT_NYQUIST_ZONE,
+    MIRRORED_NYQUIST_ZONE,
+    nyquist_zone_is_mirrored,
+)
 from pilot_proxy.detector_reference import quantize_complex_numpy
 from pilot_proxy.detector_weights import (
     CRC32_UNSIGNED_MASK,
@@ -666,18 +670,26 @@ def generate_weight_table_from_receiver_profile(
         core, detector_window_samples=int(profile.detector_window_samples)
     )
     coordinate_system = normalize_weight_coordinate_system(weight_coordinate_system)
-    use_normal_override = (
+    generation_profile = profile
+    if (
         coordinate_system == WEIGHT_COORDINATE_POST_NYQUIST_ZONE
         and not profile.time_reverse_detector_windows_before_kernel
-    ) or (
+    ):
+        generation_profile = replace(profile, nyquist_zone=DEFAULT_NYQUIST_ZONE)
+    elif (
         coordinate_system == WEIGHT_COORDINATE_RAW_INPUT
         and profile.time_reverse_detector_windows_before_kernel
-    )
-    generation_profile = (
-        replace(profile, nyquist_zone=DEFAULT_NYQUIST_ZONE)
-        if use_normal_override
-        else profile
-    )
+    ):
+        # A raw bank sees the windows unreversed, so it is the mirror of the
+        # post bank: build it in the other zone parity (CHIME 2 -> 1, CHORD 1 -> 2).
+        generation_profile = replace(
+            profile,
+            nyquist_zone=(
+                DEFAULT_NYQUIST_ZONE
+                if nyquist_zone_is_mirrored(profile.nyquist_zone)
+                else MIRRORED_NYQUIST_ZONE
+            ),
+        )
     table = np.zeros(
         (
             int(generation_profile.num_coarse_channels),

@@ -202,8 +202,9 @@ def _inject_tone_copy(
     amplitude_lsb: float,
     phase_seed: int,
     center_hz: float,
+    chunk_rows: int = 8192,
 ) -> dict[str, Any]:
-    """Write and verify an injection copy before publication."""
+    """Write and verify an injection copy before publication, ``chunk_rows`` rows at a time."""
     import h5py
 
     fmt = _format_module()
@@ -237,50 +238,59 @@ def _inject_tone_copy(
         }
 
     with h5py.File(str(output_path), "r+") as handle:
-        packed = handle[BASEBAND_DATASET][...]
-        n_time, n_feeds = packed.shape
-        real, imag = _decode_components(packed)
-        rms = float(
-            np.sqrt(
-                (real.astype(np.float64) ** 2 + imag.astype(np.float64) ** 2).mean()
-                / 2.0
-            )
-        )
+        dataset = handle[BASEBAND_DATASET]
+        n_time, n_feeds = dataset.shape
         rng = np.random.default_rng(int(phase_seed))
         phases = 2.0 * np.pi * rng.random(n_feeds)
-        n = np.arange(n_time, dtype=np.float64)[:, np.newaxis]
-        angle = (
-            2.0 * np.pi * float(baseband_frequency_hz) / float(fmt.FS)
-        ) * n + phases[np.newaxis, :]
-        tone_re = float(amplitude_lsb) * np.cos(angle)
-        tone_im = float(amplitude_lsb) * np.sin(angle)
-        # Dithered requantization: floor(tone + U) has mean tone, so a tone
-        # below 0.5 LSB is injected too. The draws follow the phases, so a seed
-        # fixes the whole output.
-        delta_re = np.floor(tone_re + rng.random(tone_re.shape))
-        delta_im = np.floor(tone_im + rng.random(tone_im.shape))
-        frac_re = tone_re - np.floor(tone_re)
-        frac_im = tone_im - np.floor(tone_im)
-        dither_variance = float((frac_re * (1 - frac_re) + frac_im * (1 - frac_im)).mean() / 2.0)
-        # Saturate in the floating-point domain before converting to integers;
-        # a finite tone can exceed the range of int64.
-        new_re = real + delta_re
-        new_im = imag + delta_im
-        clipped = (
-            (new_re < COMPONENT_MIN)
-            | (new_re > COMPONENT_MAX)
-            | (new_im < COMPONENT_MIN)
-            | (new_im > COMPONENT_MAX)
-        )
-        clip_count = int(np.count_nonzero(clipped))
-        new_re = np.clip(new_re, COMPONENT_MIN, COMPONENT_MAX).astype(np.int32)
-        new_im = np.clip(new_im, COMPONENT_MIN, COMPONENT_MAX).astype(np.int32)
-        handle[BASEBAND_DATASET][...] = _encode_components(new_re, new_im)
-        # The written delta projected on the unit tone, after saturation.
-        unit_re, unit_im = np.cos(angle), np.sin(angle)
-        written_re, written_im = new_re - real, new_im - imag
-        realized = float(np.hypot((written_re * unit_re + written_im * unit_im).mean(),
-                                  (written_im * unit_re - written_re * unit_im).mean()))
+        # The file is done in slabs of rows. The real-part dither draws follow
+        # the phases and the imaginary-part draws follow those (one uint64 per
+        # double), so the output equals one whole-array pass with this seed.
+        rng_im_bits = np.random.PCG64()
+        rng_im_bits.state = rng.bit_generator.state
+        rng_im_bits.advance(n_time * n_feeds)
+        rng_im = np.random.Generator(rng_im_bits)
+        power = clip_count = 0
+        dither_sum = along = across = 0.0
+        for start in range(0, n_time, int(chunk_rows)):
+            stop = min(start + int(chunk_rows), n_time)
+            real, imag = _decode_components(dataset[start:stop])
+            power += int((real.astype(np.int64) ** 2 + imag.astype(np.int64) ** 2).sum())
+            n = np.arange(start, stop, dtype=np.float64)[:, np.newaxis]
+            angle = (
+                2.0 * np.pi * float(baseband_frequency_hz) / float(fmt.FS)
+            ) * n + phases[np.newaxis, :]
+            tone_re = float(amplitude_lsb) * np.cos(angle)
+            tone_im = float(amplitude_lsb) * np.sin(angle)
+            # Dithered requantization: floor(tone + U) has mean tone, so a tone
+            # below 0.5 LSB is injected too.
+            delta_re = np.floor(tone_re + rng.random(tone_re.shape))
+            delta_im = np.floor(tone_im + rng_im.random(tone_im.shape))
+            frac_re = tone_re - np.floor(tone_re)
+            frac_im = tone_im - np.floor(tone_im)
+            dither_sum += float((frac_re * (1 - frac_re) + frac_im * (1 - frac_im)).sum())
+            # Saturate in the floating-point domain before converting to integers;
+            # a finite tone can exceed the range of int64.
+            new_re = real + delta_re
+            new_im = imag + delta_im
+            clipped = (
+                (new_re < COMPONENT_MIN)
+                | (new_re > COMPONENT_MAX)
+                | (new_im < COMPONENT_MIN)
+                | (new_im > COMPONENT_MAX)
+            )
+            clip_count += int(np.count_nonzero(clipped))
+            new_re = np.clip(new_re, COMPONENT_MIN, COMPONENT_MAX).astype(np.int32)
+            new_im = np.clip(new_im, COMPONENT_MIN, COMPONENT_MAX).astype(np.int32)
+            dataset[start:stop] = _encode_components(new_re, new_im)
+            # The written delta projected on the unit tone, after saturation.
+            unit_re, unit_im = np.cos(angle), np.sin(angle)
+            written_re, written_im = new_re - real, new_im - imag
+            along += float((written_re * unit_re + written_im * unit_im).sum())
+            across += float((written_im * unit_re - written_re * unit_im).sum())
+        size = float(n_time * n_feeds)
+        rms = float(np.sqrt(power / size / 2.0))
+        dither_variance = dither_sum / size / 2.0
+        realized = float(np.hypot(along / size, across / size))
 
     verify_injection_preserves_siblings(source_path, output_path)
     return {
@@ -324,7 +334,8 @@ def verify_injection_preserves_siblings(source_path: Path, output_path: Path) ->
 
         def _visit(name, item):
             if isinstance(item, h5py.Dataset):
-                datasets[name] = item[...]
+                # baseband is the injected dataset and is not compared
+                datasets[name] = None if name == BASEBAND_DATASET else item[...]
             attrs[name] = dict(item.attrs)
 
         handle.visititems(_visit)

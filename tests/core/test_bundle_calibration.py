@@ -47,6 +47,8 @@ from pilot_proxy.run_scores import build_run_scores
 from pilot_proxy.run_spectrogram import FRAME_SECONDS, run_spectrogram, write_masked_summary, write_run_spectrogram
 
 ROOT = Path(__file__).resolve().parents[2]
+# a v3 power-limit bundle: channel 35 at its power-limit word, 29 at the reject word, 37 the control
+GOLDEN = ROOT / "tests" / "data" / "v3_bundle_golden"
 BLOCK = 16384
 INPUTS = 16
 FS = 390625.0
@@ -87,10 +89,12 @@ def plans(tmp_path_factory):
     )
     # strong and clean captures in turn, so the kept fraction has a knee
     mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    control = [write_capture(tmp / "c37.h5", 37, 26, 3)]
     calibrate = dict(common, epoch="synthetic", null_quantile=0.8, min_knee_captures=4, channels={
         "35": mixed,
         "29": [write_capture(tmp / "c29.h5", 29, 6, 2)],
-    }, control=dict(channel=37, captures=[write_capture(tmp / "c37.h5", 37, 26, 3)]))
+        "37": control,
+    }, control=dict(channel=37, captures=control))
     test = dict(capture_format="chime_baseband",
                 channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2)) for i in range(2)],
                           "29": [write_capture(tmp / "t29.h5", 29, 4, 5)]},
@@ -285,7 +289,7 @@ def test_pilot_in_every_capture_takes_the_floor(plans, tmp_path):
     # no clean frames, so the knee would sit in the pilot's own spread and keep most of it
     always = [write_capture(tmp_path / f"a35_{i}.h5", 35, 2, 40 + i, tone=0.8) for i in range(6)]
     path = tmp_path / "plan.json"
-    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": always})))
+    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": always, "37": plans["calibrate"]["channels"]["37"]})))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     channel = report["channels"]["35"]
     assert channel["pilot_in_nearly_every_frame"]
@@ -379,6 +383,11 @@ def test_chord_blocks_start_on_the_block_grid_and_leave_out_rfi_dishes(tmp_path)
     expected = voltages[3:, 1][:, :, [0, 2]].reshape(5, block, 4)
     assert len(blocks) == 5 and all(np.array_equal(b, e) for b, e in zip(blocks, expected))
     assert len(list(iter_blocks(path, "chord_baseband", 3115, block, max_frames=2))) == 2
+    # fixed-length byte labels leave out the same dish
+    path = write_chord_capture(tmp_path / "bytes.h5", voltages, [2531, 3115], 1000 * block - 3,
+                               np.array([b"D1", b"RFI1", b"D2"], dtype="S4"))
+    blocks = list(iter_blocks(path, "chord_baseband", 3115, block))
+    assert len(blocks) == 5 and all(np.array_equal(b, e) for b, e in zip(blocks, expected))
     # a file with no labels sums every dish
     path = write_chord_capture(tmp_path / "unlabelled.h5", voltages, [2531, 3115], 0)
     blocks = list(iter_blocks(path, "chord_baseband", 2531, block))
@@ -547,7 +556,7 @@ def test_run_scores_feed_the_threshold_rule(plans, tmp_path):
         frames = rng.integers(900, 1100, size=(48, 3, 256)).astype(np.uint64)
         frames[:16, 0, anchor] *= np.uint64(1000)
         frames[40:] = np.iinfo(np.uint64).max
-        runs.append(write_run_file(tmp_path / f"run_{index}.h5", [521, 614], frames))
+        runs.append(write_run_file(tmp_path / f"run_{1 - index}.h5", [521, 614], frames))
         with h5py.File(runs[-1], "a") as handle:
             handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = (1 - index) * 48 * 8192
     result = build_run_scores(bundle_dir=plans["bundle"], runs=runs, channel=35, output_dir=tmp_path / "scores",
@@ -564,6 +573,30 @@ def test_run_scores_feed_the_threshold_rule(plans, tmp_path):
     assert sweep["x"][-1] > sweep["x"][0]
     with pytest.raises(ValueError, match="already exists"):
         build_run_scores(bundle_dir=plans["bundle"], runs=runs, channel=35, output_dir=tmp_path / "scores")
+
+
+def test_run_scores_keep_recording_order_after_a_restart(plans, tmp_path):
+    # one several-frame file: two timed windows, then two after an F-engine restart, untimed and near seq 0
+    sources = []
+    for w, seq in enumerate([10**9, 10**9 + 4 * 8192, 4096, 4096 + 4 * 8192]):
+        frames = np.full((4, 3, 256), 1000 + w, dtype=np.uint64)
+        sources.append(write_run_file(tmp_path / f"w{w}.h5", [521, 614], frames))
+        with h5py.File(sources[-1], "a") as handle:
+            handle["dtv_fine_powers_n0"].attrs.update(fpga_seq_num=seq, fpga_seq_time_nsec=10**18 + seq * 5120,
+                                                      seq_length_nsec=5120, dim_scalings=[8192, 1, 1, 1],
+                                                      time_downsampling_fpga=8192)
+    (tmp_path / "acq_1").mkdir()
+    path = str(write_frames_file(sources, tmp_path / "acq_1" / "dtv_fine_powers.00000000.h5"))
+    build_run_scores(bundle_dir=plans["bundle"], runs=[path], channel=35, output_dir=tmp_path / "scores",
+                     event_seconds=0.1)
+    with np.load(tmp_path / "scores" / "product_ch35.npz") as product:
+        target = product["fine_power_u64"][:, 0, 0]
+    assert list(target // 256) == [1000] * 4 + [1001] * 4 + [1002] * 4 + [1003] * 4
+    # the untimed windows follow the timed ones in time and in events
+    with np.load(tmp_path / "scores" / "ch35.npz") as scores:
+        time, event = scores["frame_time"], scores["frame_event_index"]
+    assert (np.diff(time) > 0).all() and time[-1] - time[0] < 1.0
+    assert event[8:].min() > event[:8].max()
 
 
 def test_run_scores_read_the_frame_timing_from_the_file(plans, tmp_path):
@@ -633,7 +666,8 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     frames = np.ones((2, 3, 256), dtype=np.uint64)
     for index in range(6):
-        name = write_run_file(tmp_path / f"run_{index}.h5", [521, 491], frames)
+        # untimed files are in the order recv named them
+        name = write_run_file(tmp_path / f"run_{5 - index}.h5", [521, 491], frames)
         with h5py.File(name, "a") as handle:
             handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = 1000 - index
     # another half, with no bound channel
@@ -641,8 +675,8 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     result = write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "out",
                              epoch="synthetic", receiver_profile=Path(plans["calibrate"]["receiver_profile"]))
     first, last = result["calibrate"]["channels"]["37"], result["test"]["channels"]["37"]
-    assert [Path(p).name for p in first] == ["run_5.h5", "run_4.h5", "run_3.h5", "run_2.h5"]
-    assert [Path(p).name for p in last] == ["run_1.h5", "run_0.h5"]
+    assert [Path(p).name for p in first] == ["run_0.h5", "run_1.h5", "run_2.h5", "run_3.h5"]
+    assert [Path(p).name for p in last] == ["run_4.h5", "run_5.h5"]
     assert result["calibrate"]["control"] == dict(channel=37, captures=first)
     assert result["test"]["control"] == last
     assert json.loads((tmp_path / "out" / "test.json").read_text()) == result["test"]
@@ -752,13 +786,18 @@ def test_unknown_decision_version_is_refused(plans, tmp_path):
         calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
 
 
-def test_control_channel_can_be_bound(plans, tmp_path):
-    captures = plans["calibrate"]["control"]["captures"]
-    plan = dict(plans["calibrate"], channels={**plans["calibrate"]["channels"], "37": captures})
+def test_control_channel_must_be_listed_under_channels(plans, tmp_path):
+    channels = {c: p for c, p in plans["calibrate"]["channels"].items() if c != "37"}
     path = tmp_path / "plan.json"
-    path.write_text(json.dumps(plan))
-    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    path.write_text(json.dumps(dict(plans["calibrate"], channels=channels)))
+    with pytest.raises(ValueError, match="must also be listed under channels"):
+        calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    assert not (tmp_path / "bundle").exists()
+
+
+def test_control_channel_is_bound(plans):
+    report = plans["report"]
+    rows = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())["profiles"]
     status = {row["physical_channel"]: row["fine_calibration"]["status"] for row in rows}
     assert status == {29: "calibrated", 35: "calibrated", 37: "control"}
     assert report["channels"]["37"]["word_q16"] == report["floor_word_q16"]
@@ -1159,6 +1198,18 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     assert not check["passed"] and "recalibrate" in check["detail"]
     # a channel with no passing word carries the reject word, so every consumer masks it whole
     assert fine[29]["power_limit_multiplier_q16"] == REJECT_WORD_Q16
+    # the bundle is the golden v3 bundle the consumers test their readers on; after a deliberate change of the
+    # writer, copy this bundle's pilot_profiles.json there and rewrite expected_roles.json
+    written, golden = (json.loads(Path(d, "pilot_profiles.json").read_text()) for d in (tmp_path / "bundle", GOLDEN))
+    for bundle in (written, golden):
+        for row in bundle["profiles"]:
+            row["fine_calibration"]["provenance"].pop("source_product_sha256")   # the hash of the plan, with its paths
+    assert written == golden
+    roles = {str(p["receiver_channel_id"]): dict(physical_channel=p["physical_channel"], word=v3_word(p["fine_calibration"]),
+                                                 control=p["fine_calibration"]["status"] == "control")
+             for p in golden["profiles"]}
+    assert roles == json.loads((GOLDEN / "expected_roles.json").read_text())
+    assert {r["word"] for r in roles.values()} >= {REJECT_WORD_Q16, fine[35]["power_limit_multiplier_q16"]}
 
 
 def test_bundle_test_of_a_channel_calibrated_without_captures_fails_cleanly(plans, tmp_path):
@@ -1307,7 +1358,7 @@ def test_v3_control_channel_takes_the_control_word_itself(plans, tmp_path):
 
 
 def test_v3_default_word_needs_no_captures_of_the_channel(plans, tmp_path):
-    path = _v3_plan(plans, tmp_path, channels={"29": [], "35": plans["calibrate"]["channels"]["35"]})
+    path = _v3_plan(plans, tmp_path, channels={**plans["calibrate"]["channels"], "29": []})
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     r = report["channels"]["29"]
     assert r["frames"] == 0 and r["word_source"] == "control word x scale"
@@ -1541,6 +1592,63 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
         eta=1.5, word_source="control word x scale", masked_fraction=0.01, power_limit_word_q16=None,
         power_limit_word_source="none, power limit: pilot not seen")}))
     assert tool.describe(none) == "ch29 1.5 (control word x scale, 1.0%, no power-limit word)"
+
+
+def test_calibration_length_takes_the_night_control_word(plans, tmp_path, monkeypatch, capsys):
+    from pilot_proxy.sun import is_night
+
+    tool = _calibration_length_tool()
+    captures = plans["calibrate"]["control"]["captures"]
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    minutes = DAY_CTIME + 60 * np.arange(12 * 60)
+    sunset = minutes[np.argmax(is_night(minutes, DRAO["latitude_deg"], DRAO["longitude_deg_east"]))]
+    site = (str(DRAO["latitude_deg"]), str(DRAO["longitude_deg_east"]))
+
+    def write_run(run, before_sunset_s):
+        """Write 64 captures starting before_sunset_s before sunset at DRAO, and return which are in the day."""
+        times = sunset - before_sunset_s + tool.CAPTURE_SECONDS * np.arange(64)
+        day = ~is_night(times, DRAO["latitude_deg"], DRAO["longitude_deg_east"])
+        rng = np.random.default_rng(3)
+        (tmp_path / run).mkdir()
+        for index in range(64):
+            data = rng.gamma(44, 1e6 / 44, size=(8, 2, 3, 256))
+            data[:, 1, 0] *= 1 + 0.5 * day[index]        # the Sun raises the control's target in the day
+            with h5py.File(tmp_path / run / f"run_{index:02d}.h5", "w") as handle:
+                handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
+                handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
+                handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 8 * 8192
+                handle["dtv_fine_powers_n0"].attrs["fpga_seq_time_nsec"] = int(times[index] * 1e9)
+        return day
+
+    def study(name, run, *extra):
+        monkeypatch.setattr(sys, "argv", ["calibration_length.py", "--bundle-dir", str(tmp_path / "bundle"), "--run",
+                                          str(tmp_path / run / "run_*.h5"), "--decision-version",
+                                          "fine_decision_v3", "--output-dir", str(tmp_path / name), *extra])
+        tool.main()
+        return capsys.readouterr().out
+
+    # from 0.2 h before sunset, the 0.4 h calibration holds about 17 day and 17 night captures
+    day = write_run("run", 720)
+    study("night", "run", "--hours", "0.4", "--night", *site)
+    study("all", "run", "--hours", "0.4")
+    night, all_frames = (json.loads((tmp_path / name / "0.4h" / "bundle.report.json").read_text())
+                         for name in ("night", "all"))
+    assert night["control"]["night"] == dict(DRAO, frames=8 * int((~day[:34]).sum()))
+    assert night["control_quantile_q16"] < all_frames["control_quantile_q16"]
+
+    # from 1400 s before sunset, the first 0.38 h is all day: it is skipped, and the night after it calibrates
+    day = write_run("dusk", 1400)
+    assert day[:32].all()
+    out = study("dusk-hours", "dusk", "--hours", "0.38", "--night", *site)
+    assert "0.38 h: no night control capture; skipped" in out
+    assert json.loads((tmp_path / "dusk-hours" / "length.json").read_text()) == []
+    study("dusk-blocks", "dusk", "--block-hours", "0.38", "--night", *site)
+    rows = json.loads((tmp_path / "dusk-blocks" / "blocks.json").read_text())
+    assert rows[0]["skipped"] == "no night control capture" and "channels" in rows[1]
+    report = json.loads((tmp_path / "dusk-blocks" / "block1" / "bundle.report.json").read_text())
+    assert report["control"]["night"] == dict(DRAO, frames=8 * int((~day[32:]).sum()))
 
 
 def test_v3_rows_need_a_receiver_namespace():

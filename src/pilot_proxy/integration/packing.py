@@ -15,9 +15,7 @@ from pilot_proxy.detector_constants import (
     LOCKED_SAMPLE_BITS_PER_COMPONENT as DEFAULT_BITS_PER_COMPONENT,
 )
 from pilot_proxy.detector_geometry import (
-    DEFAULT_NYQUIST_ZONE,
     DetectorFrameLayout,
-    apply_nyquist_zone_to_detector_matrix,
     build_stream_map,
     flatten_feed_channel_streams,
     stream_time_block_to_detector_matrix,
@@ -229,8 +227,8 @@ def pack_channelized_streams_for_detector(
     feed_channel_streams: np.ndarray,
     *,
     frame_size_samples: int,
+    time_reverse_windows: bool,
     detector_window_samples: int = DEFAULT_DETECTOR_WINDOW_SAMPLES,
-    nyquist_zone: int = DEFAULT_NYQUIST_ZONE,
     quantization_scale_mode: str = QUANTIZATION_SCALE_MODE_GLOBAL,
     clip_sigma: float = DEFAULT_CLIP_SIGMA,
     combine_mode: str = COMBINE_MODE_COMBINED_STREAMS,
@@ -247,9 +245,11 @@ def pack_channelized_streams_for_detector(
 
     Each block of frame_size_samples starts block_step_samples after the
     previous one (one frame by default). The block is cut into windows of
-    detector_window_samples, the windows are time reversed in a mirrored
-    Nyquist zone, and the rows of each stream are quantized with that
-    stream's scale. Combined mode returns one detector row matrix per block.
+    detector_window_samples, the windows are time reversed when
+    time_reverse_windows is true, and the rows of each stream are quantized
+    with that stream's scale. time_reverse_windows is the bundle's (or the
+    profile's) time_reverse_detector_windows_before_kernel; it does not follow
+    from the Nyquist zone alone (CHORD reverses in zone 1). Combined mode returns one detector row matrix per block.
     Per-stream diagnostic mode returns one row matrix for each input stream
     of each block.
     """
@@ -309,10 +309,8 @@ def pack_channelized_streams_for_detector(
             flattened[:, start:stop],
             detector_window_samples=int(detector_window_samples),
         )
-        detector_matrix = apply_nyquist_zone_to_detector_matrix(
-            detector_matrix,
-            nyquist_zone=nyquist_zone,
-        )
+        if time_reverse_windows:
+            detector_matrix = np.ascontiguousarray(detector_matrix[..., ::-1])
         packed_matrix = _quantize_rows_by_stream(
             detector_matrix,
             windows_per_stream=int(layout.windows_per_stream),

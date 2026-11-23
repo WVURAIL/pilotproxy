@@ -26,7 +26,7 @@ def test_overlapping_blocks_keep_feed_channel_window_order(zone, diagnostic):
         detector_window_samples=4,
         num_blocks=3,
         block_step_samples=6,
-        nyquist_zone=zone,
+        time_reverse_windows=zone == 2,
         quantization_scale_mode="provided",
         scale_by_stream=scales,
         selected_channel_indices=[900, 12, 77],
@@ -95,7 +95,8 @@ def test_overlapping_blocks_keep_feed_channel_window_order(zone, diagnostic):
 )
 def test_packing_refuses_invalid_geometry(field, value):
     options = dict(
-        frame_size_samples=8, detector_window_samples=4, num_blocks=1, scale=1.0
+        frame_size_samples=8, detector_window_samples=4, num_blocks=1, scale=1.0,
+        time_reverse_windows=False,
     )
     options[field] = value
     with pytest.raises((TypeError, ValueError), match=field):
@@ -157,7 +158,7 @@ def test_automatic_packing_preserves_per_stream_scaling_and_clipping(
     options = {"combine_mode": COMBINE_MODE_PER_STREAM_DIAGNOSTIC} if diagnostic else {}
     result = pack_channelized_streams_for_detector(
         streams, frame_size_samples=8, detector_window_samples=4,
-        nyquist_zone=1, quantization_scale_mode=mode, clip_sigma=1, **options,
+        time_reverse_windows=False, quantization_scale_mode=mode, clip_sigma=1, **options,
     )
     np.testing.assert_allclose(result.quantization["scale_by_stream"], scales)
     np.testing.assert_array_equal(result.quantization["clip_fraction_by_stream"], clipped)
@@ -179,7 +180,7 @@ def test_automatic_scale_refuses_unsupported_or_inexact_component_bits(bits, ent
             estimate_complex_scale(np.asarray([-1, 1]), bits_per_component=bits, clip_sigma=3)
         else:
             pack_channelized_streams_for_detector(
-                np.asarray([[[-1, 1] * 4]]), frame_size_samples=8,
+                np.asarray([[[-1, 1] * 4]]), frame_size_samples=8, time_reverse_windows=False,
                 detector_window_samples=4, bits_per_component=bits,
             )
 
@@ -195,7 +196,7 @@ def test_automatic_scale_refuses_invalid_clip_sigma_before_quantizing(monkeypatc
     monkeypatch.setattr(packing, "quantize_complex_numpy", unexpected_quantization)
     with pytest.raises(ValueError, match="clip_sigma"):
         packing.pack_channelized_streams_for_detector(
-            np.asarray([[[-1, 1] * 4]]), frame_size_samples=8,
+            np.asarray([[[-1, 1] * 4]]), frame_size_samples=8, time_reverse_windows=False,
             detector_window_samples=4, quantization_scale_mode=mode,
             clip_sigma=clip_sigma,
         )
@@ -231,8 +232,38 @@ def test_automatic_scale_refuses_an_unrepresentable_scale(clip_sigma, amplitude)
 def test_an_explicit_scale_does_not_require_an_automatic_spread(mode):
     result = pack_channelized_streams_for_detector(
         np.full((1, 1, 8), 2 + 3j), frame_size_samples=8,
-        detector_window_samples=4, nyquist_zone=1,
+        detector_window_samples=4, time_reverse_windows=False,
         quantization_scale_mode=mode, scale=1, clip_sigma=0,
     )
     np.testing.assert_array_equal(result.packed, np.full((1, 2, 4), 0x23, dtype=np.int8))
     assert result.quantization["scale_by_stream"] == [1]
+
+
+@pytest.mark.parametrize("channel", [14, 21])
+def test_packing_with_the_pathfinder_flag_keeps_an_upright_pilot_on_the_target(channel):
+    # Pathfinder is zone 1 and still reverses its windows; packing by zone alone
+    # left the pilot off the target on these channels.
+    from pathlib import Path
+
+    from pilot_proxy.atsc_channels import physical_channel_to_pilot_hz
+    from pilot_proxy.detector_reference import unpack_packed_complex
+    from pilot_proxy.integration import load_detector_core_profile, load_receiver_profile
+    from pilot_proxy.integration.receiver_profile import receiver_frequency_to_channel
+    from pilot_proxy.integration.weight_generation import generate_weight_table_from_receiver_profile
+
+    configs = Path(__file__).resolve().parents[2] / "configs"
+    profile = load_receiver_profile(configs / "receiver_profiles" / "chord_pathfinder_dtv_fengine.json")
+    core = load_detector_core_profile(configs / "detector_core" / "pilotproxy_cuda_local_reference_power_ratio.json")
+    table, (layout,) = generate_weight_table_from_receiver_profile(profile=profile, core=core, physical_channels=[channel])
+    k = table.shape[-1]
+    offset = receiver_frequency_to_channel(physical_channel_to_pilot_hz(channel), profile).fine_bin_offset_hz
+    tone = 5.5 * np.exp(2j * np.pi * offset / profile.coarse_channel_width_hz * np.arange(128 * k))
+    packed = pack_channelized_streams_for_detector(
+        tone.reshape(1, 1, -1), frame_size_samples=128 * k, detector_window_samples=k,
+        time_reverse_windows=profile.time_reverse_detector_windows_before_kernel,
+        quantization_scale_mode="provided", scale=1.0,
+    )
+    x = unpack_packed_complex(packed.packed[0], 4)
+    w = unpack_packed_complex(table[int(layout["coarse_channel_index"])], 4)
+    target, lower, upper = (float((np.abs(x @ np.conjugate(w[t])) ** 2).sum()) for t in range(3))
+    assert target > 100 * max(lower, upper)

@@ -43,6 +43,7 @@ from pilot_proxy.integration.weight_generation import (
     profile_requires_window_time_reversal,
 )
 from pilot_proxy.runtime_bundle import (
+    CONTROL_PHYSICAL_CHANNEL,
     REQUIRED_RUNTIME_BUNDLE_FILES,
     validate_runtime_weight_bundle,
 )
@@ -233,11 +234,12 @@ def _load_bundle(plan, base, bindings, paths, data, receiver, geometry):
     }
     _same(producer.get("detector"), expected_detector, "recorded detector configuration")
     for row in bundle["profiles"]:
-        _integer(row.get("physical_channel"), "submitted physical channel", 14, 36)
+        _integer(row.get("physical_channel"), "submitted physical channel", 14, CONTROL_PHYSICAL_CHANNEL)
     bound = [row for row in bundle["profiles"] if row["chord_channel_id"] in geometry.frequency_ids]
     _require(bound, "Capture has no bound fine profiles")
     for row in bound:
-        _same(row["fine_calibration"].get("status"), "calibrated", "fine calibration status")
+        # the validator allows the control status only on the control channel
+        _require(row["fine_calibration"].get("status") in ("calibrated", "control"), "Bound fine profile is not calibrated")
         maprow = data["packing_contract"]["frequency_map"][list(geometry.frequency_ids).index(row["chord_channel_id"])]
         _same(row["coarse_channel_index"], maprow["coarse_channel_index"], "bundle coarse channel")
         _require(_fraction(row["coarse_channel_center_hz"], "bundle center") == _fraction(maprow["rf_center_hz"], "capture center"), "Bundle RF-center mismatch")

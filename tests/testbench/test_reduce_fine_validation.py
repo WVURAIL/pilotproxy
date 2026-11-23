@@ -18,14 +18,35 @@ def write(path, value):
     path.write_text(json.dumps(value))
 
 
-def fixture(tmp_path, *, invalid_null=False):
+# Seven distinct calibrated anchors and an odd nominal one. Each tone sits at an
+# odd designated bin, so it is in no anchor's (even) bulk.
+ANCHORS = [202 + 6 * case for case in range(7)]
+NOMINAL = 195
+TONE_BINS = [a + 1 for a in ANCHORS] + [NOMINAL]
+NULL_TONES = [120 + 5 * slot for slot in range(8)]
+DISCOVERY_TONE = 600
+
+
+def stage_scale(stage):
+    """Floating stage s carries its tones scaled by 1 + 0.05 s."""
+    return 1 + 0.05 * stage
+
+
+def float_powers(fixed, tone_bins):
+    floating = np.repeat(fixed[:, :, None], 5, axis=2).astype(np.float64)
+    for stage in range(5):
+        floating[:, :, stage, 0, tone_bins] *= stage_scale(stage)
+    return floating
+
+
+def fixture(tmp_path, *, invalid_null=False, invalid_fine_rank=False):
     out = tmp_path / "study"
     out.mkdir()
     cache = tmp_path / "cache"
     profile = {"physical_channel": 14, "layout": {"target_norm_sq": 100, "reference_norm_sum_sq": 200},
                "cases": [{"calibrated_anchor_bin_normal": 54, "nominal_anchor_bin_normal": 54,
-                          "calibrated_anchor_bin_inverted": 202,
-                          "nominal_anchor_bin_inverted": 202} for _ in range(7)]}
+                          "calibrated_anchor_bin_inverted": anchor,
+                          "nominal_anchor_bin_inverted": NOMINAL} for anchor in ANCHORS]}
     write(cache / "plan.json", {"profiles": [profile]})
     source = tmp_path / "generator-source.py"
     source.write_text("# Explicit engineering fake-power generator fixture\n")
@@ -53,18 +74,23 @@ def fixture(tmp_path, *, invalid_null=False):
             fine = np.full((2, second, 3, 256), 100, dtype=np.uint64)
             coarse = np.full((2, second, 3), 100, dtype=np.uint64)
             if case is None:
-                fine[1, :, 0, 202] = 120
+                fine[1, :, 0][:, TONE_BINS] = NULL_TONES
                 coarse[1, :, 0] = 120
                 if invalid_null:
                     fine[1, :, 1:, :] = 0
+                tones = TONE_BINS
             else:
-                for snr in range(second):
-                    # Independent fixture observations at each SNR remain paired.
-                    target = 100 if snr < 6 else 140
-                    fine[:, snr, 0, 202] = target
-                    coarse[:, snr, 0] = target
+                # Independent fixture observations at each SNR remain paired.
+                fine[:, 6:, 0, TONE_BINS[case]] = DISCOVERY_TONE
+                coarse[:, 6:, 0] = 140
+                tones = [TONE_BINS[case]]
+            floating = float_powers(fine, tones)
+            if invalid_fine_rank:
+                # No floating bulk bin has a reference; the fixed powers and
+                # the frame sums stay valid.
+                floating[1, :, :, 1:, ::2] = 0
             arrays = {"fixed_fine": fine, "fixed_coarse": coarse,
-                      "float_fine": np.repeat(fine[:, :, None], 5, axis=2).astype(np.float64),
+                      "float_fine": floating,
                       "float_coarse": np.repeat(coarse[:, :, None], 5, axis=2).astype(np.float64),
                       "clip_count": np.zeros((2, second), dtype=np.uint32)}
             meta = {"plan_sha256": REDUCER.sha(out / "plan.json"), "phase": phase, "start": 0, "stop": 2,
@@ -90,30 +116,61 @@ def test_engineering_power_files_end_to_end_complete_frozen_grid(tmp_path):
     assert null["coverage_complete"] and null["trials"] == 2
     calibration = REDUCER.calibrate(out)
     assert calibration["status"] == "calibrated"
-    fine = calibration["fine"]["ch14"]["202"]
-    assert fine[REDUCER.FLOAT_STAGES[0]]["62"]["0.01"]["threshold"] == pytest.approx(1.2)
-    assert fine[REDUCER.Q16_STAGE]["62"]["0.01"]["threshold"] == 78644
+    fine = calibration["fine"]["ch14"]
+    assert set(fine) == {str(a) for a in ANCHORS + [NOMINAL]}
+    for slot, anchor in enumerate(ANCHORS + [NOMINAL]):
+        tone = NULL_TONES[slot]
+        for stage_index, stage in enumerate(REDUCER.FLOAT_STAGES):
+            scale = stage_scale(stage_index) if stage_index < 5 else 1
+            for record in fine[str(anchor)][stage].values():
+                assert record["0.01"]["threshold"] == pytest.approx(tone / 100 * scale, rel=1e-12)
+        assert fine[str(anchor)][REDUCER.Q16_STAGE]["62"]["0.01"]["threshold"] == -(-tone * 65536 // 100)
+    assert fine["202"][REDUCER.Q16_STAGE]["62"]["0.01"]["threshold"] == 78644
+    for stage_index, stage in enumerate(REDUCER.FLOAT_STAGES):
+        scale = stage_scale(stage_index) if stage_index < 5 else 1
+        p0 = 248 * 100 + sum(NULL_TONES) * scale
+        assert calibration["coarse"]["ch14"][stage]["0.01"]["threshold"] == pytest.approx(p0 / 25600, rel=1e-12)
     assert (out / "calibration.sha256").read_text().strip() == REDUCER.sha(out / "calibration.json")
     REDUCER.score_stage(out, "discovery")
     frozen = REDUCER.freeze_grid(out)
     assert frozen["status"] == "frozen" and frozen["expected_cells"] == 7
     assert frozen["evaluation_outcomes_used"] is False
     assert set(frozen["grids"]) == {f"ch14/case{i}" for i in range(7)}
-    assert frozen["grids"]["ch14/case0"] == list(np.arange(-52.5, -46.49, .75))
-    assert len(frozen["details"]["ch14/case0"]["curves"]) == 52
+    for case in range(7):
+        assert frozen["grids"][f"ch14/case{case}"] == list(np.arange(-52.5, -46.49, .75))
+        assert len(frozen["details"][f"ch14/case{case}"]["curves"]) == 52
     assert (out / "evaluation-grid.sha256").read_text().strip() == REDUCER.sha(out / "evaluation-grid.json")
     REDUCER.rehash(out, frozen["calibration_inputs_sha256"])
     with pytest.raises(ValueError, match="overwrite"):
         REDUCER.score_stage(out, "null_calibration")
 
 
-def test_invalid_null_frame_refuses_instead_of_trimming(tmp_path):
-    out = fixture(tmp_path, invalid_null=True)
+def fine_refusals(stages, reason):
+    return {(anchor, stage, int(rank), reason(stage)) for anchor in ANCHORS + [NOMINAL]
+            for stage in stages for rank in REDUCER.construct_geometry(anchor).ranks}
+
+
+@pytest.mark.parametrize("damage", ["invalid_null", "invalid_fine_rank"])
+def test_invalid_null_frame_refuses_instead_of_trimming(tmp_path, damage):
+    out = fixture(tmp_path, **{damage: True})
     REDUCER.score_stage(out, "null_calibration")
     with pytest.raises(ValueError, match="Calibration refused"):
         REDUCER.calibrate(out)
     report = REDUCER.read_json(out / "calibration-refused.json")
-    assert report["null_trials"] == 2 and report["refusals"]
+    assert report["null_trials"] == 2
+    fine = {(r["anchor"], r["stage"], r["rank"], r["reason"]) for r in report["refusals"] if "coarse" not in r}
+    coarse = {(r["stage"], r["reason"]) for r in report["refusals"] if "coarse" in r}
+    assert len(fine) + len(coarse) == len(report["refusals"])
+    if damage == "invalid_null":
+        # Every reference of trial 1 is zero, so every path refuses.
+        assert fine == fine_refusals((*REDUCER.FLOAT_STAGES, REDUCER.Q16_STAGE), lambda stage: (
+            "invalid fine ranks must be reported before calibration; no rows are dropped"
+            if stage == REDUCER.Q16_STAGE else "Invalid fine rank"))
+        assert coarse == {(stage, "Invalid coarse reference") for stage in REDUCER.FLOAT_STAGES}
+    else:
+        # Only the floating fine ranks of trial 1 are invalid.
+        assert fine == fine_refusals(REDUCER.FLOAT_STAGES[:5], lambda stage: "Invalid fine rank")
+        assert not coarse
     assert not (out / "calibration.json").exists()
     assert not (out / "calibration.sha256").exists()
 
@@ -159,8 +216,11 @@ def test_grid_preserves_downward_and_plateau_crossings_and_fallback():
     records = details["curves"]
     half = next(r for r in records if r["target"] == .5)
     assert half["downward_brackets"] and half["plateau_segments"]
-    assert -66 in grid and -52.5 in grid
+    assert grid == list(np.arange(-66, -49.49, .75))
     assert not details["fallback_discovery_grid"]
+    # Only the downward bracket [-57, -54] reaches -54.75 to -52.5.
+    grid1, _ = REDUCER.curve_grid(snrs, {"down": np.array([0] * 3 + [1, .2] + [0] * 11)})
+    assert grid1 == list(np.arange(-61.5, -52.49, .75))
     grid2, details2 = REDUCER.curve_grid(snrs, {"oscillating": rates, "unbracketed": np.zeros(16)})
     assert details2["fallback_discovery_grid"]
     assert set(snrs) <= set(grid2)
@@ -248,9 +308,9 @@ def test_raw_coarse_members_are_never_read(tmp_path):
     for name in a:
         np.testing.assert_array_equal(a[name], b[name])
     assert b["coarse_valid"].all()
-    # Frame 1 carries 120 in the designated target bin over a flat 100.
-    p0, p_ref = 255 * 100 + 120, 2 * 256 * 100
-    np.testing.assert_allclose(b["coarse_float"][1, :3], 2 * p0 / p_ref, rtol=1e-15)
+    # Frame 1 carries the null tones in eight target bins over a flat 100.
+    p0 = 248 * 100 + sum(NULL_TONES) * np.array([stage_scale(s) for s in range(3)])
+    np.testing.assert_allclose(b["coarse_float"][1, :3], 2 * p0 / (2 * 256 * 100), rtol=1e-15)
 
 
 def test_normalized_primary_coordinate_refused_before_score_reads(tmp_path):

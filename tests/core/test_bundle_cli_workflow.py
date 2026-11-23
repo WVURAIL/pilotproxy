@@ -40,10 +40,11 @@ def calibrated(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("cli")
     # strong and clean captures in turn, so the kept fraction has a knee
     mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    control = [write_capture(tmp / "c37.h5", 37, 26, 3)]
     calibrate = dict(receiver_profile=str(RECEIVER), detector_core_profile=str(CORE), capture_format="chime_baseband",
                      epoch="synthetic", null_quantile=0.8, min_knee_captures=4,
-                     channels={"35": mixed, "29": [write_capture(tmp / "c29.h5", 29, 6, 2)]},
-                     control=dict(channel=37, captures=[write_capture(tmp / "c37.h5", 37, 26, 3)]))
+                     channels={"35": mixed, "29": [write_capture(tmp / "c29.h5", 29, 6, 2)], "37": control},
+                     control=dict(channel=37, captures=control))
     test = dict(capture_format="chime_baseband",
                 channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2)) for i in range(2)],
                           "29": [write_capture(tmp / "t29.h5", 29, 4, 5)]},
@@ -70,7 +71,7 @@ def test_calibrate_bundle_prints_the_word_of_each_channel(calibrated):
                 f"(eta {row['eta']:.4f}) from {row['word_source']}") in lines
     profiles = json.loads((bundle / "pilot_profiles.json").read_text())["profiles"]
     words = {p["physical_channel"]: p["fine_calibration"]["cfar_multiplier_q16"] for p in profiles}
-    assert words == {29: report["floor_word_q16"], 35: report["channels"]["35"]["word_q16"]}
+    assert words == {29: report["floor_word_q16"], 35: report["channels"]["35"]["word_q16"], 37: report["floor_word_q16"]}
     # a bundle is never written over
     with pytest.raises(ValueError, match="never changed"):
         run_cli(["calibrate-bundle", "--plan", calibrated["tmp"] / "calibrate.json", "--output-dir", bundle])
@@ -113,7 +114,7 @@ def test_qualify_bundle_prints_its_summary(calibrated, tmp_path):
     assert not validate_runtime_weight_bundle(bundle_dir=tmp_path / "qualified").get("errors")
     profiles = json.loads((tmp_path / "qualified" / "pilot_profiles.json").read_text())["profiles"]
     assert {p["physical_channel"]: p["fine_calibration"]["provenance"]["mask_qualification"]["reviewer"]
-            for p in profiles} == {29: "A. Reviewer", 35: "A. Reviewer"}
+            for p in profiles if p["physical_channel"] != 37} == {29: "A. Reviewer", 35: "A. Reviewer"}
 
 
 def write_run(path, frames, seq, channels=(521, 491)):
@@ -286,8 +287,8 @@ def test_run_spectrogram_writes_each_channel_and_the_masked_summary(calibrated, 
 def test_run_scores_write_the_cache_of_each_channel(calibrated, tmp_path, monkeypatch):
     profiles = json.loads((calibrated["bundle"] / "pilot_profiles.json").read_text())["profiles"]
     anchor = next(p for p in profiles if p["physical_channel"] == 35)["fine_calibration"]["anchor_bin"]
-    # the second file was recorded first
-    runs = [loud_run(tmp_path / f"run_{index}.h5", anchor, seq=(1 - index) * 48 * 8192, missing=True)
+    # the second file given was recorded first; untimed files are in the order recv named them
+    runs = [loud_run(tmp_path / f"run_{1 - index}.h5", anchor, seq=(1 - index) * 48 * 8192, missing=True)
             for index in range(2)]
     out_dir = tmp_path / "scores"
     workers = []

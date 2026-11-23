@@ -29,6 +29,7 @@ import zipfile
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -122,6 +123,66 @@ def assert_count(name,observed,expected):
     if int(observed)!=int(expected):raise ValueError(f"corrected ledger mismatch:{name}: {observed} != {expected}")
 
 
+def _frame_fields(product,proxy):
+    """The health-gated per-frame fields that the screened and control exports share."""
+    if int(product.scalar("nfft"))!=NFFT:raise ValueError("unexpected frame geometry")
+    # the original health gate is required and runs on the frame powers from the fine sums
+    health=evaluate_frame_health(proxy);view=product.view
+    valid=np.asarray(view.valid,dtype=bool);health_include=np.asarray(health.include,dtype=bool)
+    selected=valid&health_include;Q=np.asarray(view.statistic,dtype=np.float64)
+    frame_time=product.frame_time;unit_time=product.unit_time
+    finite_time=np.isfinite(frame_time);finite_Q=np.isfinite(Q)
+    unit_index=product.frame_unit_index;unit_event_id=product.unit_event_id
+    if unit_event_id.dtype.kind not in "iu":raise ValueError("acquisition IDs must preserve their integer type")
+    return SimpleNamespace(reasons={key:int(value) for key,value in health.reason_counts.items()},
+        valid=valid,health_include=health_include,selected=selected,Q=Q,frame_time=frame_time,unit_time=unit_time,
+        finite_time=finite_time,finite_Q=finite_Q,hist=selected&finite_time&finite_Q,
+        unit_index=unit_index,unit_event_id=unit_event_id)
+
+
+def _counts(f,era_id,current):
+    selected,hist,Q=f.selected,f.hist,f.Q
+    return {"total":len(Q),"valid":int(f.valid.sum()),"health_include":int(f.health_include.sum()),
+        "selected":int(selected.sum()),"finite_time_selected":int((selected&f.finite_time).sum()),
+        "histogram_eligible":int(hist.sum()),"nonpositive_histogram":int((hist&(Q<=0)).sum()),
+        "current_selected":int((selected&current).sum()),"current_histogram_eligible":int((hist&current).sum()),
+        "current_untimed_selected":int((selected&current&~f.finite_time).sum()),
+        "unassigned_selected":int((selected&(era_id<0)).sum()),
+        "unassigned_histogram_eligible":int((hist&(era_id<0)).sum()),
+        "untimed_selected":int((selected&~f.finite_time).sum()),"nonfinite_Q_selected":int((selected&~f.finite_Q).sum())}
+
+
+def _write_export(product,proxy,product_path,initial_stat,output,channel,f,months,head,membership_rule):
+    """Write the frames npz and its metadata, ``head`` followed by the rules both exports share."""
+    timed_month,member_month,era_id,current=months
+    arrays={"Q":f.Q,"valid":f.valid,"health_include":f.health_include,"selected":f.selected,
+        "finite_time":f.finite_time,"finite_Q":f.finite_Q,"positive_Q":f.finite_Q&(f.Q>0),
+        "histogram_eligible":f.hist,"era_id":era_id,"is_current":current,"current_histogram_eligible":f.hist&current,
+        "frame_index":product.frame_column("frame_index"),"frame_unit_index":f.unit_index,
+        "frame_in_unit":product.frame_in_unit,"frame_time":f.frame_time,"unit_time":f.unit_time,
+        "frame_month":timed_month,"membership_month":member_month,
+        "acquisition_id":f.unit_event_id[f.unit_index],"unit_event_id":f.unit_event_id,
+        "unit_keys":np.asarray(proxy["unit_keys"]),"source_event_keys":np.asarray(proxy["source_event_keys"]),
+        "unit_time0_ctime":product.unit_time0,"unit_delta_time":product.unit_delta_time}
+    geometry={name:int(product.scalar(name)) for name in ("nfft","detector_window_samples","num_input_streams","target_norm_sq","reference_norm_sum_sq")}
+    geometry.update(mu0=product.mu0,sample_rate_hz=float(product.scalar("sample_rate_hz")),
+                    pilot_frequency_hz=float(product.scalar("pilot_frequency_hz")),chime_frequency_hz=float(product.scalar("chime_frequency_hz")))
+    final_stat=product_path.stat()
+    if (initial_stat.st_size,initial_stat.st_mtime_ns)!=(final_stat.st_size,final_stat.st_mtime_ns):raise ValueError("product changed during extraction")
+    output_path=output/f"ch{channel:02d}.npz"
+    with output_path.open("xb") as stream:np.savez_compressed(stream,**arrays)
+    metadata={**head,"membership_rule":membership_rule,
+        "histogram_rule":"selected & finite_time & finite_Q; Q<=0 is retained and separately flagged, no statistical trimming",
+        "timestamp_rule":"unit_time0_ctime[frame_unit_index]+frame_in_unit*nfft*unit_delta_time[frame_unit_index]; no fabricated frame interval",
+        "acquisition_rule":"acquisition_id is stored unit_event_id mapped by frame_unit_index; original unit_keys/source_event_keys also retained to disambiguate units",
+        "health":{"schema":HEALTH_GATE_SCHEMA,"reason_counts":f.reasons,
+            "fine_member_use":"Original v1 gate invoked. Header and full byte length of fine_power_u64 validated; the member is decoded once because the frame powers (Q, valid, the gate's power checks) are its all-bin sums (kernel core 3.0.0). No fine value or PSD is exported.",
+            "fine_member_header":proxy.fine_header},
+        "geometry":geometry,"decoded_npz_members":proxy.read_fields,"export_sha256":sha(output_path)}
+    write_json(output/f"ch{channel:02d}.json",metadata)
+    return metadata
+
+
 def process_channel(product_path,ledger_path,eras_path,output,preflight):
     ledger=json.loads(ledger_path.read_text());era_record=json.loads(eras_path.read_text())
     sections=ledger["sections"];source_product=sections["product"];source_era=sections["era"]
@@ -137,26 +198,9 @@ def process_channel(product_path,ledger_path,eras_path,output,preflight):
         proxy=FrameExportArchive(product.archive,product_path);product._z=proxy
         view=product.view
         if view.physical_channel!=channel or view.freq_id!=fid:raise ValueError("product identity differs")
-        if int(product.scalar("nfft"))!=NFFT:raise ValueError("unexpected frame geometry")
-        # the original health gate is required and runs on the frame powers from the fine sums
-        health=evaluate_frame_health(proxy)
-        valid=np.asarray(view.valid,dtype=bool);health_include=np.asarray(health.include,dtype=bool)
-        selected=valid&health_include;Q=np.asarray(view.statistic,dtype=np.float64)
-        frame_time=product.frame_time;unit_time=product.unit_time
-        finite_time=np.isfinite(frame_time);finite_Q=np.isfinite(Q)
-        hist=selected&finite_time&finite_Q
-        timed_month,member_month,era_id,current=memberships(frame_time,unit_time,era_record["eras"],era_record["current_era"])
-        unit_index=product.frame_unit_index
-        unit_event_id=product.unit_event_id
-        if unit_event_id.dtype.kind not in "iu":raise ValueError("acquisition IDs must preserve their integer type")
-        counts={"total":len(Q),"valid":int(valid.sum()),"health_include":int(health_include.sum()),
-            "selected":int(selected.sum()),"finite_time_selected":int((selected&finite_time).sum()),
-            "histogram_eligible":int(hist.sum()),"nonpositive_histogram":int((hist&(Q<=0)).sum()),
-            "current_selected":int((selected&current).sum()),"current_histogram_eligible":int((hist&current).sum()),
-            "current_untimed_selected":int((selected&current&~finite_time).sum()),
-            "unassigned_selected":int((selected&(era_id<0)).sum()),
-            "unassigned_histogram_eligible":int((hist&(era_id<0)).sum()),
-            "untimed_selected":int((selected&~finite_time).sum()),"nonfinite_Q_selected":int((selected&~finite_Q).sum())}
+        f=_frame_fields(product,proxy);selected,finite_time,unit_index=f.selected,f.finite_time,f.unit_index
+        months=memberships(f.frame_time,f.unit_time,era_record["eras"],era_record["current_era"]);era_id=months[2]
+        counts=_counts(f,era_id,months[3])
         for key,field in (("total","n_frames"),("valid","n_valid"),("selected","n_selected"),("untimed_selected","n_without_time")):
             assert_count(key,counts[key],source_product[field])
         for key,field in (("total","frames"),("valid","valid"),("selected","health_selected")):
@@ -166,9 +210,8 @@ def process_channel(product_path,ledger_path,eras_path,output,preflight):
         assert_count("era frames_without_time",counts["untimed_selected"],era_record["frames_without_time"])
         if source_product["health_schema"]!=HEALTH_GATE_SCHEMA or preflight["health_schema"]!=HEALTH_GATE_SCHEMA:
             raise ValueError("corrected population used a different health gate")
-        reasons={key:int(value) for key,value in health.reason_counts.items()}
         expected_reasons={item.split(":")[0]:int(item.split(":")[1]) for item in source_product.get("health_reasons","").split(";") if item}
-        if reasons!=expected_reasons:raise ValueError("health reasons differ from corrected ledger")
+        if f.reasons!=expected_reasons:raise ValueError("health reasons differ from corrected ledger")
         definitions=[]
         for record in era_record["eras"]:
             member=era_id==int(record["era"])
@@ -180,40 +223,16 @@ def process_channel(product_path,ledger_path,eras_path,output,preflight):
                 if record["first_month"]!=source_era["current_first_month"] or record["last_month"]!=source_era["current_last_month"]:
                     raise ValueError("current era boundaries differ from ledger")
             definitions.append({**record,"is_current":int(record["era"])==int(era_record["current_era"]),
-                "exported_count_selected":n_selected,"exported_count_histogram_eligible":int((member&hist).sum()),
+                "exported_count_selected":n_selected,"exported_count_histogram_eligible":int((member&f.hist).sum()),
                 "exported_count_untimed_selected":n_untimed})
-        arrays={"Q":Q,"valid":valid,"health_include":health_include,"selected":selected,
-            "finite_time":finite_time,"finite_Q":finite_Q,"positive_Q":finite_Q&(Q>0),
-            "histogram_eligible":hist,"era_id":era_id,"is_current":current,"current_histogram_eligible":hist&current,
-            "frame_index":product.frame_column("frame_index"),"frame_unit_index":unit_index,
-            "frame_in_unit":product.frame_in_unit,"frame_time":frame_time,"unit_time":unit_time,
-            "frame_month":timed_month,"membership_month":member_month,
-            "acquisition_id":unit_event_id[unit_index],"unit_event_id":unit_event_id,
-            "unit_keys":np.asarray(proxy["unit_keys"]),"source_event_keys":np.asarray(proxy["source_event_keys"]),
-            "unit_time0_ctime":product.unit_time0,"unit_delta_time":product.unit_delta_time}
-        geometry={name:int(product.scalar(name)) for name in ("nfft","detector_window_samples","num_input_streams","target_norm_sq","reference_norm_sum_sq")}
-        geometry.update(mu0=product.mu0,sample_rate_hz=float(product.scalar("sample_rate_hz")),
-                        pilot_frequency_hz=float(product.scalar("pilot_frequency_hz")),chime_frequency_hz=float(product.scalar("chime_frequency_hz")))
-        final_stat=product_path.stat()
-        if (initial_stat.st_size,initial_stat.st_mtime_ns)!=(final_stat.st_size,final_stat.st_mtime_ns):raise ValueError("product changed during extraction")
-        output_path=output/f"ch{channel:02d}.npz"
-        with output_path.open("xb") as stream:np.savez_compressed(stream,**arrays)
-        metadata={"schema":"coarse-histogram-frame-export-v1","channel":channel,"freq_id":fid,
+        head={"schema":"coarse-histogram-frame-export-v1","channel":channel,"freq_id":fid,
             "product":{"path":str(product_path),"sha256":digest,"bytes":initial_stat.st_size},
             "source_records":{"ledger":{"path":str(ledger_path),"sha256":sha(ledger_path)},"eras":{"path":str(eras_path),"sha256":sha(eras_path)}},
             "current_era":int(era_record["current_era"]),"era_definitions":definitions,"counts":counts,
             "era_config_digest":era_record["config_digest"],"era_config":era_record["config"],
-            "era_scope":"Corrected retrospective full-archive assignments reused unchanged; this does not make them causal or independent of histogram data",
-            "membership_rule":"Inclusive first_month..last_month using frame UTC month, acquisition-start month when frame time is nonfinite. Unassigned transition/outside months retain era_id=-1. Health status does not change temporal labels.",
-            "histogram_rule":"selected & finite_time & finite_Q; Q<=0 is retained and separately flagged, no statistical trimming",
-            "timestamp_rule":"unit_time0_ctime[frame_unit_index]+frame_in_unit*nfft*unit_delta_time[frame_unit_index]; no fabricated frame interval",
-            "acquisition_rule":"acquisition_id is stored unit_event_id mapped by frame_unit_index; original unit_keys/source_event_keys also retained to disambiguate units",
-            "health":{"schema":HEALTH_GATE_SCHEMA,"reason_counts":reasons,
-                "fine_member_use":"Original v1 gate invoked. Header and full byte length of fine_power_u64 validated; the member is decoded once because the frame powers (Q, valid, the gate's power checks) are its all-bin sums (kernel core 3.0.0). No fine value or PSD is exported.",
-                "fine_member_header":proxy.fine_header},
-            "geometry":geometry,"decoded_npz_members":proxy.read_fields,"export_sha256":sha(output_path)}
-        write_json(output/f"ch{channel:02d}.json",metadata)
-    return metadata
+            "era_scope":"Corrected retrospective full-archive assignments reused unchanged; this does not make them causal or independent of histogram data"}
+        return _write_export(product,proxy,product_path,initial_stat,output,channel,f,months,head,
+            "Inclusive first_month..last_month using frame UTC month, acquisition-start month when frame time is nonfinite. Unassigned transition/outside months retain era_id=-1. Health status does not change temporal labels.")
 
 
 CONTROL_PERIOD_RULE=("A control band has no emitter, so no era is dated: its archive is one period, era 1, from the first "
@@ -254,65 +273,36 @@ def process_control(product_path,project,output):
         view=product.view
         channel=int(view.physical_channel);fid=int(view.freq_id)
         band=control_band(project,channel,fid,float(product.scalar("pilot_frequency_hz")))
-        if int(product.scalar("nfft"))!=NFFT:raise ValueError("unexpected frame geometry")
-        health=evaluate_frame_health(proxy)
-        valid=np.asarray(view.valid,dtype=bool);health_include=np.asarray(health.include,dtype=bool)
-        selected=valid&health_include;Q=np.asarray(view.statistic,dtype=np.float64)
-        frame_time=product.frame_time;unit_time=product.unit_time
-        finite_time=np.isfinite(frame_time);finite_Q=np.isfinite(Q)
-        hist=selected&finite_time&finite_Q
-        unit_index=product.frame_unit_index
-        member_month=memberships(frame_time,unit_time,[],1)[1]
-        period=control_period(member_month,selected,finite_time,unit_index)
-        timed_month,member_month,era_id,current=memberships(frame_time,unit_time,[period],period["era"])
-        unit_event_id=product.unit_event_id
-        if unit_event_id.dtype.kind not in "iu":raise ValueError("acquisition IDs must preserve their integer type")
-        counts={"total":len(Q),"valid":int(valid.sum()),"health_include":int(health_include.sum()),
-            "selected":int(selected.sum()),"finite_time_selected":int((selected&finite_time).sum()),
-            "histogram_eligible":int(hist.sum()),"nonpositive_histogram":int((hist&(Q<=0)).sum()),
-            "current_selected":int((selected&current).sum()),"current_histogram_eligible":int((hist&current).sum()),
-            "current_untimed_selected":int((selected&current&~finite_time).sum()),
-            "unassigned_selected":int((selected&(era_id<0)).sum()),
-            "unassigned_histogram_eligible":int((hist&(era_id<0)).sum()),
-            "untimed_selected":int((selected&~finite_time).sum()),"nonfinite_Q_selected":int((selected&~finite_Q).sum())}
+        f=_frame_fields(product,proxy)
+        member_month=memberships(f.frame_time,f.unit_time,[],1)[1]
+        period=control_period(member_month,f.selected,f.finite_time,f.unit_index)
+        months=memberships(f.frame_time,f.unit_time,[period],period["era"])
+        counts=_counts(f,months[2],months[3])
         assert_count("period frames",counts["current_selected"],period["frames"])
-        reasons={key:int(value) for key,value in health.reason_counts.items()}
         definitions=[{**period,"is_current":True,"exported_count_selected":counts["current_selected"],
             "exported_count_histogram_eligible":counts["current_histogram_eligible"],
             "exported_count_untimed_selected":counts["current_untimed_selected"]}]
-        arrays={"Q":Q,"valid":valid,"health_include":health_include,"selected":selected,
-            "finite_time":finite_time,"finite_Q":finite_Q,"positive_Q":finite_Q&(Q>0),
-            "histogram_eligible":hist,"era_id":era_id,"is_current":current,"current_histogram_eligible":hist&current,
-            "frame_index":product.frame_column("frame_index"),"frame_unit_index":unit_index,
-            "frame_in_unit":product.frame_in_unit,"frame_time":frame_time,"unit_time":unit_time,
-            "frame_month":timed_month,"membership_month":member_month,
-            "acquisition_id":unit_event_id[unit_index],"unit_event_id":unit_event_id,
-            "unit_keys":np.asarray(proxy["unit_keys"]),"source_event_keys":np.asarray(proxy["source_event_keys"]),
-            "unit_time0_ctime":product.unit_time0,"unit_delta_time":product.unit_delta_time}
-        geometry={name:int(product.scalar(name)) for name in ("nfft","detector_window_samples","num_input_streams","target_norm_sq","reference_norm_sum_sq")}
-        geometry.update(mu0=product.mu0,sample_rate_hz=float(product.scalar("sample_rate_hz")),
-                        pilot_frequency_hz=float(product.scalar("pilot_frequency_hz")),chime_frequency_hz=float(product.scalar("chime_frequency_hz")))
-        final_stat=product_path.stat()
-        if (initial_stat.st_size,initial_stat.st_mtime_ns)!=(final_stat.st_size,final_stat.st_mtime_ns):raise ValueError("product changed during extraction")
-        output_path=output/f"ch{channel:02d}.npz"
-        with output_path.open("xb") as stream:np.savez_compressed(stream,**arrays)
         plan_file=project.files["frequency_plan"]
-        metadata={"schema":"coarse-histogram-frame-export-v1","role":"control","channel":channel,"freq_id":fid,
+        head={"schema":"coarse-histogram-frame-export-v1","role":"control","channel":channel,"freq_id":fid,
             "band":{"label":band.label,"low_mhz":band.low_mhz,"high_mhz":band.high_mhz,"role":band.role,"target_freq_id":band.target_freq_id},
             "product":{"path":str(product_path),"sha256":digest,"bytes":initial_stat.st_size},
             "source_records":{"frequency_plan":{"path":str(plan_file),"sha256":sha(plan_file)}},
             "current_era":period["era"],"era_definitions":definitions,"counts":counts,
-            "era_scope":CONTROL_PERIOD_RULE,
-            "membership_rule":"Inclusive first_month..last_month using frame UTC month, acquisition-start month when frame time is nonfinite. A frame with neither time retains era_id=-1. Health status does not change temporal labels.",
-            "histogram_rule":"selected & finite_time & finite_Q; Q<=0 is retained and separately flagged, no statistical trimming",
-            "timestamp_rule":"unit_time0_ctime[frame_unit_index]+frame_in_unit*nfft*unit_delta_time[frame_unit_index]; no fabricated frame interval",
-            "acquisition_rule":"acquisition_id is stored unit_event_id mapped by frame_unit_index; original unit_keys/source_event_keys also retained to disambiguate units",
-            "health":{"schema":HEALTH_GATE_SCHEMA,"reason_counts":reasons,
-                "fine_member_use":"Original v1 gate invoked. Header and full byte length of fine_power_u64 validated; the member is decoded once because the frame powers (Q, valid, the gate's power checks) are its all-bin sums (kernel core 3.0.0). No fine value or PSD is exported.",
-                "fine_member_header":proxy.fine_header},
-            "geometry":geometry,"decoded_npz_members":proxy.read_fields,"export_sha256":sha(output_path)}
-        write_json(output/f"ch{channel:02d}.json",metadata)
-    return metadata
+            "era_scope":CONTROL_PERIOD_RULE}
+        return _write_export(product,proxy,product_path,initial_stat,output,channel,f,months,head,
+            "Inclusive first_month..last_month using frame UTC month, acquisition-start month when frame time is nonfinite. A frame with neither time retains era_id=-1. Health status does not change temporal labels.")
+
+
+def _manifest(output,records,note,role=None):
+    tag={"role":role} if role else {}
+    manifest={"schema":"coarse-histogram-frames-manifest-v1",**tag,"completed_utc":datetime.now(timezone.utc).isoformat(),"passed":True,
+        "extraction_plan_sha256":sha(output/"extraction-plan.json"),
+        "totals":{key:sum(record["counts"][key] for record in records) for key in records[0]["counts"]},
+        "channels":[{"channel":record["channel"],"freq_id":record["freq_id"],**tag,"npz":f"ch{record['channel']:02d}.npz","metadata":f"ch{record['channel']:02d}.json","counts":record["counts"]} for record in records],
+        "files":{path.name:sha(path) for path in output.iterdir() if path.is_file()},
+        "era_denominator_note":note,"fine_power_payload_decoded":True,"psd_payloads_decoded":False}
+    write_json(output/"manifest.json",manifest)
+    return manifest
 
 
 def run_control(product,output,profile=None):
@@ -333,14 +323,7 @@ def run_control(product,output,profile=None):
     print(json.dumps({"channel":record["channel"],"role":"control","counts":record["counts"]}),flush=True)
     for path,digest in inputs.items():
         if sha(path)!=digest:raise ValueError(f"source record changed during extraction:{path}")
-    manifest={"schema":"coarse-histogram-frames-manifest-v1","role":"control","completed_utc":datetime.now(timezone.utc).isoformat(),"passed":True,
-        "extraction_plan_sha256":sha(output/"extraction-plan.json"),"totals":dict(record["counts"]),
-        "channels":[{"channel":record["channel"],"freq_id":record["freq_id"],"role":"control","npz":f"ch{record['channel']:02d}.npz","metadata":f"ch{record['channel']:02d}.json","counts":record["counts"]}],
-        "files":{path.name:sha(path) for path in output.iterdir() if path.is_file()},
-        "era_denominator_note":"The period count includes acquisition-month assignments of untimed frames. Histogram eligibility requires actual finite frame time; both counts are retained.",
-        "fine_power_payload_decoded":True,"psd_payloads_decoded":False}
-    write_json(output/"manifest.json",manifest)
-    return manifest
+    return _manifest(output,[record],"The period count includes acquisition-month assignments of untimed frames. Histogram eligibility requires actual finite frame time; both counts are retained.",role="control")
 
 
 def run(products,release,output):
@@ -366,14 +349,7 @@ def run(products,release,output):
         print(json.dumps({"channel":result["channel"],"counts":result["counts"]}),flush=True)
     for path,digest in inputs.items():
         if sha(path)!=digest:raise ValueError(f"source/release record changed during extraction:{path}")
-    totals={key:sum(record["counts"][key] for record in records) for key in records[0]["counts"]}
-    manifest={"schema":"coarse-histogram-frames-manifest-v1","completed_utc":datetime.now(timezone.utc).isoformat(),"passed":True,
-        "extraction_plan_sha256":sha(output/"extraction-plan.json"),"totals":totals,"channels":[{"channel":record["channel"],"freq_id":record["freq_id"],"npz":f"ch{record['channel']:02d}.npz","metadata":f"ch{record['channel']:02d}.json","counts":record["counts"]} for record in records],
-        "files":{path.name:sha(path) for path in output.iterdir() if path.is_file()},
-        "era_denominator_note":"Saved era counts include acquisition-month assignments of untimed frames. Histogram eligibility requires actual finite frame time; both counts are retained.",
-        "fine_power_payload_decoded":True,"psd_payloads_decoded":False}
-    write_json(output/"manifest.json",manifest)
-    return manifest
+    return _manifest(output,records,"Saved era counts include acquisition-month assignments of untimed frames. Histogram eligibility requires actual finite frame time; both counts are retained.")
 
 
 def main(argv=None):

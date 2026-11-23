@@ -2,8 +2,8 @@
 
 Kotekan's bufferBadInputs writes one int8 mask element per frame, [polarization, dish] per stream (one
 stream per NUMA half), 1 for a good input. The detector packs an input whose element is 0 as zero, so
-the inputs it sums are the nonzero elements; -1, written before the first bad-input update of an
-acquisition, counts as summed, as it does in the detector. The visibility files keep the mask under
+the inputs it sums are the nonzero elements. The writer fills a stream's row with -1 when that stream's
+mask frame did not reach it, as before the stream's first frame; such rows are dropped. The visibility files keep the mask under
 bad_feed_mask/ (mask [time, stream, pol, dish], fpga_seq_num [time], stream_freq_id [stream, freq]),
 and frame0_unix_ns and fpga_seq_length_ns turn its fpga_seq_num into times.
 """
@@ -20,7 +20,8 @@ from pilot_proxy.bundle_calibration import _expand
 def read_good_inputs(vis_paths: Iterable[str], freq_ids: Iterable[int]) -> dict[int, tuple[np.ndarray, np.ndarray]]:
     """Return {freq_id: (time_ns, good inputs)} over the visibility files, in time order.
 
-    A frequency counts the inputs of the stream that carries it. Rows that two files share are kept once.
+    A frequency counts the inputs of the stream that carries it. Rows the stream's mask frame did not reach
+    (-1) are dropped, and rows that two files share are kept once.
     """
     import h5py
 
@@ -42,8 +43,10 @@ def read_good_inputs(vis_paths: Iterable[str], freq_ids: Iterable[int]) -> dict[
                 hit = np.flatnonzero((streams == freq_id).any(axis=1))
                 if not hit.size:
                     continue
-                mask = group["mask"][:, int(hit[0])]
-                rows[freq_id].append((time_ns, np.count_nonzero(mask.reshape(len(seq), -1), axis=1)))
+                mask = group["mask"][:, int(hit[0])].reshape(len(seq), -1)
+                received = ~(mask < 0).any(axis=1)
+                if received.any():
+                    rows[freq_id].append((time_ns[received], np.count_nonzero(mask[received], axis=1)))
     out = {}
     for freq_id, parts in rows.items():
         if not parts:

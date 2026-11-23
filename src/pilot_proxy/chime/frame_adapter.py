@@ -11,6 +11,7 @@ import numpy as np
 from pilot_proxy.detector_geometry import (
     DetectorFrameLayout,
     apply_nyquist_zone_to_detector_matrix,
+    nyquist_zone_is_mirrored,
     stream_time_block_to_detector_matrix,
 )
 from pilot_proxy.detector_reference import packed_dtype_for_component_bits
@@ -248,7 +249,7 @@ def pack_chime_block_for_detector(
         feed_channel_streams=arr,
         frame_size_samples=int(frame_size_samples),
         detector_window_samples=int(detector_window_samples),
-        nyquist_zone=nyquist_zone,
+        time_reverse_windows=nyquist_zone_is_mirrored(nyquist_zone),
         quantization_scale_mode=mode,
         clip_sigma=clip_sigma,
         combine_mode=COMBINE_MODE_COMBINED_STREAMS,

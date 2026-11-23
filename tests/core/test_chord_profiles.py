@@ -41,8 +41,10 @@ from pilot_proxy.integration.receiver_profile import (
     receiver_frequency_to_channel,
 )
 from pilot_proxy.integration.stream_layout import InputStreamMap
+from pilot_proxy.detector_reference import quantize_complex_numpy, unpack_packed_complex
 from pilot_proxy.integration.weight_generation import (
     generate_weight_table_from_receiver_profile,
+    profile_requires_window_time_reversal,
     target_layout,
 )
 from pilot_proxy.provenance import file_sha256
@@ -225,28 +227,31 @@ def test_chord_reference_placement_adaptive_cases() -> None:
             assert layout["adaptive_reference_placement"] is False
 
 
-def test_chord_weight_tables_identical_for_both_coordinate_systems() -> None:
-    # In zone 1 (upright), the post-Nyquist-zone normalization and the raw
-    # input-frequency coordinates coincide. Both banks must therefore be
-    # bit-identical, and no window time reversal is requested.
-    profile = load_receiver_profile(CHORD_PROFILE)
+@pytest.mark.parametrize("profile_path", [CHIME_PROFILE, CHORD_PROFILE, PATHFINDER_PROFILE],
+                         ids=["chime", "chord", "pathfinder"])
+@pytest.mark.parametrize("coordinates", ["post_nyquist_zone_normalization", "raw_input_frequency_coordinate"])
+def test_both_coordinate_banks_respond_to_the_native_pilot(profile_path, coordinates) -> None:
+    # The native pilot is the tone the receiver delivers (mirrored in an even zone).
+    # Windows are reversed only when the coordinate system asks for it, and the
+    # target term must then dominate both references on every channel.
+    profile = load_receiver_profile(profile_path)
     core = load_detector_core_profile(CORE_PROFILE)
-    table_post, layouts = generate_weight_table_from_receiver_profile(
-        profile=profile,
-        core=core,
-        physical_channels=ATSC_PHYSICAL_CHANNELS,
-        weight_coordinate_system="post_nyquist_zone_normalization",
+    table, layouts = generate_weight_table_from_receiver_profile(
+        profile=profile, core=core, physical_channels=ATSC_PHYSICAL_CHANNELS,
+        weight_coordinate_system=coordinates,
     )
-    table_raw, _ = generate_weight_table_from_receiver_profile(
-        profile=profile,
-        core=core,
-        physical_channels=ATSC_PHYSICAL_CHANNELS,
-        weight_coordinate_system="raw_input_frequency_coordinate",
-    )
-    assert np.array_equal(table_post, table_raw)
-    populated = sorted(np.flatnonzero(table_post.any(axis=(1, 2))).tolist())
-    assert populated == EXPECTED_CHORD_CHANNEL_IDS
-    assert len(layouts) == len(ATSC_PHYSICAL_CHANNELS)
+    reverse = profile_requires_window_time_reversal(profile, coordinates)
+    k = table.shape[-1]
+    n = np.arange(128 * k)
+    for channel, layout in zip(ATSC_PHYSICAL_CHANNELS, layouts):
+        selection = receiver_frequency_to_channel(physical_channel_to_pilot_hz(channel), profile)
+        tone = 5.5 * np.exp(2j * np.pi * selection.fine_bin_offset_hz / profile.coarse_channel_width_hz * n)
+        x = unpack_packed_complex(quantize_complex_numpy(tone.reshape(128, k), 4, 1.0), 4)
+        if reverse:
+            x = x[:, ::-1]
+        w = unpack_packed_complex(table[int(layout["coarse_channel_index"])], 4)
+        target, lower, upper = (float((np.abs(x @ np.conjugate(w[t])) ** 2).sum()) for t in range(3))
+        assert target > 100 * max(lower, upper), (channel, target, lower, upper)
 
 
 @pytest.mark.parametrize(

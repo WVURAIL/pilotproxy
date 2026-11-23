@@ -62,7 +62,7 @@ def validation(out, plan, *, special=False, no_exceedances=False, coarse_members
     fine = np.full((2, 1, 3, 256), 100, dtype=np.uint64)
     coarse = np.full((2, 1, 3), 100, dtype=np.uint64)
     if not no_exceedances:
-        fine[0, :, 0, 202] = 150
+        fine[0, :, 0][:, FIXTURES.TONE_BINS] = 600  # above every calibrated threshold
         coarse[0, :, 0] = 150
     if special:
         fine[0, :, 0, :] = 0
@@ -126,7 +126,7 @@ def test_frame_level_rows_use_the_fine_sums_not_the_raw_coarse_members(tmp_path)
         assert row["exceedances"] == 1
     assert "all-bin sums of the fine powers" in result["coarse_scope"]
     data = np.load(out / "reports/null_validation/ch14.npz")
-    p0, p_ref = 255 * 100 + 150, 2 * 256 * 100
+    p0, p_ref = 248 * 100 + 8 * 600, 2 * 256 * 100
     np.testing.assert_allclose(data["coarse_float"][0, :3], 2 * p0 / p_ref, rtol=1e-15)
     np.testing.assert_allclose(data["coarse_float"][1, :3], 1.0, rtol=1e-15)
 

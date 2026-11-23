@@ -138,7 +138,7 @@ def engineering_cohort(tmp_path, *, coarse_members=None):
         fine = np.full((2, len(snrs), 3, 256), 100, dtype=np.uint64)
         coarse = np.full((2, len(snrs), 3), 100, dtype=np.uint64)
         for j, snr in enumerate(snrs):
-            fine[:, j, 0, 202] = 100 if snr < -49.5 else 150
+            fine[:, j, 0, helper.TONE_BINS[case]] = 100 if snr < -49.5 else helper.DISCOVERY_TONE
             coarse[:, j, 0] = 100 if snr < -49.5 else 150
         if coarse_members is not None:
             coarse = np.full_like(coarse, coarse_members)

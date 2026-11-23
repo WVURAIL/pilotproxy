@@ -36,4 +36,4 @@ Run each command with --help. Store new outputs separately from existing data.
 - GNU Radio: generate_gnuradio_reference.py, plot_gnuradio_sdr_references.py, analyze_noise_signal_references.py.
 - Repository and examples: generate_doc_specs.py (TeX macros for the formal documents), make_code_only_cut.py (the
   tree without the CHIME-derived files), make_capture_replay_example.py and make_operating_policy_example.py
-  (synthetic fixtures for rehearsals), freeze_estimator_transfer.py (freeze estimator-transfer evidence).
+  (synthetic fixtures for rehearsals).

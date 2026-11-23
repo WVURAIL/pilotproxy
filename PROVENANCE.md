@@ -18,7 +18,7 @@ access on request.
 Set `PILOT_PROXY_PROVENANCE_REPOSITORY` to a local checkout or bare clone of that
 history for the archived exporter and transfer-reproduction tests. These tests
 execute the hash-verified historical sources; separate tests check that current
-readers and exporters refuse incompatible inputs or changed publication sources.
+readers refuse incompatible inputs.
 `GIT_ALTERNATE_OBJECT_DIRECTORIES` can expose preserved object directories to the
 source-hash and cited-path checks without importing private refs into this
 repository.

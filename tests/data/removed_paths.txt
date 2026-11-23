@@ -358,3 +358,9 @@ tools/sdr_stream_worker.cpp	63e72e8
 tools/sdr_transfer.py	63e72e8
 tools/validate_sdr_upgrade_adapter.py	63e72e8
 tools/validate_sdr_upgrade_streaming.py	63e72e8
+tests/archive/test_survey_durability_stress.py	63e72e8
+tests/archive/test_survey_stress_concurrency.py	63e72e8
+tests/archive/test_survey_stress_contract.py	63e72e8
+tests/archive/test_survey_stress_resume.py	63e72e8
+tools/freeze_estimator_transfer.py	63e72e8
+tests/testbench/test_freeze_estimator_transfer.py	63e72e8

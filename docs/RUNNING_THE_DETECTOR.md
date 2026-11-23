@@ -199,24 +199,28 @@ dtv_write_enabled: false
 dtv_calibration_mode: true
 ```
 
-Without `dtv_calibration_mode` only the mask is sent, and with kotekan#1924 `dtv_stat` as well (port 11039), in every mode. With it, the powers, fine support and fine powers are sent too, and both templates must be rendered with the same value. The mask and recording switches start from the values above, and either is changed over REST until the next restart:
+Without `dtv_calibration_mode` only the mask is sent, and with kotekan#1924 `dtv_stat` as well (port 11041), in every mode. With it, the powers, fine support and fine powers are sent too, and both templates must be rendered with the same value. The mask and recording switches start from the values above, and either is changed over REST until the next restart:
 
 ```bash
-curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true, "valid_at_time_ns": 0}' <node>:12048/dtv_mask_enabled
+at=$(( ($(date +%s) + 20) * 1000000000 ))
+curl -X POST -H 'Content-Type: application/json' -d "{\"enabled\": true, \"valid_at_time_ns\": $at}" <node>:12048/dtv_mask_enabled
 ```
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' -d '{"enabled": true}' <node>:12048/dtv_write_enabled
 ```
 
-A POST sent before the stages start has no effect. A `valid_at_time_ns` of 0 applies the mask from the next frame.
+A POST sent before the stages start has no effect. Post a `valid_at_time_ns` a few seconds ahead, as above, so every node switches at the same frame; `tools/pathfinder_dtv_switch.py` does this for a list of nodes (`--lead`, 20 s by default). A mask change applies from the first frame starting at or after that time, in `DtvRfiMask` and in the `frac_dtv_mask_enabled` that `N2Accumulate` records. With kotekan#1927 both round a posted 0, or a time already passed, up to the next whole 5 s. An earlier build applies it at each stage's next frame, and `N2Accumulate`, downstream, then records the switch up to about a second before the data change.
 
 On the live Pathfinder, the site control system choco stores both switches and pushes its values back to the nodes, so a POST sent straight to a node can be undone. There, switch them from the choco host, for every X-engine (`cx`) or one node (`cx/cx47`):
 
 ```bash
-choco set cx dtv_mask_enabled '{"enabled": true, "valid_at_time_ns": 0}'
+at=$(( ($(date +%s) + 20) * 1000000000 ))
+choco set cx dtv_mask_enabled "{\"enabled\": true, \"valid_at_time_ns\": $at}"
 choco set cx dtv_write_enabled '{"enabled": true}'
 ```
+
+`tools/pathfinder_mask_schedule.sh` switches the mask through choco in this way, on a schedule.
 
 The recv node writes the products under `/mnt/cs00/data/dtv/acq_<start time>/`, with a new directory for each recv start, and one file for each half and window of about 43 s. The `coarse_freq` and `fpga_seq_num` attributes identify the half and the window, and `fpga_seq_time_nsec` gives the window's time. The tools order the files by that time, so a recording split by restarts, even one that resets `fpga_seq_num`, keeps its order. A block missing from a window is a row of 0xFF bytes, and the reader skips it.
 
@@ -291,10 +295,10 @@ pilot-proxy run-scores --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_f
 ```
 
 ```bash
-python tools/threshold_rule.py --scores scores --power-limits limits.json --out thresholds
+python tools/threshold_rule.py --scores scores --table channel_table.json --channels 18,24,29 --power-limits limits.json --out thresholds
 ```
 
-This rule keeps the most data while the BAO bias from the residual shelf power stays under one standard deviation in the RFIsher table, with a margin of two standard errors. It applies no control corrections. `limits.json` gives each channel's checked power limit in mK². The result is in-sample, so it is checked on a later part of the run or on another run.
+This rule keeps the most data while the BAO bias from the residual shelf power stays under one standard deviation in the RFIsher table, with a margin of two standard errors. It applies no control corrections. `channel_table.json` is the RFIsher channel table of this telescope: without `--table` the tool takes the packaged CHIME inter-cylinder table, which gives a wrong word on any other telescope. `--channels` names the channels of the score cache, since the tool otherwise reads every DTV channel of the table. `limits.json` gives each channel's checked power limit in mK². The result is in-sample, so it is checked on a later part of the run or on another run.
 
 On CHIME, the detector is removed by a restart without `dtv_enabled`, and the rendered config then has no detector stages. A change of bundle, word, or channel list always needs a restart.
 

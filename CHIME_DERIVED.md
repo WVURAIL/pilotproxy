@@ -18,6 +18,7 @@ GNU Radio benches, the designed weight banks, RFIsher's forecast tolerance table
 | `docs/evidence/ca_os_archive_bulk_2026-09-29/` (65 files) | Archive-bulk statistics of all 23 ATSC channels: per-channel bulk statistics, persistent-bin profiles and geometry (`data/bulk/chNN.json`), the per-channel release ledger with product SHA-256, era months and frame counts, the producer and verifier code, and the report |
 | `docs/evidence/ch37_rank_injection_2026-09-30/` (143 files) | Channel 37 control study: rank curves and real-null exceedance rates of the ch37 control product (`data/controls_summary.json`), per-geometry frame metadata, beside a synthetic rank bench; with the result, check and verifier |
 | `docs/evidence/youden_j_2026-09-07/` (2 files) | Coarse-versus-fine ROC and Youden J on the released per-pilot products: channel 35 off-era frames as the null, channels 34 to 36 from 2025 as the signal |
+| `docs/evidence/bao_word_crosscheck_2026-11-22/` (3 files) | BAO-word cross-check of `calibrate-bundle` against the dissertation on the archive frames: per-channel `mu_0` of each channel and of the control (40477 control frames), best words, least ratios and outcomes (`ratio_e135492.json`), with the README that quotes them and the script |
 | `docs/evidence/F1_INVENTORY.md` | Index of the two packages above (file counts, bytes, manifest SHA-256) |
 | `data/provenance/combine_subset_20260714/` (3 files) | Stack-subset decision record: the count of archive events per freq_id presence signature (190 signatures with counts, no event numbers) and the selected 16-channel block |
 | `data/provenance/dissertation_summary_v1.json`, `_v2.json`, `_v3.json` | Curated per-channel and per-epoch values of the archive trawl (mask fractions, retained frames, status) |
@@ -32,11 +33,17 @@ They stay in both cuts. Review them before any public release:
 - The archived inventory records: archive accounting (units, events,
   exclusions, frame counts).
 - `docs/DESIGN_DECISIONS.md`: archive measurements behind design choices (for example
-  the coarse flag's false-alarm rate on quiet frames).
+  the coarse flag's false-alarm rate on quiet frames, the control's all-frame and night
+  99th percentiles, and the least ratios of the BAO-word cross-check).
+- `docs/PilotProxy_DD001_Design_Document.tex` and its PDF: the BAO-word cross-check on the
+  archive (channels 21, 29 and 32 under the worst case).
+- `CHANGELOG.md`: archive results quoted in release notes (for example the control's
+  99th percentiles 1.716 all-frame and 1.133 at night).
 - `docs/PER_PILOT_PRODUCT_FIELDS.md`: railed-sample counts measured on real CHIME baseband
   (freq_id 506).
 - Test goldens written inline: verified off dates
-  (test_transmitter_off.py) and era literals (tests/config/test_profile_literals.py).
+  (test_transmitter_off.py), era literals (tests/config/test_profile_literals.py), and the
+  control's frame counts and 99th-percentile words (tests/core/test_default_word_pin.py).
   Tests that need the withheld files skip in the code-only cut, but their source
   still holds these values.
 
@@ -60,6 +67,7 @@ cut keeps the empty stand-ins for `author_eras_2026-09-23.json` and `transmitter
 docs/evidence/ca_os_archive_bulk_2026-09-29/
 docs/evidence/ch37_rank_injection_2026-09-30/
 docs/evidence/youden_j_2026-09-07/
+docs/evidence/bao_word_crosscheck_2026-11-22/
 docs/evidence/F1_INVENTORY.md
 data/provenance/combine_subset_20260714/
 data/provenance/dissertation_summary_v1.json

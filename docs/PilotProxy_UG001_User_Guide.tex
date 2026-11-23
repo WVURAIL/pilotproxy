@@ -436,7 +436,7 @@ This file is the one an operator reads most. It holds the receiver binding and t
 \hline
 \textbf{Field} & \textbf{Meaning} & \textbf{Kotekan}\\ \hline
 \endhead
-\pfield{status} & \code{pending_campaign} (exported, no values), \code{calibrated}, or \code{control}. Only channel 37 may be \code{control}, and channel 37 must be. A bound \code{pending_campaign} channel stops Kotekan at the first frame. \code{calibrated} means the values are filled in, not that the channel is qualified for masking. & \yes\\ \hline
+\pfield{status} & \code{pending_campaign} (exported, no values), \code{calibrated}, or \code{control}. Only channel 37 may be \code{control}, and channel 37 is \code{control}, or \code{pending_campaign} with kotekan\#1927; an earlier Kotekan requires \code{control}. A bound \code{pending_campaign} channel stops Kotekan at the first frame. \code{calibrated} means the values are filled in, not that the channel is qualified for masking. & \yes\\ \hline
 \pfield{decision_version} & \code{fine_decision_v3}, or \code{fine_decision_v2} or \code{fine_decision_v1} in an earlier bundle: the integer test of Section~\ref{sec:definitions}. Kotekan \code{develop} accepts v1 and v2 (\#1914), and v3 needs kotekan\#1924. & \yes\\ \hline
 \pfield{cfar_multiplier_q16} & The default word \(W\), for any backend with no word of its own. \(\eta=W/65536\). Must be positive. In v1 and v2, the one word of the channel. & \yes\\ \hline
 \pfield{power_limit_multiplier_q16} & v3 only, optional. The power-limit (BAO) word, written where the power-limit test passed (Section~\ref{sec:threshold}). \code{DtvRfiMask} (kotekan\#1924) applies it to the pair in \code{dtv_stat}, or \code{cfar_multiplier_q16} when it is absent. & \yes\\ \hline
@@ -899,14 +899,15 @@ dtv_calibration_mode: true
 
 The two switches are changed over REST until the next restart:
 \begin{lstlisting}[style=shell]
+at=$(( ($(date +%s) + 20) * 1000000000 ))
 curl -X POST -H 'Content-Type: application/json' \
-  -d '{"enabled": true, "valid_at_time_ns": 0}' <node>:12048/dtv_mask_enabled
+  -d "{\"enabled\": true, \"valid_at_time_ns\": $at}" <node>:12048/dtv_mask_enabled
 curl -X POST -H 'Content-Type: application/json' \
   -d '{"enabled": true}' <node>:12048/dtv_write_enabled
 \end{lstlisting}
-A \code{valid_at_time_ns} of 0 applies a mask change from the next frame. A nonzero value applies it from the first frame starting at or after that instrument time. A write change applies to whole frames. A POST sent before the stages start has no effect. The \code{DtvRfiMask} log line \code{DTV mask on} or \code{off} confirms a mask change. \code{N2Accumulate} records the fraction of each bin the mask was on, and \code{hdf5N2Write} writes it as \code{frac_dtv_mask_enabled}.
+A mask change applies from the first frame starting at or after the instrument time \code{valid_at_time_ns}, in \code{DtvRfiMask} and in the fraction that \code{N2Accumulate} records. Post a time a few seconds ahead, as above, so every node switches at the same frame. \code{tools/pathfinder_dtv_switch.py} does this for a list of nodes, and on the live Pathfinder \code{choco set} from the choco host takes the same value (\code{tools/pathfinder_mask_schedule.sh}). With kotekan\#1927 both stages round a posted 0, or a time already passed, up to the next whole 5\,s. An earlier build applies it at each stage's next frame, and \code{N2Accumulate}, downstream, then records the switch up to about a second before the data change. A write change applies to whole frames. A POST sent before the stages start has no effect. The \code{DtvRfiMask} log line \code{DTV mask on} or \code{off} confirms a mask change. \code{N2Accumulate} records the fraction of each bin the mask was on, and \code{hdf5N2Write} writes it as \code{frac_dtv_mask_enabled}.
 
-Each X-engine half packs 1024 blocks (about 43 s) of each sent product into one frame and sends it to the recv node, on ports 11031 (mask), 11033 (powers), 11035 (fine support), 11037 (fine powers) and, with kotekan\#1924, 11039 (\code{dtv_stat}). \code{recv.j2} writes each frame to its own file under \code{/mnt/cs00/data/dtv/acq_<start time>/}, named \code{dtv_<product>.<number>.h5}, with a new directory for each recv start. The numbers follow arrival order. The \code{coarse_freq} attribute identifies the half and \code{fpga_seq_num} gives the start of the window. A block missing from a window is a row of \code{0xFF} bytes.
+Each X-engine half packs 1024 blocks (about 43 s) of each sent product into one frame and sends it to the recv node, on ports 11031 (mask), 11033 (powers), 11035 (fine support), 11037 (fine powers) and, with kotekan\#1924, 11041 (\code{dtv_stat}). \code{recv.j2} writes each frame to its own file under \code{/mnt/cs00/data/dtv/acq_<start time>/}, named \code{dtv_<product>.<number>.h5}, with a new directory for each recv start. The numbers follow arrival order. The \code{coarse_freq} attribute identifies the half and \code{fpga_seq_num} gives the start of the window. A block missing from a window is a row of \code{0xFF} bytes.
 
 \subsection{CHIME Upgrade}
 
@@ -1052,8 +1053,8 @@ The CHIME archive scans of record were made with an earlier release; the tag \co
 \code{receiver channel namespace mismatch} & Bundle for the other telescope. & Use a bundle of this telescope's receiver profile.\\ \hline
 \code{missing bundle receiver namespace} & Rows carry receiver IDs but the file has no top-level namespace. & Export the bundle again with the current tools.\\ \hline
 \code{weight_bank_nbytes ... does not match the compiled kernel contract} & Bundle for the other window size (\(K=64\) or 128). & Use a bundle of this telescope.\\ \hline
-\code{outside ATSC 14-37} or \code{only physical channel 37 can have status control} & Malformed profile, or a Kotekan build older than the control channel. & Check the bundle with the validator; update Kotekan.\\ \hline
-\code{fine calibration is not deployable} (first frame) & A bound profile is \code{pending_campaign}. & Calibrate that channel, drop it from the bundle, or list its ID in the permanent mask.\\ \hline
+\code{outside ATSC 14-37}, \code{physical channel 37 must have status control or pending_campaign, and no other channel can be control} (kotekan\#1927), or \code{only physical channel 37 can have status control} (earlier builds) & Malformed profile, a Kotekan build older than the control channel, or channel 37 \code{pending_campaign} on a build before kotekan\#1927. & Check the bundle with the validator; update Kotekan.\\ \hline
+\code{fine calibration is not deployable} (first frame) & A bound profile is \code{pending_campaign}. & Calibrate that channel or drop it from the bundle. The F-engine template can also list its ID in the permanent mask; the Pathfinder templates do not pass that list.\\ \hline
 \code{archive-review-only thresholds} (first frame) & A bound profile's word is for archive review only. & Use a bundle with qualified words.\\ \hline
 \code{does not carry coarse_freq} or \code{coarse_freq entries but num_frequencies} & Voltage metadata without the frequency map, or with the wrong count. & Fix the upstream metadata.\\ \hline
 \code{more than dtv_fine_powers_rows} & More bound channels on the node than fine-power rows. & Raise \code{dtv_fine_powers_rows} or bind fewer channels.\\ \hline

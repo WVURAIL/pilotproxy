@@ -1,28 +1,36 @@
 # Detector-to-threshold workflow
 
-1. Reduce the archive with the fixed detector and receiver configuration.
-2. Select one declared receiver-state interval and retain its original event weights.
-3. Export exact fine-score words and frame powers.
-4. Build a cache with: pilot-proxy characterize score-cache --metadata
-   PATH/ch19.json --output PATH/cache --current-word WORD
-5. Generate an RFIsher schema-v3 additive-power response table.
-6. Run python tools/threshold_rule.py --scores PATH/cache --table PATH/channel_table.json
-   --channels 19 --power-limits PATH/finite_limits.json --out PATH/decisions
-7. Evaluate the selected word on independent data, then compile and test the
-   receiver configuration before using its mask.
+The words a bundle carries come from `calibrate-bundle` on a recording of the telescope where
+they are used. [RUNNING_THE_DETECTOR.md](RUNNING_THE_DETECTOR.md) gives each step with its commands.
 
-The channel table supplies the coefficient in a = power_scale*x**2.
-The simple model assigns temperature Tsys*x and spreads its squared amplitude
-uniformly over supported forecast modes. This stated normalization is not an
-empirical sky calibration.
+1. Record a detect-only run of the bound channels and the channel-37 control, several days
+   long (Step 1).
+2. Calibrate with `"threshold": "power_limit"`, or `plan-run` and `process-run` with
+   `--threshold power_limit --power-limit inputs.json` (Step 2). The plan gives the
+   `power_limit` inputs: the RFIsher channel table of this telescope (`table`), the checked
+   limits in mK² (`limits`), and `coupling`, `curvature` and `margin`. Under fine decision v3,
+   each channel gets its default word, the control's 1% word scaled to the channel, and a
+   power-limit (BAO) word, or the reject word 1 where no word passes.
+3. Test the bundle on later data with `test-bundle`, and qualify it with `qualify-bundle`
+   (Step 3).
+4. Compile the decisions with `compile-operating-policy`
+   ([CHANNEL_OPERATING_POLICY.md](CHANNEL_OPERATING_POLICY.md)), then deploy the bundle
+   (Step 4).
 
-The sweep retains original event weights, averages signed excess before
-flooring, and carries an event-clustered sampling error. It chooses maximum
-retention subject to the upper first-order bias and checked finite-power
-limit. finite_limits.json supplies those per-channel limits in mK^2.
-Channel 37 remains an unmasked background control.
+The power-limit test is `power_limit_word.limit_test`. It keeps the most frames for which
 
-The two-standard-error margin is an in-sample rule, not a simultaneous
-confidence guarantee. Keep calibration and evaluation populations distinct.
-Runtime correctness requires exact Q16 words, matching weights and receiver
-geometry, frame alignment, and valid-sample accounting.
+```
+f * power_scale * (x + 2 s)^2 <= limit,    x = max(C_s e(u) - o - delta(u), 0)
+```
+
+where `e(u)` is the kept mean ratio excess `F / mu_0 - 1` with clustered error `s`, `o` is the
+control's null and `delta(u)` its selection shift at the channel's word. The channel's
+`curvature` is added to `o`. The upper estimate also adds two standard errors of `o`, `delta(u)`
+and `curvature`, and the `margin`. The channel table supplies `power_scale`. The simple model
+assigns temperature Tsys*x and spreads its squared amplitude uniformly over the supported
+forecast modes. This normalization is a model convention, not an empirical sky calibration.
+The word is in-sample, so it is tested on independent data before it masks.
+
+`tools/threshold_rule.py` is an archive study tool. It runs the same sweep on a score cache
+with the bias-ratio and finite-power criteria and applies no control corrections, so its words
+differ from the power-limit test's and are not deployed.

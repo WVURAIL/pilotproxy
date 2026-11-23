@@ -99,12 +99,20 @@ forecast modes. The channel table supplies power_scale in
 a = power_scale*x**2, with a in mK^2. This is a model convention, not a
 measured sky calibration. RFIsher schema-v3 response_dv is per mK^2.
 
-The selected word maximizes retention subject to both the upper first-order
-bias ratio being at most one and the upper additive power being no greater
-than power_limit. That required per-channel limit comes from a finite-model
-check; it has no default and must not be copied from an unchecked linear
-one-sigma tolerance. The CLI accepts the limits as a JSON object through
---power-limits, mapping channel numbers to positive powers in mK^2.
+The power-limit word (`power_limit_word.py`) maximizes retention subject to
+f*power_scale*(x + 2 s)^2 <= limit, with x = max(C_s e(u) - o - delta(u), 0):
+the kept mean excess less the control's null o and selection shift delta(u),
+floored after averaging. The plan names the inputs under `power_limit`:
+`table` (the RFIsher channel table, for power_scale), `limits` (a JSON object
+mapping channel numbers to positive powers in mK^2), `coupling` f, `curvature`
+and `margin` (`plan-run` and `process-run` take them through --power-limit).
+The per-channel limit comes from a finite-model check; it has no default and
+must not be copied from an unchecked linear one-sigma tolerance.
+
+The archive study tool `tools/threshold_rule.py` selects by a different rule:
+the upper first-order bias ratio at most one and the upper additive power no
+greater than the limit, with no control corrections. It takes the limits
+through --power-limits.
 
 These are conditional, in-sample selections. The conversion's range and
 uncertainty and an independent evaluation of the frozen configuration are

@@ -588,6 +588,7 @@ def test_pack_channelized_streams_combined_shape_and_row_order() -> None:
     packed = pack_channelized_streams_for_detector(
         feed_channel,
         frame_size_samples=SMALL_PACK_FRAME_SIZE,
+        time_reverse_windows=False,
         detector_window_samples=SMALL_PACK_WINDOW,
         quantization_scale_mode="provided",
         scale=1.0,
@@ -627,6 +628,7 @@ def test_pack_channelized_streams_per_stream_diagnostic_shape() -> None:
     packed = pack_channelized_streams_for_detector(
         feed_channel,
         frame_size_samples=SMALL_PACK_FRAME_SIZE,
+        time_reverse_windows=False,
         detector_window_samples=SMALL_PACK_WINDOW,
         quantization_scale_mode="provided",
         scale=1.0,

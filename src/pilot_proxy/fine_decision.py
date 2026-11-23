@@ -95,8 +95,9 @@ calibrate-bundle (bundle_calibration.py) writes the words. Under v1 and v2
 a channel's word is its knee or the floor. With the power-limit threshold it
 is the power-limit word, or the floor where no word passes. Under v3 each
 channel gets a default word, the control's 1% word scaled to the channel.
-With the power-limit threshold a channel with a passing word also gets a
-power-limit word (power_limit_word.py). v3_word returns the word that
+With the power-limit threshold each channel also gets a power-limit word
+(power_limit_word.py): its passing word, or the reject word 1, which masks
+the channel whole, where no word passes. v3_word returns the word that
 Kotekan's DtvRfiMask applies to a v3 channel.
 """
 from __future__ import annotations

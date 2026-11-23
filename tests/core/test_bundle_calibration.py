@@ -1390,7 +1390,11 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
     with pytest.raises(SystemExit, match="fewer than 30 captures, and the tool sets 30 for the masked fractions"):
         study("v3-blocks-30", "--decision-version", "fine_decision_v3", mode=blocks, output="blocks.json")
 
-    # a channel with no passing word has none
+    # a channel with no passing word carries the reject word; a report from before the reject word has none
+    reject = tool.summary(dict(decision_version="fine_decision_v3", channels={"29": dict(
+        eta=1.5, word_source="control word x scale", masked_fraction=0.01, power_limit_word_q16=1,
+        power_limit_word_source="reject, power limit: pilot not seen in the calibration captures")}))
+    assert tool.describe(reject) == "ch29 1.5 (control word x scale, 1.0%, reject word, masked whole)"
     none = tool.summary(dict(decision_version="fine_decision_v3", channels={"29": dict(
         eta=1.5, word_source="control word x scale", masked_fraction=0.01, power_limit_word_q16=None,
         power_limit_word_source="none, power limit: pilot not seen")}))

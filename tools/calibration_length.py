@@ -127,7 +127,12 @@ def limit_word(c):
     """Return the v3 power-limit word of a channel summary, or an empty string when it has no entry."""
     if "power_limit_source" not in c:
         return ""
-    return ", no power-limit word" if c["power_limit_eta"] is None else f", power-limit word {c['power_limit_eta']}"
+    if c["power_limit_eta"] is None:
+        return ", no power-limit word"
+    # a channel with no passing word carries the reject word, which masks it whole
+    if c["power_limit_source"].startswith("reject"):
+        return ", reject word, masked whole"
+    return f", power-limit word {c['power_limit_eta']}"
 
 
 def describe(channels):

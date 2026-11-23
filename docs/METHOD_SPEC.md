@@ -234,9 +234,10 @@ The decision paths in the repository have different operational status:
   frames when the plan asks for them, scaled by the channel's
   `null_power_ratio * g` over the control's. `g` is a passband factor of the
   plan, 1 when the plan gives none. With the power-limit threshold,
-  `calibrate-bundle` also writes a power-limit word. Kotekan's `DtvRfiMask`
-  applies the power-limit word where the bundle has one, and the default word
-  otherwise.
+  `calibrate-bundle` also writes a power-limit word: the passing word, or the
+  reject word 1 where no word passes, which masks the channel whole. Kotekan's
+  `DtvRfiMask` applies the power-limit word where the bundle has one, and the
+  default word otherwise.
 - An exported bundle marks its profiles `pending_campaign`, and a pending
   profile never reaches a mask. `calibrate-bundle` marks them `calibrated`,
   and the control `control`. Kotekan turns the mask on only when every

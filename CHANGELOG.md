@@ -5,6 +5,12 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- New calibrations write fine decision v3, which Kotekan runs since kotekan#1924. `calibrate-bundle`, `plan-run` and
+  `process-run` write v2 or v1 only when the plan or `--decision-version` names it. `export-runtime-weight-bundle`
+  writes its pending profiles under the same version, with no search geometry for v3, and
+  `export_runtime_weight_bundle` takes `decision_version`. A v3 profile needs a receiver channel-id namespace, so a
+  bundle of `reference_800mhz_pfb`, which has none, must name v2 or v1. `process-run`'s `summary.md` names the
+  decision version on its first line. The operating-policy example is a v1 bundle.
 - Removed the September evidence packages `docs/evidence/ca_os_archive_bulk_2026-09-29` and
   `ch37_rank_injection_2026-09-30`, and their index `F1_INVENTORY.md`. They chose the bulk mask and the CFAR rank
   of fine decisions v1 and v2, which v3 does not use, and nothing reads them. Under frame-health gate v2 their bulk

@@ -43,7 +43,7 @@ def calibrated(tmp_path_factory):
     mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2), ctime=T0 + 3600 * i) for i in range(6)]
     control = write_hours(tmp / "c37", 37, 26, 3, 13, T0)
     calibrate = dict(receiver_profile=str(RECEIVER), detector_core_profile=str(CORE), capture_format="chime_baseband",
-                     epoch="synthetic", null_quantile=0.8, min_knee_captures=4,
+                     epoch="synthetic", null_quantile=0.8, min_knee_captures=4, decision_version="fine_decision_v2",
                      channels={"35": mixed, "29": write_hours(tmp / "c29", 29, 6, 2, 3, T0), "37": control},
                      control=dict(channel=37, captures=control))
     test = dict(capture_format="chime_baseband",

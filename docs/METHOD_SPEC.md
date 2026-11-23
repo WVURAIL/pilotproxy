@@ -230,9 +230,9 @@ The decision paths in the repository have different operational status:
   frame with `d_rho = 0` has no decision, and `DtvRfiMask` rejects it.
 - On 2026-11-22, every bundle installed in Kotekan, on `develop` and on
   `chord`, is fine decision v1 with a designated half-width of 32. Kotekan
-  `develop` runs v1 and v2 bundles. Fine decision v3 needs kotekan#1924, which
-  is open. Until it merges, `calibrate-bundle` writes v2 unless the plan names
-  a version.
+  `develop` runs v1, v2 and, since kotekan#1924, v3 bundles. `calibrate-bundle`
+  writes v3 unless the plan names a version, so a v2 bundle is chosen with
+  `decision_version` `fine_decision_v2`.
 - Under v3, `calibrate-bundle` writes the default word of each channel. It is
   the control's 1% word (`null_quantile` 0.99 by default), over the night
   frames when the plan asks for them, scaled by the channel's

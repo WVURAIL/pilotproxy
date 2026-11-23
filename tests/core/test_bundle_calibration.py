@@ -117,7 +117,9 @@ def plans(tmp_path_factory):
     # the hour-to-hour spread of each masked fraction
     mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2), ctime=T0 + 3600 * i) for i in range(6)]
     control = write_hours(tmp / "c37", 37, 26, 3, 13, T0)
-    calibrate = dict(common, epoch="synthetic", null_quantile=0.8, min_knee_captures=4, channels={
+    # the knee, the floor and the anchors are of fine decisions v1 and v2, so the plan names v2
+    calibrate = dict(common, epoch="synthetic", null_quantile=0.8, min_knee_captures=4,
+                     decision_version="fine_decision_v2", channels={
         "35": mixed,
         "29": write_hours(tmp / "c29", 29, 6, 2, 3, T0),
         "37": control,
@@ -752,8 +754,9 @@ def test_process_run_summarizes_a_run(plans, tmp_path):
             handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
             handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 32 * 8192
     out = tmp_path / "processed"
+    # the floor is of fine decisions v1 and v2
     summary = process_run(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
-                          output_dir=out, calibration_share=0.5,
+                          output_dir=out, calibration_share=0.5, decision_version="fine_decision_v2",
                           receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
     rows = {row["channel"]: row for row in summary["channels"]}
     assert rows[35]["word_source"].startswith("floor") and rows[35]["pilot_share"] > 0.9
@@ -761,26 +764,38 @@ def test_process_run_summarizes_a_run(plans, tmp_path):
     assert rows[37]["test_masked_percent"] < 10
     assert json.loads((out / "summary.json").read_text()) == summary
     assert "| 35 |" in (out / "summary.md").read_text()
+    assert (out / "summary.md").read_text().splitlines()[0] == "# Run synthetic, fine_decision_v2"
     assert (out / "spectrograms" / "test" / "masked_summary.csv").exists()
     with pytest.raises(ValueError, match="not empty"):
         process_run(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic", output_dir=out)
 
 
-@pytest.mark.parametrize("decision, floor", [(None, 1.7), ("fine_decision_v1", 1.84)])
+@pytest.mark.parametrize("decision, floor", [("fine_decision_v2", 1.7), ("fine_decision_v1", 1.84)])
 def test_first_bundle_needs_no_captures(plans, tmp_path, decision, floor):
-    plan = dict(plans["calibrate"], channels={"29": [], "37": []}, control=None, num_inputs=32, null_quantile=0.99)
-    if decision:
-        plan["decision_version"] = decision
+    plan = dict(plans["calibrate"], channels={"29": [], "37": []}, control=None, num_inputs=32, null_quantile=0.99,
+                decision_version=decision)
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    # a new bundle takes version 2 unless the plan names another
-    version = decision or "fine_decision_v2"
+    version = decision
     assert report["decision_version"] == version
     assert report["floor_eta"] > floor
     assert report["channels"]["37"]["word_source"] == "floor, no captures"
     rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
     assert {row["fine_calibration"]["decision_version"] for row in rows} == {version}
+
+
+def test_a_plan_without_a_decision_version_calibrates_v3(plans, tmp_path):
+    plan = dict(plans["calibrate"], channels={"29": [], "37": []}, control=None, num_inputs=32, null_quantile=0.99)
+    del plan["decision_version"]
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    assert report["decision_version"] == "fine_decision_v3"
+    assert {r["word_source"] for r in report["channels"].values()} == {"control word x scale"}
+    rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    assert {row["fine_calibration"]["decision_version"] for row in rows} == {"fine_decision_v3"}
+    assert validate_runtime_weight_bundle(bundle_dir=tmp_path / "bundle")["valid"]
 
 
 def test_v3_first_bundle_scales_the_simulated_control_word(plans, tmp_path):
@@ -1197,7 +1212,7 @@ def _summary_md_eta(tmp_path, channel):
     return next(line for line in lines if line.startswith(f"| {channel} |")).split("|")[3].strip()
 
 
-@pytest.mark.parametrize("decision", [None, "fine_decision_v3"])
+@pytest.mark.parametrize("decision", ["fine_decision_v2", "fine_decision_v3", None])
 def test_process_run_takes_the_power_limit_threshold(plans, tmp_path, decision):
     summary, report, common = _power_limit_run(plans, tmp_path, decision)
     rows = {row["channel"]: row for row in summary["channels"]}
@@ -1207,8 +1222,11 @@ def test_process_run_takes_the_power_limit_threshold(plans, tmp_path, decision):
     assert report["channels"]["37"]["power_limit"]["corrections"] == "none, the control itself"
     # the summary and the spectrograms name the word the stage applies; v3 keeps it beside its default word
     channel = report["channels"]["35"]
-    applied = channel["power_limit_word_q16"] if decision else channel["word_q16"]
-    assert decision is None or applied != channel["word_q16"]
+    # a run that names no version is calibrated under v3
+    v3 = decision != "fine_decision_v2"
+    assert report["decision_version"] == ("fine_decision_v3" if v3 else decision)
+    applied = channel["power_limit_word_q16"] if v3 else channel["word_q16"]
+    assert not v3 or applied != channel["word_q16"]
     masked = next(csv.DictReader((tmp_path / "out" / "spectrograms" / "calibrate" / "masked_summary.csv").open()))
     assert rows[35]["word_q16"] == applied and masked["channel"] == "35" and masked["word_q16"] == str(applied)
     assert rows[35]["eta"] == round(applied / 65536, 4) and _summary_md_eta(tmp_path, 35) == str(rows[35]["eta"])
@@ -1664,6 +1682,7 @@ def test_v3_process_run_summary_reports_the_control_word(plans, tmp_path):
     rows = {row["channel"]: row for row in summary["channels"]}
     assert rows[35]["word_source"] == "control word x scale" and rows[35]["scale"] > 0
     text = (out / "summary.md").read_text()
+    assert text.splitlines()[0] == "# Run synthetic, fine_decision_v3"
     assert "Control word eta" in text and "| Scale |" in text and "knee or the floor" not in text
 
 

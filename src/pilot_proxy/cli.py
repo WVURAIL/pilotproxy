@@ -367,8 +367,8 @@ def _add_threshold_arguments(parser: argparse.ArgumentParser) -> None:
                         help="For --threshold power_limit: JSON naming the response table and the checked power limits, "
                              "with the curvature and the pilot passband factor of each channel and the margin.")
     parser.add_argument("--decision-version", choices=FINE_DECISION_VERSIONS, default=None,
-                        help="Test the words are set for (default: the calibration default). "
-                             "fine_decision_v1 for a Kotekan stage that runs only that test.")
+                        help="Test the words are set for (default: fine_decision_v3). fine_decision_v2 for a Kotekan "
+                             "stage without kotekan#1924, and fine_decision_v1 for one that runs only that test.")
     parser.add_argument("--night", type=float, nargs=2, default=None, metavar=("LATITUDE_DEG", "LONGITUDE_DEG_EAST"),
                         help="Take the control quantile of the default word over the control frames recorded with the "
                              "Sun below the horizon at this site, as CHIME's 21 cm analyses use the data. "
@@ -901,7 +901,9 @@ def build_parser() -> argparse.ArgumentParser:
         "calibrate-bundle",
         "Build a detect-only commissioning bundle from captures.",
     )
-    calibrate.add_argument("--plan", type=Path, required=True, help="Calibration plan JSON.")
+    calibrate.add_argument("--plan", type=Path, required=True,
+                           help="Calibration plan JSON. Its decision_version is fine_decision_v3 unless it names "
+                                "fine_decision_v2 or fine_decision_v1.")
     calibrate.add_argument("--output-dir", type=Path, required=True, help="New bundle directory.")
     calibrate.set_defaults(func=_cmd_calibrate_bundle)
 

@@ -6,8 +6,6 @@ On Kotekan `develop`, the detector runs in every Pathfinder X-engine node (`conf
 
 A release requires a calibrated bundle, a verified telescope configuration, an acceptance record, and a site restart and rollback procedure. An exported bundle marked `pending_campaign` and a receiver profile marked `example_requires_data_product_verification` do not meet these requirements. Development bundles are kept apart from accepted releases.
 
-[Archive operating-curve candidates](ARCHIVE_POLICY_CANDIDATE.md) are a review product of their own. They preserve saved words and exact numerical geometry with no null-quantile interpretation, and their `archive_review_only` qualification stops the operating-policy compiler from producing a complete deployment configuration. Such a candidate is never a release bundle, and its detector-frame policy still needs evaluation at the actual masking granularity of the consumer.
-
 ## 1. Build and check the implementation
 
 Use the accepted Kotekan revision recorded in the release manifest. Build with `USE_CUDA=ON` and `WITH_TESTS=ON` on a supported CUDA device. Follow the checkout's `docs/sphinx/compiling/general.rst`, `README.md`, and `docs/sphinx/dev/dev_pilotproxy_testing.rst`. Record the complete build options, compiler/CUDA versions, binary hash, and `external/pilotproxy/VENDOR.json`.

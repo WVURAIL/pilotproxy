@@ -140,6 +140,19 @@ def test_the_bundle_word_must_equal_the_decided_word(case):
         analyze(case)
 
 
+def test_a_bundle_with_an_archive_review_selection_is_refused(case):
+    # the archive candidate builder that wrote provenance.threshold_selection is gone, and the bundle refuses the field
+    source = "a" * 64
+    fine = calibrated(65536, source)
+    fine["provenance"].update(null_quantile=None, threshold_selection={
+        "method": "operating_curve_candidate_v1", "decision_channel": 29, "decision_word_q16": 65536,
+        "decision_record_sha256": source, "score_metadata_sha256": source, "score_population_sha256": source,
+        "selection_granularity": "detector_frame", "qualification": "archive_review_only"})
+    change_bundle(case, lambda rows: rows[29].update(fine_calibration=fine))
+    with pytest.raises(ValueError, match="threshold_selection"):
+        analyze(case)
+
+
 @pytest.mark.parametrize("change, match", [
     (lambda rows: rows[29].update(deployed_word=None), "deployed word"),
     (lambda rows: rows[29].update(deployed_word=0), "deployed word"),

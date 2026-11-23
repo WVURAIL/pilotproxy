@@ -95,7 +95,9 @@ instead of being recorded as clipping. Without this split, a frame that
 partially overlaps absent baseband would be permanently misrecorded as
 saturated. On real CHIME baseband (freq_id 506), we find a median of 795 of
 67108864 components (0.0012%), with the worst frame at 18948 (0.028%), a
-frame-to-frame spread of 24 times.
+frame-to-frame spread of 24 times. Since gate v2, `archive_health` also
+excludes a frame whose `fill_sample_count` is more than 1% of
+`railed_sample_total`.
 
 `null_power_ratio` is not written to the product. It is exactly
 `2*target_norm_sq/reference_norm_sum_sq` from two fields above, and a stored

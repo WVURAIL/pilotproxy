@@ -37,7 +37,7 @@ the audit never assumes that it came from a clean commit.
 ## Versioned, fail-closed frame gate
 
 The gate identity is
-`pilotproxy_archive_frame_health_gate_v1`. Before it returns an inclusion mask,
+`pilotproxy_archive_frame_health_gate_v2`. Before it returns an inclusion mask,
 the gate validates the required fields, shapes, binary flags, frame-to-unit
 indices, source-event keys, and the fine array. Missing or malformed evidence
 is an error and is never read as a healthy row.
@@ -54,6 +54,13 @@ retains 750279:
 The gate also fails closed on non-finite or out-of-range baseband power,
 non-finite valid-row coarse F, and non-finite or negative valid-row fine F. No
 further row of the completed survey triggers these guards.
+
+Version 2 adds `fill_samples_above_one_percent`. A frame is excluded when more
+than 1% of its samples are the archive's 0x00 missing-data fill
+(`fill_sample_count > railed_sample_total / 100`). The rule reads the fill
+count of current products (per-pilot schema v5 and later). The completed
+products are archived products without it, so the rule is empty for them and
+the counts above are unchanged.
 
 Every excluded row appears once in `archive_exclusion_ledger.jsonl`. A record
 holds all triggered reason codes, the product hash, physical channel,

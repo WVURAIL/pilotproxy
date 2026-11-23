@@ -8,9 +8,11 @@
 With --hours, each length L calibrates on the captures of the first L hours of the recording and tests the
 words on the rest. The table gives the floor, each channel's word and its source, the masked fraction on the
 calibration part, the failed test checks, and the share of captures to give process-run as
---calibration-share for the same split. Under fine decision v3 the table has no floor or anchor. Each
-channel's word is its default word, the control's 1% word scaled to the channel, and with --power-limit the
-table also gives its power-limit word. The calibration length is the shortest L whose words still pass.
+--calibration-share for the same split. Under v1 and v2, --power-limit sets each word but the control's to its
+power-limit word or the floor. Under fine decision v3 the table has no floor or anchor. Each channel's word is
+its default word, the control's 1% word scaled to the channel, and the masked fraction is at that word. With
+--power-limit the table also gives its power-limit word. The calibration length is the shortest L whose words
+still pass.
 With --block-hours, consecutive blocks of that length are calibrated on their own, which shows how each
 word follows the time of day.
 
@@ -18,10 +20,11 @@ Hours are clock hours from the first capture, read from each file's fpga_seq_tim
 with interruptions keeps its times: a gap leaves its hours without captures, and a block that falls in one
 is skipped. Files that record no time (the mock run) count one capture every 43 s. Each capture is one
 dtv_fine_powers file of about 43 s. Each part of a split needs as many captures as a word needs, or its
-masked fractions say little. A v1 or v2 knee needs 30 (MIN_KNEE_CAPTURES). The v3 default word needs no
-captures of the channel, so under v3 the count is the min_captures that a power-limit word must keep, 30
-unless the power-limit plan sets another. Writes length.json or blocks.json, with a plan and bundle for each
-case, and prints the table and the gaps.
+masked fractions say little. With --power-limit the count is the min_captures that a power-limit word must
+keep, 30 (MIN_KNEE_CAPTURES) unless the power-limit plan sets another. Otherwise a v1 or v2 knee needs 30. The
+v3 default word needs no captures of the channel, so with no power limit the tool sets 30 for the masked
+fractions. Writes length.json or blocks.json, with a plan and bundle for each case, and prints the table and
+the gaps.
 
 With --input-counts (from pathfinder_input_counts.py), each row also gives each channel's good inputs over
 its captures (min, median and max), and the blocks end with how each channel's word follows that count.
@@ -43,6 +46,7 @@ from pilot_proxy.run_plans import ordered_run_files, write_run_plans
 CAPTURE_SECONDS = 1024 * 8192 * 5.12e-6     # 1024 detector blocks; the same on CHIME (16384 x 2.56 us)
 # the fewest kept captures the archive rule accepts, which a v1 or v2 knee needs
 KNEE_CAPTURES = MIN_KNEE_CAPTURES
+KNEE_RULE = f"a knee needs {KNEE_CAPTURES}"
 
 
 def ordered_files(args, work):
@@ -65,13 +69,16 @@ def is_v3(template):
 def fewest_captures(template):
     """Return the fewest captures of each part of a split, and the rule that sets them.
 
-    Under v1 and v2 a knee needs KNEE_CAPTURES. The v3 default word needs no captures of the channel, and a
-    power-limit word must keep the plan's min_captures, MIN_KNEE_CAPTURES unless the plan sets it.
+    A power-limit word must keep the plan's min_captures, MIN_KNEE_CAPTURES unless the plan sets it. Without a
+    power limit, a v1 or v2 knee needs KNEE_CAPTURES. The v3 default word needs no captures of the channel, so
+    there the tool sets MIN_KNEE_CAPTURES for the masked fractions.
     """
+    if "power_limit" in template:
+        count = int(template["power_limit"].get("min_captures", MIN_KNEE_CAPTURES))
+        return count, f"a power-limit word keeps at least {count}"
     if not is_v3(template):
-        return KNEE_CAPTURES, f"a knee needs {KNEE_CAPTURES}"
-    count = int(template.get("power_limit", {}).get("min_captures", MIN_KNEE_CAPTURES))
-    return count, f"a power-limit word keeps at least {count}"
+        return KNEE_CAPTURES, KNEE_RULE
+    return MIN_KNEE_CAPTURES, f"the tool sets {MIN_KNEE_CAPTURES} for the masked fractions"
 
 
 def capture_hours(runs, files):
@@ -166,7 +173,7 @@ def summary(report):
     if report["decision_version"] != FINE_DECISION_V3_VERSION:
         return {ch: dict(eta=round(c["eta"], 4), source=c["word_source"], anchor=c["anchor_bin"],
                          masked=round(c["masked_fraction"], 4)) for ch, c in report["channels"].items()}
-    # v3 records no anchor, and keeps the power-limit word apart from the default word
+    # a v3 bundle has no anchor, so the table leaves it out. It gives the power-limit word apart.
     out = {}
     for ch, c in report["channels"].items():
         out[ch] = dict(eta=round(c["eta"], 4), source=c["word_source"], masked=round(c["masked_fraction"], 4))
@@ -202,6 +209,7 @@ def main():
     template, files, control = ordered_files(args, args.output_dir / "all")
     v3 = is_v3(template)
     fewest, rule = fewest_captures(template)
+    knee = rule == KNEE_RULE
     hours, first_ns = capture_hours(args.run, files)
     counts, freq_of = {}, {}
     if args.input_counts:
@@ -225,7 +233,7 @@ def main():
             # the test needs as many captures as the calibration, or its masked fractions say little
             if k < fewest or m < fewest:
                 print(f"{length:g} h: {k} captures to calibrate and {m} to test, each needs {fewest}"
-                      + (f" ({rule})" if v3 else "") + "; skipped")
+                      + ("" if knee else f" ({rule})") + "; skipped")
                 continue
             out = args.output_dir / f"{length:g}h"
             report = calibrate_on(template, chosen, control, out)
@@ -246,7 +254,7 @@ def main():
         size = args.block_hours
         if round(size * 3600 / CAPTURE_SECONDS) < fewest:
             raise SystemExit(f"a block of {size:g} h has fewer than {fewest} captures, "
-                             + (f"and {rule}" if v3 else "which a knee needs"))
+                             + ("which a knee needs" if knee else f"and {rule}"))
         for b in range(int(span // size + 1e-9)):
             start = b * size
             chosen = select(files, hours, start, start + size)

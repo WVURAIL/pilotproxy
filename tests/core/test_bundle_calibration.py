@@ -1349,12 +1349,12 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
     (tmp_path / "limit.json").write_text(json.dumps(limit))
     (tmp_path / "limit10.json").write_text(json.dumps(dict(limit, min_captures=10)))
 
-    def study(name, *extra):
+    def study(name, *extra, mode=("--hours", "0.2", "0.4"), output="length.json"):
         monkeypatch.setattr(sys, "argv", ["calibration_length.py", "--bundle-dir", str(tmp_path / "bundle"), "--run",
-                                          str(tmp_path / "run" / "run_*.h5"), "--hours", "0.2", "0.4",
+                                          str(tmp_path / "run" / "run_*.h5"), *mode,
                                           "--output-dir", str(tmp_path / name), *extra])
         tool.main()
-        return json.loads((tmp_path / name / "length.json").read_text()), capsys.readouterr().out
+        return json.loads((tmp_path / name / output).read_text()), capsys.readouterr().out
 
     # v1 keeps its floor, anchors and knee gate
     rows, out = study("v1", "--decision-version", "fine_decision_v1")
@@ -1375,9 +1375,20 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
     assert f"power-limit word {channels['35']['power_limit_eta']}" in out
     assert "power_limit_eta" not in channels["37"]
 
-    # the gate is the power-limit plan's min_captures
+    # the gate is the power-limit plan's min_captures, under v1 as well
     rows, out = study("v3-10", "--decision-version", "fine_decision_v3", "--power-limit", str(tmp_path / "limit10.json"))
     assert [r["hours"] for r in rows] == [0.2, 0.4] and "skipped" not in out
+    assert tool.fewest_captures(dict(decision_version="fine_decision_v1", power_limit=dict(min_captures=10))) == (
+        10, "a power-limit word keeps at least 10")
+
+    # blocks under v3 have no floor, and with no power limit the tool sets 30 captures for the masked fractions
+    blocks = ("--block-hours", "0.2")
+    rows, out = study("v3-blocks", "--decision-version", "fine_decision_v3", "--power-limit",
+                      str(tmp_path / "limit10.json"), mode=blocks, output="blocks.json")
+    assert [r["captures"] for r in rows] == [17, 17, 17] and "floor" not in out
+    assert not any("floor_eta" in r for r in rows) and all("power_limit_eta" in r["channels"]["35"] for r in rows)
+    with pytest.raises(SystemExit, match="fewer than 30 captures, and the tool sets 30 for the masked fractions"):
+        study("v3-blocks-30", "--decision-version", "fine_decision_v3", mode=blocks, output="blocks.json")
 
     # a channel with no passing word has none
     none = tool.summary(dict(decision_version="fine_decision_v3", channels={"29": dict(

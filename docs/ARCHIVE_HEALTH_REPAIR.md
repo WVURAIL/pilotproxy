@@ -60,7 +60,10 @@ than 1% of its samples are the archive's 0x00 missing-data fill
 (`fill_sample_count > railed_sample_total / 100`). The rule reads the fill
 count of current products (per-pilot schema v5 and later). The completed
 products are archived products without it, so the rule is empty for them and
-the counts above are unchanged.
+the counts above are unchanged. A partly filled frame's samples are not
+reconstructible, so `audit-archive-health` refuses corrected-spectra
+publication and the diagnostic plots for any current product with a valid
+frame excluded by this rule.
 
 Every excluded row appears once in `archive_exclusion_ledger.jsonl`. A record
 holds all triggered reason codes, the product hash, physical channel,

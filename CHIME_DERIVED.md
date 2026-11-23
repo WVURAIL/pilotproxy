@@ -9,7 +9,7 @@ its papers reproduce from them.
 Their public release needs CHIME collaboration clearance under its publication policy.
 Until that clearance is given, a public copy of this repository must be the code-only
 cut described at the end of this page. Material that is not CHIME data (the synthetic
-GNU Radio benches, the LimeSDR lab runs, the designed weight banks, RFIsher's forecast tolerance table) is not listed.
+GNU Radio benches, the designed weight banks, RFIsher's forecast tolerance table) is not listed.
 
 ## Data files
 

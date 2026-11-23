@@ -20,6 +20,7 @@ from pilot_proxy.capture_reference import (
     expected_products,
 )
 from pilot_proxy.detector_contract import WEIGHT_COORDINATE_RAW_INPUT
+from pilot_proxy.fine_decision import fine_keep_v3
 
 SPEC = importlib.util.spec_from_file_location(
     "capture_example",
@@ -60,6 +61,21 @@ def update_raw(plan_path, kind, change):
     path.write_bytes(data)
     plan["raw_files"][kind][0] = example.file_ref(path, plan_path.parent)
     example.write_json(plan_path, plan)
+
+
+V3 = "fine_decision_v3"
+UNTESTED = ["0", str(2**64 - 1)]
+# one stat frame of the fixture: two frequencies of [n_peak, d_rho]
+STAT_FRAME = 4 + CHORD_METADATA_SIZE + 2 * 2 * 8
+
+
+def stat_offset(block, freq_index, column):
+    """Byte offset of n_peak (column 0) or d_rho (column 1) in the fixture's stat file."""
+    return block * STAT_FRAME + 4 + CHORD_METADATA_SIZE + (2 * freq_index + column) * 8
+
+
+def flip_bit(offset):
+    return lambda data: data.__setitem__(offset, data[offset] ^ 1)
 
 
 def test_example_preserves_exact_valid_and_invalid_scores(tmp_path):
@@ -380,3 +396,92 @@ def test_output_and_input_tampering_refused_by_revalidation(tmp_path):
     (path.parent / "synthetic_gains.json").write_text("changed")
     with pytest.raises(ValueError, match="File identity mismatch"):
         replay.validate_replay(output)
+
+
+def test_v3_replay_checks_the_stat_and_exports_the_applied_decision(tmp_path):
+    plan = make_plan(tmp_path, decision_version=V3)
+    output = tmp_path / "replay"
+    report = replay.write_replay(plan, output)
+    assert report["status"] == "invalid_support"
+    assert report["product_agreement"] is True
+    assert all(row["stat_matches"] and row["mask_matches"] for row in report["comparisons"])
+    rows = read(output / "scores_CH14.json")["scores"]
+    # the random block is flagged, and the detector leaves its mask at 0
+    assert rows[0]["recorded_stat"] == rows[0]["expected_stat"] == ["286283146", "61866904"]
+    assert rows[0]["required_multiplier_q16"] == "303262"
+    assert (rows[0]["recorded_mask"], rows[0]["expected_mask"], rows[0]["expected_decision"]) == (0, 0, 1)
+    # the decision and the reported word are the power-limit word, which the stage applies
+    calibration = read(plan.parent / "bundle/pilot_profiles.json")["profiles"][0]["fine_calibration"]
+    n_peak, d_rho = map(int, rows[0]["expected_stat"])
+    assert fine_keep_v3(n_peak, d_rho, calibration["cfar_multiplier_q16"]) == 1
+    assert fine_keep_v3(n_peak, d_rho, calibration["power_limit_multiplier_q16"]) == 0
+    assert [row["bundle_multiplier_q16"] for row in rows] == [str(calibration["power_limit_multiplier_q16"])] * 2
+    # the zero block has d_rho = 0, so it has no decision and is masked
+    assert rows[1]["expected_stat"] == ["0", "0"]
+    assert (rows[1]["valid"], rows[1]["required_multiplier_q16"], rows[1]["expected_decision"]) == (False, None, 1)
+    unbound = [row for row in report["comparisons"] if row["receiver_channel_id"] == 1600]
+    assert [row["expected_stat"] for row in unbound] == [UNTESTED, UNTESTED]
+    assert not any("expected_decision" in row for row in unbound)
+    assert len(read(output / "population_CH14.json")["scores"]) == 2
+    assert replay.validate_replay(output) == report
+
+
+def test_v3_flagged_and_kept_frames_match(tmp_path):
+    report = replay.replay_capture(make_plan(tmp_path, decision_version=V3, valid_only=True))["replay.json"]
+    assert report["status"] == "matched"
+    bound = [row for row in report["comparisons"] if row["receiver_channel_id"] == 2408]
+    assert [row["expected_decision"] for row in bound] == [1, 0]
+    assert all(row["recorded_mask"] == 0 and row["mask_matches"] and row["stat_matches"] for row in bound)
+
+
+@pytest.mark.parametrize(("block", "freq_index", "column"), ((0, 0, 0), (0, 0, 1), (1, 1, 1)))
+def test_v3_stat_bit_change_fails_and_names_the_frame(tmp_path, block, freq_index, column):
+    plan = make_plan(tmp_path, decision_version=V3)
+    update_raw(plan, "stat", flip_bit(stat_offset(block, freq_index, column)))
+    output = tmp_path / "replay"
+    report = replay.write_replay(plan, output)
+    assert report["status"] == "product_mismatch"
+    failed = [(row["block_index"], row["receiver_channel_id"]) for row in report["comparisons"] if not row["stat_matches"]]
+    assert failed == [(block, (2408, 1600)[freq_index])]
+    assert all(row["mask_matches"] and row["powers_match"] for row in report["comparisons"])
+    assert not (output / "population_CH14.json").exists()
+    frame = read(output / "scores_CH14.json")["scores"][block]["stat_frame"]
+    assert frame["source_path"] == str((plan.parent / "stat.raw").resolve())
+    assert frame["payload_offset"] == block * STAT_FRAME + 4 + CHORD_METADATA_SIZE
+    assert replay.validate_replay(output) == report
+
+
+def test_v3_nonzero_mask_row_fails(tmp_path):
+    plan = make_plan(tmp_path, decision_version=V3)
+    # the flagged block's decision written into dtv_mask, which the detector never does for a v3 row
+    update_raw(plan, "masks", lambda data: data.__setitem__(4 + CHORD_METADATA_SIZE, 1))
+    report = replay.replay_capture(plan)["replay.json"]
+    assert report["status"] == "product_mismatch"
+    failed = [row for row in report["comparisons"] if not row["mask_matches"]]
+    assert [(row["block_index"], row["receiver_channel_id"], row["recorded_mask"], row["expected_mask"])
+            for row in failed] == [(0, 2408, 1, 0)]
+    assert all(row["stat_matches"] for row in report["comparisons"])
+
+
+def test_v3_capture_without_stat_refused(tmp_path):
+    path = make_plan(tmp_path, decision_version=V3)
+    plan = read(path)
+    del plan["raw_files"]["stat"]
+    example.write_json(path, plan)
+    with pytest.raises(ValueError, match="raw_files.stat"):
+        replay.write_replay(path, tmp_path / "replay")
+    assert not (tmp_path / "replay").exists()
+
+
+def test_stat_is_optional_for_v1_and_checked_when_given(tmp_path):
+    path = make_plan(tmp_path, stat=True)
+    artifacts = replay.replay_capture(path)
+    report = artifacts["replay.json"]
+    assert report["product_agreement"] is True
+    assert all(row["expected_stat"] == UNTESTED and "expected_decision" not in row for row in report["comparisons"])
+    assert {row["bundle_multiplier_q16"] for row in artifacts["scores_CH14.json"]["scores"]} == {"196608"}
+    update_raw(path, "stat", flip_bit(stat_offset(0, 0, 1)))
+    report = replay.replay_capture(path)["replay.json"]
+    assert report["status"] == "product_mismatch"
+    assert [(row["block_index"], row["receiver_channel_id"]) for row in report["comparisons"]
+            if not row["stat_matches"]] == [(0, 2408)]

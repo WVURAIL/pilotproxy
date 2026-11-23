@@ -29,7 +29,12 @@ from pilot_proxy.detector_geometry import (
     frequency_axis_nyquist_zone,
     nyquist_zone_is_mirrored,
 )
-from pilot_proxy.fine_decision import calibration_geometry, pack_bulk_mask
+from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
+    calibration_geometry,
+    pack_bulk_mask,
+    v3_word,
+)
 from pilot_proxy.integration.receiver_profile import (
     load_receiver_profile,
     receiver_profile_hash_matches,
@@ -297,16 +302,24 @@ def replay_capture(plan_path):
     paths, data, receiver, geometry = _load_contracts(plan, path.parent, bindings)
     bundle, weights, bound = _load_bundle(plan, path.parent, bindings, paths, data, receiver, geometry)
     raw = _object(plan.get("raw_files"), "raw_files")
+    kinds = {"voltage": geometry.voltage_frame_size, "masks": geometry.mask_frame_size, "powers": geometry.power_frame_size}
+    # The stat files are optional for v1 and v2. A v3 row's dtv_mask holds 0, and DtvRfiMask decides it from dtv_stat.
+    if "stat" in raw:
+        kinds["stat"] = geometry.stat_frame_size
+    else:
+        _require(all(row["fine_calibration"]["decision_version"] != FINE_DECISION_V3_VERSION for row in bound),
+                 "A fine_decision_v3 capture needs raw_files.stat: DtvRfiMask decides its rows from dtv_stat, "
+                 "and their dtv_mask rows hold 0")
     captures = {}
     seen = set()
-    for kind, size in (("voltage", geometry.voltage_frame_size), ("masks", geometry.mask_frame_size), ("powers", geometry.power_frame_size)):
+    for kind, size in kinds.items():
         refs = raw.get(kind)
         _require(isinstance(refs, list) and refs, f"Missing ordered {kind} files")
         files = [_bound_file(ref, path.parent, bindings) for ref in refs]
         _require(not seen.intersection(files) and len(set(files)) == len(files), "Repeated raw capture file")
         seen.update(files)
         captures[kind] = capture_reference.read_raw_frames(files, size)
-    nblocks = capture_reference.validate_frames(captures["voltage"], captures["masks"], captures["powers"], plan["expected_input_frames"], geometry=geometry)
+    nblocks = capture_reference.validate_frames(captures["voltage"], captures["masks"], captures["powers"], plan["expected_input_frames"], geometry=geometry, stats=captures.get("stat"))
     first = captures["voltage"][0]
     timing = data["packing_contract"]["timing"]
     _same(first.fpga_seq_num, plan["first_fpga_seq_num"], "capture first FPGA sequence")
@@ -373,6 +386,10 @@ def replay_capture(plan_path):
             "mask_frame": captures["masks"][block].provenance(),
             "power_frame": captures["powers"][block].provenance(),
         }
+        recorded_stat = None
+        if "stat" in captures:
+            recorded_stat = np.frombuffer(captures["stat"][block].payload, dtype="<u8").reshape(geometry.num_freq, 2)
+            provenance["stat_frame"] = captures["stat"][block].provenance()
         # The trial identity is formed from the voltage hash, timing and
         # frequencies, so it is unchanged when a capture, file or trial is
         # relabeled. Independent-unit labels still require the supplied
@@ -398,12 +415,23 @@ def replay_capture(plan_path):
                 "mask_matches": mask_ok,
                 "powers_match": bool(powers_ok),
             }
+            if recorded_stat is not None:
+                comparison["recorded_stat"] = [str(int(v)) for v in recorded_stat[freq_index]]
+                comparison["expected_stat"] = [str(int(v)) for v in expected.stats[freq_index]]
+                comparison["stat_matches"] = bool(np.array_equal(recorded_stat[freq_index], expected.stats[freq_index]))
+            if expected.stat_decisions[freq_index] is not None:
+                # DtvRfiMask's decision from the reference pair at the applied word: 1 rejects, 0 keeps
+                comparison["expected_decision"] = expected.stat_decisions[freq_index]
             comparisons.append(comparison)
             matched = next((row for row in bound if row["chord_channel_id"] == freq), None)
             if matched is None:
                 continue
             decision = expected.decisions[freq_index]
             _require(decision is not None, "Missing fine reference decision")
+            calibration = matched["fine_calibration"]
+            # the word the stage applies: DtvRfiMask applies v3_word to a v3 row
+            word = (v3_word(calibration) if calibration["decision_version"] == FINE_DECISION_V3_VERSION
+                    else calibration["cfar_multiplier_q16"])
             rows_by_channel[matched["physical_channel"]].append({
                 **provenance,
                 **comparison,
@@ -412,9 +440,9 @@ def replay_capture(plan_path):
                 "rank_bin": int(decision.rank_bin),
                 "limiting_bin": int(decision.limiting_bin),
                 "required_multiplier_q16": None if decision.multiplier_q16 is None else str(decision.multiplier_q16),
-                "bundle_multiplier_q16": str(matched["fine_calibration"]["cfar_multiplier_q16"]),
+                "bundle_multiplier_q16": str(word),
             })
-    parity = all(row["mask_matches"] and row["powers_match"] for row in comparisons)
+    parity = all(row["mask_matches"] and row["powers_match"] and row.get("stat_matches", True) for row in comparisons)
     invalid = sum(not row["valid"] for rows in rows_by_channel.values() for row in rows)
     # Population declarations are authenticated even when parity fails. The
     # population file, which is the calibrator input, is written only when the

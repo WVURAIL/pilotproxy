@@ -3,8 +3,9 @@
 
 The default pair has one valid random block and one invalid all-zero block.
 With --valid-only, both blocks are uniform synthetic draws, which suits a test
-of the population handoff. Neither fixture can qualify a threshold or test a
-GPU implementation.
+of the population handoff. With --decision-version fine_decision_v3, the bound
+channel is calibrated for fine decision v3 and the dtv_stat frames are written
+too. Neither fixture can qualify a threshold or test a GPU implementation.
 """
 
 from __future__ import annotations
@@ -25,7 +26,12 @@ from pilot_proxy.capture_reference import (
     expected_products,
 )
 from pilot_proxy.detector_contract import WEIGHT_COORDINATE_POST_NYQUIST_ZONE
-from pilot_proxy.fine_decision import pack_bulk_mask
+from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
+    FINE_DECISION_VERSION,
+    FINE_DECISION_VERSIONS,
+    pack_bulk_mask,
+)
 from pilot_proxy.fine_reduction import independent_bin_mask
 from pilot_proxy.runtime_bundle import (
     DEFAULT_SHA256SUMS_FILENAME,
@@ -68,6 +74,7 @@ def native_frame(payload, *, kind, sequence, counter, geometry):
             ("F", "W"),
             geometry.block_samples,
         ),
+        "stat": ("dtv_stat", 6, (geometry.num_freq, 2), ("F", "S"), geometry.block_samples),
     }
     name, dtype, dims, names, downsampling = layouts[kind]
     metadata = bytearray(CHORD_METADATA_SIZE)
@@ -100,8 +107,17 @@ def make_example(
     *,
     valid_only=False,
     weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
+    decision_version=FINE_DECISION_VERSION,
+    stat=None,
 ):
-    """Write a new example directory and return its replay plan path."""
+    """Write a new example directory and return its replay plan path.
+
+    The dtv_stat frames are written when ``stat`` is true. By default they are written for fine_decision_v3 only.
+    """
+    if decision_version not in FINE_DECISION_VERSIONS:
+        raise ValueError(f"unknown decision version {decision_version!r}")
+    if stat is None:
+        stat = decision_version == FINE_DECISION_V3_VERSION
     output = Path(output_dir).resolve()
     output.mkdir(parents=True, exist_ok=False)
     receiver = json.loads(
@@ -145,15 +161,23 @@ def make_example(
     )
     bundle_path = output / "bundle/pilot_profiles.json"
     bundle = json.loads(bundle_path.read_text())
-    bulk = independent_bin_mask(256, designated_bins=list(range(60, 65)))
+    if decision_version == FINE_DECISION_V3_VERSION:
+        # v3 has no search geometry. The stage applies the power-limit word, which flags the first
+        # random block and keeps the second of --valid-only. The default word keeps both.
+        fields = {"cfar_multiplier_q16": 393216, "power_limit_multiplier_q16": 278528}
+    else:
+        bulk = independent_bin_mask(256, designated_bins=list(range(60, 65)))
+        fields = {
+            "anchor_bin": 62,
+            "designated_half_width": 2,
+            "bulk_mask_words_hex": [f"0x{word:016x}" for word in pack_bulk_mask(bulk)],
+            "cfar_rank": int(sum(bulk) // 2),
+            "cfar_multiplier_q16": 196608,
+        }
     bundle["profiles"][0]["fine_calibration"] = {
         "status": "calibrated",
-        "decision_version": "fine_decision_v1",
-        "anchor_bin": 62,
-        "designated_half_width": 2,
-        "bulk_mask_words_hex": [f"0x{word:016x}" for word in pack_bulk_mask(bulk)],
-        "cfar_rank": int(sum(bulk) // 2),
-        "cfar_multiplier_q16": 196608,
+        "decision_version": decision_version,
+        **fields,
         "provenance": {
             "epochs": ["synthetic_fixture_only"],
             "null_quantile": 0.99,
@@ -278,7 +302,8 @@ def make_example(
         },
     }
     write_json(output / "producer.json", producer)
-    recordings = {kind: bytearray() for kind in ("voltage", "masks", "powers")}
+    kinds = ("voltage", "masks", "powers") + (("stat",) if stat else ())
+    recordings = {kind: bytearray() for kind in kinds}
     weights = (output / "bundle/weights.bin").read_bytes()
     for block, seed in enumerate(np.random.SeedSequence(SEED).spawn(2)):
         rng = np.random.default_rng(seed)
@@ -293,11 +318,12 @@ def make_example(
             "voltage": voltage.tobytes(),
             "masks": products.masks.tobytes(),
             "powers": products.powers.astype("<u8").tobytes(),
+            "stat": products.stats.astype("<u8").tobytes(),
         }
-        for kind, payload in payloads.items():
+        for kind in recordings:
             recordings[kind].extend(
                 native_frame(
-                    payload,
+                    payloads[kind],
                     kind=kind,
                     sequence=first_sequence + block * 8192,
                     counter=block,
@@ -363,8 +389,14 @@ def main():
         action="store_true",
         help="generate two uniform blocks without the invalid-support example",
     )
+    parser.add_argument(
+        "--decision-version",
+        choices=FINE_DECISION_VERSIONS,
+        default=FINE_DECISION_VERSION,
+        help="fine decision of the bound channel (default: %(default)s); fine_decision_v3 also writes dtv_stat",
+    )
     args = parser.parse_args()
-    print(make_example(args.output_dir, valid_only=args.valid_only))
+    print(make_example(args.output_dir, valid_only=args.valid_only, decision_version=args.decision_version))
 
 
 if __name__ == "__main__":

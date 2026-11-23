@@ -75,6 +75,21 @@ def test_public_replay_mismatch_returns_failure_and_retains_diagnostics(tmp_path
     assert _hashes(output) == published
 
 
+def test_public_v3_replay_returns_failure_on_a_stat_mismatch(tmp_path, capsys):
+    plan = make_plan(tmp_path, decision_version="fine_decision_v3")
+    assert cli.main(["replay-fine-capture", "--plan", str(plan), "--output-dir", str(tmp_path / "good")]) == 0
+    assert "invalid_support; 1 invalid rows retained" in capsys.readouterr().out
+    offset = 4 + CHORD_METADATA_SIZE
+    update_raw(plan, "stat", lambda data: data.__setitem__(offset, data[offset] ^ 1))
+    output = tmp_path / "replay"
+    with pytest.raises(SystemExit) as status:
+        cli.main(["replay-fine-capture", "--plan", str(plan), "--output-dir", str(output)])
+    assert status.value.code == 1
+    assert "product_mismatch" in capsys.readouterr().out
+    report = _read(output / "replay.json")
+    assert [(r["block_index"], r["receiver_channel_id"]) for r in report["comparisons"] if not r["stat_matches"]] == [(0, 2408)]
+
+
 def test_public_validation_recomputes_even_after_output_digest_is_refreshed(tmp_path, capsys):
     plan = make_plan(tmp_path)
     output = tmp_path / "replay"

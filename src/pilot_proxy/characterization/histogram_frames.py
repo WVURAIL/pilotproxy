@@ -176,7 +176,7 @@ def _write_export(product,proxy,product_path,initial_stat,output,channel,f,month
         "timestamp_rule":"unit_time0_ctime[frame_unit_index]+frame_in_unit*nfft*unit_delta_time[frame_unit_index]; no fabricated frame interval",
         "acquisition_rule":"acquisition_id is stored unit_event_id mapped by frame_unit_index; original unit_keys/source_event_keys also retained to disambiguate units",
         "health":{"schema":HEALTH_GATE_SCHEMA,"reason_counts":f.reasons,
-            "fine_member_use":"Original v1 gate invoked. Header and full byte length of fine_power_u64 validated; the member is decoded once because the frame powers (Q, valid, the gate's power checks) are its all-bin sums (kernel core 3.0.0). No fine value or PSD is exported.",
+            "fine_member_use":"Original health gate invoked. Header and full byte length of fine_power_u64 validated; the member is decoded once because the frame powers (Q, valid, the gate's power checks) are its all-bin sums (kernel core 3.0.0). No fine value or PSD is exported.",
             "fine_member_header":proxy.fine_header},
         "geometry":geometry,"decoded_npz_members":proxy.read_fields,"export_sha256":sha(output_path)}
     write_json(output/f"ch{channel:02d}.json",metadata)

@@ -37,6 +37,7 @@ def fixture_product(fine):
         "valid":np.array([1,1,0,1],dtype=np.uint8),"reject_mask":np.array([0,0,0,1],dtype=np.uint8),
         "p_target_u64":np.array([1,2,0,3],dtype=np.uint64),"p_ref_sum_u64":np.array([2,2,0,2],dtype=np.uint64),
         "baseband_power_linear":np.array([1,128,0,2.]),"coarse_power_ratio":np.array([1,2,np.nan,3]),"fine_power_u64":fine,
+        "fill_sample_count":np.array([0,64,0,0],dtype=np.uint64),"railed_sample_total":np.full(4,64,dtype=np.uint64),
         "target_norm_sq":np.array([1],dtype=np.int64),"reference_norm_sum_sq":np.array([2],dtype=np.int64),
         "pilot_below_data_db":np.asarray(11.3),"bin_enbw_hz":np.asarray(3051.7578125),
         "dtv_bandwidth_hz":np.asarray(6.0e6),"pilot_capture_efficiency":np.asarray(1.0)}

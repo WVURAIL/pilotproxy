@@ -89,7 +89,7 @@ MASK_RULE = (
 VALID_RULE = "p_ref_sum != 0"
 FINE_MEASUREMENT_METHOD = "exact_fine_power_terms"
 SCHEMA_TOKEN = PRODUCT_SCHEMA_TOKEN
-HEALTH_GATE_SCHEMA = "pilotproxy_archive_frame_health_gate_v1"
+HEALTH_GATE_SCHEMA = "pilotproxy_archive_frame_health_gate_v2"
 
 _PROJECT = default_project()
 _INSTRUMENT = _PROJECT.instrument
@@ -847,12 +847,12 @@ class HealthGate:
 
 
 def health_gate(product: Product) -> HealthGate:
-    """Apply the v1 frame-health gate (:func:`pilot_proxy.archive_health.evaluate_frame_health`).
+    """Apply the v2 frame-health gate (:func:`pilot_proxy.archive_health.evaluate_frame_health`).
 
-    The gate excludes 192 of the campaign's 770478 frames, which are the
-    saturated-ceiling and detector-invalid frames. The gate defines the
-    frame population of the product, so the valid flag alone cannot replace
-    it.
+    The gate excludes the detector-invalid frames, the saturated-ceiling
+    frames, and the frames with more than 1% missing-data fill. The gate
+    defines the frame population of the product, so the valid flag alone
+    cannot replace it.
     """
     from pilot_proxy.archive_health import evaluate_frame_health
     result = evaluate_frame_health(product.archive)

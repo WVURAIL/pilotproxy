@@ -30,6 +30,7 @@ from pilot_proxy.archive_health import (
     REASON_BASEBAND_OUT_OF_BOUNDS,
     REASON_DETECTOR_INVALID,
     REASON_DETECTOR_POWERS_ALL_ZERO,
+    REASON_FILL_ABOVE_ONE_PERCENT,
     REASON_FINE_NEGATIVE,
     ArchiveHealthError,
     audit_product,
@@ -43,6 +44,7 @@ from pilot_proxy.archive_health import (
 )
 from pilot_proxy import archive_health
 from pilot_proxy.fine_reduction import calibrate_cfar
+from pilot_proxy.products.reader import HEALTH_GATE_SCHEMA
 
 
 NFFT = 16_384
@@ -651,11 +653,16 @@ def _current_form(product: dict[str, np.ndarray], fine_sums: np.ndarray) -> dict
 
     The exact fine powers are stored as in the per-pilot v5 and v6 products.
     ``fine_sums`` has shape (frames, 3) for [target, lower, upper]. The stored
-    coarse columns are left unchanged, as in a v5 product of record.
+    coarse columns are left unchanged, as in a v5 product of record. Only a
+    ceiling frame is filled.
     """
     product = dict(product)
     product.pop(ARCHIVED_FINE_POWER_RATIO)
     n = len(product["frame_index"])
+    total = 2 * NFFT * int(product["num_input_streams"])
+    ceiling = product["baseband_power_linear"] == 128.0
+    product["fill_sample_count"] = np.where(ceiling, total, 0).astype(np.uint64)
+    product["railed_sample_total"] = np.full((n, 1), total, dtype=np.uint64)
     fine = np.full((n, 3, FINE_BINS), 1, dtype=np.uint64)
     fine[:, :, 0] = np.asarray(fine_sums, dtype=np.uint64) - np.uint64(FINE_BINS - 1)
     product["fine_power_u64"] = fine
@@ -708,6 +715,39 @@ def test_release_summaries_and_gate_read_the_fine_sums(tmp_path) -> None:
     assert row["frame_index"] == 3
     assert (row["p_target_u64"], row["p_ref_sum_u64"]) == (800, 2000)
     assert row["valid"] is True and row["reject_mask"] is False
+
+
+def test_gate_excludes_frames_more_than_one_percent_filled() -> None:
+    product = _current_form(
+        _product(valid=[1] * 5, reject=[0] * 5,
+                 baseband_power=[4.0, 4.0, 4.0, 4.0, 128.0]),
+        np.asarray([[500, 1000, 1000]] * 5),
+    )
+    total = int(product["railed_sample_total"][0, 0])  # 65536
+    # none, the largest count at or below 1%, the smallest above it, one
+    # 1/32 step, and the whole frame (also a ceiling frame)
+    fill = [0, total // 100, total // 100 + 1, total // 32, total]
+    product["fill_sample_count"] = np.asarray(fill, dtype=np.uint64)[:, None]
+    health = evaluate_frame_health(product)
+    assert health.include.tolist() == [True, True, False, False, False]
+    assert health.reason_counts == {
+        REASON_FILL_ABOVE_ONE_PERCENT: 3,
+        REASON_BASEBAND_CEILING: 1,
+    }
+
+    # an archived product stores no fill count and cannot trigger the rule;
+    # a current product without it is refused
+    assert REASON_FILL_ABOVE_ONE_PERCENT not in evaluate_frame_health(
+        _product(valid=[1], reject=[0], baseband_power=[4.0])
+    ).reason_counts
+    del product["fill_sample_count"]
+    with pytest.raises(ArchiveHealthError, match="fill_sample_count"):
+        evaluate_frame_health(product)
+
+
+def test_reader_names_the_gate_schema_it_applies() -> None:
+    assert HEALTH_GATE_SCHEMA == FRAME_HEALTH_GATE_SCHEMA_VERSION
+    assert FRAME_HEALTH_GATE_SCHEMA_VERSION.endswith("_v2")
 
 
 def test_stored_spectra_are_checked_with_the_masks_they_were_accumulated_with() -> None:

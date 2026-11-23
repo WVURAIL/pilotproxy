@@ -76,7 +76,7 @@ from pilot_proxy.product_contract import (
 )
 from pilot_proxy.provenance import file_sha256, package_source_sha256
 
-FRAME_HEALTH_GATE_SCHEMA_VERSION = "pilotproxy_archive_frame_health_gate_v1"
+FRAME_HEALTH_GATE_SCHEMA_VERSION = "pilotproxy_archive_frame_health_gate_v2"
 ARCHIVE_HEALTH_SUMMARY_SCHEMA_VERSION = "pilotproxy_archive_health_summary_v1"
 EXCLUSION_LEDGER_SCHEMA_VERSION = "pilotproxy_archive_exclusion_ledger_v1"
 DIAGNOSTIC_MANIFEST_SCHEMA_VERSION = "pilotproxy_archive_diagnostic_manifest_v1"
@@ -111,6 +111,7 @@ REASON_DETECTOR_POWERS_ALL_ZERO = "detector_powers_all_zero"
 REASON_BASEBAND_NONFINITE = "baseband_power_nonfinite"
 REASON_BASEBAND_OUT_OF_BOUNDS = "baseband_power_out_of_complex_int4_bounds"
 REASON_BASEBAND_CEILING = "baseband_power_at_negative_full_scale_ceiling"
+REASON_FILL_ABOVE_ONE_PERCENT = "fill_samples_above_one_percent"
 REASON_COARSE_NONFINITE = "coarse_power_ratio_nonfinite"
 REASON_FINE_NONFINITE = "fine_power_ratio_nonfinite"
 REASON_FINE_NEGATIVE = "fine_power_ratio_negative"
@@ -136,6 +137,11 @@ REASON_DEFINITIONS: dict[str, str] = {
         "raw byte 0x00, equivalently detector-input/post-repack "
         "two's-complement byte 0x88."
     ),
+    REASON_FILL_ABOVE_ONE_PERCENT: (
+        "More than 1% of the frame's samples are the archive's 0x00 "
+        "missing-data fill (fill_sample_count > railed_sample_total / 100).  "
+        "Only products that store the fill count can trigger it."
+    ),
     REASON_COARSE_NONFINITE: (
         "A detector-valid row has a non-finite coarse power ratio."
     ),
@@ -157,7 +163,7 @@ ENCODING_INTERPRETATION = (
 
 SPECTRAL_LIMITATION = (
     "The NPZ files store only two accumulated power spectra, not per-frame "
-    "complex FFTs.  The v1 gate can exactly remove detector-invalid rows "
+    "complex FFTs.  The gate can exactly remove detector-invalid rows "
     "(which contributed nothing) and the provably constant power-ceiling "
     "rows (whose DC-only spectrum is reconstructible).  It cannot apply an "
     "arbitrary new frame mask, FFT window, or threshold to the archived "
@@ -169,7 +175,7 @@ _REASON_ORDER = tuple(REASON_DEFINITIONS)
 _VERSION_TOKEN = re.compile(r"(?P<key>[^=\s]+)=(?P<value>[^\s]+)")
 
 class ArchiveHealthError(ValueError):
-    """The archive cannot be interpreted safely under the v1 gate."""
+    """The archive cannot be interpreted safely under the health gate."""
 
 
 @dataclass(frozen=True)
@@ -219,7 +225,7 @@ class FineDiagnosticResult:
 
 @dataclass(frozen=True)
 class CorrectedSpectrumResult:
-    """Exactly corrected integrated spectra for the v1 health exclusions."""
+    """Exactly corrected integrated spectra for the health exclusions."""
 
     before: np.ndarray
     after: np.ndarray
@@ -364,7 +370,7 @@ def _validate_frame_identity(product: Mapping[str, Any], n_frames: int) -> None:
 
 
 def evaluate_frame_health(product: Mapping[str, Any]) -> FrameHealthResult:
-    """Evaluate the versioned v1 gate, excluding any unsafe row.
+    """Evaluate the versioned health gate, excluding any unsafe row.
 
     Required fields and frame identities are validated before a mask is
     returned.  A malformed or unclassifiable product raises instead of
@@ -413,6 +419,17 @@ def evaluate_frame_health(product: Mapping[str, Any]) -> FrameHealthResult:
             )
         fine_nonfinite = np.zeros(n_frames, dtype=bool)
         fine_negative = np.zeros(n_frames, dtype=bool)
+        # Current products count the archive's 0x00 missing-data fill per
+        # frame. Archived products have no fill count, so the rule is empty
+        # for them. fill > total // 100 is fill > 1% of total in integers.
+        fill = _frame_vector(product, "fill_sample_count", n_frames)
+        total = _frame_vector(product, "railed_sample_total", n_frames)
+        if fill.dtype.kind != "u" or total.dtype.kind != "u":
+            raise ArchiveHealthError(
+                "fill_sample_count and railed_sample_total must use unsigned "
+                "integer dtypes"
+            )
+        fill_above_one_percent = fill > total // np.uint64(100)
     else:
         fine = _array(product, "fine_power_ratio")
         if fine.ndim != 2 or fine.shape[0] != n_frames or fine.shape[1] <= 0:
@@ -421,6 +438,7 @@ def evaluate_frame_health(product: Mapping[str, Any]) -> FrameHealthResult:
             )
         fine_nonfinite = ~np.all(np.isfinite(fine), axis=1)
         fine_negative = np.any(fine < 0.0, axis=1)
+        fill_above_one_percent = np.zeros(n_frames, dtype=bool)
 
     reasons: dict[str, np.ndarray] = {
         REASON_DETECTOR_INVALID: ~valid,
@@ -431,6 +449,7 @@ def evaluate_frame_health(product: Mapping[str, Any]) -> FrameHealthResult:
             & ((baseband_power < 0.0) | (baseband_power > 128.0))
         ),
         REASON_BASEBAND_CEILING: baseband_power == 128.0,
+        REASON_FILL_ABOVE_ONE_PERCENT: fill_above_one_percent,
         REASON_COARSE_NONFINITE: valid & ~np.isfinite(coarse),
         REASON_FINE_NONFINITE: valid & fine_nonfinite,
         REASON_FINE_NEGATIVE: valid & fine_negative,
@@ -953,7 +972,7 @@ def health_correct_integrated_spectra(
     product: Mapping[str, Any],
     health: FrameHealthResult | None = None,
 ) -> CorrectedSpectrumResult:
-    """Exactly remove v1-reconstructible exclusions from archived spectra.
+    """Exactly remove the reconstructible exclusions from archived spectra.
 
     Detector-invalid rows were never accumulated.  A valid ceiling-power row
     is the constant native byte ``0x00`` and contributes only one known DC-bin
@@ -3331,7 +3350,7 @@ def _plot_product_diagnostics(
         axis.set_title(
             f"Channel {channel} (frequency ID {fid}): "
             "relative time-averaged spectra\n"
-            f"exact v1 DC subtraction: {spectra.ceiling_count_before} before, "
+            f"exact DC subtraction: {spectra.ceiling_count_before} before, "
             f"{spectra.ceiling_count_after} after"
         )
         fig.tight_layout()
@@ -3519,7 +3538,7 @@ def write_archive_audit(
         "figure_semantics": {
             "histograms": "health-filtered scalar distributions",
             "spectra": (
-                "relative time averages from the exactly v1-corrected "
+                "relative time averages from the exactly corrected "
                 "integrated spectra; not absolute calibrated PSDs"
             ),
             "heatmaps": (
@@ -3693,6 +3712,7 @@ __all__ = [
     "REASON_BASEBAND_CEILING",
     "REASON_DETECTOR_INVALID",
     "REASON_DETECTOR_POWERS_ALL_ZERO",
+    "REASON_FILL_ABOVE_ONE_PERCENT",
     "SPECTRAL_LIMITATION",
     "audit_archive_products",
     "audit_product",

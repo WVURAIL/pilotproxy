@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from pilot_proxy.bundle_calibration import calibrate_bundle, test_bundle
+from pilot_proxy.fine_decision import MULTIPLIER_ONE
 from pilot_proxy.json_utils import write_json_strict
 from pilot_proxy.run_plans import CALIBRATION_SHARE, CORE_PROFILE, write_run_plans
 from pilot_proxy.run_spectrogram import (
@@ -32,10 +33,16 @@ def _summary_rows(report: dict[str, Any], tested: dict[str, Any], masked: dict[s
     rows = []
     for channel, row in report["channels"].items():
         mine = [c for c in checks if c["check"].endswith(f"channel {channel}")]
+        # the spectrograms keep frames at the word the stage applies, which for a v3 channel is the power-limit
+        # word where calibration wrote one, so the row names that word
+        limit = row.get("power_limit_word_q16") is not None
+        word = row["power_limit_word_q16"] if limit else row["word_q16"]
+        eta = word / MULTIPLIER_ONE if limit else row["eta"]
+        source = row["power_limit_word_source"] if limit else row["word_source"]
         rows.append(dict(
             channel=int(channel), anchor_bin=row["anchor_bin"], anchor_source=row["anchor_source"],
-            nominal_bin=row["nominal_bin"], eta=round(row["eta"], 4), word_q16=row["word_q16"],
-            word_source=row["word_source"], pilot_share=None if "pilot_share" not in row else round(row["pilot_share"], 3),
+            nominal_bin=row["nominal_bin"], eta=round(eta, 4), word_q16=word,
+            word_source=source, pilot_share=None if "pilot_share" not in row else round(row["pilot_share"], 3),
             scale=row.get("scale"),
             **{f"{part}_{key}": value for part in PARTS
                for key, value in masked[part].get(int(channel), {}).items()},
@@ -70,7 +77,7 @@ def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: 
         tested = report["power_limit"]
         none = ", ".join(str(c) for c in tested["no_passing_word"]) or "none"
         lines += ["", f"Threshold: power limit, against {tested['experiment']}. Channels with no passing word: {none}. "
-                  f"The operating policy masks these whole, and the bundle holds the {'default word' if v3 else 'floor'} "
+                  f"The operating policy masks these whole, and the bundle holds the {'reject word' if v3 else 'floor'} "
                   "on them. A power-limit word "
                   "is in-sample, and it needs a test on independent data before it masks."]
     source = "the control behind it" if v3 else "the run behind it"

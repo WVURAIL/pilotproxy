@@ -17,7 +17,11 @@ import numpy as np
 
 from pilot_proxy.bundle_calibration import _expand, _rows, required_words
 from pilot_proxy.characterization.score_cache import sha, write_json
-from pilot_proxy.fine_decision import calibration_geometry
+from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
+    calibration_geometry,
+    v3_word,
+)
 
 # Pathfinder timing, used when a file does not state its own
 BLOCK_SAMPLES = 8192
@@ -56,8 +60,11 @@ def build_run_scores(*, bundle_dir: Path, runs: Sequence[str], channel: int, out
         raise ValueError(f"channel {channel} is not in the bundle")
     row = rows[channel]
     calibration = row["fine_calibration"]
-    # v3 searches every bin and has no anchor
-    anchor, word = int(calibration.get("anchor_bin", 0)), int(calibration["cfar_multiplier_q16"])
+    # v3 searches every bin and has no anchor, and its current word is the one the stage applies, the power-limit
+    # word where calibration wrote one
+    v3 = calibration["decision_version"] == FINE_DECISION_V3_VERSION
+    anchor = int(calibration.get("anchor_bin", 0))
+    word = v3_word(calibration) if v3 else int(calibration["cfar_multiplier_q16"])
     bulk, rank = calibration_geometry(calibration)
     paths = _expand(runs)
     decision = calibration["decision_version"]

@@ -7,10 +7,13 @@ runtime bundle, the consumer, and the era. Each ATSC channel 14 to 36 of the
 decisions becomes one assignment at its receiver frequency ID:
 
 - deployed (outcome ``useful``): a finite threshold at the decided Q16 word.
-  The bundle's profile for the channel must carry that word
-  (``fine_calibration`` calibrated with ``cfar_multiplier_q16`` equal to
-  it). Until it does, the channel is pending and the configuration is
-  incomplete.
+  The bundle's profile for the channel must carry it as the word the stage
+  applies: ``cfar_multiplier_q16`` under v1 and v2. Under
+  ``fine_decision_v3`` it is ``power_limit_multiplier_q16`` where
+  calibration wrote one, and ``cfar_multiplier_q16``, the default word,
+  otherwise (``v3_word``). A calibrated profile at another word is
+  refused. While the profile is still ``pending_campaign``, the channel is
+  pending and the configuration is incomplete.
 - not deployed (outcome ``not useful``): ``reject_all``, the permanent mask,
   with the rule's reason. A channel whose reason is in ``UNMASKED_REASONS``
   is DTV without a matching pilot, so the detector has no pilot to act on
@@ -44,7 +47,11 @@ from pathlib import Path
 from pilot_proxy import runtime_calibration as calibration
 from pilot_proxy.atsc_channels import physical_channel_to_lower_edge_hz
 from pilot_proxy.config.project import default_project
-from pilot_proxy.fine_decision import FINE_DECISION_V3_VERSION, MAX_MULTIPLIER_Q16
+from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
+    MAX_MULTIPLIER_Q16,
+    v3_word,
+)
 from pilot_proxy.integration.receiver_profile import (
     load_receiver_profile,
     receiver_profile_hash_matches,
@@ -172,10 +179,11 @@ def _binding(channel, freq, eta, bound, status="calibrated"):
     fine = bound["fine_calibration"]
     if fine["status"] != status:
         return None
-    # the decided word is the power-limit word, which v3 carries beside its default word
+    # the bundle's word is the one the stage applies: under v3 the power-limit word where calibration wrote one,
+    # and the default word otherwise
     v3 = fine["decision_version"] == FINE_DECISION_V3_VERSION
-    word_key = "power_limit_multiplier_q16" if v3 else "cfar_multiplier_q16"
-    _require(fine.get(word_key) == eta, f"channel {channel}: the bundle's word differs from the decided word")
+    word = v3_word(fine) if v3 else fine.get("cfar_multiplier_q16")
+    _require(word == eta, f"channel {channel}: the bundle's word differs from the decided word")
     # v3 has no geometry: every bin searched, the even bins' median
     geometry = {} if v3 else {"cfar_rank": fine["cfar_rank"], "bulk_mask_words_hex": fine["bulk_mask_words_hex"],
                               "anchor_bin": fine["anchor_bin"], "designated_half_width": fine["designated_half_width"]}

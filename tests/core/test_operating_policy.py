@@ -314,26 +314,32 @@ def test_the_control_is_refused_off_its_word_or_without_the_consumer_capability(
         analyze(case)
 
 
-def with_v3(case, *, capability=True):
-    """Re-export the example bundle with channel 29 as a fine_decision_v3 profile at the decided word."""
+def with_v3(case, *, capability=True, default=70000, power_limit=65536, control=None):
+    """Re-export the example bundle with channel 29 as a fine_decision_v3 profile at its default and power-limit words.
+
+    With ``control``, channel 37 is a v3 control at that default word, with no power-limit word.
+    """
     path, plan, directory = case
     bundle = directory / "bundle_v3"
     export_runtime_weight_bundle(
         receiver_profile_path=directory / "receiver_profile.json",
         detector_core_profile_path=directory / "detector_core_profile.json",
         weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
-        physical_channels=[14, 29], output_dir=bundle,
+        physical_channels=[14, 29] + ([37] if control is not None else []), output_dir=bundle,
     )
     profiles = read(bundle / "pilot_profiles.json")
     rows = {row["physical_channel"]: row for row in profiles["profiles"]}
     v1 = calibrated(65536, plan["decisions"]["sha256"])
-    rows[29]["fine_calibration"] = {"status": "calibrated", "decision_version": "fine_decision_v3",
-                                    "cfar_multiplier_q16": 70000, "power_limit_multiplier_q16": 65536,
-                                    "provenance": v1["provenance"]}
+    v3 = {"decision_version": "fine_decision_v3", "provenance": v1["provenance"]}
+    rows[29]["fine_calibration"] = {**v3, "status": "calibrated", "cfar_multiplier_q16": default,
+                                    **({} if power_limit is None else {"power_limit_multiplier_q16": power_limit})}
+    if control is not None:
+        rows[37]["fine_calibration"] = {**v3, "status": "control", "cfar_multiplier_q16": control}
     write(bundle / "pilot_profiles.json", profiles)
     plan["bundle_files"] = refresh_bundle(bundle)
     if capability:
-        plan["consumer"]["capabilities"] = sorted(op.REQUIRED_CAPABILITIES | {op.V3_CAPABILITY})
+        plan["consumer"]["capabilities"] = sorted(
+            op.REQUIRED_CAPABILITIES | {op.V3_CAPABILITY} | ({op.CONTROL_CAPABILITY} if control is not None else set()))
 
 
 def test_a_v3_bundle_compiles_with_the_v3_capability(case):
@@ -342,6 +348,36 @@ def test_a_v3_bundle_compiles_with_the_v3_capability(case):
     (binding,) = report["required_threshold_bindings"]
     assert binding["decision_version"] == "fine_decision_v3" and binding["eta_q16"] == "65536"
     assert "anchor_bin" not in binding
+
+
+def test_a_v3_power_limit_channel_is_refused_at_its_default_word(case):
+    # the stage applies the power-limit word, so a decision at the default word does not bind
+    with_v3(case)
+    change_decisions(case, lambda rows: rows[29].update(deployed_word=70000))
+    with pytest.raises(ValueError, match="channel 29: the bundle's word differs from the decided word"):
+        analyze(case)
+
+
+def test_a_v3_channel_without_a_power_limit_word_binds_at_its_default_word(case):
+    # calibration writes no power-limit word where no word passes, and the stage applies the default word
+    with_v3(case, default=65536, power_limit=None)
+    report = analyze(case)
+    assert report["deployment_configuration_complete"] is True
+    (binding,) = report["required_threshold_bindings"]
+    assert binding["decision_version"] == "fine_decision_v3" and binding["eta_q16"] == "65536"
+
+
+def test_a_v3_control_binds_at_its_default_word(case):
+    with_v3(case, control=72850)
+    report = analyze(case)
+    assert report["control_freq_ids"] == [491]
+    assert report["kotekan_parameters"] == {"permanent_mask_freq_ids": [844], "require_fine_freq_ids": [614],
+                                            "control_freq_ids": [491]}
+    (control,) = report["control_bindings"]
+    assert control["decision_version"] == "fine_decision_v3" and control["eta_q16"] == "72850"
+    with_v3(case, control=72851)
+    with pytest.raises(ValueError, match="channel 37: the bundle's word differs from the decided word"):
+        analyze(case)
 
 
 def test_a_v3_bundle_is_refused_without_the_v3_capability(case):

@@ -821,7 +821,7 @@ pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_
   \item \code{bundle/}, \code{bundle.report.json}, and \code{bundle.decisions.json} for a power-limit run;
   \item \code{test.json}, the \code{test-bundle} record;
   \item \code{spectrograms/calibrate/} and \code{spectrograms/test/}, with one \code{spectrogram_ch<NN>.pdf} and \code{.npz} per channel and \code{masked_summary.csv};
-  \item \code{summary.md} and \code{summary.json}, with the masks at the default word: per channel the scale (v3) or the anchor (v1 and v2), the word and its source, the pilot share, the masked percent of each part, the longest masked stretch, and the test result.
+  \item \code{summary.md} and \code{summary.json}, with the masks at the word \code{DtvRfiMask} applies: per channel the scale (v3) or the anchor (v1 and v2), the word and its source, the pilot share, the masked percent of each part, the longest masked stretch, and the test result. Under v3 the word, its eta and its source are those of the BAO word where calibration set one, and of the default word otherwise. The scale is that of the default word.
 \end{itemize}
 
 \subsection{Step 4: Deploy}
@@ -983,7 +983,7 @@ pilot-proxy run-spectrogram --bundle-dir bundle \
   --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" \
   --channel 18 24 29 37 --output-dir spectrograms
 \end{lstlisting}
-The decision is recomputed from the fine powers and the bundle's default word (\code{cfar_multiplier_q16}), not the BAO word that \code{DtvRfiMask} applies where there is one, so the control shows what its word would remove. A block whose test is invalid counts as masked, as in \code{DtvRfiMask}. Chunks are 10 s by default (\code{--chunk-seconds}). A chunk with no kept blocks is grey. The time axis is recorded time, so a gap in the recording does not appear. The command also writes \code{masked_summary.csv} with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
+The decision is recomputed from the fine powers and the word that \code{DtvRfiMask} applies, so the control shows what its word would remove. Under v3 that word is the BAO word (\code{power_limit_multiplier_q16}) where there is one, and the default word (\code{cfar_multiplier_q16}) otherwise. A block whose test is invalid counts as masked, as in \code{DtvRfiMask}. Chunks are 10 s by default (\code{--chunk-seconds}). A chunk with no kept blocks is grey. The time axis is recorded time, so a gap in the recording does not appear. The command also writes \code{masked_summary.csv} with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
 
 \subsection{Run Check Tools}
 

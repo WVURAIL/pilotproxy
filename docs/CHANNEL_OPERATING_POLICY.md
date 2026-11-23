@@ -24,8 +24,12 @@ one assignment at its receiver frequency ID:
 
 A decision for a channel other than 14 to 36 (the channel 37 control band) is
 not a DTV decision. The review lists it under `not_in_policy` and assigns
-nothing to it. The compiler changes no decision and infers no threshold of its
-own.
+nothing to it. The exception is channel 37 when its bundle profile has status
+`control`. Its decision must then be `useful`, and the profile must carry the
+decided word as the word the stage applies, by the rule of check 4 below. It is
+compiled as the noise control and listed in `control_freq_ids`, which the
+detector evaluates and records and the consumer never applies. The compiler
+changes no decision and infers no threshold of its own.
 
 ## Commands
 
@@ -90,9 +94,10 @@ For every channel 14 to 36 of the decisions the compiler checks:
    36). The map of the CHIME profile gives
    `freq_id = coarse_channel_index + 1`.
 4. A deployed channel whose bundle profile is `calibrated` carries exactly the
-   decided word (`power_limit_multiplier_q16` under v3, `cfar_multiplier_q16`
-   under v1 and v2). Under v1 and v2 its anchor, width, bulk mask, and rank are
-   copied into the binding, and a v3 binding has none. A deployed channel whose profile is still
+   decided word as the word the stage applies: `cfar_multiplier_q16` under v1
+   and v2. Under v3 it is `power_limit_multiplier_q16` where calibration wrote
+   one, and the default word `cfar_multiplier_q16` otherwise. Under v1 and v2
+   its anchor, width, bulk mask, and rank are copied into the binding, and a v3 binding has none. A deployed channel whose profile is still
    `pending_campaign` is listed in `pending_freq_ids`, since the decision has a
    word that the bundle does not carry yet.
 

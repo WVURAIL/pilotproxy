@@ -128,6 +128,7 @@ def main():
     S = np.array([np.frombuffer(p, "<i4") for p in support["payload"]]).reshape(n, F, 2)
     # a fine_decision_v3 channel is decided from its dtv_stat rows, and its mask and support rows hold 0 and -1
     profiles = json.load(open(os.path.join(a.bundle_dir, "pilot_profiles.json")))["profiles"]
+    v3 = {}
     if any(p["fine_calibration"].get("decision_version") == "fine_decision_v3" for p in profiles):
         # only a v3 bundle needs pilot-proxy
         from pilot_proxy.fine_decision import MISSING_ROW, masks_from_stat
@@ -152,8 +153,8 @@ def main():
     checks["unbound_rows_zero"] = bool(not M[:, unbound].any() and not P[:, unbound].any()
                                        and (S[:, unbound] == -1).all())
     ranges = json.load(open(a.ranges)) if os.path.exists(a.ranges) else {}
-    # the archive ranges computed for this bundle: same channels at the same words
-    words = {str(r["physical_channel"]): r["fine_calibration"]["cfar_multiplier_q16"] for r in prof.values()}
+    # the archive ranges computed for this bundle: same channels at the same words, each v3 channel at the word N2 applies
+    words = {str(r["physical_channel"]): v3.get(f, r["fine_calibration"]["cfar_multiplier_q16"]) for f, r in prof.items()}
     ranges = next((rows for rows in ranges.values()
                    if {c: v["word_q16"] for c, v in rows.items()} == words), {})
     checks["archive_ranges_found_for_bundle"] = bool(ranges)

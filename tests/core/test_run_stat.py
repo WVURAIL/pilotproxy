@@ -242,3 +242,63 @@ def test_check_tool_stops_on_two_windows_with_one_sequence_number(run):
     done = _run_tool("check_pathfinder_dtv_run", "--dtv-dir", run["dtv"], "--bundle-dir", run["bundle"],
                      "--channels", V1)
     assert done.returncode == 1 and "fpga_seq_num 0 differ" in done.stderr
+
+
+def test_analyze_tool_finds_the_archive_ranges_at_the_words_n2_applies(tmp_path):
+    bundle = _bundle(tmp_path)
+    profiles = json.loads((bundle / "pilot_profiles.json").read_text())
+    for row in profiles["profiles"]:
+        row["null_power_ratio"] = 1.0
+    (bundle / "pilot_profiles.json").write_text(json.dumps(profiles))
+    frames, freqs = 4, [V3, V1]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _raw(run_dir / "dtv_mask_0.raw", np.zeros((frames, 2)), freqs, np.int8)
+    _raw(run_dir / "dtv_powers_0.raw", np.ones((frames, 2, 3)), freqs, "<u8")
+    _raw(run_dir / "dtv_fine_support_0.raw", np.ones((frames, 2, 2)), freqs, "<i4")
+    stat = np.zeros((frames, 2, 2), np.uint64)
+    stat[:, 0] = [10, 10]                                 # kept at every word
+    stat[:, 1] = [0, MISSING_ROW]                         # the v1 channel has no statistic
+    _raw(run_dir / "dtv_stat_0.raw", stat, freqs, "<u8")
+
+    def entry(label, words):
+        return {str(c): dict(word_q16=w, monthly_p05=0.0, monthly_p95=1.0, label=label) for c, w in words.items()}
+    # channel 18 carries a power-limit word, which N2 applies, so the ranges at its default word are not this bundle's
+    ranges = {"default": entry("default", {18: 65536, 24: 3 * 65536, 29: 65536, 37: 65536}),
+              "applied": entry("applied", {18: 2 * 65536, 24: 3 * 65536, 29: 65536, 37: 65536})}
+    (tmp_path / "ranges.json").write_text(json.dumps(ranges))
+    out = tmp_path / "out.json"
+    _run_tool("analyze_dtv_run", "--run-dir", run_dir, "--bundle-dir", bundle, "--num-freq", 2,
+              "--ranges", tmp_path / "ranges.json", "--json", out)
+    result = json.loads(out.read_text())
+    assert result["checks"]["archive_ranges_found_for_bundle"]
+    assert {c: r["archive_range"]["label"] for c, r in result["channels"].items()} == {"18": "applied", "29": "applied"}
+
+
+def test_analyze_tool_finds_the_archive_ranges_of_a_v1_bundle_at_its_words(tmp_path):
+    # a v1 bundle has no v3 channel, so the tool reads no dtv_stat and matches each channel at its cfar_multiplier_q16
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    rows = [dict(receiver_channel_id=f, physical_channel=c, null_power_ratio=1.0,
+                 fine_calibration=dict(status="calibrated", decision_version="fine_decision_v1", anchor_bin=141,
+                                       cfar_multiplier_q16=w))
+            for f, c, w in ((V3, 18, 2 * 65536), (V1, 29, 65536))]
+    (bundle / "pilot_profiles.json").write_text(json.dumps(dict(profiles=rows)))
+    frames, freqs = 4, [V3, V1]
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    _raw(run_dir / "dtv_mask_0.raw", np.zeros((frames, 2)), freqs, np.int8)
+    _raw(run_dir / "dtv_powers_0.raw", np.ones((frames, 2, 3)), freqs, "<u8")
+    _raw(run_dir / "dtv_fine_support_0.raw", np.ones((frames, 2, 2)), freqs, "<i4")
+
+    def entry(label, words):
+        return {str(c): dict(word_q16=w, monthly_p05=0.0, monthly_p95=1.0, label=label) for c, w in words.items()}
+    ranges = {"other": entry("other", {18: 65536, 29: 65536}), "bundle": entry("bundle", {18: 2 * 65536, 29: 65536})}
+    (tmp_path / "ranges.json").write_text(json.dumps(ranges))
+    out = tmp_path / "out.json"
+    done = _run_tool("analyze_dtv_run", "--run-dir", run_dir, "--bundle-dir", bundle, "--num-freq", 2,
+                     "--ranges", tmp_path / "ranges.json", "--json", out)
+    assert done.returncode == 0, done.stderr
+    result = json.loads(out.read_text())
+    assert result["checks"]["archive_ranges_found_for_bundle"] and "stat_frames_match" not in result["checks"]
+    assert {c: r["archive_range"]["label"] for c, r in result["channels"].items()} == {"18": "bundle", "29": "bundle"}

@@ -5,6 +5,11 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The power-limit test divides the corrected estimate and its margin by the pilot passband factor `r_c`, as the
+  dissertation's BAO test does. A power-limit plan (and the `--power-limit` file) must give `pilot_passband` for every
+  channel, the control included; for CHIME it is `r_c` of the dissertation's `pilot_passband.json`. Without it the test
+  read each ratio low by `r_c^2`. `limit_test` takes `pilot_passband`, and its `x` and `upper_shelf` are on the sky.
+  The report and `bundle.decisions.json` record the factor.
 - Removed the v6 archive pipeline (`src/pilot_proxy/archive/`, `products/acceptance.py`) and the commands
   `chime-survey`, `chime-inventory`, `chime-scan`, `chime-combine`, `audit-archive-health` and `products
   check-archive`, with the CANFAR scripts, `setup_env.sh`, `launch_gpu_session.py`, the archive freeze and monitor

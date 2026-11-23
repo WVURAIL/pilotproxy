@@ -306,6 +306,12 @@ differences and its route term as the margin, `calibrate-bundle` reproduces the
 dissertation's worst-case test to 1e-13 on every word of channels 14 to 36
 (`docs/evidence/bao_word_crosscheck_2026-11-22`).
 
+Until 2026-11-23 the test had no pilot passband factor `r_c`, which the dissertation
+divides the corrected estimate and its margin by, so it read every ratio low by the
+factor `r_c^2` (0.28 on channel 21). The plan now gives `pilot_passband` for every
+channel, with no default for the same reason as `curvature`: `r_c` is below 1 on most
+channels.
+
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%
 less time than the v2 mask for one channel and 0.5% less for 16 channels in one
 call. With core 4.2.0 on that laptop GPU (WSL2, no correlator load), the v3 entry took

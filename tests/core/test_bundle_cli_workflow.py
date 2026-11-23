@@ -151,7 +151,8 @@ def option_arguments(directory):
     (directory / "limits.json").write_text(json.dumps({"35": 1e-5}))
     inputs = directory / "inputs.json"
     inputs.write_text(json.dumps(dict(table=str(ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"),
-                                      limits="limits.json", curvature={"35": [0.0, 0.0]}, margin=0.0)))
+                                      limits="limits.json", curvature={"35": [0.0, 0.0]}, margin=0.0,
+                                      pilot_passband={"35": 1.0, "37": 1.0})))
     return ["--receiver-profile", receiver, "--detector-core-profile", core, "--null-quantile", "0.9",
             "--threshold", "power_limit", "--power-limit", inputs, "--decision-version", "fine_decision_v3",
             "--night", *DRAO]

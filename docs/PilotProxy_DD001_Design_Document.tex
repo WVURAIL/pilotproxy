@@ -637,9 +637,14 @@ and \code{--output-dir}. Under v3:
         own weights. The passband offset of the ratio differs between a
         channel's pilot and the control position, so the plan gives that
         difference for each channel as its \code{curvature}, with its error,
-        and gives the margin. Neither has a default: the difference is
-        negative on some channels, so leaving it out reads them low, and on
-        the archive would pass channels 21, 29 and 32 under the worst case.
+        and gives the margin. The pilot is a tone and passes the channelizer
+        with another gain than the shelf, so the corrected estimate reads
+        \(r_c\) times the shelf, and the plan's \code{pilot_passband}
+        \(r_c\) divides the estimate and its margin. None has a default: the
+        difference is negative on some channels, so leaving it out reads them
+        low, and on the archive would pass channels 21, 29 and 32 under the
+        worst case; \(r_c\) is below 1 on most channels, so leaving it out
+        reads them low as well.
         With the dissertation's values, the test reproduces the
         dissertation's worst-case test on the archive to
         \(10^{-13}\) on every word

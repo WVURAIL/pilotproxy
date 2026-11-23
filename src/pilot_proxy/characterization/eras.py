@@ -105,7 +105,7 @@ SOURCE_AUTHOR = "author-dated"
 class EraConfig:
     """Every policy value of the section 8.1 procedure, versioned and digested."""
 
-    version: str = "section-8.1-eras-v2"
+    version: str = "section-8.1-eras-v3"
     min_frames: int = blocks.MONTH_MIN_FRAMES
     min_units: int = blocks.MONTH_MIN_UNITS
     min_days: int = blocks.MONTH_MIN_DAYS
@@ -494,21 +494,21 @@ def _station_boundaries(pop: Sequence[MonthRecord], raw: list[str], positions: l
 def _instrument_boundaries(pop: Sequence[MonthRecord], config: EraConfig) -> tuple[list[Boundary], list[Excursion]]:
     boundaries: list[Boundary] = []
     excursions: list[Excursion] = []
-    previous: set[str] | None = None
-    for k, record in enumerate(pop):
+    # compare with the established maps, so the old map returning after an excursion is not a change
+    established = set(pop[0].input_maps) if pop else set()
+    for k, record in enumerate(pop[1:], start=1):
         maps = set(record.input_maps)
-        if previous is not None:
-            opened = False
-            for value in sorted(maps - previous):
-                window = pop[k: k + config.persistence_months]
-                holds = len(window) == config.persistence_months and all(value in r.input_maps for r in window)
-                if holds and not opened:
-                    boundaries.append(Boundary(EVIDENCE_INSTRUMENT, pop[k - 1].month, record.month, (),
-                                               ";".join(sorted(previous)), ";".join(sorted(maps))))
-                    opened = True
-                elif not holds:
-                    excursions.append(Excursion(record.month, "instrument", value[:8]))
-        previous = maps
+        new = sorted(maps - established)
+        window = pop[k: k + config.persistence_months]
+        held = [v for v in new
+                if len(window) == config.persistence_months and all(v in r.input_maps for r in window)]
+        failed = [v for v in new if v not in held]
+        excursions.extend(Excursion(record.month, "instrument", v[:8]) for v in failed)
+        if held:
+            boundaries.append(Boundary(EVIDENCE_INSTRUMENT, pop[k - 1].month, record.month, (),
+                                       ";".join(sorted(established)), ";".join(sorted(maps))))
+        if held or not failed:
+            established = maps - set(failed)
     return boundaries, excursions
 
 

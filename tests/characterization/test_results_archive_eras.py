@@ -184,6 +184,14 @@ def test_instrument_change_is_an_entering_map_that_persists():
     assert [(e.month - M0, e.detail) for e in seg.excursions if e.kind == "instrument"] == [(2, "c"), (4, "d")]
 
 
+def test_the_old_map_returning_after_a_one_month_excursion_is_not_a_change():
+    seg = segment([_rec(i, 2.0, maps=(m,)) for i, m in enumerate("aabaaa")])
+    assert _spans(seg) == [(0, 5, PROXY_HIGH)] and seg.instrument_change_months == ()
+    assert [(e.month - M0, e.detail) for e in seg.excursions if e.kind == "instrument"] == [(2, "b")]
+    seg = segment([_rec(i, 2.0, maps=(m,)) for i, m in enumerate("aabbb")])
+    assert _spans(seg) == [(0, 1, PROXY_HIGH), (2, 4, PROXY_HIGH)] and seg.instrument_change_months == (M0 + 2,)
+
+
 def test_coincident_boundaries_join_their_evidence_and_records_name_transitions():
     records = [_rec(0, 0.1, maps=("a",)), _rec(1, 0.1, maps=("a",)), _rec(2, 2.0, maps=("b",)), _rec(3, 2.0, maps=("b",))]
     seg = segment(records)

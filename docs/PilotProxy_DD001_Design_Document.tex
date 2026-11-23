@@ -336,10 +336,11 @@ order after binding stops the stage.
 
 \begin{itemize}
   \item \textbf{CHORD Pathfinder.} \code{config/chord/pathfinder.j2} includes
-        \code{config/chord/dtv.j2} on every X-engine node. The products are
-        sent to the recv node and written there (\code{config/chord/recv.j2}).
-        REST endpoints switch the mask and the recording until the next
-        restart.
+        \code{config/chord/dtv.j2} on every X-engine node unless
+        \code{dtv_enabled} is false. The products are sent to the recv node
+        and written there (\code{config/chord/recv.j2}). REST endpoints
+        switch the mask and the recording until the next restart, and both
+        start off.
   \item \textbf{CHIME upgrade.} \code{config/chime/chime_upgrade_2numa.j2}
         includes \code{config/chime/dtv.j2} in each NUMA domain when
         \code{dtv_enabled} is set. No visibility or weight consumer reads the
@@ -954,7 +955,7 @@ bins.}
 \subsection{Channel 37 is the control}
 \choice{Channel 37 can be bound with \code{fine_calibration.status: control}.
 Its decisions are formed and recorded, and its mask stays zero unless
-\code{dtv_mask_control} is set (kotekan\#1915). Only channel
+\code{dtv_mask_control} is set (kotekan\#1924). Only channel
 37 may carry that status, and it is never \code{calibrated}.}
 {The default word and the power-limit corrections need frames of the same
 receiver with no pilot. A channel reserved for radio astronomy gives them
@@ -1115,7 +1116,7 @@ record. The \code{chime-first} words are a white-noise floor.}
 \code{chime-hello-world-d1ed7815} & 29, 35 & First detect-only CHIME run.\\ \hline
 \code{chime-first-56005bb7} & 14--36, control 37 & Parameters only, to record data for the first calibration. Word 72260 (\(\eta\approx1.103\)) on every channel, from a white-noise floor over 2048 inputs, \(h=32\), rank 47. Added by kotekan\#1880.\\ \hline
 \code{pathfinder-commissioning-b8026807} & 18, 24, 29 & Pathfinder detect-only runs (kotekan\#1862).\\ \hline
-\code{pathfinder-commissioning-e2e90219} & 18, 24, 29, control 37 & The same words, and records channel 37 for the next calibration (kotekan\#1877). The default after kotekan\#1895.\\ \hline
+\code{pathfinder-commissioning-e2e90219} & 18, 24, 29, control 37 & The same words, and records channel 37 for the next calibration (kotekan\#1877). Named in \code{config/chord/dtv.j2} (kotekan\#1895, \#1919).\\ \hline
 \end{tabularx}
 \caption{Bundles in Kotekan, from \code{config/chime/dtv_bundles/README.md}
 and \code{config/chord/dtv_bundles/README.md}. None qualifies a channel for
@@ -1376,7 +1377,7 @@ detect only, and Kotekan refuses to mask with it. A bundle from
 \code{calibrate-bundle} is a commissioning bundle. Applied masking needs a
 telescope calibration, a passing \code{test-bundle} report with the control,
 \code{qualify-bundle}, the shadow acceptance of
-\code{docs/OPERATOR_HANDOFF.md}, and only then \code{dtv_apply_mask: true}.}
+\code{docs/OPERATOR_HANDOFF.md}, and only then the mask switched on.}
 
 \subsection{Open work and known limitations}
 
@@ -1430,8 +1431,9 @@ kotekan\#1880 & Merged. CHIME fine powers, bad feeds, calibration mode and the f
 kotekan\#1894, \#1896 & Merged. Only the mask sent outside calibration mode; per-run acquisition directory.\\ \hline
 kotekan\#1905, \#1906 & Merged through \#1914. Re-vendor of the core at \code{54ae410}; masking refused with a detect-only bundle; summed-input warning.\\ \hline
 kotekan\#1914 & Merged 2026-11-20. Fine decision v2 where the bundle names it; core vendored at \code{d34ae7d}.\\ \hline
-kotekan\#1915 & Merged 2026-11-20. \code{dtv_mask_control}: the control channel masked like a pilot.\\ \hline
-kotekan\#1924 & Open. Fine decision v3: core 4.2.0, \code{dtv_stat} always written, and \code{DtvRfiMask} applying the words.\\ \hline
+kotekan\#1915 & Merged 2026-11-20. \code{mask_control}: the control channel masked like a pilot. \#1919 removed its Pathfinder render variable \code{dtv_mask_control}, and \#1924 restores it for the detector and \code{DtvRfiMask}.\\ \hline
+kotekan\#1919 & Merged 2026-11-23. Pathfinder DTV values in \code{telescope.j2}; \code{dtv_enabled}; both switches off at start; the bundle path fixed in \code{dtv.j2}. Removes the Pathfinder render variables \code{dtv_runtime_bundle_dir}, \code{dtv_apply_mask}, \code{dtv_write_enabled} and \code{dtv_mask_control}; \#1924 restores the first and the last.\\ \hline
+kotekan\#1924 & Open. Fine decision v3: core 4.2.1, \code{dtv_stat} always written, and \code{DtvRfiMask} applying the words.\\ \hline
 kotekan\#1925 & Open. Recv files of many frames with \code{frame_metadata}, which PilotProxy reads.\\ \hline
 \end{longtable}
 

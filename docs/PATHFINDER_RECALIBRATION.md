@@ -124,15 +124,21 @@ built without it, and `--decision-version fine_decision_v3` for a stage with kot
 
 ## 5. Deploy
 
-For commissioning and debugging, the X-engines can read the bundle from the site home: set
-`dtv_runtime_bundle_dir` to it when the configurations are rendered. A production bundle goes into Kotekan
-through a pull request under `config/chord/dtv_bundles/<purpose>-<first 8 hex of sha256(sha256sums.txt)>`.
-With kotekan#1906, the stage refuses to switch the mask on with a bundle that has not been qualified.
+On `develop` (kotekan#1919) the X-engines read the bundle at the path fixed by the `set` line in
+`config/chord/dtv.j2`, the installed `pathfinder-commissioning-e2e90219`. A new bundle goes into Kotekan
+through a pull request that adds it under
+`config/chord/dtv_bundles/<purpose>-<first 8 hex of sha256(sha256sums.txt)>` and changes that line to its
+installed path. The `chord` branch can carry the pull request before it merges into `develop`, and the nodes
+take the bundle at the next deploy. With kotekan#1924, `dtv_runtime_bundle_dir` is a render variable with
+that path as its default, so a run can name another installed bundle without a template change. With
+kotekan#1906, the stage refuses to switch the mask on with a bundle that has not been qualified.
 
 ## 6. Characterize with the mask on
 
-With calibration mode on and `dtv_mask_control: true` (kotekan#1915, so the control is masked like a
-pilot), switch the mask on from the choco host and keep it on for at least a day:
+With calibration mode on, switch the mask on from the choco host and keep it on for at least a day. On
+`develop` the control is never masked. With kotekan#1924, render the X-engine configs with
+`dtv_mask_control: true` so that the control is masked like a pilot, in the detector and in `DtvRfiMask`,
+for any bundle version:
 
 ```bash
 at=$(( ($(date +%s) + 20) * 1000000000 ))

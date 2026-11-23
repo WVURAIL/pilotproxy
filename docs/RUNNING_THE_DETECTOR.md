@@ -38,7 +38,7 @@ The loop is repeated after a change to the gains or quantization, the input popu
 
 ## Step 1: Record
 
-Calibration reads each channel to be bound and a control channel with no pilot. Channel 37 is the control for CHIME and the Pathfinder. The best source is the detector itself. With `dtv_calibration_mode` and `dtv_write_enabled` on, a detect-only run writes the fine powers of every block to `dtv_fine_powers*.h5`, and each file of about 43 s counts as one capture (`dtv_fine_powers` in the plan). `tools/combine_pathfinder_dtv_run.py` stacks an acquisition's files into one per half, and the run commands read a window of a combined file as they read a per-window file. They read a file of several frames with per-frame metadata (kotekan#1925) by its frames. The channels and the control must be bound in the bundle of that run, and the voltages are not needed. Reading these files needs `h5py` and `hdf5plugin`. A run of a few days covers the changes over a day, and it gives far more than the 30 captures a knee needs.
+Calibration reads each channel to be bound and a control channel with no pilot. Channel 37 is the control for CHIME and the Pathfinder. The best source is the detector itself. With `dtv_calibration_mode` and the recording on (`/dtv_write_enabled` on the Pathfinder, `dtv_write_enabled` on CHIME), a detect-only run writes the fine powers of every block to `dtv_fine_powers*.h5`, and each file of about 43 s counts as one capture (`dtv_fine_powers` in the plan). `tools/combine_pathfinder_dtv_run.py` stacks an acquisition's files into one per half, and the run commands read a window of a combined file as they read a per-window file. They read a file of several frames with per-frame metadata (kotekan#1925) by its frames. The channels and the control must be bound in the bundle of that run, and the voltages are not needed. Reading these files needs `h5py` and `hdf5plugin`. A run of a few days covers the changes over a day, and it gives far more than the 30 captures a knee needs.
 
 A telescope with no data starts from its parameters alone. A plan with empty capture lists, `"control": null` and `"num_inputs"` gives a first bundle at the simulated control word, and this bundle is enough to record the data for the next one:
 
@@ -185,22 +185,22 @@ The digests can be checked there before a restart:
 sha256sum -c sha256sums.txt
 ```
 
-With `CMAKE_INSTALL_PREFIX=/usr`, the configs go to `/etc/kotekan/` instead, and `dtv_runtime_bundle_dir` must be set to match.
+With `CMAKE_INSTALL_PREFIX=/usr`, the configs go to `/etc/kotekan/` instead, and the bundle path must be changed to match: `dtv_runtime_bundle_dir` on CHIME, and on the Pathfinder the `set` line in `config/chord/dtv.j2` (with kotekan#1924, `dtv_runtime_bundle_dir`).
 
 ### CHORD Pathfinder
 
 [PATHFINDER_RECALIBRATION.md](PATHFINDER_RECALIBRATION.md) is the checklist for the steps below, with the commands.
 
-The detector always runs in `config/chord/pathfinder.j2`. With kotekan#1895, its bundle defaults to the installed `pathfinder-commissioning-e2e90219`. A new bundle is named in that default by a Kotekan pull request, or set for one run. These variables are set when `pathfinder.j2` and `config/chord/recv.j2` are rendered:
+`config/chord/pathfinder.j2` runs the detector unless it is rendered with `dtv_enabled: false`, which leaves the detector, the DTV mask and the recording out, and n2k then reads the SK mask. On `develop` (kotekan#1919) the bundle path is fixed by the `set` line in `config/chord/dtv.j2`, the installed `pathfinder-commissioning-e2e90219`, and a new bundle is named in that line by a Kotekan pull request. With kotekan#1924, `dtv_runtime_bundle_dir` is a render variable of `pathfinder.j2` with that path as its default. `config/chord/telescope.j2` reads two variables for both `pathfinder.j2` and `config/chord/recv.j2`, so render both with the same values:
 
 ```yaml
-dtv_runtime_bundle_dir: /usr/local/etc/kotekan/chord/dtv_bundles/<bundle>
-dtv_apply_mask: false
-dtv_write_enabled: false
+dtv_enabled: true
 dtv_calibration_mode: true
 ```
 
-Without `dtv_calibration_mode` only the mask is sent, and with kotekan#1924 `dtv_stat` as well (port 11041), in every mode. With it, the powers, fine support and fine powers are sent too, and both templates must be rendered with the same value. The mask and recording switches start from the values above, and either is changed over REST until the next restart:
+Without `dtv_calibration_mode` only the mask is sent, and with kotekan#1924 `dtv_stat` as well (port 11041), in every mode. With it, the powers, fine support and fine powers are sent too. On `develop` the control is decided and recorded like a pilot, and never masked. With kotekan#1924, rendering `pathfinder.j2` with `dtv_mask_control: true` masks it like a pilot, in the detector and in `DtvRfiMask`, for any bundle version.
+
+There is no `dtv_apply_mask` or `dtv_write_enabled` variable on the Pathfinder. The mask and recording switches start off at every start, and either is changed over REST until the next restart:
 
 ```bash
 at=$(( ($(date +%s) + 20) * 1000000000 ))
@@ -324,4 +324,4 @@ On CHORD, the detector packs every input flagged by `bufferBadInputs` as zero, a
 
 ## Applying the mask
 
-Masking needs a calibration on the telescope, a passing `test-bundle` report with the control, `qualify-bundle`, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then `dtv_apply_mask: true`. With kotekan#1906, Kotekan's `DtvRfiMask` refuses to start with the mask on unless every calibrated channel of the bundle is qualified, and a POST that switches the mask on with such a bundle stops Kotekan.
+Masking needs a calibration on the telescope, a passing `test-bundle` report with the control, `qualify-bundle`, then the shadow acceptance in `docs/OPERATOR_HANDOFF.md`, and only then switching the mask on. With kotekan#1906, Kotekan's `DtvRfiMask` refuses to start with the mask on unless every calibrated channel of the bundle is qualified, and a POST that switches the mask on with such a bundle stops Kotekan.

@@ -310,7 +310,11 @@ Until 2026-11-23 the test had no pilot passband factor `r_c`, which the disserta
 divides the corrected estimate and its margin by, so it read every ratio low by the
 factor `r_c^2` (0.28 on channel 21). The plan now gives `pilot_passband` for every
 channel, with no default for the same reason as `curvature`: `r_c` is below 1 on most
-channels.
+channels. The figures above predate `r_c`. With it, on the dissertation's records, a
+plan without `curvature` and `margin` would pass channels 29 and 32 (least ratios 0.19
+and 0.59, against 10.5 and 13.6), and channel 21 reads 1.14. The dissertation's
+`scripts/check_bao_agreement.py` compares `limit_test` with its test on every channel
+and the control.
 
 On an RTX 5000 Ada at 2048 inputs, the v3 entry, searching every bin, takes 7%
 less time than the v2 mask for one channel and 0.5% less for 16 channels in one

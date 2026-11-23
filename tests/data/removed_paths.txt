@@ -865,7 +865,6 @@ tests/archive/test_survey_runtime_safety.py	89577ee
 tests/archive/test_transport_errors.py	89577ee
 tests/archive/test_transport_timeout_boundary.py	89577ee
 tests/core/test_archive_health_plots.py	89577ee
-tests/core/test_attached_archive_health.py	89577ee
 tests/core/test_audit_local_archive_run.py	89577ee
 tests/core/test_freeze_archive_inventory.py	89577ee
 tests/core/test_freeze_archive_inventory_rederivation.py	89577ee

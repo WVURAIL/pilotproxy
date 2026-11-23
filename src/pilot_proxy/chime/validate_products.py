@@ -1323,8 +1323,9 @@ def validate_products(
         _add_error(
             errors,
             "publish.transaction",
-            "a chime-combine publication overlapped validation or is awaiting "
-            "rollback; rerun chime-combine before consuming canonical products",
+            "a combine publication overlapped validation or is awaiting "
+            "rollback; complete or roll it back with the release that wrote it "
+            "(tag pre-purge-2026-11-23) before consuming canonical products",
         )
     if generation_before != generation_after:
         _add_error(

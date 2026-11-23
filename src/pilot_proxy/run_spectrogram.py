@@ -14,7 +14,11 @@ from pilot_proxy.bundle_calibration import (
     iter_run_frames,
     required_words,
 )
-from pilot_proxy.fine_decision import calibration_geometry
+from pilot_proxy.fine_decision import (
+    FINE_DECISION_V3_VERSION,
+    calibration_geometry,
+    v3_word,
+)
 
 # 8192 samples on the Pathfinder and 16384 on CHIME give the same block
 FRAME_SECONDS = 0.04194304
@@ -28,8 +32,11 @@ def run_spectrogram(*, bundle_dir: Path, runs: Sequence[str], channel: int, chun
     if channel not in rows:
         raise ValueError(f"channel {channel} is not in the bundle")
     calibration = rows[channel]["fine_calibration"]
-    # v3 searches every bin and has no anchor; its spectrogram is drawn from bin 0
-    anchor, word = int(calibration.get("anchor_bin", 0)), int(calibration["cfar_multiplier_q16"])
+    # v3 searches every bin and has no anchor; its spectrogram is drawn from bin 0, and its frames are kept at the
+    # word the stage applies, the power-limit word where calibration wrote one
+    v3 = calibration["decision_version"] == FINE_DECISION_V3_VERSION
+    anchor = int(calibration.get("anchor_bin", 0))
+    word = v3_word(calibration) if v3 else int(calibration["cfar_multiplier_q16"])
     bulk, rank = calibration_geometry(calibration)
     channel_id = int(rows[channel]["receiver_channel_id"])
     per_chunk = max(1, round(chunk_seconds / FRAME_SECONDS))

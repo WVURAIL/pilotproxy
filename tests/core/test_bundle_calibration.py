@@ -513,6 +513,53 @@ def test_run_scores_read_the_frame_timing_from_the_file(plans, tmp_path):
     assert np.diff(time) == pytest.approx(16384 * 2560e-9)
 
 
+def _v3_run(plans, tmp_path, **words):
+    """Write a bundle with channel 35 as a v3 profile at ``words``, and a run whose v3 keep words are 1, 2 and 3.
+
+    Each keep word, in units of 65536, holds 16 frames in recorded order. The run tools read only the profiles.
+    """
+    bundle = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    row["fine_calibration"] = dict(status="calibrated", decision_version="fine_decision_v3", **words)
+    directory = tmp_path / "bundle_v3"
+    directory.mkdir()
+    (directory / "pilot_profiles.json").write_text(json.dumps(bundle))
+    frames = np.ones((48, 3, 256), dtype=np.uint64)
+    frames[16:32, 0, 140] = 2
+    frames[32:, 0, 140] = 3
+    run = write_run_file(tmp_path / "run_v3.h5", [521, 614], frames)
+    with h5py.File(run, "a") as handle:
+        handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = 0
+    return directory, run
+
+
+@pytest.mark.parametrize("words, applied, kept", [
+    # the stage applies the power-limit word where calibration wrote one
+    (dict(cfar_multiplier_q16=65536, power_limit_multiplier_q16=2 * 65536), 2 * 65536, [16, 16, 0]),
+    # and the default word otherwise
+    (dict(cfar_multiplier_q16=65536), 65536, [16, 0, 0]),
+])
+def test_v3_spectrogram_keeps_the_frames_the_stage_keeps(plans, tmp_path, words, applied, kept):
+    bundle, run = _v3_run(plans, tmp_path, **words)
+    result = run_spectrogram(bundle_dir=bundle, runs=[run], channel=35, chunk_seconds=16 * FRAME_SECONDS)
+    assert result["word_q16"] == applied and result["kept"].tolist() == kept
+    summary = list(csv.DictReader(write_masked_summary([result], tmp_path / "out").open()))
+    assert summary[0]["word_q16"] == str(applied) and summary[0]["masked_frames"] == str(48 - sum(kept))
+
+
+@pytest.mark.parametrize("words, applied, kept", [
+    (dict(cfar_multiplier_q16=65536, power_limit_multiplier_q16=2 * 65536), 2 * 65536, 32),
+    (dict(cfar_multiplier_q16=65536), 65536, 16),
+])
+def test_v3_run_scores_keep_the_frames_the_stage_keeps(plans, tmp_path, words, applied, kept):
+    bundle, run = _v3_run(plans, tmp_path, **words)
+    result = build_run_scores(bundle_dir=bundle, runs=[run], channel=35, output_dir=tmp_path / "scores")
+    assert result["current_threshold"] == {"kind": "finite", "eta_q16": str(applied)}
+    assert result["masked_percent"] == round(100.0 * (48 - kept) / 48, 3)
+    frames = threshold_rule.load_frames(35, tmp_path / "scores")
+    assert frames.current_word == applied and int(frames.current_keep.sum()) == kept
+
+
 def test_run_plans_split_each_channel_in_time(plans, tmp_path):
     captures = plans["calibrate"]["control"]["captures"]
     plan = dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})
@@ -834,7 +881,8 @@ def test_limit_test_takes_the_largest_passing_word():
         limit_test(sweep, coupling=1.5, **common)
 
 
-def test_process_run_takes_the_power_limit_threshold(plans, tmp_path):
+@pytest.mark.parametrize("decision", [None, "fine_decision_v3"])
+def test_process_run_takes_the_power_limit_threshold(plans, tmp_path, decision):
     captures = plans["calibrate"]["control"]["captures"]
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})))
@@ -855,13 +903,20 @@ def test_process_run_takes_the_power_limit_threshold(plans, tmp_path):
                                                           curvature={"35": [0.0, 0.0], "37": [0.0, 0.0]}, margin=0.0)))
     common = dict(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
                   calibration_share=0.5, receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
-    summary = process_run(output_dir=tmp_path / "out", threshold="power_limit", power_limit=tmp_path / "inputs.json", **common)
+    summary = process_run(output_dir=tmp_path / "out", threshold="power_limit", power_limit=tmp_path / "inputs.json",
+                          decision_version=decision, **common)
     rows = {row["channel"]: row for row in summary["channels"]}
     assert summary["threshold"] == "power_limit" and rows[35]["word_source"] == "power limit"
     # the word keeps the files with no pilot and masks the others
     assert 40 < rows[35]["calibrate_masked_percent"] < 60
     report = json.loads((tmp_path / "out" / "bundle.report.json").read_text())
     assert report["channels"]["37"]["power_limit"]["corrections"] == "none, the control itself"
+    # the summary and the spectrograms name the word the stage applies; v3 keeps it beside its default word
+    channel = report["channels"]["35"]
+    applied = channel["power_limit_word_q16"] if decision else channel["word_q16"]
+    assert decision is None or applied != channel["word_q16"]
+    masked = next(csv.DictReader((tmp_path / "out" / "spectrograms" / "calibrate" / "masked_summary.csv").open()))
+    assert rows[35]["word_q16"] == applied and masked["channel"] == "35" and masked["word_q16"] == str(applied)
     assert "Threshold: power limit" in (tmp_path / "out" / "summary.md").read_text()
     assert (tmp_path / "out" / "bundle.decisions.json").exists()
     with pytest.raises(ValueError, match="needs a JSON file"):

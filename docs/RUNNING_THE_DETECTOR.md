@@ -278,7 +278,7 @@ A run with `dtv_calibration_mode` also gives a spectrogram of each bound channel
 pilot-proxy run-spectrogram --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --channel 18 24 29 37 --output-dir spectrograms
 ```
 
-The decision is recomputed from the fine powers and the bundle word, so the control shows what its word would remove. A chunk with no kept frames is grey. The axis is recorded time, so a gap in the recording does not appear.
+The decision is recomputed from the fine powers and the word the stage applies, so the control shows what its word would remove. Under v3 that word is the power-limit word where calibration wrote one, and the default word otherwise. A chunk with no kept frames is grey. The axis is recorded time, so a gap in the recording does not appear.
 
 The same command writes `masked_summary.csv`, with the masked percent and the longest masked stretch of each channel. The percent on the control is its false-alarm rate at its word.
 

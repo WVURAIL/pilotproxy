@@ -22,6 +22,14 @@ All notable changes to PilotProxy are recorded here. The project follows
   with another weight bank, such as the control's `chime_dtv_weights_k128_r14_37.bin`.
 - The archive tests place channel 15 at 476.171875 MHz, the centre of freq_id 829; 476.3125 MHz was off the CHIME
   grid. The annotation of `reference_800mhz_pfb.json` gives its ascending channel formula.
+- `inject-pilot-tone` dithers the tone it adds: each component gets `floor(tone + U)`, with `U` uniform on [0, 1)
+  from the seeded generator. Rounding the integer data plus the tone added `round(tone)`, so a tone below 0.5 LSB
+  left the file unchanged and a larger one came out as a staircase (1.38, 1.54 and 0.64 times `a^2` at `a` = 0.6,
+  0.8 and 1.5). Each manifest entry adds `realized_amplitude_lsb` and the added
+  `dither_variance_lsb2_per_component` (at most 1/4). A zero-amplitude copy is still byte-identical.
+- `tools/audit_local_archive_run.py` accepts the `storage_service` that `chime-scan` writes in each execution
+  record (null, or the replica it used) and refuses any other extra key. Before, the closeout failed on every
+  complete run.
 - Every site that applies a fine_decision_v3 word uses the word the stage applies (`v3_word`): the power-limit
   word where calibration wrote one, and the default word otherwise. `compile-operating-policy` binds a v3 channel
   or control at that word, so a v3 control and a v3 channel with no power-limit word now compile. It used to

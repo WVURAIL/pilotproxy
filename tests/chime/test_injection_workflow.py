@@ -58,15 +58,17 @@ def test_injection_cli_preserves_control_and_matches_scalar_quantizer(tmp_path, 
             assert destination.read_bytes() == source.read_bytes()
             assert entry["byte_identical_to_source"] is True
             continue
-        phases = 2 * math.pi * np.random.default_rng(17).random(2)
+        rng = np.random.default_rng(17)
+        phases = 2 * math.pi * rng.random(2)
+        dither_re, dither_im = rng.random((16, 2)), rng.random((16, 2))
         expected = np.empty_like(packed)
         clipped = 0
         for time in range(16):
             for feed in range(2):
                 value = int(packed[time, feed])
                 angle = 2 * math.pi * -3059 * time / 390625 + phases[feed]
-                real = round((value >> 4) - 8 + amplitude * math.cos(angle))
-                imag = round((value & 15) - 8 + amplitude * math.sin(angle))
+                real = (value >> 4) - 8 + math.floor(amplitude * math.cos(angle) + dither_re[time, feed])
+                imag = (value & 15) - 8 + math.floor(amplitude * math.sin(angle) + dither_im[time, feed])
                 clipped += real < -8 or real > 7 or imag < -8 or imag > 7
                 expected[time, feed] = ((min(7, max(-8, real)) + 8) << 4) | (min(7, max(-8, imag)) + 8)
         with h5py.File(destination) as handle:

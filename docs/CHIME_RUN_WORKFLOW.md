@@ -325,9 +325,10 @@ pilot-proxy chime-combine
 ```
 
 `inject-pilot-tone` works in the file's native offset-binary 4+4-bit integer
-domain, with component range `[-8, 7]`. A zero-amplitude pass preserves the
-baseband bytes, and a nonzero pass records saturation while preserving sibling
-datasets, attributes, and filenames. Therefore the output can be read by
+domain, with component range `[-8, 7]`. It adds the tone dithered, `floor(tone + U)` with `U` uniform on
+[0, 1), so the mean added signal is the tone even below one LSB. A zero-amplitude pass preserves the
+baseband bytes, and a nonzero pass records saturation, the realized tone amplitude and the added dither
+variance while preserving sibling datasets, attributes, and filenames. Therefore the output can be read by
 `chime-scan --source local`.
 
 The plotting code uses Computer Modern mathtext by default. Set

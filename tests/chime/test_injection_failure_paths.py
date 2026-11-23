@@ -150,8 +150,16 @@ def test_successful_replacement_does_not_follow_an_existing_output_symlink(tmp_p
     assert not output.is_symlink()
     assert protected.read_bytes() == b"unrelated output target"
     assert entry["output"] == str(output)
+    with h5py.File(source) as handle:
+        packed = handle["baseband"][...].astype(np.int32)
+    # amplitude 2 at 0 Hz with seed 0: a constant tone per feed, dithered
+    rng = np.random.default_rng(0)
+    phases = 2 * np.pi * rng.random(2)
+    re = (packed >> 4) - 8 + np.floor(2 * np.cos(phases) + rng.random(packed.shape))
+    im = (packed & 15) - 8 + np.floor(2 * np.sin(phases) + rng.random(packed.shape))
+    expected = (((np.clip(re, -8, 7) + 8).astype(np.uint8) << 4) | (np.clip(im, -8, 7) + 8).astype(np.uint8))
     with h5py.File(output) as handle:
-        np.testing.assert_array_equal(handle["baseband"], np.tile([0x76, 0x8A], (16, 1)))
+        np.testing.assert_array_equal(handle["baseband"], expected)
 
 
 def test_nan_siblings_and_attributes_survive_injection(tmp_path):

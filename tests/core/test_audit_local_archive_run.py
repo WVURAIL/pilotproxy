@@ -103,6 +103,8 @@ def _fixture(tmp_path: Path) -> dict[str, object]:
         "max_staged_files": 8,
         "checkpoint_every": 250,
         "staging_dir": str(staging_dir.resolve()),
+        # as chime-scan writes it (src/pilot_proxy/archive/scan.py)
+        "storage_service": None,
     }
     scope = {
         "schema_version": "pilotproxy_chime_scan_scope_v1",
@@ -169,6 +171,29 @@ def test_closeout_accounts_for_inventory_and_product(tmp_path: Path, monkeypatch
     assert report["inventory_units"] == 1
     assert report["product_units"] == 1
     assert report["per_freq_units"] == {"506": 1}
+
+
+@pytest.mark.parametrize("change,passes", [
+    ({"storage_service": "https://replica.example/datatrail"}, True),
+    ({"storage_service": ""}, False),
+    ({"storage_service": 7}, False),
+    ({"download_workers": 5}, False),
+    ({"new_setting": True}, False),
+])
+def test_closeout_checks_each_execution_record(tmp_path: Path, monkeypatch, change, passes) -> None:
+    arguments = _fixture(tmp_path)
+    monkeypatch.setattr(
+        audit_local_archive_run, "validate_current_product_identity", lambda product: None
+    )
+    scope_path = arguments["run_dir"] / "scan_scope.json"
+    scope = json.loads(scope_path.read_text(encoding="utf-8"))
+    scope["execution_attempts"].append({**scope["execution"], **change})
+    scope_path.write_text(json.dumps(scope), encoding="utf-8")
+    if passes:
+        audit_local_archive_run.audit_run(**arguments)
+    else:
+        with pytest.raises(audit_local_archive_run.CloseoutError, match="execution attempt"):
+            audit_local_archive_run.audit_run(**arguments)
 
 
 def test_closeout_rejects_source_token_difference(tmp_path: Path, monkeypatch) -> None:

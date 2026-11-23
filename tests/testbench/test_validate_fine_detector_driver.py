@@ -446,19 +446,21 @@ def test_calibration_refuses_missing_marker(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "damage",
+    "damage,message",
     [
-        "missingcell",
-        "duplicate",
-        "offlattice",
-        "range",
-        "nan",
-        "empty",
-        "wrong_count",
-        "evaluation_used",
+        # the fixture has no discovery shards, so an undamaged grid stops at that check
+        ("none", "discovery coverage"),
+        ("missingcell", "must cover all"),
+        ("duplicate", "strictly ascending"),
+        ("offlattice", "range/lattice"),
+        ("range", "range/lattice"),
+        ("nan", "range/lattice"),
+        ("empty", "point count"),
+        ("wrong_count", "Grid scope or evaluation separation"),
+        ("evaluation_used", "Grid scope or evaluation separation"),
     ],
 )
-def test_grid_invalid_before_discovery_reads(tmp_path, monkeypatch, damage):
+def test_grid_invalid_before_discovery_reads(tmp_path, monkeypatch, damage, message):
     plan, ids = fixture_plan()
     (tmp_path / "plan.json").write_text(json.dumps(plan))
     cal = dict(
@@ -498,12 +500,12 @@ def test_grid_invalid_before_discovery_reads(tmp_path, monkeypatch, damage):
         grids["ch14/case0"] = []
     elif damage == "wrong_count":
         artifact["expected_cells"] = 160
-    else:
+    elif damage == "evaluation_used":
         artifact["evaluation_outcomes_used"] = True
     path = tmp_path / "evaluation-grid.json"
     path.write_text(json.dumps(artifact))
     d.seal_marker(path)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=message):
         d.verify_evaluation_grid(tmp_path, plan)
 
 

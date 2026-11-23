@@ -92,6 +92,26 @@ def test_injection_delta_is_the_requested_tone(tmp_path) -> None:
     assert np.all(off_bin < 0.1 * amplitude)
 
 
+@pytest.mark.parametrize("amplitude", [0.3, 1.5])
+def test_injected_tone_has_the_requested_amplitude_below_and_above_one_lsb(tmp_path, amplitude) -> None:
+    # Rounding integer + tone injected nothing below 0.5 LSB and a distorted
+    # tone above it; the dithered delta has the requested fundamental.
+    source = tmp_path / "event_506.h5"
+    _make_base_file(source, include_minus_eight=False)
+    output = tmp_path / "out" / "event_506.h5"
+    entry = inject_tone_into_baseband_file(
+        source, output, baseband_frequency_hz=F_BB, amplitude_lsb=amplitude, phase_seed=5,
+    )
+    with h5py.File(str(source), "r") as src, h5py.File(str(output), "r") as dst:
+        delta = fmt.unpack_4bit(dst["baseband"][...]) - fmt.unpack_4bit(src["baseband"][...])
+    spectrum = np.fft.fft(delta, axis=0) / N_TIME
+    # dither noise per bin is at most sqrt(0.5/N_TIME), or 0.011 LSB
+    assert np.abs(spectrum[TONE_BIN, :]) == pytest.approx(amplitude, abs=0.05)
+    assert np.all(np.abs(spectrum[TONE_BIN + 5, :]) < 0.05)
+    assert entry["realized_amplitude_lsb"] == pytest.approx(amplitude, abs=0.03)
+    assert 0 < entry["dither_variance_lsb2_per_component"] <= 0.25
+
+
 def test_saturation_is_counted(tmp_path) -> None:
     source = tmp_path / "event_506.h5"
     _make_base_file(source, include_minus_eight=False)

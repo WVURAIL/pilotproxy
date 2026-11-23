@@ -140,11 +140,12 @@ def _native_inputs(tmp_path):
 
 
 def _injected_components(real, imag, amplitude):
-    phases = 2 * np.pi * np.random.default_rng(PHASE_SEED).random(FEEDS)
+    rng = np.random.default_rng(PHASE_SEED)
+    phases = 2 * np.pi * rng.random(FEEDS)
     # The CH14 pilot is 3059 Hz below center, hence +3059 Hz in native zone 2.
     angle = 2 * np.pi * 3059 / SAMPLE_RATE * np.arange(len(real))[:, None] + phases
-    re = np.rint(real + amplitude * np.cos(angle))
-    im = np.rint(imag + amplitude * np.sin(angle))
+    re = real + np.floor(amplitude * np.cos(angle) + rng.random(angle.shape))
+    im = imag + np.floor(amplitude * np.sin(angle) + rng.random(angle.shape))
     clipped = int(np.count_nonzero((re < -8) | (re > 7) | (im < -8) | (im > 7)))
     return np.clip(re, -8, 7).astype(np.int16), np.clip(im, -8, 7).astype(np.int16), clipped
 

@@ -80,9 +80,14 @@ class _FakeSynthSource(DataSource):
                         F_TONE_BB, seed=(abs(hash(unit.key)) % 997) + 1)
         with self._lock:
             self.fetch_order.append(unit.key)
-            n = len(os.listdir(os.path.dirname(dest)))
-            self.max_on_disk = max(self.max_on_disk, n)
+            self._scratch = os.path.dirname(dest)
+        self.record_disk()
         return True, ""
+
+    def record_disk(self):
+        with self._lock:
+            n = len(os.listdir(self._scratch))
+            self.max_on_disk = max(self.max_on_disk, n)
 
 
 class _RecordingAnalyzer(Analyzer):
@@ -171,6 +176,19 @@ def test_duplicate_basenames_distinct_keys_both_processed():
 
 
 # #1 bounded scratch
+class _SlowAnalyzer(_RecordingAnalyzer):
+    """Analyzes slowly, so the downloaders run ahead until the scratch bound stops them."""
+
+    def __init__(self, source):
+        super().__init__()
+        self._source = source
+
+    def consume_file(self, arrays, meta):
+        self._source.record_disk()
+        time.sleep(0.15)
+        return super().consume_file(arrays, meta)
+
+
 def _bound_run(work, n_units, workers, staged):
     inst = inst_mod.load_instrument("chime")
     fcen = inst.freq_of_freq_id(844) * 1e6
@@ -179,10 +197,11 @@ def _bound_run(work, n_units, workers, staged):
     src = _FakeSynthSource(fcen, n_frames=2)
     ctx = RunContext(instrument=inst, selection=[844], options={})
     out = os.path.join(work, "b.npz"); tmp = os.path.join(work, "tmp")
-    pipeline.run(source=src, reader=ChimeBasebandReader(),
-                 analyzer=_RecordingAnalyzer(), units=units, out_path=out,
-                 tmp_dir=tmp, ctx=ctx, download_workers=workers,
-                 max_staged_files=staged, verbose=False)
+    res = pipeline.run(source=src, reader=ChimeBasebandReader(),
+                       analyzer=_SlowAnalyzer(src), units=units, out_path=out,
+                       tmp_dir=tmp, ctx=ctx, download_workers=workers,
+                       max_staged_files=staged, verbose=False)
+    assert res.n_new == n_units
     return src.max_on_disk, tmp
 
 
@@ -190,15 +209,15 @@ def test_staged_file_bound_one_by_default():
     """Even with 4 download workers, the default holds exactly one file on scratch."""
     work = _tmp("bound1")
     peak, tmp = _bound_run(work, n_units=6, workers=4, staged=1)
-    assert peak <= 1
+    assert peak == 1
     assert os.listdir(tmp) == []
 
 
 def test_staged_file_bound_respects_max_staged_files():
-    """Raising the bound to N never exceeds N files on scratch."""
+    """Raising the bound to N fills, and never exceeds, N files on scratch."""
     work = _tmp("bound3")
     peak, tmp = _bound_run(work, n_units=8, workers=4, staged=3)
-    assert peak <= 3
+    assert peak == 3
     assert os.listdir(tmp) == []
 
 

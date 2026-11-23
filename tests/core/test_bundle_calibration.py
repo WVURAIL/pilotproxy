@@ -885,8 +885,9 @@ def test_masked_fraction_passes_within_one_hourly_std():
     calibration = dict(word_q16=70000, mean=0.5, std=0.25, bins=24, bin="hour")
     passed, detail = bias_within_std(calibration, 0.625)
     assert passed and detail == "calibration 0.5000, std 0.2500 over 24 hours; bias/std 0.50"
-    # a rate shifted by one standard deviation or more fails, either way
-    for shifted in (0.75, 0.2):
+    # a bias of one standard deviation passes, as |b| <= sigma; a larger one fails, either way
+    assert bias_within_std(calibration, 0.75)[0]
+    for shifted in (0.76, 0.2):
         assert not bias_within_std(calibration, shifted)[0]
     # a channel masked in every frame has no spread, so it passes only at the same rate
     whole = dict(calibration, mean=1.0, std=0.0)

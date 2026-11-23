@@ -352,8 +352,8 @@ def bias_within_std(calibration: dict[str, Any], test_mean: float) -> tuple[bool
     """Return whether a test masked fraction agrees with its calibration, and why.
 
     `calibration` is a record of hourly_masked. bias = test mean - calibration mean, and the check passes when
-    |bias| < std, the hour-to-hour spread of the calibration: a bias below one standard deviation, the dissertation's
-    rule. With std 0 it passes only on a bias of 0. A calibration of fewer than two bins has no spread, so it fails.
+    |bias| <= std, the hour-to-hour spread of the calibration: the dissertation's criterion |b| <= sigma. With std 0
+    it passes only on a bias of 0. A calibration of fewer than two bins has no spread, so it fails.
     """
     unit = "hour" if calibration.get("bin", "hour") == "hour" else "capture"
     count, mean, std = int(calibration["bins"]), float(calibration["mean"]), float(calibration["std"])
@@ -361,7 +361,7 @@ def bias_within_std(calibration: dict[str, Any], test_mean: float) -> tuple[bool
         return False, f"calibration has {_count(count, unit)}, so no hour-to-hour spread; calibrate on more hours"
     bias = test_mean - mean
     ratio = abs(bias) / std if std > 0 else (0.0 if bias == 0 else math.inf)
-    return (abs(bias) < std or bias == 0,
+    return (abs(bias) <= std,
             f"calibration {mean:.4f}, std {std:.4f} over {_count(count, unit)}; bias/std {ratio:.2f}")
 
 

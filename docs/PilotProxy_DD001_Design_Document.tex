@@ -677,7 +677,7 @@ structure and digests, values on every bound channel, no shared captures with
 calibration (by path, or by identity for a copy or another layout of the same data), a decision on every frame of each channel (a valid rank under v1
 and v2, a nonzero median under v3), the masked fraction of each channel at
 the word \code{DtvRfiMask} applies, and that of the control at the control
-word. A masked-fraction check passes when \(|\text{bias}| < \sigma\). The
+word. A masked-fraction check passes when \(|\text{bias}| \le \sigma\). The
 blocks are grouped by the UTC hour of their time, the bias is the test's mean
 masked fraction less the calibration's, both weighted by blocks, and
 \(\sigma\) is the standard deviation of the calibration's hourly fractions at

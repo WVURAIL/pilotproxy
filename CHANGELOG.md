@@ -5,7 +5,7 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
-- `test-bundle` accepts a masked fraction when `|bias| < std`, the rule of the dissertation's BAO test. Frames are
+- `test-bundle` accepts a masked fraction when `|bias| <= std`, the criterion of the dissertation's BAO test. Frames are
   grouped by the UTC hour of their time. The bias is the test's mean masked fraction less the calibration's, both
   weighted by frames, and `std` is the standard deviation of the calibration's hourly fractions at the same word.
   The rule applies to each channel at the word the stage applies and to the control at the control word, over its

@@ -18,10 +18,10 @@ one assignment at its receiver frequency ID:
   channel's calibrated profile whenever the mask is on, so the channel is
   compiled at the word the stage applies (`v3_word` under v3,
   `cfar_multiplier_q16` otherwise). At the reject word 1 it is `reject_all`.
-  At any other word it is a finite threshold in `require_fine_freq_ids`,
-  masked at least at the null false-alarm rate; `expected_masked_fraction` is
-  `1 - null_quantile` when the word is the default word. The channel is listed
-  under `no_pilot_freq_ids`, and its profile must be calibrated. The 2026-10-12
+  At any other word it is a finite threshold in `require_fine_freq_ids`. The
+  channel is listed under `no_pilot_freq_ids`. While its profile is still
+  `pending_campaign` it reaches no mask, so the channel is also listed in
+  `pending_freq_ids`, as a pending deployed channel is. The 2026-10-12
   decisions write this reason as `pilot not seen`. `calibrate-bundle`'s
   `pilot not seen in the calibration captures` is a different reason, a run that
   never showed the pilot, and is `reject_all`.
@@ -157,5 +157,6 @@ owner must approve activation. No review output changes a live configuration.
 
 `tests/core/test_operating_policy.py` compiles the frozen decisions in
 `tests/data/threshold_decisions_2026-10-12.json` on the CHIME
-receiver profile. Eight channels go to the permanent mask, channel 19 goes to
-its bundle word, and fourteen go to their words.
+receiver profile. Eight channels go to the permanent mask, and channel 19 and
+fourteen others are pending until the bundle is calibrated; then channel 19
+goes to its bundle word and the fourteen to their words.

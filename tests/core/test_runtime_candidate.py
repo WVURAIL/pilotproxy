@@ -144,9 +144,10 @@ def test_candidate_lists_a_no_pilot_channel_which_the_policy_decides_at_its_bund
     write(case["plan_path"], case["plan"])
     report = build_archive_candidate(case["plan_path"], case["output"])
     assert report["no_pilot_channels"] == [14] and report["permanent_mask_channels"] == []
-    # the candidate leaves channel 14 pending, so the policy has no word to compile it at
-    with pytest.raises(ValueError, match="must be calibrated"):
-        op.analyze_policy(policy_plan(case, case["output"] / "bundle"))
+    # the candidate leaves channel 14 pending, so the policy lists it as pending
+    policy = op.analyze_policy(policy_plan(case, case["output"] / "bundle"))
+    assert policy["no_pilot_freq_ids"] == policy["pending_freq_ids"] == [844]
+    assert not policy["deployment_configuration_complete"]
 
 
 @pytest.mark.parametrize("field,value,match", [

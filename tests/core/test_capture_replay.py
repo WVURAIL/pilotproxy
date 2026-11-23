@@ -427,11 +427,16 @@ def test_v3_replay_checks_the_stat_and_exports_the_applied_decision(tmp_path):
 
 
 def test_v3_flagged_and_kept_frames_match(tmp_path):
-    report = replay.replay_capture(make_plan(tmp_path, decision_version=V3, valid_only=True))["replay.json"]
+    plan = make_plan(tmp_path, decision_version=V3, valid_only=True)
+    report = replay.replay_capture(plan)["replay.json"]
     assert report["status"] == "matched"
     bound = [row for row in report["comparisons"] if row["receiver_channel_id"] == 2408]
     assert [row["expected_decision"] for row in bound] == [1, 0]
     assert all(row["recorded_mask"] == 0 and row["mask_matches"] and row["stat_matches"] for row in bound)
+    # the default word keeps both blocks, so the flag comes from the power-limit word
+    calibration = read(plan.parent / "bundle/pilot_profiles.json")["profiles"][0]["fine_calibration"]
+    pairs = [tuple(map(int, row["expected_stat"])) for row in bound]
+    assert [fine_keep_v3(n, d, calibration["cfar_multiplier_q16"]) for n, d in pairs] == [1, 1]
 
 
 @pytest.mark.parametrize(("block", "freq_index", "column"), ((0, 0, 0), (0, 0, 1), (1, 1, 1)))

@@ -96,6 +96,11 @@ as `[F,3]` little-endian uint64 values. A stat frame contains the pairs
 `[n_peak, d_rho]` as `[F,2]` little-endian uint64 values, with array name
 `dtv_stat` and dimension names `F` and `S`. The pinned commit predates
 `dtv_stat`, so a stat frame follows the layout of the mask and power frames.
+Every Kotekan build that writes `dtv_stat` also has the int64
+`time_downsampling_fpga` of kotekan#1787 and a leading `T` axis of length 1 on
+each product (kotekan#1840). The reader refuses that metadata, so it cannot
+yet replay a recorded v3 capture. The v3 checks run on captures in the pinned
+layout, such as the synthetic example.
 The FPGA sequence of a mask, power or stat frame is that of the first voltage
 sample in the block, and its downsampling is the input downsampling times the
 block length. The replay expects the frame

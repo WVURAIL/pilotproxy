@@ -1185,6 +1185,17 @@ def _validate_receiver_channel_ids(
             field=field,
             errors=errors,
         )
+    if receiver_channel_id_namespace is None:
+        # DtvRfiMask maps v3 words by receiver_channel_id, and Kotekan refuses a v3 row without a namespace
+        v3_rows = [index for index, row in enumerate(profiles)
+                   if isinstance(row, dict) and isinstance(row.get("fine_calibration"), dict)
+                   and row["fine_calibration"].get("decision_version") == FINE_DECISION_V3_VERSION]
+        if v3_rows:
+            _add_error(
+                errors,
+                "pilot_profiles.receiver_channel_id_namespace",
+                f"profile rows {v3_rows} carry fine_decision_v3, which needs a receiver_channel_id_namespace",
+            )
     for index, row in enumerate(profiles):
         if not isinstance(row, dict):
             continue

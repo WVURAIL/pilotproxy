@@ -5,6 +5,12 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- `test-bundle` checks each channel's masked fraction at the word the stage applies: for a v3 channel with a
+  power-limit word, that word (`v3_word`), against the interval `calibrate-bundle` now also records at it
+  (`applied_masked_interval`). It used to test the default word only, so a qualified BAO word had no
+  out-of-sample test. A report without the interval fails the check and asks for a recalibration.
+- Bundle validation refuses fine_decision_v3 rows when `receiver_channel_id_namespace` is null, as Kotekan does
+  at startup (DtvRfiMask maps v3 words by receiver_channel_id).
 - `calibrate-bundle` takes an optional night site, `"default_word": {"night": {"latitude_deg": ...,
   "longitude_deg_east": ...}}`, and then sets the control word over the control frames recorded with the Sun below
   the horizon there (`sun.py`), as CHIME's 21 cm analyses use the data. In the day the Sun is common to every input

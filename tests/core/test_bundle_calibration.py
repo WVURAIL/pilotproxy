@@ -878,6 +878,21 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
             for p in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
     assert fine[35]["power_limit_multiplier_q16"] == tested["word"]
     assert fine[35]["cfar_multiplier_q16"] == channel["word_q16"]
+    # test-bundle tests the word the stage applies, against the interval calibration gave at that word
+    assert tested["word"] != channel["word_q16"] and "applied_masked_interval" in channel
+    result = run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])
+    check = next(c for c in result["checks"] if c["check"] == "masked fraction on channel 35")
+    assert "at the power-limit word" in check["detail"]
+    low, high = channel["applied_masked_interval"]
+    assert f"calibration gave {low:.3f} to {high:.3f}" in check["detail"]
+    # a report from before this interval existed cannot test the power-limit word
+    report_path = tmp_path / "bundle.report.json"
+    stale = json.loads(report_path.read_text())
+    del stale["channels"]["35"]["applied_masked_interval"]
+    report_path.write_text(json.dumps(stale))
+    check = next(c for c in run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=plans["test_path"])["checks"]
+                 if c["check"] == "masked fraction on channel 35")
+    assert not check["passed"] and "recalibrate" in check["detail"]
     # a channel with no passing word carries no power-limit word, so it is decided at its default word
     assert "power_limit_multiplier_q16" not in fine[29]
 
@@ -1165,3 +1180,18 @@ def test_v3_process_run_summary_reports_the_control_word(plans, tmp_path):
     assert rows[35]["word_source"] == "control word x scale" and rows[35]["scale"] > 0
     text = (out / "summary.md").read_text()
     assert "Control word eta" in text and "| Scale |" in text and "knee or the floor" not in text
+
+
+def test_v3_rows_need_a_receiver_namespace():
+    from pilot_proxy.runtime_bundle import _validate_receiver_channel_ids
+
+    def errors_for(version):
+        rows = [dict(physical_channel=29, receiver_channel_id_namespace=None,
+                     fine_calibration=dict(decision_version=version))]
+        errors = []
+        _validate_receiver_channel_ids(profiles=rows, receiver_channel_id_namespace=None, errors=errors)
+        return [e["message"] for e in errors]
+
+    # Kotekan maps v3 words by receiver_channel_id and refuses such a bundle, so validation refuses it first
+    assert any("needs a receiver_channel_id_namespace" in m for m in errors_for("fine_decision_v3"))
+    assert errors_for("fine_decision_v2") == []

@@ -149,7 +149,7 @@ Each check prints PASS or FAIL, and the exit status is 1 on any failure.
 | Every bound channel has values | A pending channel stops the instance at its first frame |
 | Test data differ from calibration data | A word tested on its own data proves nothing |
 | Every frame decided on each channel | A v3 frame whose median reference is zero, or a v1/v2 frame with too few reference bins, has no decision |
-| Masked fraction on each channel | The word masks other captures as it masked the calibration captures |
+| Masked fraction on each channel | The word the stage applies (the BAO word where set) masks other captures as it masked the calibration captures |
 | False alarms on the control | The control word gives the rate it claims. A test plan without a control fails |
 
 Kotekan's `tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh` tests the code, and `test-bundle` tests the numbers. Both are needed after a change to the detector core.

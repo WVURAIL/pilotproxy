@@ -33,6 +33,7 @@ from pilot_proxy.fine_decision import (
     decision_functions,
     pack_bulk_mask,
     v3_geometry,
+    v3_word,
 )
 from pilot_proxy.fxfft import fine_power_fx
 from pilot_proxy.json_utils import write_json_strict
@@ -888,6 +889,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 word, word_source = knee, "knee"
             masked = float(np.sum(weights[seen[supported] > word]))
             intervals = bootstrap_captures(seen[supported], captures[supported], word)
+            if limited is not None and limited[0] is not None and limited[0] != word:
+                # Kotekan and the relay apply the power-limit word, so test-bundle tests it against this interval
+                intervals["applied_masked_interval"] = bootstrap_captures(
+                    seen[supported], captures[supported], int(limited[0]))["masked_interval"]
             note = f"Word from {word_source}, {'control word' if v3 else 'floor'} from {source}."
             if limited is not None:
                 note += f" Power-limit word from {limited[1]}." if limited[0] is not None else f" No power-limit word ({limited[1]})."
@@ -1020,13 +1025,23 @@ def test_bundle(*, bundle_dir: Path, plan_path: Path, output_json: Path | None =
             check(f"masked fraction on channel {channel}", False,
                   "calibration had no captures of this channel, so it predicts no masked fraction")
             continue
-        hits = int(np.count_nonzero(words[valid] > fine_cal["cfar_multiplier_q16"]))
+        # the word the stage applies: a v3 channel's power-limit word where calibration wrote one
+        applied = (v3_word(fine_cal) if fine_cal["decision_version"] == FINE_DECISION_V3_VERSION
+                   else int(fine_cal["cfar_multiplier_q16"]))
+        limit_word = applied != int(fine_cal["cfar_multiplier_q16"])
+        key = "applied_masked_interval" if limit_word else "masked_interval"
+        if key not in predicted[str(channel)]:
+            check(f"masked fraction on channel {channel}", False,
+                  "calibration predicts no masked fraction at the power-limit word the stage applies; recalibrate")
+            continue
+        hits = int(np.count_nonzero(words[valid] > applied))
         trials = int(valid.sum())
-        low, high = predicted[str(channel)]["masked_interval"]
+        low, high = predicted[str(channel)][key]
         # consistent if the count could come from a rate inside the calibration interval
         agrees = binomial_upper_tail(hits, trials, high) >= MIN_TAIL and binomial_lower_tail(hits, trials, low) >= MIN_TAIL
         check(f"masked fraction on channel {channel}", agrees,
-              f"masked {hits / trials:.3f}, calibration gave {low:.3f} to {high:.3f}")
+              f"masked {hits / trials:.3f} at the {'power-limit' if limit_word else 'default'} word, "
+              f"calibration gave {low:.3f} to {high:.3f}")
 
     record = calibration.get("control")
     if plan.get("control") and record:

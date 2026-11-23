@@ -675,8 +675,9 @@ power-limit threshold, a channel with no passing word holds the floor.
 \code{pilot-proxy test-bundle} then checks the bundle on other captures:
 structure and digests, values on every bound channel, no shared captures with
 calibration (by path, or by identity for a copy or another layout of the same data), a decision on every frame of each channel (a valid rank under v1
-and v2, a nonzero median under v3), the masked fraction against the
-calibration interval, and the false-alarm count on the control.
+and v2, a nonzero median under v3), the masked fraction at the word
+\code{DtvRfiMask} applies against the calibration interval at that word, and
+the false-alarm count on the control.
 
 %=====================================================================
 \section{Design Choices}
@@ -1228,7 +1229,7 @@ Decision arithmetic & \code{tests/core/test_fine_decision.py} against a \code{fr
 Fused kernel & Threaded CPU emulation of the device code, one pthread per CUDA thread, bit-identical for noise, an injected pilot, a wrapped anchor, a degenerate bulk and an unbound tap. On the GPU: \code{tests/kernel/test_fused_fine_gpu.py} and \code{tests/kernel/test_fused_mask_gpu.py}, including last-block determinism over 20 repeats.\\ \hline
 Kernel matrix & \(K\) = 64 and 128, scalar and DP4A, weight placements, 32/64/128 threads, restricted grids (\code{tests/kernel/test_kernel_matrix_gpu.py}).\\ \hline
 C ABI & \code{cuda/tests/} with the CPU reference (\code{make -C cuda test}).\\ \hline
-Bundles & \code{tests/core/test_runtime_bundle.py}, \code{tests/core/test_bundle_calibration.py}; \code{validate-runtime-weight-bundle}; \code{test-bundle} on held-out captures.\\ \hline
+Bundles & \code{tests/core/test_runtime_bundle.py}, \code{tests/core/test_bundle_calibration.py}, \code{tests/core/test_bundle_cli_workflow.py}; \code{validate-runtime-weight-bundle}; \code{test-bundle} on held-out captures.\\ \hline
 Placement & Synthesized pilot and reference tones over channels 14--36, Nyquist zone, edge and DC (\code{tests/core/test_chord_tone_injection.py}, \code{tests/core/test_atsc_channels.py}).\\ \hline
 Kotekan & \code{tests/test_pilotproxy_integration.py} against integer CPU references; \code{tests/test_dtv_rfi_mask.py} for visibilities and counts across ring wrap; \code{tests/boost/test_DtvRfiMask.cpp}; \code{tests/ci-scripts/pilotproxy/run_pilotproxy_tests.sh}; the production-geometry soak with 2048 inputs (\code{docs/sphinx/dev/dev_pilotproxy_chime.rst}).\\ \hline
 Archive run & The gates of \code{docs/VALIDATION_GATES.md}: clean source, full test tree, CPU reference, pinned library digest, real-file and resume gates.\\ \hline
@@ -1281,8 +1282,8 @@ them (\code{CHIME_DERIVED.md}).
         tests the control word on the control and the masked fractions.
   \item The power-limit word is in-sample, and its corrections use an
         assumed normalization from the RFIsher table. \code{test-bundle} tests
-        the default word on held-out captures, never the BAO word that
-        \code{DtvRfiMask} applies.
+        the masked fraction at the BAO word on held-out captures, not the
+        power limit the word was chosen to meet.
 \end{itemize}
 
 %=====================================================================

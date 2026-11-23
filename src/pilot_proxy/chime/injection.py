@@ -8,12 +8,16 @@ and the recovered pilot excess is shown to track the injected amplitude.
 
 The injection is performed in the file's own integer domain. On-disk baseband
 is offset-binary 4+4-bit uint8 with components spanning exactly [-8, 7], and
-the archive reader and the injection share one format module. The integer
-components are decoded, the float tone is added, and the sum is rounded and
-clipped to [-8, 7]. A zero-amplitude pass is therefore byte-identical to the
-source in every case, even for components at -8, which a symmetric +/-7
-quantizer would corrupt. Every injected delta is exact apart from saturation,
-and the clipped samples are counted and reported.
+the archive reader and the injection share one format module. The data are
+already integers, so rounding integer + tone would add round(tone): nothing
+below 0.5 LSB and a staircase above it. Each component instead gets the dithered
+tone floor(tone + U), with U uniform on [0, 1) from the seeded generator, and the
+sum is clipped to [-8, 7]. The mean delta is the tone at any amplitude. The
+dither adds at most 1/4 LSB^2 of quantization variance per component, and each
+manifest entry records that variance and the realized tone amplitude. A
+zero-amplitude pass is byte-identical to the source in every case, even for
+components at -8, which a symmetric +/-7 quantizer would corrupt. The clipped
+samples are counted and reported.
 
 Files are copied whole, and only the ``baseband`` dataset is rewritten in
 place. Sibling datasets, attributes and the ``*_<freq_id>.h5`` names that the
@@ -227,6 +231,8 @@ def _inject_tone_copy(
             "clip_count": 0,
             "clip_fraction": 0.0,
             "rms_lsb_per_component": None,
+            "realized_amplitude_lsb": 0.0,
+            "dither_variance_lsb2_per_component": 0.0,
             "byte_identical_to_source": True,
         }
 
@@ -248,12 +254,18 @@ def _inject_tone_copy(
         ) * n + phases[np.newaxis, :]
         tone_re = float(amplitude_lsb) * np.cos(angle)
         tone_im = float(amplitude_lsb) * np.sin(angle)
-        # The sum (integer + tone) is rounded, as in a physical quantizer, so
-        # for a = 0 the original integers are returned exactly.
+        # Dithered requantization: floor(tone + U) has mean tone, so a tone
+        # below 0.5 LSB is injected too. The draws follow the phases, so a seed
+        # fixes the whole output.
+        delta_re = np.floor(tone_re + rng.random(tone_re.shape))
+        delta_im = np.floor(tone_im + rng.random(tone_im.shape))
+        frac_re = tone_re - np.floor(tone_re)
+        frac_im = tone_im - np.floor(tone_im)
+        dither_variance = float((frac_re * (1 - frac_re) + frac_im * (1 - frac_im)).mean() / 2.0)
         # Saturate in the floating-point domain before converting to integers;
         # a finite tone can exceed the range of int64.
-        new_re = np.round(real + tone_re)
-        new_im = np.round(imag + tone_im)
+        new_re = real + delta_re
+        new_im = imag + delta_im
         clipped = (
             (new_re < COMPONENT_MIN)
             | (new_re > COMPONENT_MAX)
@@ -264,6 +276,11 @@ def _inject_tone_copy(
         new_re = np.clip(new_re, COMPONENT_MIN, COMPONENT_MAX).astype(np.int32)
         new_im = np.clip(new_im, COMPONENT_MIN, COMPONENT_MAX).astype(np.int32)
         handle[BASEBAND_DATASET][...] = _encode_components(new_re, new_im)
+        # The written delta projected on the unit tone, after saturation.
+        unit_re, unit_im = np.cos(angle), np.sin(angle)
+        written_re, written_im = new_re - real, new_im - imag
+        realized = float(np.hypot((written_re * unit_re + written_im * unit_im).mean(),
+                                  (written_im * unit_re - written_re * unit_im).mean()))
 
     verify_injection_preserves_siblings(source_path, output_path)
     return {
@@ -279,6 +296,8 @@ def _inject_tone_copy(
         "clip_count": clip_count,
         "clip_fraction": clip_count / float(n_time * n_feeds),
         "rms_lsb_per_component": rms,
+        "realized_amplitude_lsb": realized,
+        "dither_variance_lsb2_per_component": dither_variance,
         "byte_identical_to_source": False,
     }
 

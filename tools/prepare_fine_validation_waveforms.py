@@ -132,17 +132,12 @@ def run(args):
     probe = "import json,sys,numpy;from gnuradio import gr;print(json.dumps({'python':sys.version,'executable':sys.executable,'numpy':numpy.__version__,'gnuradio':gr.version()}))"
     runtime = json.loads(subprocess.check_output([args.gnuradio_python,'-c',probe],env=env,text=True))
     out.mkdir(parents=True)
-    snap = out/'source_snapshots/pilot-proxy'
+    # the generator runs from the checkout, whose sources are hashed here and checked again at the end
     sources = sorted((REPO/'src/pilot_proxy').rglob('*.py')) + [REPO/'tools/generate_settled_atsc.py',Path(__file__).resolve()]
-    snapshots = {}
-    for source in sources:
-        target = snap/source.relative_to(REPO)
-        target.parent.mkdir(parents=True,exist_ok=True)
-        shutil.copyfile(source,target)
-        snapshots[str(target.relative_to(out))] = sha(target)
+    hashes = {str(source.relative_to(REPO)):sha(source) for source in sources}
     plan = {'schema':'fine-waveform-preparation-plan-v1','frozen_utc':utc(),
             'generation_runtime':runtime,'qualification_runtime':{'python':sys.version,'executable':sys.executable,'numpy':np.__version__},
-            'source_snapshots_sha256':snapshots,
+            'source_sha256':hashes,
             'seed_recipe':'First4 SHA256 bytes big-endian of UTF8 fine-detector-validation-v1:payload:{index}, indices0..3. No retries.',
             'payload_seeds':seeds,'seed_exclusion_inputs':{str(exclusions):sha(exclusions),str(used_controls):sha(used_controls)},
             'seed_exclusion_counts':{'raw':len(forbidden),'effective63':len(forbidden63),'conservative32':len(forbidden32)},
@@ -162,7 +157,7 @@ def run(args):
     write(out/'plan.json',plan)
     print(json.dumps({'frozen_plan_sha256':sha(out/'plan.json'),'payload_seeds':seeds,'window_samples':WINDOW,'window_count':WINDOW_COUNT}),flush=True)
     results=[]
-    wrapper=snap/'tools/generate_settled_atsc.py'
+    wrapper=REPO/'tools/generate_settled_atsc.py'
     for index,seed in enumerate(seeds):
         dest=out/f'payload-{index:02d}'
         command=[sys.executable,str(wrapper),'--output-dir',str(dest),'--num-iq-samples',str(RETAINED),
@@ -193,8 +188,8 @@ def run(args):
         results.append(record)
         write(out/f'payload-{index:02d}-completion.json',record)
         print(json.dumps({'payload':index,'returncode':proc.returncode,'qualified':record['qualified']}),flush=True)
-    for name,expected in snapshots.items():
-        if sha(out/name)!=expected:
+    for name,expected in hashes.items():
+        if sha(REPO/name)!=expected:
             raise ValueError('Frozen generating source changed:'+name)
     summary={'schema':'fine-waveform-preparation-result-v1','completed_utc':utc(),'plan_sha256':sha(out/'plan.json'),
              'payloads':results,'all_four_qualified':all(row['qualified'] for row in results),

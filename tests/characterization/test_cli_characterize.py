@@ -1,4 +1,4 @@
-"""The characterize and products command groups dispatch to their modules."""
+"""The characterize command group dispatches to its modules."""
 from __future__ import annotations
 
 import json
@@ -10,19 +10,14 @@ from pilot_proxy import cli
 from pilot_proxy.characterization import run
 
 
-@pytest.mark.parametrize("group,steps", [
-    ("characterize", {"archive", "histogram-frames", "fine-histogram-frames", "score-cache"}),
-    ("products", {"check-archive"}),
-])
-def test_the_groups_name_their_steps(group, steps):
-    table = {"characterize": cli.CHARACTERIZE_STEPS, "products": cli.PRODUCTS_STEPS}[group]
-    assert set(table) == steps
+def test_the_group_names_its_steps():
+    table = cli.CHARACTERIZE_STEPS
+    assert set(table) == {"archive", "histogram-frames", "fine-histogram-frames", "score-cache"}
     for module in table.values():
         assert callable(getattr(__import__(module, fromlist=["main"]), "main"))
 
 
-@pytest.mark.parametrize("argv", [["characterize", "histogram-frames", "--help"], ["characterize", "archive", "--help"],
-                                  ["products", "check-archive", "--help"]])
+@pytest.mark.parametrize("argv", [["characterize", "histogram-frames", "--help"], ["characterize", "archive", "--help"]])
 def test_step_help_is_the_steps_own(argv, capsys):
     with pytest.raises(SystemExit) as exit_info:
         cli.main(argv)

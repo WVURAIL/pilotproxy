@@ -134,23 +134,23 @@ LITERALS = {
         lambda: P.instrument.freq_id_of_hz(P.marker_hz(P.frequency_plan.band("37")))),
     # instrument
     "chime_band_top": (
-        "pilot-proxy src/pilot_proxy/archive/chime_coarse.py:24 CHIME_BAND_TOP_HZ",
-        "replaced", 800_000_000.0, lambda: P.instrument.f0_hz),
+        "pilot-proxy src/pilot_proxy/archive/chime_coarse.py@89577ee:27 CHIME_BAND_TOP_HZ",
+        "deleted", 800_000_000.0, lambda: P.instrument.f0_hz),
     "chime_n_coarse": (
-        "pilot-proxy src/pilot_proxy/archive/chime_coarse.py:25 CHIME_N_COARSE_CHANNELS",
-        "replaced", 1024, lambda: P.instrument.n_channels),
+        "pilot-proxy src/pilot_proxy/archive/chime_coarse.py@89577ee:28 CHIME_N_COARSE_CHANNELS",
+        "deleted", 1024, lambda: P.instrument.n_channels),
     "chime_coarse_width": (
-        "pilot-proxy src/pilot_proxy/archive/chime_coarse.py:26 CHIME_COARSE_WIDTH_HZ",
-        "replaced", 400_000_000.0 / 1024, lambda: P.instrument.channel_width_hz),
+        "pilot-proxy src/pilot_proxy/archive/chime_coarse.py@89577ee:29 CHIME_COARSE_WIDTH_HZ",
+        "deleted", 400_000_000.0 / 1024, lambda: P.instrument.channel_width_hz),
     "chime_products_sample_rate": (
         "pilot-proxy src/pilot_proxy/chime/products.py:59 SAMPLE_RATE_HZ",
         "replaced", 390_625.0, lambda: P.instrument.sample_rate_hz),
     "drao_longitude": (
-        "pilot-proxy src/pilot_proxy/archive_health.py:81 DRAO_LONGITUDE_DEGREES_EAST",
-        "replaced", -119.6175, lambda: P.instrument.site_longitude_deg),
+        "pilot-proxy src/pilot_proxy/archive_health.py@89577ee:88 DRAO_LONGITUDE_DEGREES_EAST",
+        "deleted", -119.6175, lambda: P.instrument.site_longitude_deg),
     "local_time_zone": (
-        "pilot-proxy src/pilot_proxy/archive_health.py:82 LOCAL_CIVIL_TIME_ZONE",
-        "replaced", "America/Vancouver", lambda: P.instrument.local_time_zone),
+        "pilot-proxy src/pilot_proxy/archive_health.py@89577ee:89 LOCAL_CIVIL_TIME_ZONE",
+        "deleted", "America/Vancouver", lambda: P.instrument.local_time_zone),
     "hdf5_coarse_width": (
         "pilot-proxy src/pilot_proxy/chime/hdf5_input.py:26 CHIME_COARSE_WIDTH_HZ",
         "pinned", 400_000_000.0 / 1024.0, lambda: P.instrument.channel_width_hz),
@@ -158,8 +158,8 @@ LITERALS = {
         "pilot-proxy src/pilot_proxy/chime/hdf5_input.py:343,350 800_000_000.0",
         "pinned", 800_000_000.0, lambda: P.instrument.f0_hz),
     "detector_analyzer_default_top": (
-        "pilot-proxy src/pilot_proxy/archive/detector.py:504 800_000_000.0 (reset from the "
-        "instrument in begin())", "pinned", 800_000_000.0, lambda: P.instrument.f0_hz),
+        "pilot-proxy src/pilot_proxy/archive/detector.py@89577ee:716 800_000_000.0 (reset from the "
+        "instrument in begin())", "deleted", 800_000_000.0, lambda: P.instrument.f0_hz),
     "runner_sample_rate": (
         "pilot-proxy src/pilot_proxy/chime/runner.py@63e72e8:354 390_625.0",
         "deleted", 390_625.0, lambda: P.instrument.sample_rate_hz),
@@ -307,15 +307,6 @@ REPLACED_NAMES = {
         "ATSC_PILOT_OFFSET_HZ": "atsc_pilot_offset",
         "ATSC_UHF_CHANNEL_14_LOWER_EDGE_HZ": "atsc_ch14_lower_edge",
     },
-    "archive/chime_coarse.py": {
-        "CHIME_BAND_TOP_HZ": "chime_band_top",
-        "CHIME_N_COARSE_CHANNELS": "chime_n_coarse",
-        "CHIME_COARSE_WIDTH_HZ": "chime_coarse_width",
-    },
-    "archive_health.py": {
-        "DRAO_LONGITUDE_DEGREES_EAST": "drao_longitude",
-        "LOCAL_CIVIL_TIME_ZONE": "local_time_zone",
-    },
     "chime/products.py": {
         "SAMPLE_RATE_HZ": "chime_products_sample_rate",
     },
@@ -382,12 +373,10 @@ def test_screened_bands_follow_the_uhf_raster():
     assert (control.low_mhz, control.high_mhz, control.role) == (608.0, 614.0, "control")
 
 
-def test_hz_freq_id_helpers_agree_on_every_target():
-    from pilot_proxy.archive.chime_coarse import chime_freq_id_from_hz
-
+def test_every_marker_lies_in_its_target_channel():
     for band in P.frequency_plan.bands():
         marker = P.marker_hz(band)
-        assert chime_freq_id_from_hz(marker) == P.instrument.freq_id_of_hz(marker)
+        assert P.instrument.freq_id_of_hz(marker) == P.target_freq_id(band)
         centre = P.instrument.hz_of_freq_id(P.target_freq_id(band))
         assert abs(centre - marker) <= P.instrument.channel_width_hz / 2
 

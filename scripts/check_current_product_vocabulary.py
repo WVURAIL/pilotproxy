@@ -21,16 +21,13 @@ BANNED = {
 }
 CURRENT_FILES = (
     ROOT / "README.md",
-    ROOT / "INTEGRATION.md",
     ROOT / "Makefile",
     ROOT / "docs" / "PRODUCT_SCHEMA.md",
     ROOT / "docs" / "PER_PILOT_PRODUCT_FIELDS.md",
     ROOT / "docs" / "FINE_REDUCTION_PRODUCTS.md",
     ROOT / "docs" / "METHOD_SPEC.md",
     ROOT / "docs" / "DATA_PRODUCTS.md",
-    ROOT / "docs" / "CANFAR_RUNBOOK.md",
     ROOT / "docs" / "CHIME_RUN_WORKFLOW.md",
-    ROOT / "docs" / "VALIDATION_GATES.md",
     ROOT / "docs" / "OPERATOR_HANDOFF.md",
     ROOT / "docs" / "PilotProxy_DD001_Design_Document.tex",
     ROOT / "docs" / "PilotProxy_UG001_User_Guide.tex",

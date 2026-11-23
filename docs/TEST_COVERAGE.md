@@ -49,15 +49,11 @@ exercise CLI routing, invalid inputs, and schema compatibility.
 | PFB and receiver channelizer | `core/test_reference_pfb.py`, `core/test_reference_pfb_gpu.py` | Response, channel ordering, time and phase conventions, CPU/GPU agreement |
 | Coarse statistic, fine reductions, masks, and units | `core/test_mask_zero_point.py`, `core/test_dtv_units.py`, `core/test_fine_reduction.py`, `test_mask_boundary.py` | Norm correction, strict thresholds, zero references, exact retention, CFAR, dimensional conversions |
 | ATSC generation | `testbench/test_generate_atsc_signal.py`, `testbench/test_audit_atsc_signal.py` | Waveform quality checks; real GNU Radio requires its interpreter |
-| CHIME readers and adapters | `chime/test_chime_frame_adapter.py`, `archive/test_packed_reader.py`, `archive/test_reader_contract_guards.py` | Native offset-binary bytes, partial frames, metadata, bounded reading, malformed files |
-| Standalone detector and CHIME analysis | `core/test_detect_inputs.py`, `archive/test_detector_weight_manifest.py`, `chime/test_chime_reductions.py`, `chime/test_injection_recovery.py` | Input contracts, weight-manifest checks, frame results, and injection recovery |
-| Archive detector and real GPU scan | `archive/test_detector_analyzer_parity.py`, `archive/test_detector_resume.py`, `kernel/test_archive_scan_gpu.py` | Path from HDF5 through packing and CUDA to the retained products, independent CPU numerical check, actual SIGINT mid-file, checkpoint/resume equivalence and completed-run no-op |
-| Archive pipeline and publication | `archive/test_pipeline_regressions.py`, `archive/test_engine_safety.py`, `archive/test_publish_transaction.py`, `archive/test_quarantine_locking.py` | Worker failures, bounded staging, cleanup, ordered consumption, atomic publication, locks and quarantines |
-| Source transport, inventory, survey, and selection | `archive/test_cadc_offline.py`, `archive/test_datatrail_adapter.py`, `archive/test_transport_errors.py`, `archive/test_selection*.py`, `archive/test_survey*.py` | Replica contracts, retry classification, exact selections, persistent state, resume and crash windows |
-| Combining | `archive/test_combine*.py`, `archive/test_event_keyed_combine.py` | Event identity, duplicate refusal and frequency/time alignment |
+| CHIME readers and adapters | `chime/test_chime_frame_adapter.py` | Native offset-binary bytes, partial frames, metadata, bounded reading, malformed files |
+| Standalone detector and CHIME analysis | `core/test_detect_inputs.py`, `chime/test_chime_reductions.py` | Input contracts and frame results |
 | Threshold pipeline and deployment | `characterization/test_release.py`, `characterization/test_*histogram_frames_export.py`, `characterization/test_score_cache.py`, `characterization/test_threshold_rule.py`, `core/test_operating_policy.py` | Authenticated frame exports, exact weights and masks, conditional power scaling, required finite-bias limits, maximum retention under both power constraints, and runtime word binding |
-| Product health, provenance, schemas, and atomic I/O | `core/test_archive_health.py`, `core/test_product_contract.py`, `core/test_provenance.py`, `core/test_atomic_io.py`, `core/test_json_utils.py`, `chime/test_validate_products.py` | Health exclusions, support evidence, exact types, provenance, interrupted writes and validation failures |
-| CLI, environment, packaging, and GPU test gate | `test_cli*.py`, `test_setup_env_guard.py`, `archive/test_accel.py`, `archive/test_standalone_runtime.py`, `core/test_secondary_python.py`, `core/test_gpu_test_gate.py`, `../.github/workflows/tests.yml` | Argument routing, interrupt-handler restoration, dependency failures, isolated installs/resources and refusal of skipped hardware gates |
+| Product health, provenance, schemas, and atomic I/O | `core/test_archive_health.py`, `core/test_product_contract.py`, `core/test_provenance.py`, `core/test_atomic_io.py`, `core/test_json_utils.py`, `chime/test_validate_products.py` | Health-gate exclusions, exact types, provenance, interrupted writes and validation failures |
+| CLI, environment, packaging, and GPU test gate | `test_cli*.py`, `core/test_secondary_python.py`, `core/test_gpu_test_gate.py`, `../.github/workflows/tests.yml` | Argument routing, interrupt-handler restoration, dependency failures, isolated installs/resources and refusal of skipped hardware gates |
 
 The kernel matrix has 128 padded stream slots, with 16 or 32 active inputs and
 the remaining slots filled with zeros. This layout matches the padded Pathfinder
@@ -72,23 +68,7 @@ The hardware gate must also run
 on the deployment GPU. Compute Sanitizer and a sustained shadow run of the full
 pipeline remain as further hardware checks.
 
-The archive survey suite exercises inventory compatibility, provenance,
-collection restoration, path validation, interrupted writes, and recovery of
-exported views. Each of these is an executable assertion, and none is marked as
-an expected failure. Tests that require external artifacts skip when their
-inputs are absent, and a skipped test validates nothing about those artifacts.
-
-Inventory compatibility no longer requires the retired July exports. Inline
-fixtures check legacy filename reconstruction, canonical paths, and agreement
-with bare and prefixed replica resolution. The retained v5 inventory adds
-170,377 named-row checks and constructed legacy conversions; its replica tests
-check mixed bare/prefixed lists. These checks preserve the software contracts
-without requiring the July export's historical row or event counts.
-
-Large-product tests require `PILOT_PROXY_ATTACHED_PRODUCTS` or `PP_PER_PILOT`.
-The frozen-bundle rederivation also accepts `PILOT_PROXY_DEEP_BUNDLE_CHECK=1`,
-which makes it read the preserved source product archive. These checks validate
-existing artifacts and start no new campaign.
-
-The CHIME packed archive path keeps its native integer grid and uses no
-synthetic floating-point quantizer.
+Tests that require external artifacts skip when their inputs are absent, and a
+skipped test validates nothing about those artifacts. The archive survey, scan
+and combine suites were removed with the archive pipeline (tag
+`pre-purge-2026-11-23`).

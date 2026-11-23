@@ -4,7 +4,7 @@ The purpose of this page is to describe the standalone and CUDA workflows. A
 complete CPU-only installation and paper check are given in [the first-run
 walkthrough](FIRST_RUN.md). The environment and the clone below are created from
 any chosen workspace, and the remaining commands are run from the repository
-root. Archive runs follow the local or CANFAR runbook.
+root.
 
 ## Environment
 
@@ -15,7 +15,7 @@ Ubuntu installation, these come from `python3-venv`, or `PYTHON_BIN` can be set
 to a Miniconda or session Python that already provides them.
 
 ```bash
-export VENV_DIR="${VENV_DIR:-$HOME/.venvs/pilot-proxy-archive}"
+export VENV_DIR="${VENV_DIR:-$HOME/.venvs/pilot-proxy}"
 export PYTHON_BIN="${PYTHON_BIN:-python3}"
 mkdir -p "$(dirname "$VENV_DIR")"
 "$PYTHON_BIN" -m venv "$VENV_DIR"
@@ -28,16 +28,14 @@ into the virtual environment and never with a bare `pip`. On a managed GPU
 image, the option `--system-site-packages` at environment creation keeps the
 CuPy and CUDA packages of the image visible. An isolated CPU installation is
 made without it. The environment is activated in every new session, and it
-persists only when `VENV_DIR` is on persistent storage, such as `/arc` on
-CANFAR. The CANFAR runbook uses `setup_env.sh`, which creates and recreates its
-own configured environment, so that environment is never created by hand.
+persists only when `VENV_DIR` is on persistent storage.
 
 ---
 
 ## Fresh clone and minimal CPU-only smoke test
 
 This smoke test checks the Python package, the CLI entry point, and the
-reference detector metadata. It requires no GNU Radio, CADC credentials, CUDA,
+reference detector metadata. It requires no GNU Radio, CUDA,
 or CHIME HDF5 data, and it is run in the [environment](#environment) above
 before any standalone workflow.
 
@@ -69,8 +67,7 @@ make test-python
 The `test` extra installs `h5py`, Matplotlib, and PyYAML, because the checked-in
 tests exercise the CHIME HDF5 adapters, the plotting paths, and the YAML
 configuration loaders. These tests generate or mock their inputs and need no
-CHIME data files. CADC-backed checks are skipped when archive credentials are
-not available.
+CHIME data files.
 
 `make test` runs `test-kernel` before `test-python`, so it needs a CUDA build
 host. The driver and the compiler are checked first with:
@@ -87,8 +84,8 @@ target adds the CPU C/C++ reference checks, the profile and layout checks, and
 the runtime-bundle validation. It requires a C++ compiler but no GPU.
 
 The required GPU gate is `make test-gpu DETECTOR_WINDOW_SAMPLES=128`, which
-builds temporary K=64 and K=128 libraries and runs the archive interrupt and
-resume tests. A missing GPU prerequisite fails this gate. The component map, the
+builds temporary K=64 and K=128 libraries and runs the `tests/kernel` GPU
+suite. A missing GPU prerequisite fails this gate. The component map, the
 GNU Radio checks, and the remaining validation limits are in [test
 coverage](../docs/TEST_COVERAGE.md).
 
@@ -105,28 +102,19 @@ the operating documentation in these paths:
   workflows.
 - `src/pilot_proxy/testbench/` - GNU Radio ATSC generation, waveform audit,
   and the fine-detector validation campaign.
-- `src/pilot_proxy/archive/` - bounded inventory, staging, streaming, CHIME
-  sources and readers, the detector analyzer, scan, and combine support.
 - `weights/` - prebuilt ATSC reference detector weights for
   `detector_window_samples=128`, `num_weight_terms=3`,
   `skipped_guard_bins=1`, `reference_offset_bins=2`, physical channels 14-36,
   and 4+4 bit samples.
 - `configs/` - detector-core, receiver-profile, and stream-map JSON examples for
   standalone and integration workflows.
-- `scripts/setup_env.sh` - one-shot CANFAR archive setup script for the
-  integrated CHIME workflow.
-- `scripts/launch_gpu_session.py` - launch, reuse, or tear down a CANFAR CUDA GPU
-  notebook session (skaha / `canfar` client) for the detector path.
-- `INTEGRATION.md` - detailed standalone archive integration notes.
 - `docs/METHOD_SPEC.md` - equation-first method contract for CHIME products.
 - `docs/PRODUCT_SCHEMA.md` - the only supported per-pilot product contract.
 - `docs/PER_PILOT_PRODUCT_FIELDS.md` - detailed shared-field reference.
 - `docs/FINE_REDUCTION_PRODUCTS.md` - fine-measurement and diagnostic fields.
 - `docs/CHIME_RUN_WORKFLOW.md` - CHIME data contract, weight convention and
-  products of `chime-scan`, whose runs follow the local or CANFAR guide below.
+  run products.
 - `docs/DATA_PRODUCTS.md` - emitted file, array, and table definitions.
-- `docs/LOCAL_PROCESSING.md` - authoritative local WSL archive procedure.
-- `docs/CANFAR_RUNBOOK.md` - bounded CANFAR operating procedure.
 - `docs/OPERATOR_HANDOFF.md` - runtime-bundle and Kotekan handoff notes.
 - `docs/DESIGN_DECISIONS.md` - recorded detector and integration decisions.
 - `docs/PilotProxy_DD001_Design_Document.tex` - formal design document (build to PDF).
@@ -143,37 +131,6 @@ Built wheels contain the shipped receiver profiles, stream map, weight bank, and
 weight manifest. The CUDA shared library is architecture-specific and is not
 packaged. Before the GPU detector runs, the library is built from a source
 checkout and staged under `~/.cache/pilot_proxy/libpilotproxy.so`.
-
----
-
-## Setup for the CHIME / CANFAR workflow
-
-The integrated workflow uses this repository and the pinned archive client in
-`requirements/archive.txt`. The `scripts/setup_env.sh` script recreates a
-virtual environment and installs `.[archive,test]`. It checks the bundled
-source, reader, and analyzer classes directly. On a GPU node, it also requires
-`nvcc`, builds the CUDA kernel, and checks that the kernel loads. The script
-removes and recreates the target environment, so `VENV_DIR` must never point to
-an environment that needs to be preserved. The script refuses the home
-directory, the checkout, overlapping directories, and non-empty targets it does
-not own. A genuine virtual environment created by an older checkout is adopted
-on its first guarded rerun only with the explicit acknowledgement
-`PILOT_PROXY_ADOPT_LEGACY_VENV=1`. Later rebuilds use the durable ownership
-record beside the environment and can be retried after an interruption.
-
-The full procedure is in
-[docs/CANFAR_RUNBOOK.md](../docs/CANFAR_RUNBOOK.md#environment-setup).
-It gives the exact `setup_env.sh` invocation, a manual setup that does not
-recreate an environment, GPU-session launch, Harbor registry credentials,
-required inputs, and bounded run sequences. Integration-specific details are in
-[INTEGRATION.md](../INTEGRATION.md#setup).
-
-A manual installation in an active virtual environment uses:
-
-```bash
-python -m pip install -r requirements/archive.txt
-python -m pip install -e ".[archive,test]"
-```
 
 ---
 
@@ -268,7 +225,6 @@ each command that consumes it:
 
 ```bash
 pilot-proxy list-channels --weights-path weights/chime_dtv_weights_k128.bin
-pilot-proxy chime-scan --weights-path weights/chime_dtv_weights_k128.bin --help
 ```
 
 `list-channels` reports the reference placement for each physical channel.
@@ -331,13 +287,11 @@ capability with the decimal point removed:
 | 8.9 | 89 |
 | 9.0 | 90 |
 
-The Python GPU path uses CuPy. In the integrated CHIME/CANFAR workflow,
-`setup_env.sh` resolves CuPy through the bundled archive accelerator API. A
-standalone CUDA 12.x workflow installs it with
+The Python GPU path uses CuPy. A CUDA 12.x workflow installs it with
 `python -m pip install -e ".[cuda]"`. The `cuda` extra installs `cupy-cuda12x`, and a runtime other than
 CUDA 12.x needs the corresponding `cupy-cudaXXx` package.
 
-Both `setup_env.sh` and the `make` targets detect `SM` from the first GPU
+The `make` targets detect `SM` from the first GPU
 visible to `nvidia-smi`. `SM=<arch>` is passed only when detection fails or when
 cross-compiling for another architecture. The build records the architecture and
 kernel configuration in its build stamp. If either value changes, the next build
@@ -351,7 +305,7 @@ The kernel build requires the CUDA compiler, `nvcc`, on `PATH`:
 command -v nvcc && nvcc --version
 ```
 
-On some CANFAR CUDA images, `nvcc` is installed under `/usr/local/cuda/bin` but
+On some CUDA images, `nvcc` is installed under `/usr/local/cuda/bin` but
 that directory is not on `PATH`. If `command -v nvcc` returns a path such as
 `/usr/bin/nvcc`, `make build-kernel` is used without setting `NVCC`. Otherwise,
 the compiler is located with:
@@ -373,8 +327,8 @@ The compiler path can also be passed directly, since `cuda/Makefile` honors
 make build-kernel NVCC=/path/to/cuda/bin/nvcc
 ```
 
-If `nvcc` is absent, the build needs a CANFAR image that ships the CUDA toolkit,
-such as `skaha/astroml-cuda`, or an installed toolkit that matches the runtime.
+If `nvcc` is absent, the build needs an image that ships the CUDA toolkit, or an
+installed toolkit that matches the runtime.
 A runtime-only image may run CuPy while it still lacks the compiler needed for
 this kernel, and in that case `make test` and `make test-kernel` stop at the
 `nvcc` step. On a CPU-only host, `make test-python` and `make release-check` are
@@ -455,50 +409,15 @@ make test-kernel
 
 ---
 
-## CHIME archive workflow
+## CHIME archive scans
 
-To keep a fixed staging bound during an archive-scale run, we use
-`pilot-proxy chime-scan`. It runs the PilotProxy analyzer through the bundled
-archive engine, writes one product for each selected pilot with usable input,
-and attempts to combine those products into the canonical CHIME outputs. If no
-`(event, frame-in-file)` identity is common to every completed pilot, the
-per-pilot products are preserved, and stacking waits until a compatible channel
-subset is chosen with `pilot-proxy chime-combine`.
-
-The archive command sequence is:
-
-```bash
-pilot-proxy chime-survey --name chime-pilots --freq-ids <freq_ids>
-pilot-proxy chime-inventory --inventory-name chime-pilots
-pilot-proxy chime-scan --inventory-name chime-pilots --output-dir <detector_run>
-```
-
-Two constraints set how we run it. First, selection uses the CHIME `freq_id`
-coarse-channel namespace in place of ATSC physical-channel numbers. For
-`--source cadc-datatrail`, a scan without `--select` covers each `freq_id`
-present in the inventory, and the command prints that set before staging
-begins. `--select` restricts the set. The `--inventory` and `--inventory-name`
-flags also let `chime-scan` infer the archive source. The 23 `freq_id` values
-for the default pilot range of ATSC channels 14 through 36 are listed in
-[docs/CANFAR_RUNBOOK.md](../docs/CANFAR_RUNBOOK.md#selection-convention), and
-`844` is the single-channel smoke-test value for the pilot of ATSC channel 14.
-
-Second, `chime-scan` is the supported path. Downloads may run concurrently,
-while the analyzer still receives files in inventory order. The defaults are one
-worker and one staged file, and `--download-workers` and `--max-staged-files`
-raise the bounded prefetch depth.
-
-The following documents give the complete selection rules, local and
-CADC/CANFAR sequences, order constraint, and post-processing commands:
-
-- **Runtime settings:** [receiver profile](../configs/receiver_profiles/chime_dtv_fengine.json),
-  [detector core profile](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json),
-  [weight manifest](../weights/chime_dtv_weights_k128.bin.manifest.json), and
-  [product schema](PRODUCT_SCHEMA.md).
-- **[docs/VALIDATION_GATES.md](../docs/VALIDATION_GATES.md)** --- mandatory local launch gates.
-- **[docs/LOCAL_PROCESSING.md](../docs/LOCAL_PROCESSING.md)** --- measured local workstation profile and sole production command.
-- **[INTEGRATION.md](../INTEGRATION.md)** --- standalone archive integration contract.
-- **[docs/CANFAR_RUNBOOK.md](../docs/CANFAR_RUNBOOK.md)** --- alternate bounded remote workflow.
+The CHIME archive scans of record were made with an earlier release; the tag
+`pre-purge-2026-11-23` holds the survey, scan and combine code. The current
+package reads their per-pilot products (see [product schema](PRODUCT_SCHEMA.md)).
+The runtime settings are the
+[receiver profile](../configs/receiver_profiles/chime_dtv_fengine.json),
+[detector core profile](../configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json)
+and [weight manifest](../weights/chime_dtv_weights_k128.bin.manifest.json).
 
 ---
 
@@ -558,7 +477,6 @@ sudo apt-get install --no-install-recommends \
 ```
 
 Figures rendered with `PILOT_PROXY_USE_TEX=1` also require
-`dvipng cm-super ghostscript`. The tested CANFAR session images provide neither TeX nor root
-access, so the documentation is built on another host.
+`dvipng cm-super ghostscript`.
 
 ---

@@ -56,9 +56,9 @@ p_r_u64[:, 0] == fine_power_u64[:, r, :].sum(axis=1)      r = target, lower, upp
 p_ref_sum_u64 == p_ref_lower_u64 + p_ref_upper_u64
 ```
 
-This identity is enforced by the writer (`archive/detector.py`),
-`validate_current_product_identity`, `products/reader.py`, and
-`tools/audit_per_pilot.py`, and every derived coarse column must equal
+This identity is enforced by `products/reader.py` and
+`tools/audit_per_pilot.py` (the v6 writer, `archive/detector.py`, is at the tag
+`pre-purge-2026-11-23`), and every derived coarse column must equal
 `coarse_columns_from_fine(product)`. The coarse and fine measurements come
 from one spectrum. The active rejection policy is the coarse rule, and the fine
 threshold is a diagnostic. The padded fixed-point transform is gated by its

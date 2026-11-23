@@ -187,142 +187,6 @@ def _add_optional_arg(
         argv.extend([flag, str(value)])
 
 
-def _parse_chime_scan_set_options(values: Sequence[str] | None) -> dict[str, object]:
-    """Parse repeated --set key=value options for chime-scan analyzer_options."""
-    out: dict[str, object] = {}
-    for item in values or []:
-        if "=" not in item:
-            raise SystemExit(f"--set expects key=value, got {item!r}")
-        key, raw = item.split("=", 1)
-        key = key.strip()
-        text = raw.strip()
-        low = text.lower()
-        if low in {"true", "false"}:
-            value: object = low == "true"
-        elif low in {"none", "null"}:
-            value = None
-        else:
-            for cast in (int, float):
-                try:
-                    value = cast(text)
-                    break
-                except ValueError:
-                    pass
-            else:
-                value = text
-        if not key:
-            raise SystemExit(f"--set key may not be empty in {item!r}")
-        out[key] = value
-    return out
-
-
-def _cmd_chime_survey(args: argparse.Namespace) -> None:
-    from pilot_proxy.archive.commands import survey_chime
-
-    survey_chime(
-        out_dir=args.out,
-        name=args.name,
-        root=args.root,
-        scope=args.scope,
-        freq_ids=args.freq_ids,
-        include_outrigger=args.include_outrigger,
-        workers=args.workers,
-        re_enumerate=args.re_enumerate,
-        max_events=args.max_events,
-        empty_age_days=args.empty_age_days,
-        strict_completeness=args.strict_completeness,
-        dry_run=args.dry_run,
-        scopes_only=args.scopes_only,
-        match=args.match,
-        expand=args.expand,
-    )
-
-
-def _cmd_chime_inventory(args: argparse.Namespace) -> None:
-    from pilot_proxy.archive.commands import inspect_chime_inventory
-
-    inspect_chime_inventory(
-        source=args.source,
-        input_dir=args.input_dir,
-        inventory=args.inventory,
-        inventory_name=args.inventory_name,
-        source_root=args.source_root,
-        source_glob=args.source_glob,
-        source_freq_id_regex=args.source_freq_id_regex,
-        source_event_regex=args.source_event_regex,
-    )
-
-
-def _cmd_chime_combine(args: argparse.Namespace) -> None:
-    from pilot_proxy.archive.combine import (
-        combine_detector_products,
-        report_products,
-    )
-
-    if args.products:
-        paths = [Path(p) for p in args.products]
-    else:
-        paths = sorted(Path(args.work_dir).glob(args.glob))
-    missing = [str(p) for p in paths if not Path(p).exists()]
-    if missing:
-        raise SystemExit(f"chime-combine: missing product file(s): {missing}")
-    if not paths:
-        raise SystemExit(
-            f"chime-combine: no per-pilot products matched {args.glob!r} under "
-            f"{args.work_dir}"
-        )
-    if args.report:
-        print(report_products(paths))
-        return
-    if args.output_dir is None:
-        raise SystemExit("chime-combine: --output-dir is required (or use --report).")
-    drop_freq_ids = (
-        [int(x) for x in str(args.drop).split(",") if x.strip()]
-        if args.drop else None
-    )
-    outputs = combine_detector_products(
-        paths, args.output_dir, drop_freq_ids=drop_freq_ids)
-    print(f"Combined {len(paths)} pilot product(s) -> {args.output_dir}")
-    for label, path in outputs.items():
-        print(f"  {label}: {path}")
-
-
-def _cmd_audit_archive_health(args: argparse.Namespace) -> None:
-    from pilot_proxy.archive_health import main as archive_health_main
-
-    argv: list[str] = [
-        "--output-dir",
-        str(args.output_dir),
-        "--glob",
-        str(args.glob),
-        "--fine-chunk-rows",
-        str(args.fine_chunk_rows),
-    ]
-    if args.products_dir is not None:
-        argv.extend(["--products-dir", str(args.products_dir)])
-    else:
-        for product in args.products or []:
-            argv.extend(["--product", str(product)])
-    if args.no_plots:
-        argv.append("--no-plots")
-    if args.dissertation_style:
-        argv.append("--dissertation-style")
-    for flag, value in (
-        ("--product-archive", args.product_archive),
-        ("--inventory-archive", args.inventory_archive),
-        ("--kernel-library", args.kernel_library),
-        ("--source-repository", args.source_repository),
-        ("--expect-products", args.expect_products),
-        ("--expect-excluded-frames", args.expect_excluded_frames),
-        ("--expect-invalid-frames", args.expect_invalid_frames),
-        ("--expect-ceiling-frames", args.expect_ceiling_frames),
-    ):
-        _add_optional_arg(argv, flag, value)
-    for commit in args.source_commits:
-        argv.extend(["--source-commit", str(commit)])
-    raise SystemExit(archive_health_main(argv))
-
-
 def _cmd_chime_plot(args: argparse.Namespace) -> None:
     argv = ["--run-dir", str(args.run_dir)]
     if args.clean_figures:
@@ -337,47 +201,6 @@ def _cmd_validate_products(args: argparse.Namespace) -> None:
     ]
     _add_optional_arg(argv, "--output-json", args.output_json)
     _run_module("pilot_proxy.chime.validate_products", argv)
-
-
-def _cmd_chime_scan(args: argparse.Namespace) -> None:
-    from pilot_proxy.archive.scan import run_chime_scan
-    analyzer_options = _parse_chime_scan_set_options(args.set_option)
-    for key, value in {
-        "weights_path": args.weights_path,
-        "lib_path": args.lib_path,
-        "weight_coordinate_system": args.weight_coordinate_system,
-        "pilot_frequency_tolerance_hz": args.pilot_frequency_tolerance_hz,
-        "pilot_below_data_db": args.pilot_below_data_db,
-        "bin_enbw_hz": args.bin_enbw_hz,
-        "dtv_bandwidth_hz": args.dtv_bandwidth_hz,
-        "pilot_capture_efficiency": args.pilot_capture_efficiency,
-    }.items():
-        if value is not None:
-            analyzer_options[key] = value
-    run_chime_scan(
-        input_dir=args.input_dir,
-        output_dir=args.output_dir,
-        source=args.source,
-        analyzer=args.analyzer,
-        select=args.select,
-        instrument=args.instrument,
-        max_files=args.max_files,
-        max_chunks_per_file=args.max_chunks_per_file,
-        checkpoint_every=args.checkpoint_every,
-        stop_after_checkpoint=args.stop_after_checkpoint,
-        download_workers=args.download_workers,
-        max_staged_files=args.max_staged_files,
-        inventory=args.inventory,
-        inventory_name=args.inventory_name,
-        source_root=args.source_root,
-        work_dir=args.work_dir,
-        staging_dir=args.staging_dir,
-        source_glob=args.source_glob,
-        source_freq_id_regex=args.source_freq_id_regex,
-        source_event_regex=args.source_event_regex,
-        analyzer_options=analyzer_options,
-        allow_partial=args.allow_partial,
-    )
 
 
 def _cmd_check_layout(args: argparse.Namespace) -> None:
@@ -641,15 +464,14 @@ def _cmd_list_channels(args: argparse.Namespace) -> None:
     _print_adaptive_reference_diagnostics(layouts)
 
 
-# Steps of the characterize and products groups. Each step is a module
-# with its own ``main(argv)``, and the group passes the remaining arguments to it.
+# Steps of the characterize group. Each step is a module with its own
+# ``main(argv)``, and the group passes the remaining arguments to it.
 CHARACTERIZE_STEPS = {
     "archive": "pilot_proxy.characterization.run",
     "histogram-frames": "pilot_proxy.characterization.histogram_frames",
     "fine-histogram-frames": "pilot_proxy.detectors.narrowband_marker.fine_histogram_frames",
     "score-cache": "pilot_proxy.characterization.score_cache",
 }
-PRODUCTS_STEPS = {"check-archive": "pilot_proxy.products.acceptance"}
 
 
 def _cmd_step(steps: dict[str, str]):
@@ -1193,252 +1015,13 @@ def build_parser() -> argparse.ArgumentParser:
     validate_operating_policy.add_argument("--policy-dir", type=Path, required=True)
     validate_operating_policy.set_defaults(func=_cmd_validate_operating_policy)
 
-    chime_survey = _add_command(
-        "chime-survey",
-        "Build or resume a CHIME archive inventory.",
-    )
-    chime_survey.add_argument(
-        "--out",
-        type=Path,
-        default=None,
-        help="Explicit inventory output directory.",
-    )
-    chime_survey.add_argument(
-        "--name",
-        default=None,
-        help="Managed inventory name; defaults to CHIME plus the freq_id selection.",
-    )
-    chime_survey.add_argument(
-        "--root",
-        type=Path,
-        default=None,
-        help="Place a managed inventory under <root>/data/<name>.",
-    )
-    chime_survey.add_argument(
-        "--scope",
-        default=None,
-        help="Comma-separated archive scopes; defaults to the CHIME configuration.",
-    )
-    chime_survey.add_argument(
-        "--freq-ids",
-        default=None,
-        help="freq_id list, range, or 'all'.",
-    )
-    chime_survey.add_argument(
-        "--include-outrigger",
-        action="store_true",
-        help="Keep events carrying an outrigger label.",
-    )
-    chime_survey.add_argument(
-        "--workers",
-        type=int,
-        default=12,
-        help="Parallel archive probes per event.",
-    )
-    chime_survey.add_argument(
-        "--re-enumerate",
-        action="store_true",
-        help="Refresh the event cache before probing files.",
-    )
-    chime_survey.add_argument(
-        "--max-events",
-        type=int,
-        default=None,
-        help="Process at most this many pending events during this run.",
-    )
-    chime_survey.add_argument(
-        "--empty-age-days",
-        type=int,
-        default=None,
-        help="Accept a dated empty event immediately once it reaches this age.",
-    )
-    chime_survey.add_argument(
-        "--strict-completeness",
-        action="store_true",
-        help="Exit nonzero while unresolved or terminal omissions remain.",
-    )
-    chime_survey.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the target without contacting the archive.",
-    )
-    chime_survey.add_argument(
-        "--scopes-only",
-        action="store_true",
-        help="Walk the scopes and write a dataset map instead of an inventory.",
-    )
-    chime_survey.add_argument(
-        "--match",
-        default=None,
-        help="Comma-separated terms a dataset name must all contain "
-             "(--scopes-only).",
-    )
-    chime_survey.add_argument(
-        "--expand",
-        action="store_true",
-        help="Open each matched dataset one level and map its children "
-             "(--scopes-only).",
-    )
-    chime_survey.set_defaults(func=_cmd_chime_survey)
-
-    chime_inventory = _add_command(
-        "chime-inventory",
-        "Summarize a CHIME inventory or local directory without staging data.",
-    )
-    chime_inventory.add_argument(
-        "--source",
-        choices=["local", "cadc-datatrail"],
-        default=None,
-        help="Data source; inferred from inventory options when omitted.",
-    )
-    chime_inventory.add_argument(
-        "--input-dir",
-        type=Path,
-        default=None,
-        help="Local directory of CHIME baseband files.",
-    )
-    chime_inventory.add_argument(
-        "--inventory",
-        type=Path,
-        default=None,
-        help="Explicit inventory.jsonl path.",
-    )
-    chime_inventory.add_argument(
-        "--inventory-name",
-        "--name",
-        dest="inventory_name",
-        default=None,
-        help="Managed inventory name.",
-    )
-    chime_inventory.add_argument(
-        "--source-root",
-        type=Path,
-        default=None,
-        help="Local input directory or a root containing data/<name>.",
-    )
-    chime_inventory.add_argument("--source-glob", default="*.h5")
-    chime_inventory.add_argument("--source-freq-id-regex", default=None)
-    chime_inventory.add_argument("--source-event-regex", default=None)
-    chime_inventory.set_defaults(func=_cmd_chime_inventory)
-
-    chime_combine = _add_command(
-        "chime-combine",
-        "Stack per-pilot detector products (work-dir <freq_id>.npz files) "
-        "into the canonical combined products. Same combine the scan runs at "
-        "completion; usable mid-survey on completed channels or snapshots.",
-    )
-    combine_source = chime_combine.add_mutually_exclusive_group(required=True)
-    combine_source.add_argument("--work-dir", type=Path, default=None,
-                                help="Directory of per-pilot <freq_id>.npz products.")
-    combine_source.add_argument("--product", type=Path, action="append",
-                                dest="products", default=None,
-                                help="Explicit per-pilot product path (repeatable).")
-    chime_combine.add_argument("--glob", default="*.npz",
-                               help="Product glob under --work-dir.")
-    chime_combine.add_argument("--output-dir", type=Path, default=None,
-                               help="Where the combined canonical products are "
-                                    "written. Required unless --report.")
-    chime_combine.add_argument("--drop", default=None,
-                               help="Comma-separated freq_ids to exclude from "
-                                    "the stack (subset selection; see --report "
-                                    "for the drop-curve).")
-    chime_combine.add_argument("--report", action="store_true",
-                               help="Print the event-presence report for the "
-                                    "given products (per-pilot event counts, "
-                                    "presence histogram, all-pilot "
-                                    "intersection, greedy drop-curve) and "
-                                    "exit without combining.")
-    chime_combine.set_defaults(func=_cmd_chime_combine)
-
-    archive_health = _add_command(
-        "audit-archive-health",
-        "Apply the versioned fail-closed frame-health gate to archived "
-        "per-pilot NPZs; separate the predicted fine acquisition neighborhood "
-        "from evidence-gated measured epoch anchors; emit a summary, reason-"
-        "coded exclusion ledger, exactly supported spectrum correction, and "
-        "optional diagnostics.",
-    )
-    archive_source = archive_health.add_mutually_exclusive_group(required=True)
-    archive_source.add_argument(
-        "--products-dir",
-        type=Path,
-        help="Directory containing archived per-pilot NPZ products.",
-    )
-    archive_source.add_argument(
-        "--product",
-        type=Path,
-        action="append",
-        dest="products",
-        help="Explicit per-pilot NPZ path (repeatable).",
-    )
-    archive_health.add_argument("--glob", default="*.npz")
-    archive_health.add_argument("--output-dir", type=Path, required=True)
-    archive_health.add_argument("--fine-chunk-rows", type=int, default=4096)
-    archive_health.add_argument(
-        "--no-plots",
-        action="store_true",
-        help="Write only machine-readable evidence and corrected spectra.",
-    )
-    archive_health.add_argument(
-        "--dissertation-style",
-        action="store_true",
-        help=(
-            "Fail closed unless LaTeX can embed Latin Modern/T1 fonts in the "
-            "PDF diagnostics. Use this for dissertation release assets."
-        ),
-    )
-    archive_health.add_argument(
-        "--product-archive",
-        type=Path,
-        default=None,
-        help="Optional ZIP whose NPZ member hashes must reproduce the inputs.",
-    )
-    archive_health.add_argument(
-        "--inventory-archive",
-        type=Path,
-        default=None,
-        help="Optional inventory ZIP used to verify source-unit coverage.",
-    )
-    archive_health.add_argument(
-        "--kernel-library",
-        type=Path,
-        default=None,
-        help="Optional kernel binary whose SHA-256 must match every product.",
-    )
-    archive_health.add_argument(
-        "--source-repository",
-        type=Path,
-        default=None,
-        help=(
-            "Optional Git repository used to reproduce product-recorded "
-            "package source hashes. Requires --source-commit."
-        ),
-    )
-    archive_health.add_argument(
-        "--source-commit",
-        action="append",
-        dest="source_commits",
-        default=[],
-        help=(
-            "Clean Git commit whose src/pilot_proxy tree must reproduce a "
-            "source hash recorded by the products (repeatable)."
-        ),
-    )
-    archive_health.add_argument("--expect-products", type=int, default=None)
-    archive_health.add_argument(
-        "--expect-excluded-frames", type=int, default=None
-    )
-    archive_health.add_argument("--expect-invalid-frames", type=int, default=None)
-    archive_health.add_argument("--expect-ceiling-frames", type=int, default=None)
-    archive_health.set_defaults(func=_cmd_audit_archive_health)
-
     chime_plot = _add_command(
         "chime-plot",
         "Regenerate the diagnostic figures for a completed CHIME run "
         "directory.",
     )
     chime_plot.add_argument("--run-dir", type=Path, required=True,
-                            help="Run directory written by chime-scan.")
+                            help="CHIME run directory.")
     chime_plot.add_argument(
         "--clean-figures",
         action="store_true",
@@ -1452,176 +1035,21 @@ def build_parser() -> argparse.ArgumentParser:
         "schema.",
     )
     validate_products.add_argument("--run-dir", type=Path, required=True,
-                                   help="Run directory written by chime-scan.")
+                                   help="CHIME run directory.")
     validate_products.add_argument("--output-json", type=Path, default=None,
                                    help="Also write the validation report as "
                                         "JSON.")
     validate_products.set_defaults(func=_cmd_validate_products)
 
-    chime_scan = _add_command(
-        "chime-scan",
-        "Stream CHIME data through the archive engine (one resumable "
-        "product per pilot), then combine compatible products.",
+    characterize = _add_command(
+        "characterize",
+        "Archive characterization: the release the frame exports are keyed to (archive), "
+        "the frame exports and the score cache.",
     )
-    chime_scan.add_argument("--input-dir", type=Path, default=None,
-                            help="Directory of CHIME baseband .h5 files (required for "
-                                 "--source local).")
-    chime_scan.add_argument("--output-dir", type=Path, required=True,
-                            help="Where the combined canonical products are written.")
-    chime_scan.add_argument("--inventory", type=Path, default=None,
-                            help="Explicit CADC inventory.jsonl path for "
-                                 "--source cadc-datatrail. Overrides --inventory-name.")
-    chime_scan.add_argument(
-        "--inventory-name", "--name",
-        dest="inventory_name",
-        default=None,
-        help="Named archive inventory, resolved through the managed "
-             "inventory root (default ~/datatrawl-inventories/<name>/). With "
-             "--source-root <r>, resolves as <r>/data/<name>/inventory.jsonl.",
-    )
-    chime_scan.add_argument("--source-root", type=Path, default=None,
-                            help="For --source local, an input directory alternative "
-                                 "to --input-dir. For --source cadc-datatrail, the "
-                                 "chime-survey root used with --inventory-name.")
-    chime_scan.add_argument("--source", choices=["local", "cadc-datatrail"],
-                            default=None,
-                            help="local: files on disk; cadc-datatrail: stream from "
-                                 "the archive. Default: inferred; cadc-datatrail "
-                                 "when --inventory/--inventory-name is given, local "
-                                 "otherwise (--source-root alone serves both sources "
-                                 "and keeps the local default). An explicit value "
-                                 "that conflicts with the flags is an error.")
-    chime_scan.add_argument("--analyzer", choices=["pilot-proxy-detector"],
-                            default="pilot-proxy-detector")
-    chime_scan.add_argument("--select", default=None,
-                            help="CHIME freq_id (coarse-channel indices): '844', "
-                                 "'829,844', or ranges '829-844'. This is the "
-                                 "namespace the CADC file inventory and on-disk "
-                                 "filenames key on; one freq_id is one pilot, and "
-                                 "the scan always fans out to one product per "
-                                 "freq_id. For --source cadc-datatrail this "
-                                 "defaults to every freq_id the inventory "
-                                 "contains (the resolved set is printed before "
-                                 "any staging); pass --select to scan a subset. "
-                                 "Required for --source local, which has no "
-                                 "inventory to derive the scope from. For the "
-                                 "DTV 14-36 pilot set, see README.md or INTEGRATION.md.")
-    chime_scan.add_argument("--instrument", default="chime")
-    chime_scan.add_argument(
-        "--max-files",
-        type=int,
-        default=None,
-        help=(
-            "Cap files processed per pilot (smoke tests). If the cap leaves "
-            "enumerated units incomplete, also pass --allow-partial."
-        ),
-    )
-    chime_scan.add_argument(
-        "--max-chunks-per-file",
-        type=int,
-        default=None,
-        help=(
-            "Cap chunks processed per file (smoke tests). If the cap leaves "
-            "coverage incomplete, also pass --allow-partial."
-        ),
-    )
-    chime_scan.add_argument(
-        "--allow-partial",
-        action="store_true",
-        help=(
-            "Permit products with unmatched, failed, or quarantined input units; "
-            "completeness remains recorded."
-        ),
-    )
-    chime_scan.add_argument("--checkpoint-every", type=int, default=None,
-                            help="Write the per-pilot product every N files "
-                                 "(default 50); resume reloads the last checkpoint. "
-                                 "Lower = less redo after a kill, more I/O.")
-    chime_scan.add_argument(
-        "--stop-after-checkpoint",
-        action="store_true",
-        help=(
-            "Stop cleanly after the next durable per-pilot checkpoint. "
-            "Resume later without this one-shot control."
-        ),
-    )
-    chime_scan.add_argument(
-        "--download-workers",
-        type=int,
-        default=1,
-        help="Concurrent source fetches (default 1). Analysis stays in source order.",
-    )
-    chime_scan.add_argument(
-        "--max-staged-files",
-        type=int,
-        default=1,
-        help=(
-            "Maximum in-progress and completed staged files (default 1; must "
-            "be at least --download-workers)."
-        ),
-    )
-    chime_scan.add_argument("--work-dir", type=Path, default=None,
-                            help="Per-pilot products + staging (default: <output-dir>/_per_pilot).")
-    chime_scan.add_argument(
-        "--staging-dir",
-        type=Path,
-        default=None,
-        help="Temporary raw files (default: <work-dir>/_staging).",
-    )
-    chime_scan.add_argument("--source-glob", default="*.h5")
-    chime_scan.add_argument(
-        "--source-freq-id-regex",
-        default=None,
-        help=(
-            "Filename->freq_id regex (one capturing group) for --source local, "
-            "stored as source_freq_id_regex for the local archive source. "
-            "An explicit --set 'source_freq_id_regex=...' takes precedence "
-            "over this flag."
-        ),
-    )
-    chime_scan.add_argument(
-        "--source-event-regex",
-        default=None,
-        help=(
-            "Filename->event regex for --source local. An explicit --set "
-            "'source_event_regex=...' takes precedence over this flag."
-        ),
-    )
-    chime_scan.add_argument("--weights-path", type=Path, default=None)
-    chime_scan.add_argument("--lib-path", type=Path, default=None)
-    chime_scan.add_argument(
-        "--weight-coordinate-system",
-        type=normalize_weight_coordinate_system,
-        choices=[WEIGHT_COORDINATE_POST_NYQUIST_ZONE, WEIGHT_COORDINATE_RAW_INPUT],
-        default=None,
-    )
-    chime_scan.add_argument(
-        "--pilot-frequency-tolerance-hz",
-        type=float,
-        default=DEFAULT_PILOT_FREQUENCY_TOLERANCE_HZ,
-    )
-    chime_scan.add_argument("--pilot-below-data-db", type=float, default=None)
-    chime_scan.add_argument("--bin-enbw-hz", type=float, default=None)
-    chime_scan.add_argument("--dtv-bandwidth-hz", type=float, default=None)
-    chime_scan.add_argument("--pilot-capture-efficiency", type=float, default=None)
-    chime_scan.add_argument(
-        "--set", dest="set_option", action="append", default=[], metavar="KEY=VALUE",
-        help="Analyzer option passed through to chime-scan ctx.options; repeat as needed.",
-    )
-    chime_scan.set_defaults(func=_cmd_chime_scan)
-
-    for name, summary, steps in (
-        ("characterize", "Archive characterization: the release the frame exports are keyed to (archive), "
-                         "the frame exports and the score cache.",
-         CHARACTERIZE_STEPS),
-        ("products", "Per-pilot product checks: the archive cohort acceptance gate (check-archive).",
-         PRODUCTS_STEPS),
-    ):
-        group = _add_command(name, summary)
-        group.add_argument("step", choices=sorted(steps))
-        group.add_argument("step_args", nargs=argparse.REMAINDER,
-                           help="arguments of the step (see pilot-proxy %s STEP --help)" % name)
-        group.set_defaults(func=_cmd_step(steps))
+    characterize.add_argument("step", choices=sorted(CHARACTERIZE_STEPS))
+    characterize.add_argument("step_args", nargs=argparse.REMAINDER,
+                              help="arguments of the step (see pilot-proxy characterize STEP --help)")
+    characterize.set_defaults(func=_cmd_step(CHARACTERIZE_STEPS))
 
     return parser
 
@@ -1629,7 +1057,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     # A detached launcher (``nohup cmd &`` in a script) starts the process
     # with SIGINT ignored, and Python keeps that setting. An interrupt is then
-    # lost and a scan cannot be asked to drain, so the default handler is
+    # lost and a long run cannot be stopped, so the default handler is
     # restored here.
     if signal.getsignal(signal.SIGINT) is signal.SIG_IGN:
         signal.signal(signal.SIGINT, signal.default_int_handler)

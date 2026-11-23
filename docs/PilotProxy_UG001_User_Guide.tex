@@ -178,7 +178,6 @@ The guide does not explain why the detector is built the way it is. The design r
 \code{docs/RUNNING_THE_DETECTOR.md} & The loop in short form, with the commands.\\ \hline
 \code{docs/CHANNEL_OPERATING_POLICY.md} & Compiling threshold decisions into the permanent-mask and required-fine lists.\\ \hline
 \code{docs/OPERATOR_HANDOFF.md} & Shadow acceptance before the mask is applied.\\ \hline
-\code{docs/CANFAR_RUNBOOK.md}, \code{INTEGRATION.md} & The CHIME archive scan (\code{chime-scan}) on CANFAR.\\ \hline
 \code{docs/USAGE.md} & Installation details, CUDA toolchain, and the standalone testbench.\\ \hline
 Kotekan \code{docs/sphinx/user/modules/pilotproxy.rst} & The Kotekan stages, their configuration and fatal errors.\\ \hline
 Kotekan \code{docs/sphinx/dev/dev_pilotproxy_chime.rst} & The CHIME geometry and its validation tests.\\ \hline
@@ -276,13 +275,13 @@ python -m pip install -e ".[test]"          # tests, h5py, matplotlib
 python -m pip install -e ".[n2,plot]"       # read dtv_fine_powers files, plot spectrograms
 pilot-proxy --help
 \end{lstlisting}
-The \code{n2} extra installs \code{h5py} and \code{hdf5plugin}, which are needed to read the \code{dtv_fine_powers} files of a run. The \code{plot} extra installs Matplotlib for \code{run-spectrogram} and \code{process-run}. The \code{cuda} extra installs \code{cupy-cuda12x} for the GPU paths of the standalone testbench and the archive scan.
+The \code{n2} extra installs \code{h5py} and \code{hdf5plugin}, which are needed to read the \code{dtv_fine_powers} files of a run. The \code{plot} extra installs Matplotlib for \code{run-spectrogram} and \code{process-run}. The \code{cuda} extra installs \code{cupy-cuda12x} for the GPU paths of the standalone testbench.
 
 The bundle commands (\code{export-runtime-weight-bundle}, \code{validate-runtime-weight-bundle}, \code{calibrate-bundle}, \code{test-bundle}, \code{qualify-bundle}, \code{plan-run}, \code{process-run}, \code{run-spectrogram} and \code{run-scores}) compute the fine powers and words with the Python integer path. They need no GPU. A day of fine powers of one channel takes about 13 GB of memory during calibration, because one channel is held at a time.
 
 \subsection{CUDA Kernel}
 
-The CUDA library is needed only for the standalone testbench and the archive scan. On a GPU host:
+The CUDA library is needed only for the standalone testbench and the GPU tests. On a GPU host:
 \begin{lstlisting}[style=shell]
 make build-kernel   # SM detected from nvidia-smi; SM=<arch> overrides it
 \end{lstlisting}
@@ -1031,7 +1030,7 @@ pilot-proxy export-runtime-weight-bundle \
 \end{lstlisting}
 Every profile of such a bundle is \code{pending_campaign}, so Kotekan stops when it binds one. The Kotekan integration tests copy such a bundle and fill it with synthetic thresholds.
 
-The CHIME archive scan (\code{chime-survey}, \code{chime-scan}, \code{chime-combine}) reduces archived baseband data on CANFAR. It is described in \code{INTEGRATION.md} and \code{docs/CANFAR_RUNBOOK.md}.
+The CHIME archive scans of record were made with an earlier release; the tag \code{pre-purge-2026-11-23} holds the code.
 
 %======================================================================
 \section{Troubleshooting}

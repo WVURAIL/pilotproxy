@@ -112,6 +112,9 @@ def main():
     checks["period_16384"] = bool((mask["period"] == FRAME_SAMPLES).all())
     freqs = list(mask["freqs"] or [])
     checks["frequency_list_length"] = len(freqs) == F
+    if not checks["equal_frame_counts"]:
+        sys.exit(f"dtv_mask, dtv_powers and dtv_fine_support have {n}, {len(powers['seq'])} and "
+                 f"{len(support['seq'])} frames: {checks}")
     M = np.array([np.frombuffer(p, np.int8) for p in mask["payload"]]).reshape(n, F)
     P = np.array([np.frombuffer(p, "<u8") for p in powers["payload"]]).reshape(n, F, 3)
     S = np.array([np.frombuffer(p, "<i4") for p in support["payload"]]).reshape(n, F, 2)
@@ -119,17 +122,21 @@ def main():
     profiles = json.load(open(os.path.join(a.bundle_dir, "pilot_profiles.json")))["profiles"]
     if any(p["fine_calibration"].get("decision_version") == "fine_decision_v3" for p in profiles):
         # only a v3 bundle needs pilot-proxy
-        from pilot_proxy.fine_decision import masks_from_stat
+        from pilot_proxy.fine_decision import MISSING_ROW, masks_from_stat
         from pilot_proxy.run_files import v3_words
 
         v3 = v3_words(a.bundle_dir, mask_control=True)
         stat = read_product(a.run_dir, "stat", F * 2 * 8)
         checks["stat_frames_match"] = len(stat["seq"]) == n and bool((stat["seq"] == mask["seq"]).all())
+        if not checks["stat_frames_match"]:
+            sys.exit(f"dtv_stat has {len(stat['seq'])} frames, dtv_mask {n}, or their sequences differ: {checks}")
         T = np.array([np.frombuffer(p, "<u8") for p in stat["payload"]]).reshape(n, F, 2)
         for i, f in enumerate(mask["freqs"] or []):
             if f in v3:
                 M[:, i] = masks_from_stat(T[:, i], v3[f])
-                S[:, i, 0] = np.where(T[:, i, 1] > 0, 1, 0)
+                # 1 decided, 0 no decision (d_rho = 0), -1 not evaluated ([0, 2^64 - 1]) or missing
+                d = T[:, i, 1]
+                S[:, i, 0] = np.where(d == np.uint64(MISSING_ROW), -1, np.where(d > 0, 1, 0))
     bundle = json.load(open(os.path.join(a.bundle_dir, "pilot_profiles.json")))
     prof = {r["receiver_channel_id"]: r for r in bundle["profiles"]}
     bound_cols = {f: i for i, f in enumerate(freqs) if f in prof}
@@ -146,7 +153,7 @@ def main():
     for f, i in bound_cols.items():
         ch = prof[f]["physical_channel"]
         valid = S[:, i, 0] == 1
-        m = M[:, i].astype(bool)
+        m = M[:, i] == 1      # -1, a missing row, is not a masked frame
         ratio = 2.0 * P[:, i, 0] / np.maximum(P[:, i, 1] + P[:, i, 2], 1)
         null = prof[f]["null_power_ratio"]
         runs = runs_of(m)

@@ -22,12 +22,14 @@ and for the pilot frequencies, the two states are compared on:
             whole holds no data and has no power.
 
 Writes compare.json and, with matplotlib, one figure per frequency: the power and the fractions
-against time, and the power against the masked share in each state. Needs numpy, h5py and hdf5plugin.
+against time, and the power against the masked share in each state. The exit status is 1 when a
+check fails or a frequency could not be compared. Needs numpy, h5py and hdf5plugin.
 """
 import argparse
 import glob
 import json
 import os
+import sys
 from collections import defaultdict
 
 import h5py
@@ -72,7 +74,10 @@ def read_masks(dtv_dir, words=None):
     for freq_id, chunks in parts.items():
         seqs = np.concatenate([c[0] for c in chunks])
         order = np.argsort(seqs, kind="stable")
-        masks[freq_id] = (seqs[order], np.concatenate([c[1] for c in chunks])[order])
+        seqs, rows = seqs[order], np.concatenate([c[1] for c in chunks])[order]
+        # a block read twice, from a per-window file and a combined file of the same window, counts once
+        first = np.r_[True, seqs[1:] != seqs[:-1]]
+        masks[freq_id] = (seqs[first], rows[first])
     return masks
 
 
@@ -244,18 +249,21 @@ def main():
     parser.add_argument("--output-dir")
     args = parser.parse_args()
 
-    masks = read_masks(args.dtv_dir, v3_words(args.bundle_dir, mask_control=args.mask_control))
+    words = v3_words(args.bundle_dir, mask_control=args.mask_control)
+    masks = read_masks(args.dtv_dir, words)
     if not masks:
         raise SystemExit(f"no dtv_mask files in {args.dtv_dir}")
+    # the bundle's v3 channels are compared too, so one recorded without dtv_stat is reported, not left out
     freq_ids = args.freq_ids or sorted({f for f, (_, m) in masks.items() if np.any(m == 1)}
-                                       | (set(PILOTS) & set(masks)))
+                                       | (set(PILOTS) & set(masks)) | set(words))
     vis = read_vis(args.vis_dir, freq_ids)
     reports = {}
     if args.output_dir:
         os.makedirs(args.output_dir, exist_ok=True)
     for freq_id in freq_ids:
         if freq_id not in vis or freq_id not in masks:
-            reports[str(freq_id)] = dict(error="no visibilities" if freq_id not in vis else "no dtv_mask rows")
+            missing = "dtv_stat" if freq_id in words else "dtv_mask"
+            reports[str(freq_id)] = dict(error="no visibilities" if freq_id not in vis else f"no {missing} rows")
             continue
         report, flags = compare(freq_id, vis[freq_id], *masks[freq_id])
         reports[str(freq_id)] = report
@@ -274,6 +282,10 @@ def main():
     if args.output_dir:
         with open(os.path.join(args.output_dir, "compare.json"), "w") as out:
             json.dump(dict(dtv_dir=args.dtv_dir, vis_dir=args.vis_dir, frequencies=reports), out, indent=1)
+    # a check with no bins to test is None, which is not a failure
+    failed = sorted(f for f, r in reports.items() if "error" in r or False in r["checks"].values())
+    if failed:
+        sys.exit(f"failed or not compared: freq_ids {', '.join(failed)}")
 
 
 if __name__ == "__main__":

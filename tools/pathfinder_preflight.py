@@ -7,8 +7,8 @@ Run it on a host that reaches the nodes' REST port (cx50). On each X-engine it c
 built from an allowed branch (develop or chord by default: chord is develop plus the CHORD changes, and
 neither has a DTV subtraction or GNSS correlator), that
 no cudaDtvSubtract runs, that the detector writes fine powers and that the node sends the mask, powers,
-fine support and fine powers (dtv_calibration_mode); it prints the mask and recording switches. On recv
-it checks that the same four products are received and written. A node that does not answer, or answers
+fine support and fine powers (dtv_calibration_mode), and dtv_stat when its detector writes it (kotekan#1924);
+it prints the mask and recording switches. On recv it checks that the same products are received and written. A node that does not answer, or answers
 without a running pipeline (a 404 on /config), fails its check, and the others are still checked. Exit
 status 0 when every check passes. Standard library only.
 """
@@ -54,6 +54,7 @@ def main():
     parser.add_argument("--port", type=int, default=12048)
     args = parser.parse_args()
     failed = []
+    stat_nodes = []      # nodes whose detector writes dtv_stat, which recv must then receive and write
 
     def check(ok, text):
         print(("PASS " if ok else "FAIL ") + text)
@@ -73,9 +74,14 @@ def main():
         detector = [c for c in gpu_commands(config, "run_dtv_detector") if c.get("name") == "cudaPilotProxyDetector"]
         check(bool(detector) and all(c.get("dtv_fine_powers_name") for c in detector),
               f"{host}: the detector writes fine powers")
+        # a fine_decision_v3 channel is decided from dtv_stat alone (kotekan#1924), so a detector that
+        # writes it must also send it
+        products = PRODUCTS + (("stat",) if any(c.get("dtv_stat_name") for c in detector) else ())
+        if "stat" in products:
+            stat_nodes.append(host)
         sent = sorted(config.get("send_dtv", {}))
-        check(all(any(name.startswith(p) for name in sent) for p in PRODUCTS),
-              f"{host}: sends {', '.join(PRODUCTS)} (send_dtv has {sent})")
+        check(all(any(name.startswith(p) for name in sent) for p in products),
+              f"{host}: sends {', '.join(products)} (send_dtv has {sent})")
         subtract = [c for c in gpu_commands(config, "run_send_voltage") if c.get("name") == "cudaDtvSubtract"]
         check(not subtract, f"{host}: no DTV subtraction runs")
         print(f"     switches: mask {config.get('dtv_mask_enabled', {}).get('enabled')}, "
@@ -89,8 +95,9 @@ def main():
         recv, version = replies
         print(f"== {args.recv} ({version.get('kotekan_version')})")
         received, written = sorted(recv.get("buffer_recv_dtv", {})), sorted(recv.get("write_dtv", {}))
-        check(all(p in received for p in PRODUCTS), f"{args.recv}: receives {', '.join(PRODUCTS)} (has {received})")
-        check(all(p in written for p in PRODUCTS), f"{args.recv}: writes {', '.join(PRODUCTS)} (has {written})")
+        products = PRODUCTS + (("stat",) if stat_nodes else ())
+        check(all(p in received for p in products), f"{args.recv}: receives {', '.join(products)} (has {received})")
+        check(all(p in written for p in products), f"{args.recv}: writes {', '.join(products)} (has {written})")
     print("ready" if not failed else f"NOT ready: {len(failed)} check(s) failed")
     sys.exit(1 if failed else 0)
 

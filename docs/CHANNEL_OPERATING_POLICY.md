@@ -24,8 +24,12 @@ one assignment at its receiver frequency ID:
 
 A decision for a channel other than 14 to 36 (the channel 37 control band) is
 not a DTV decision. The review lists it under `not_in_policy` and assigns
-nothing to it. The compiler changes no decision and infers no threshold of its
-own.
+nothing to it. The exception is channel 37 when its bundle profile has status
+`control`. Its decision must then be `useful`, and the profile must carry the
+decided word as the word the stage applies, by the rule of check 4 below. It is
+compiled as the noise control and listed in `control_freq_ids`, which the
+detector evaluates and records and the consumer never applies. The compiler
+changes no decision and infers no threshold of its own.
 
 ## Commands
 

@@ -11,7 +11,8 @@ decisions becomes one assignment at its receiver frequency ID:
   applies: ``cfar_multiplier_q16`` under v1 and v2. Under
   ``fine_decision_v3`` it is ``power_limit_multiplier_q16`` where
   calibration wrote one, and ``cfar_multiplier_q16``, the default word,
-  otherwise (``v3_word``). Until the profile carries it, the channel is
+  otherwise (``v3_word``). A calibrated profile at another word is
+  refused. While the profile is still ``pending_campaign``, the channel is
   pending and the configuration is incomplete.
 - not deployed (outcome ``not useful``): ``reject_all``, the permanent mask,
   with the rule's reason. A channel whose reason is in ``UNMASKED_REASONS``

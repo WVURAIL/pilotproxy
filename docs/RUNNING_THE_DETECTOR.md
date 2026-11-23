@@ -218,7 +218,7 @@ choco set cx dtv_write_enabled '{"enabled": true}'
 
 The recv node writes the products under `/mnt/cs00/data/dtv/acq_<start time>/`, with a new directory for each recv start, and one file for each half and window of about 43 s. The `coarse_freq` and `fpga_seq_num` attributes identify the half and the window, and `fpga_seq_time_nsec` gives the window's time. The tools order the files by that time, so a recording split by restarts, even one that resets `fpga_seq_num`, keeps its order. A block missing from a window is a row of 0xFF bytes, and the reader skips it.
 
-After a run, one command does every step below and writes a summary of each channel to `summary.md`: the scale of its default word (v3) or its anchor (v1 and v2), the word and its source, the pilot share, the masked percent on each part under the new bundle, the longest masked stretch, and the test result. It also writes the plans, the bundle and its report, the test record, and the spectrograms of each part:
+After a run, one command does every step below and writes a summary of each channel to `summary.md`: the scale of its default word (v3) or its anchor (v1 and v2), the word and its source, the pilot share, the masked percent on each part under the new bundle, the longest masked stretch, and the test result. Under v3 the word, its eta and its source are those of the power-limit word where calibration wrote one, and the scale is still that of the default word. It also writes the plans, the bundle and its report, the test record, and the spectrograms of each part:
 
 ```bash
 pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_fine_powers*.h5" --epoch "Pathfinder commissioning" --calibration-share 0.25 --output-dir run1

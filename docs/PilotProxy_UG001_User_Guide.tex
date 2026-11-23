@@ -821,7 +821,7 @@ pilot-proxy process-run --bundle-dir bundle --run "/mnt/cs00/data/dtv/acq_*/dtv_
   \item \code{bundle/}, \code{bundle.report.json}, and \code{bundle.decisions.json} for a power-limit run;
   \item \code{test.json}, the \code{test-bundle} record;
   \item \code{spectrograms/calibrate/} and \code{spectrograms/test/}, with one \code{spectrogram_ch<NN>.pdf} and \code{.npz} per channel and \code{masked_summary.csv};
-  \item \code{summary.md} and \code{summary.json}, with the masks at the word \code{DtvRfiMask} applies: per channel the scale (v3) or the anchor (v1 and v2), the word and its source, the pilot share, the masked percent of each part, the longest masked stretch, and the test result. Under v3 the word is the BAO word where calibration set one, and the default word otherwise.
+  \item \code{summary.md} and \code{summary.json}, with the masks at the word \code{DtvRfiMask} applies: per channel the scale (v3) or the anchor (v1 and v2), the word and its source, the pilot share, the masked percent of each part, the longest masked stretch, and the test result. Under v3 the word, its eta and its source are those of the BAO word where calibration set one, and of the default word otherwise. The scale is that of the default word.
 \end{itemize}
 
 \subsection{Step 4: Deploy}

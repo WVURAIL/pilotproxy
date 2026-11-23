@@ -1,6 +1,8 @@
 """Calibrate a bundle from synthetic captures, then test it."""
 import csv
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import h5py
@@ -1315,6 +1317,73 @@ def test_v3_process_run_summary_reports_the_control_word(plans, tmp_path):
     assert rows[35]["word_source"] == "control word x scale" and rows[35]["scale"] > 0
     text = (out / "summary.md").read_text()
     assert "Control word eta" in text and "| Scale |" in text and "knee or the floor" not in text
+
+
+def _calibration_length_tool():
+    spec = importlib.util.spec_from_file_location("calibration_length", ROOT / "tools" / "calibration_length.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, monkeypatch, capsys):
+    tool = _calibration_length_tool()
+    captures = plans["calibrate"]["control"]["captures"]
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    # 64 captures that record no time, so 43 s apart: 34 start in the first 0.4 h, and 17 in the first 0.2 h.
+    # 8 frames each, so 17 captures hold the 100 control frames of a 1% word
+    rng = np.random.default_rng(3)
+    (tmp_path / "run").mkdir()
+    for index in range(64):
+        data = rng.gamma(44, 1e6 / 44, size=(8, 2, 3, 256))
+        data[:, 0, 0, 140] *= 1 + 299 * (index % 2)  # channel 35's pilot in every other capture
+        with h5py.File(tmp_path / "run" / f"run_{index:02d}.h5", "w") as handle:
+            handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
+            handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
+            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 8 * 8192
+    (tmp_path / "limits.json").write_text(json.dumps({"35": 1e-3}))
+    table = ROOT / "src/pilot_proxy/characterization/data/tolerance_table.json"
+    limit = dict(table=str(table), limits="limits.json", curvature={"35": [0.0, 0.0]}, margin=0.0)
+    (tmp_path / "limit.json").write_text(json.dumps(limit))
+    (tmp_path / "limit10.json").write_text(json.dumps(dict(limit, min_captures=10)))
+
+    def study(name, *extra):
+        monkeypatch.setattr(sys, "argv", ["calibration_length.py", "--bundle-dir", str(tmp_path / "bundle"), "--run",
+                                          str(tmp_path / "run" / "run_*.h5"), "--hours", "0.2", "0.4",
+                                          "--output-dir", str(tmp_path / name), *extra])
+        tool.main()
+        return json.loads((tmp_path / name / "length.json").read_text()), capsys.readouterr().out
+
+    # v1 keeps its floor, anchors and knee gate
+    rows, out = study("v1", "--decision-version", "fine_decision_v1")
+    assert [(r["hours"], r["captures"], r["test_captures"]) for r in rows] == [(0.4, 34, 30)]
+    assert "0.2 h: 17 captures to calibrate and 47 to test, each needs 30; skipped" in out
+    assert f"floor {rows[0]['floor_eta']};" in out and all("anchor" in c for c in rows[0]["channels"].values())
+
+    # v3 gives the default word and the power-limit word, with no floor or anchor
+    rows, out = study("v3", "--decision-version", "fine_decision_v3", "--power-limit", str(tmp_path / "limit.json"))
+    report = json.loads((tmp_path / "v3" / "0.4h" / "bundle.report.json").read_text())["channels"]
+    assert [r["hours"] for r in rows] == [0.4] and "floor_eta" not in rows[0] and "floor" not in out
+    assert "each needs 30 (a power-limit word keeps at least 30); skipped" in out
+    channels = rows[0]["channels"]
+    assert not any("anchor" in c for c in channels.values())
+    assert channels["35"]["eta"] == round(report["35"]["word_q16"] / 65536, 4)
+    assert channels["35"]["source"] == "control word x scale"
+    assert channels["35"]["power_limit_eta"] == round(report["35"]["power_limit_word_q16"] / 65536, 4)
+    assert f"power-limit word {channels['35']['power_limit_eta']}" in out
+    assert "power_limit_eta" not in channels["37"]
+
+    # the gate is the power-limit plan's min_captures
+    rows, out = study("v3-10", "--decision-version", "fine_decision_v3", "--power-limit", str(tmp_path / "limit10.json"))
+    assert [r["hours"] for r in rows] == [0.2, 0.4] and "skipped" not in out
+
+    # a channel with no passing word has none
+    none = tool.summary(dict(decision_version="fine_decision_v3", channels={"29": dict(
+        eta=1.5, word_source="control word x scale", masked_fraction=0.01, power_limit_word_q16=None,
+        power_limit_word_source="none, power limit: pilot not seen")}))
+    assert tool.describe(none) == "ch29 1.5 (control word x scale, 1.0%, no power-limit word)"
 
 
 def test_v3_rows_need_a_receiver_namespace():

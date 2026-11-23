@@ -8,15 +8,20 @@
 With --hours, each length L calibrates on the captures of the first L hours of the recording and tests the
 words on the rest. The table gives the floor, each channel's word and its source, the masked fraction on the
 calibration part, the failed test checks, and the share of captures to give process-run as
---calibration-share for the same split. The calibration length is the shortest L whose words still pass.
+--calibration-share for the same split. Under fine decision v3 the table has no floor or anchor. Each
+channel's word is its default word, the control's 1% word scaled to the channel, and with --power-limit the
+table also gives its power-limit word. The calibration length is the shortest L whose words still pass.
 With --block-hours, consecutive blocks of that length are calibrated on their own, which shows how each
 word follows the time of day.
 
 Hours are clock hours from the first capture, read from each file's fpga_seq_time_nsec, so a recording
 with interruptions keeps its times: a gap leaves its hours without captures, and a block that falls in one
 is skipped. Files that record no time (the mock run) count one capture every 43 s. Each capture is one
-dtv_fine_powers file of about 43 s, and a knee needs 30 of them. Writes length.json or blocks.json, with a
-plan and bundle for each case, and prints the table and the gaps.
+dtv_fine_powers file of about 43 s. Each part of a split needs as many captures as a word needs, or its
+masked fractions say little. A v1 or v2 knee needs 30 (MIN_KNEE_CAPTURES). The v3 default word needs no
+captures of the channel, so under v3 the count is the min_captures that a power-limit word must keep, 30
+unless the power-limit plan sets another. Writes length.json or blocks.json, with a plan and bundle for each
+case, and prints the table and the gaps.
 
 With --input-counts (from pathfinder_input_counts.py), each row also gives each channel's good inputs over
 its captures (min, median and max), and the blocks end with how each channel's word follows that count.
@@ -30,23 +35,43 @@ from pathlib import Path
 
 import numpy as np
 
-from pilot_proxy.bundle_calibration import _rows, calibrate_bundle, test_bundle
-from pilot_proxy.fine_decision import FINE_DECISION_VERSIONS
+from pilot_proxy.bundle_calibration import MIN_KNEE_CAPTURES, Q16, _rows, calibrate_bundle, test_bundle
+from pilot_proxy.fine_decision import CALIBRATION_DECISION_VERSION, FINE_DECISION_V3_VERSION, FINE_DECISION_VERSIONS
 from pilot_proxy.input_counts import load_good_inputs, span_counts
 from pilot_proxy.run_plans import ordered_run_files, write_run_plans
 
 CAPTURE_SECONDS = 1024 * 8192 * 5.12e-6     # 1024 detector blocks; the same on CHIME (16384 x 2.56 us)
-KNEE_CAPTURES = 30
+# the fewest kept captures the archive rule accepts, which a v1 or v2 knee needs
+KNEE_CAPTURES = MIN_KNEE_CAPTURES
 
 
 def ordered_files(args, work):
     """Return the calibration plan template, each channel's files in time order, and the control channel."""
     with contextlib.redirect_stdout(io.StringIO()):
         plans = write_run_plans(bundle_dir=args.bundle_dir, runs=args.run, output_dir=work, epoch=args.epoch,
-                                calibration_share=0.5, decision_version=args.decision_version)
+                                calibration_share=0.5, decision_version=args.decision_version,
+                                threshold="knee" if args.power_limit is None else "power_limit",
+                                power_limit=args.power_limit)
     calibrate, test = plans["calibrate"], plans["test"]
     files = {ch: calibrate["channels"][ch] + test["channels"][ch] for ch in calibrate["channels"]}
     return calibrate, files, str(calibrate["control"]["channel"])
+
+
+def is_v3(template):
+    """Return True when the plan calibrates fine decision v3, whose words have no floor or anchor."""
+    return template.get("decision_version", CALIBRATION_DECISION_VERSION) == FINE_DECISION_V3_VERSION
+
+
+def fewest_captures(template):
+    """Return the fewest captures of each part of a split, and the rule that sets them.
+
+    Under v1 and v2 a knee needs KNEE_CAPTURES. The v3 default word needs no captures of the channel, and a
+    power-limit word must keep the plan's min_captures, MIN_KNEE_CAPTURES unless the plan sets it.
+    """
+    if not is_v3(template):
+        return KNEE_CAPTURES, f"a knee needs {KNEE_CAPTURES}"
+    count = int(template.get("power_limit", {}).get("min_captures", MIN_KNEE_CAPTURES))
+    return count, f"a power-limit word keeps at least {count}"
 
 
 def capture_hours(runs, files):
@@ -91,8 +116,15 @@ def with_inputs(channels, inputs):
     return {ch: dict(c, inputs=inputs[ch]) if ch in inputs else c for ch, c in channels.items()}
 
 
+def limit_word(c):
+    """Return the v3 power-limit word of a channel summary, or an empty string when it has no entry."""
+    if "power_limit_source" not in c:
+        return ""
+    return ", no power-limit word" if c["power_limit_eta"] is None else f", power-limit word {c['power_limit_eta']}"
+
+
 def describe(channels):
-    return ", ".join(f"ch{ch} {c['eta']} ({c['source'].split(',')[0]}, {100 * c['masked']:.1f}%"
+    return ", ".join(f"ch{ch} {c['eta']} ({c['source'].split(',')[0]}, {100 * c['masked']:.1f}%" + limit_word(c)
                      + (f", {c['inputs'][0]}-{c['inputs'][2]} inputs" if "inputs" in c else "") + ")"
                      for ch, c in channels.items())
 
@@ -131,8 +163,18 @@ def test_on(template, chosen, control, out):
 
 
 def summary(report):
-    return {ch: dict(eta=round(c["eta"], 4), source=c["word_source"], anchor=c["anchor_bin"],
-                     masked=round(c["masked_fraction"], 4)) for ch, c in report["channels"].items()}
+    if report["decision_version"] != FINE_DECISION_V3_VERSION:
+        return {ch: dict(eta=round(c["eta"], 4), source=c["word_source"], anchor=c["anchor_bin"],
+                         masked=round(c["masked_fraction"], 4)) for ch, c in report["channels"].items()}
+    # v3 records no anchor, and keeps the power-limit word apart from the default word
+    out = {}
+    for ch, c in report["channels"].items():
+        out[ch] = dict(eta=round(c["eta"], 4), source=c["word_source"], masked=round(c["masked_fraction"], 4))
+        if "power_limit_word_source" in c:
+            word = c["power_limit_word_q16"]
+            out[ch].update(power_limit_eta=None if word is None else round(word / Q16, 4),
+                           power_limit_source=c["power_limit_word_source"])
+    return out
 
 
 def utc(first_ns, hours):
@@ -147,6 +189,9 @@ def main():
     mode.add_argument("--hours", type=float, nargs="+", help="Calibration lengths to try, each tested on the rest.")
     mode.add_argument("--block-hours", type=float, help="Calibrate consecutive blocks of this length on their own.")
     parser.add_argument("--decision-version", choices=FINE_DECISION_VERSIONS, default=None)
+    parser.add_argument("--power-limit", type=Path, default=None,
+                        help="Calibrate with the power_limit threshold: JSON naming the response table and the checked "
+                             "power limits, with the curvature of each channel and the margin, as for process-run.")
     parser.add_argument("--epoch", default="calibration length study")
     parser.add_argument("--input-counts", type=Path, help="Good-input counts from pathfinder_input_counts.py.")
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -155,6 +200,8 @@ def main():
         raise SystemExit(f"{args.output_dir} is not empty")
 
     template, files, control = ordered_files(args, args.output_dir / "all")
+    v3 = is_v3(template)
+    fewest, rule = fewest_captures(template)
     hours, first_ns = capture_hours(args.run, files)
     counts, freq_of = {}, {}
     if args.input_counts:
@@ -175,9 +222,10 @@ def main():
         for length in sorted(args.hours):
             chosen, rest = select(files, hours, 0, length), select(files, hours, length, float("inf"))
             k, m = min(len(v) for v in chosen.values()), min(len(v) for v in rest.values())
-            # the test needs as many captures as a knee, or its masked fractions say little
-            if k < KNEE_CAPTURES or m < KNEE_CAPTURES:
-                print(f"{length:g} h: {k} captures to calibrate and {m} to test, each needs {KNEE_CAPTURES}; skipped")
+            # the test needs as many captures as the calibration, or its masked fractions say little
+            if k < fewest or m < fewest:
+                print(f"{length:g} h: {k} captures to calibrate and {m} to test, each needs {fewest}"
+                      + (f" ({rule})" if v3 else "") + "; skipped")
                 continue
             out = args.output_dir / f"{length:g}h"
             report = calibrate_on(template, chosen, control, out)
@@ -186,32 +234,34 @@ def main():
                       for c in record["checks"] if not c["passed"]]
             share = round(len(chosen[control]) / len(files[control]), 4)
             inputs = input_ranges(hours, first_ns, counts, freq_of, 0, length)
-            rows.append(dict(hours=length, captures=k, test_captures=m, calibration_share=share,
-                             floor_eta=round(report["floor_eta"], 4), channels=with_inputs(summary(report), inputs),
-                             test_passed=record["passed"], failed=failed))
+            floor = {} if v3 else dict(floor_eta=round(report["floor_eta"], 4))
+            rows.append(dict(hours=length, captures=k, test_captures=m, calibration_share=share, **floor,
+                             channels=with_inputs(summary(report), inputs), test_passed=record["passed"], failed=failed))
             line = describe(rows[-1]["channels"])
-            print(f"{length:g} h ({k} captures, share {share}): floor {rows[-1]['floor_eta']}; {line}; "
+            print(f"{length:g} h ({k} captures, share {share}): "
+                  + ("" if v3 else f"floor {rows[-1]['floor_eta']}; ") + f"{line}; "
                   f"test {'passed' if record['passed'] else 'FAILED: ' + '; '.join(failed)}")
         name = "length.json"
     else:
         size = args.block_hours
-        if round(size * 3600 / CAPTURE_SECONDS) < KNEE_CAPTURES:
-            raise SystemExit(f"a block of {size:g} h has fewer than {KNEE_CAPTURES} captures, which a knee needs")
+        if round(size * 3600 / CAPTURE_SECONDS) < fewest:
+            raise SystemExit(f"a block of {size:g} h has fewer than {fewest} captures, "
+                             + (f"and {rule}" if v3 else "which a knee needs"))
         for b in range(int(span // size + 1e-9)):
             start = b * size
             chosen = select(files, hours, start, start + size)
             k = min(len(v) for v in chosen.values())
             row = dict(block=b, start_hours=round(start, 3), start_utc=utc(first_ns, start), captures=k)
-            if k < KNEE_CAPTURES:
-                rows.append(dict(row, skipped=f"{k} captures, a knee needs {KNEE_CAPTURES}"))
+            if k < fewest:
+                rows.append(dict(row, skipped=f"{k} captures, {rule}"))
                 print(f"block {b} from {start:g} h: {k} captures; skipped")
                 continue
             report = calibrate_on(template, chosen, control, args.output_dir / f"block{b}")
             inputs = input_ranges(hours, first_ns, counts, freq_of, start, start + size)
-            rows.append(dict(row, floor_eta=round(report["floor_eta"], 4),
-                             channels=with_inputs(summary(report), inputs)))
+            floor = {} if v3 else dict(floor_eta=round(report["floor_eta"], 4))
+            rows.append(dict(row, **floor, channels=with_inputs(summary(report), inputs)))
             print(f"block {b} from {start:g} h" + ("" if first_ns is None else f" ({row['start_utc']})")
-                  + f": floor {rows[-1]['floor_eta']}; {describe(rows[-1]['channels'])}")
+                  + ": " + ("" if v3 else f"floor {rows[-1]['floor_eta']}; ") + describe(rows[-1]["channels"]))
         if counts:
             follow(rows)
         name = "blocks.json"

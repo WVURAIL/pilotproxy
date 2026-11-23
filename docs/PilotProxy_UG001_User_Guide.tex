@@ -445,10 +445,9 @@ This file is the one an operator reads most. It holds the receiver binding and t
 \pfield{designated_half_width} & v1 and v2 only. The half-width \(w\), below 128. Calibration writes 32. & \yes\\ \hline
 \pfield{cfar_rank} & v1 and v2 only. The zero-based rank \(r\). Must be below the number of bulk bins. Calibration writes the median rank. & \yes\\ \hline
 \pfield{bulk_mask_words_hex} & v1 and v2 only. Four 64-bit hex strings. Bit \(b \bmod 64\) of word \(\lfloor b/64\rfloor\) is set when bin \(b\) is a bulk bin. Bits within \(\max(w,2)\) bins of the anchor must be clear. & \yes\\ \hline
-\pfield{provenance} & Object with \code{epochs} (the plan's \code{epoch} text), \code{source_product_sha256} (SHA-256 of the calibration plan), \code{null_quantile}, a \code{note}, and optionally \code{summed_inputs}, \code{mask_qualification} and \code{threshold_selection}. & part\\ \hline
+\pfield{provenance} & Object with \code{epochs} (the plan's \code{epoch} text), \code{source_product_sha256} (SHA-256 of the calibration plan), \code{null_quantile}, a \code{note}, and optionally \code{summed_inputs} and \code{mask_qualification}. & part\\ \hline
 \pfield{provenance.summed_inputs} & Inputs summed at calibration, from the plan's \code{num_inputs}. Kotekan warns while the live count differs from it by more than 10\%. & \yes\\ \hline
 \pfield{provenance.mask_qualification} & \code{test_report_sha256} and \code{reviewer}, written by \code{qualify-bundle} (Section~\ref{sec:deploy}). Only a \code{calibrated} channel may carry it. Kotekan masks only when every \code{calibrated} channel does. & \yes\\ \hline
-\pfield{provenance.threshold_selection} & When its \code{qualification} is \code{archive_review_only}, Kotekan refuses to bind the channel. & \yes\\ \hline
 \end{longtable}
 
 The \code{note} of a calibrated profile states where its words came from, for example ``Word from control word x scale, control word from control channel. Power-limit word from power limit. Detect-only, not a calibration.'' in a v3 profile, or ``Word from floor, 5 captures of 30, floor from control channel. Detect-only, not a calibration.'' in a v2 profile. Every bundle written by \code{calibrate-bundle} carries ``Detect-only, not a calibration.'' in its notes. Kotekan does not read this text. It reads \code{mask_qualification} instead (Section~\ref{sec:applymask}).

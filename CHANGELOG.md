@@ -23,6 +23,13 @@ All notable changes to PilotProxy are recorded here. The project follows
   withheld from the code-only cut). `bundle_calibration.control_quantile_q16` is the quantile step that
   `calibrate-bundle` uses.
 
+- Removed `runtime_candidate` (the archive operating-curve candidate builder), its tests and
+  `docs/ARCHIVE_POLICY_CANDIDATE.md`; nothing called it. The operating-policy compiler no longer has archive-review
+  branches (`review_only_candidate_freq_ids`, `candidate_configuration_complete`), and the bundle validator refuses
+  `provenance.threshold_selection`, which only the candidate builder wrote.
+- `calibrate-bundle` computes null scores for v1 and v2 only. With no control, the v3 first word is the quantile of
+  the exact keep words of the simulated white-noise powers, as with a control (32 inputs: 122738 to 122739 Q16).
+  `simulated_null_scores` is replaced by `simulated_powers`, and `null_scores` refuses v3.
 - Fixes from the 2026-11-22 review:
   - CHORD and Pathfinder weights in raw input coordinates are the mirror of the post bank; they were the post bank,
     blind to an upright pilot. `pack_channelized_streams_for_detector` takes a required `time_reverse_windows` flag

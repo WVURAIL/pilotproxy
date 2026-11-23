@@ -17,6 +17,7 @@ from pilot_proxy.bundle_calibration import (
     _bulk,
     _exact_word,
     _expand,
+    _geometry,
     _load_fines,
     bias_within_std,
     binomial_lower_tail,
@@ -31,10 +32,11 @@ from pilot_proxy.bundle_calibration import (
     iter_run_frames,
     knee_word,
     nominal_fine_bin,
+    null_scores,
     qualify_bundle,
     required_words,
     scaled_word,
-    simulated_null_scores,
+    simulated_powers,
     test_bundle as run_bundle_test,
     weight_norms,
 )
@@ -787,11 +789,15 @@ def test_v3_first_bundle_scales_the_simulated_control_word(plans, tmp_path):
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    # the control word is the quantile of white noise through ideal weights, whose null level is 1
-    q = float(np.quantile(simulated_null_scores(32, decision_version="fine_decision_v3"), 0.99))
+    # the control word is the quantile of the exact keep words of white noise through ideal weights, whose null
+    # level is 1
+    bulk, rank = _geometry(0, (), "fine_decision_v3")
+    words = required_words(simulated_powers(32), anchor_bin=0, bulk=bulk, rank=rank, decision_version="fine_decision_v3")
+    q = float(np.quantile(words[words >= 0].astype(np.float64), 0.99))
     assert report["control_quantile_q16"] == q and report["reference_level"] == 1.0
     assert report["floor_word_q16"] == report["measured_floor_q16"] == int(np.ceil(q))
-    assert 1.8 < report["floor_eta"] < 1.95
+    # 122738 from the float copy of the v3 word that null_scores held before
+    assert report["floor_word_q16"] == 122739
     assert report["floor_source"] == "white noise, 32 inputs" and report["control"] is None
     # one independent null score in each simulated frame
     assert report["null_scores"] == 2000
@@ -847,16 +853,29 @@ def test_existing_output_is_refused(plans):
         calibrate_bundle(plan_path=plans["calibrate_path"], output_dir=plans["bundle"])
 
 
+def _simulated_floor(num_inputs, version):
+    bulk, rank = _geometry(0, (), version)
+    scores = null_scores(simulated_powers(num_inputs, frames=200), anchor_bin=0, bulk=bulk, rank=rank,
+                         decision_version=version)
+    return np.quantile(scores, 0.99) / 65536
+
+
+def test_null_scores_are_of_v1_and_v2_only():
+    bulk, rank = _geometry(0, (), "fine_decision_v3")
+    with pytest.raises(ValueError, match="v1 and v2"):
+        null_scores(np.ones((1, 3, 256)), anchor_bin=0, bulk=bulk, rank=rank, decision_version="fine_decision_v3")
+
+
 def test_simulated_word_falls_with_input_count():
-    few = np.quantile(simulated_null_scores(32, frames=200, decision_version="fine_decision_v1"), 0.99) / 65536
-    many = np.quantile(simulated_null_scores(256, frames=200, decision_version="fine_decision_v1"), 0.99) / 65536
+    few = _simulated_floor(32, "fine_decision_v1")
+    many = _simulated_floor(256, "fine_decision_v1")
     assert few > 1.84
     assert many < few
 
 
 def test_median_reference_floor_lies_below_the_bin_ratio_floor():
     # the reference pooled over the background is less noisy than the reference of each bin
-    floors = {v: [np.quantile(simulated_null_scores(n, frames=200, decision_version=v), 0.99) / 65536 for n in (32, 256)]
+    floors = {v: [_simulated_floor(n, v) for n in (32, 256)]
               for v in ("fine_decision_v1", "fine_decision_v2")}
     assert floors["fine_decision_v2"][1] < floors["fine_decision_v2"][0]
     assert all(a < b for a, b in zip(floors["fine_decision_v2"], floors["fine_decision_v1"]))

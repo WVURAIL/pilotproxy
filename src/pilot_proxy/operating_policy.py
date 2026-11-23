@@ -275,8 +275,7 @@ def analyze_policy(plan_path):
     _require(not v3_channels or V3_CAPABILITY in caps,
              f"Consumer lacks {V3_CAPABILITY}, needed for the fine_decision_v3 profiles of channels {v3_channels}")
     project = default_project() if namespace == "chime_freq_id" else None
-    permanent, no_pilot, pending, thresholds, rows, outside = [], [], [], [], [], []
-    review_candidates, controls = [], []
+    permanent, no_pilot, pending, thresholds, rows, outside, controls = [], [], [], [], [], [], []
     for channel, decision in sorted(decisions.items()):
         if not FIRST_CHANNEL <= channel <= LAST_CHANNEL:
             bound = profiles.get(channel, [])
@@ -287,12 +286,7 @@ def analyze_policy(plan_path):
                 freq, mapping = _frequency_mapping(channel, bound[0], project, offset, receiver)
                 row, binding = _control(channel, decision, bound[0], mapping)
                 _require(binding is not None, f"channel {channel}: the control profile differs from the decided word")
-                # the detector rejects every archive-review threshold, the control's as well
-                if bound[0]["fine_calibration"]["provenance"].get("threshold_selection") is not None:
-                    row["bundle_status"] = "archive review candidate at the decided word"
-                    review_candidates.append(freq)
-                else:
-                    row["bundle_status"] = "control at the decided word"
+                row["bundle_status"] = "control at the decided word"
                 controls.append(binding)
                 rows.append(row)
                 continue
@@ -335,13 +329,7 @@ def analyze_policy(plan_path):
                 row["bundle_status"] = "pending: the bundle's profile does not carry the decided word yet"
                 pending.append(freq)
             else:
-                selection = bound["fine_calibration"]["provenance"].get("threshold_selection")
-                if selection is not None:
-                    row["bundle_status"] = "archive review candidate at the decided word"
-                    row["selection_granularity"] = selection["selection_granularity"]
-                    review_candidates.append(freq)
-                else:
-                    row["bundle_status"] = "calibrated at the decided word"
+                row["bundle_status"] = "calibrated at the decided word"
                 thresholds.append(binding)
         rows.append(row)
     _require(len(rows) > len(controls), "The decisions name no ATSC channel 14-36")
@@ -351,7 +339,7 @@ def analyze_policy(plan_path):
     thresholds.sort(key=lambda r: r["receiver_channel_id"])
     required = [r["receiver_channel_id"] for r in thresholds]
     control_ids = sorted(r["receiver_channel_id"] for r in controls)
-    complete = not pending and not review_candidates
+    complete = not pending
     parameters = {"permanent_mask_freq_ids": permanent, "require_fine_freq_ids": required}
     if control_ids:
         parameters["control_freq_ids"] = control_ids
@@ -383,13 +371,6 @@ def analyze_policy(plan_path):
     if controls:
         report["control_freq_ids"] = control_ids
         report["control_bindings"] = controls
-    if review_candidates:
-        report["candidate_configuration_complete"] = not pending
-        report["review_only_candidate_freq_ids"] = sorted(review_candidates)
-        report["remaining_runtime_acceptance"].insert(0,
-            "Archive candidate words describe detector-frame selection only. Recompute the policy "
-            "for the consumer's actual masking granularity and qualify the physical transfer, "
-            "receiver conditions, and release before forming a deployment configuration.")
     for source, expected in bindings.items():
         _require(calibration.sha256(source) == expected, "Source changed during policy compilation: " + source)
     return report
@@ -406,7 +387,7 @@ def _identity():
 def write_policy(plan_path, output_dir, *, require_complete=False):
     report = analyze_policy(plan_path)
     _require(not require_complete or report["deployment_configuration_complete"],
-             "The configuration is incomplete: a word is pending or an archive review candidate is not qualified for deployment")
+             "The configuration is incomplete: a word is pending")
     directory = Path(output_dir).resolve()
     directory.mkdir(parents=True, exist_ok=False)
     calibration._write_json(directory / "policy.json", report)

@@ -1073,7 +1073,7 @@ and a \code{fine_calibration} block:
 \code{decision_version} & \code{fine_decision_v3}. \code{fine_decision_v2}, the calibration default until Kotekan runs v3, and \code{fine_decision_v1}, in earlier bundles, stay valid.\\ \hline
 \code{cfar_multiplier_q16} & The default word, in \([1,2^{64}-1]\), for any backend with no word of its own. Under v1 and v2, the only word.\\ \hline
 \code{power_limit_multiplier_q16} & v3 only, optional. The BAO word from the power-limit test, in \([1,2^{64}-1]\), applied by the correlator (N2) path.\\ \hline
-\code{provenance} & \code{epochs}, \code{source_product_sha256}, \code{null_quantile}, optional \code{note}, \code{summed_inputs}, \code{mask_qualification} and \code{threshold_selection}. A pending block has empty lists and a null quantile. \code{mask_qualification} holds \code{test_report_sha256} and \code{reviewer}, and only a \code{calibrated} block may carry it. A \code{threshold_selection} carries \code{qualification: archive_review_only}.\\ \hline
+\code{provenance} & \code{epochs}, \code{source_product_sha256}, \code{null_quantile}, optional \code{note}, \code{summed_inputs} and \code{mask_qualification}. A pending block has empty lists and a null quantile. \code{mask_qualification} holds \code{test_report_sha256} and \code{reviewer}, and only a \code{calibrated} block may carry it.\\ \hline
 \multicolumn{2}{|l|}{\textit{v1 and v2 only. The validator refuses these fields on a v3 block.}}\\ \hline
 \code{anchor_bin} & Fine bin of the pilot, 0 to 255.\\ \hline
 \code{designated_half_width} & \(h\). Designated bins are \(a\pm h\) modulo 256.\\ \hline

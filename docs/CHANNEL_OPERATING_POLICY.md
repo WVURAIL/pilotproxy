@@ -105,14 +105,6 @@ For every channel 14 to 36 of the decisions the compiler checks:
    `pending_campaign` is listed in `pending_freq_ids`, since the decision has a
    word that the bundle does not carry yet.
 
-An [archive operating-curve candidate](ARCHIVE_POLICY_CANDIDATE.md) can carry
-all numerical fields and the decided word while it stays explicitly
-`archive_review_only`. Its imported detector-frame selection is qualified
-neither for the masking granularity of a consumer nor for physical science use.
-Such profiles are listed in `review_only_candidate_freq_ids`. The review
-carries their bindings, but it cannot produce a complete deployment
-configuration from them.
-
 Every bound source is rehashed before the review is returned. Conflicting
 identities for the same path are refused.
 
@@ -145,7 +137,7 @@ measurements remain validity conditions, and the threshold limit must never
 turn them into valid data or retained exposure.
 
 `deployment_configuration_complete` is true only when no deployed channel is
-pending and none has archive-review-only qualification. Only then is
+pending. Only then is
 `kotekan_parameters` populated with the two consumer lists, and otherwise it is
 null. Every review keeps `activation_authorized: false` and
 `science_certification: false`.

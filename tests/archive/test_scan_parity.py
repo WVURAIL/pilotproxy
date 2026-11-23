@@ -27,6 +27,7 @@ from pilot_proxy.chime import baseband_format as fmt
 
 from pilot_proxy.archive.scan import run_chime_scan
 from pilot_proxy.archive.chime_coarse import chime_freq_id_from_hz
+from pilot_proxy.chime.validate_products import validate_products
 
 from cpu_detector import exact_cpu_detector_fn, reference_fine_powers, stub_kernel  # noqa: E402
 
@@ -85,5 +86,6 @@ def test_chime_scan_matches_cpu_reference(tmp_path):
         for term, name in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
             np.testing.assert_array_equal(got[name][:, pilot], powers[:, term], err_msg=f"{ch} {name}")
     assert got["p_target_u64"].shape == (N_FRAMES * N_FILES, len(CHANNELS))
-    for name in ("chime_spectrogram_cache.npz", "chime_reductions_10s.npz"):
-        assert (scan_dir / name).is_file(), name
+    # the spectrogram cache and reductions must agree with the detector outputs
+    report = validate_products(run_dir=scan_dir)
+    assert report["valid"], report["errors"]

@@ -25,6 +25,7 @@ from pilot_proxy.archive.detector import PilotProxyDetectorAnalyzer
 from pilot_proxy.archive.packed_reader import ChimeBasebandPackedReader
 from pilot_proxy.detector_weights import DetectorWeightBank
 from pilot_proxy.paths import DEFAULT_WEIGHTS_PATH
+from pilot_proxy.product_contract import fine_derived_column_mismatches
 
 from cpu_detector import exact_cpu_detector_fn, reference_fine_powers, stub_kernel  # noqa: E402
 
@@ -78,3 +79,5 @@ def test_detector_analyzer_matches_cpu_reference(tmp_path, from_bank):
     np.testing.assert_array_equal(got["p_ref_sum_u64"][:, 0], powers[:, 1] + powers[:, 2])
     np.testing.assert_array_equal(got["valid"][:, 0], powers[:, 1] + powers[:, 2] != 0)
     np.testing.assert_array_equal(got["frame_index"], np.arange(N_FRAMES))
+    # reject_mask and the float columns follow from the fine powers
+    assert fine_derived_column_mismatches(dict(got)) == []

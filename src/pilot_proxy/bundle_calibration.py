@@ -112,8 +112,8 @@ def iter_blocks(path: str | Path, capture_format: str, channel_id: int, block_sa
                 raise ValueError(f"{path} does not hold coarse_freq {channel_id}")
             index = coarse.index(channel_id)
             # rfi antennas never enter the detector sum
-            labels = data.attrs.get("dish_label", [])
-            dishes = [j for j in range(data.shape[3]) if not (len(labels) and str(labels[j]).startswith("RFI"))]
+            labels = [l.decode() if isinstance(l, bytes) else str(l) for l in data.attrs.get("dish_label", [])]
+            dishes = [j for j in range(data.shape[3]) if not (labels and labels[j].startswith("RFI"))]
             start = (-int(data.attrs["fpga_seq_num"])) % block_samples
 
             def read(lo: int, hi: int) -> np.ndarray:

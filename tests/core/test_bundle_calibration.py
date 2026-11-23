@@ -379,6 +379,11 @@ def test_chord_blocks_start_on_the_block_grid_and_leave_out_rfi_dishes(tmp_path)
     expected = voltages[3:, 1][:, :, [0, 2]].reshape(5, block, 4)
     assert len(blocks) == 5 and all(np.array_equal(b, e) for b, e in zip(blocks, expected))
     assert len(list(iter_blocks(path, "chord_baseband", 3115, block, max_frames=2))) == 2
+    # fixed-length byte labels leave out the same dish
+    path = write_chord_capture(tmp_path / "bytes.h5", voltages, [2531, 3115], 1000 * block - 3,
+                               np.array([b"D1", b"RFI1", b"D2"], dtype="S4"))
+    blocks = list(iter_blocks(path, "chord_baseband", 3115, block))
+    assert len(blocks) == 5 and all(np.array_equal(b, e) for b, e in zip(blocks, expected))
     # a file with no labels sums every dish
     path = write_chord_capture(tmp_path / "unlabelled.h5", voltages, [2531, 3115], 0)
     blocks = list(iter_blocks(path, "chord_baseband", 2531, block))

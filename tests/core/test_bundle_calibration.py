@@ -87,10 +87,12 @@ def plans(tmp_path_factory):
     )
     # strong and clean captures in turn, so the kept fraction has a knee
     mixed = [write_capture(tmp / f"c35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    control = [write_capture(tmp / "c37.h5", 37, 26, 3)]
     calibrate = dict(common, epoch="synthetic", null_quantile=0.8, min_knee_captures=4, channels={
         "35": mixed,
         "29": [write_capture(tmp / "c29.h5", 29, 6, 2)],
-    }, control=dict(channel=37, captures=[write_capture(tmp / "c37.h5", 37, 26, 3)]))
+        "37": control,
+    }, control=dict(channel=37, captures=control))
     test = dict(capture_format="chime_baseband",
                 channels={"35": [write_capture(tmp / f"t35_{i}.h5", 35, 2, 20 + i, tone=0.8 * (i % 2)) for i in range(2)],
                           "29": [write_capture(tmp / "t29.h5", 29, 4, 5)]},
@@ -285,7 +287,7 @@ def test_pilot_in_every_capture_takes_the_floor(plans, tmp_path):
     # no clean frames, so the knee would sit in the pilot's own spread and keep most of it
     always = [write_capture(tmp_path / f"a35_{i}.h5", 35, 2, 40 + i, tone=0.8) for i in range(6)]
     path = tmp_path / "plan.json"
-    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": always})))
+    path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": always, "37": plans["calibrate"]["channels"]["37"]})))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     channel = report["channels"]["35"]
     assert channel["pilot_in_nearly_every_frame"]
@@ -757,13 +759,18 @@ def test_unknown_decision_version_is_refused(plans, tmp_path):
         calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
 
 
-def test_control_channel_can_be_bound(plans, tmp_path):
-    captures = plans["calibrate"]["control"]["captures"]
-    plan = dict(plans["calibrate"], channels={**plans["calibrate"]["channels"], "37": captures})
+def test_control_channel_must_be_listed_under_channels(plans, tmp_path):
+    channels = {c: p for c, p in plans["calibrate"]["channels"].items() if c != "37"}
     path = tmp_path / "plan.json"
-    path.write_text(json.dumps(plan))
-    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
+    path.write_text(json.dumps(dict(plans["calibrate"], channels=channels)))
+    with pytest.raises(ValueError, match="must also be listed under channels"):
+        calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    assert not (tmp_path / "bundle").exists()
+
+
+def test_control_channel_is_bound(plans):
+    report = plans["report"]
+    rows = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())["profiles"]
     status = {row["physical_channel"]: row["fine_calibration"]["status"] for row in rows}
     assert status == {29: "calibrated", 35: "calibrated", 37: "control"}
     assert report["channels"]["37"]["word_q16"] == report["floor_word_q16"]
@@ -1312,7 +1319,7 @@ def test_v3_control_channel_takes_the_control_word_itself(plans, tmp_path):
 
 
 def test_v3_default_word_needs_no_captures_of_the_channel(plans, tmp_path):
-    path = _v3_plan(plans, tmp_path, channels={"29": [], "35": plans["calibrate"]["channels"]["35"]})
+    path = _v3_plan(plans, tmp_path, channels={**plans["calibrate"]["channels"], "29": []})
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     r = report["channels"]["29"]
     assert r["frames"] == 0 and r["word_source"] == "control word x scale"

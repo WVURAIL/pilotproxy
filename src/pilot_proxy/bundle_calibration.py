@@ -735,6 +735,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         raise ValueError("null_quantile must lie between 0 and 1")
     channels = sorted(int(c) for c in plan["channels"])
     control = plan.get("control")
+    if control and int(control["channel"]) not in channels:
+        raise ValueError(f"the control channel {control['channel']} must also be listed under channels, "
+                         "with its captures, so the bundle carries it")
     if control is None and "num_inputs" not in plan:
         raise ValueError("a plan needs a control channel or num_inputs for a simulated first word")
     threshold = plan.get("threshold", "knee")

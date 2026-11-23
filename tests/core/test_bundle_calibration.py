@@ -939,16 +939,18 @@ def test_process_run_takes_the_power_limit_threshold(plans, tmp_path, decision):
         process_run(output_dir=tmp_path / "none", threshold="power_limit", **common)
 
 
-def test_v3_process_run_names_the_default_word_where_no_power_limit_word_passes(plans, tmp_path):
-    # no word keeps 100 captures, so calibration writes no power-limit word and the stage applies the default word
+def test_v3_process_run_names_the_reject_word_where_no_power_limit_word_passes(plans, tmp_path):
+    # no word keeps 100 captures, so the channel carries the reject word, which the stage applies to mask it whole
     summary, report, _ = _power_limit_run(plans, tmp_path, "fine_decision_v3", min_captures=100)
     channel = report["channels"]["35"]
-    assert channel["power_limit_word_q16"] is None and channel["power_limit"]["outcome"] == "not useful"
+    assert channel["power_limit"]["outcome"] == "not useful" and channel["power_limit_word_q16"] == REJECT_WORD_Q16
     row = next(r for r in summary["channels"] if r["channel"] == 35)
-    assert row["word_q16"] == channel["word_q16"] and row["word_source"] == "control word x scale"
-    assert row["eta"] == round(channel["eta"], 4) and _summary_md_eta(tmp_path, 35) == str(row["eta"])
+    assert row["word_q16"] == REJECT_WORD_Q16 and row["word_source"] == channel["power_limit_word_source"]
+    assert row["eta"] == round(REJECT_WORD_Q16 / 65536, 4) and _summary_md_eta(tmp_path, 35) == str(row["eta"])
+    assert row["calibrate_masked_percent"] == 100.0 and row["test_masked_percent"] == 100.0
     masked = next(csv.DictReader((tmp_path / "out" / "spectrograms" / "calibrate" / "masked_summary.csv").open()))
-    assert masked["channel"] == "35" and masked["word_q16"] == str(channel["word_q16"])
+    assert masked["channel"] == "35" and masked["word_q16"] == str(REJECT_WORD_Q16)
+    assert "the bundle holds the reject word on them" in (tmp_path / "out" / "summary.md").read_text()
 
 
 @pytest.fixture(scope="module")

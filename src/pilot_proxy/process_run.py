@@ -77,7 +77,7 @@ def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: 
         tested = report["power_limit"]
         none = ", ".join(str(c) for c in tested["no_passing_word"]) or "none"
         lines += ["", f"Threshold: power limit, against {tested['experiment']}. Channels with no passing word: {none}. "
-                  f"The operating policy masks these whole, and the bundle holds the {'default word' if v3 else 'floor'} "
+                  f"The operating policy masks these whole, and the bundle holds the {'reject word' if v3 else 'floor'} "
                   "on them. A power-limit word "
                   "is in-sample, and it needs a test on independent data before it masks."]
     source = "the control behind it" if v3 else "the run behind it"

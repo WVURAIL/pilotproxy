@@ -26,9 +26,7 @@ For the measured local workstation profile, use
 target whatever GPU architecture the remote session provides and cannot
 override the approved local settings.
 
-`pilot-proxy chime-run` reads an already-staged HDF5 directory in one process
-and is used for local calibration and regression comparisons. CADC and CANFAR
-work starts with `chime-scan`.
+CADC and CANFAR work starts with `chime-scan`.
 
 ---
 
@@ -420,9 +418,8 @@ with a known pilot. Then:
    `_per_pilot/<freq_id>.npz` product does not store it, so derive it there
    from the stored norms as `2*target_norm_sq/reference_norm_sum_sq` (see
    `null_power_ratio_from_weight_norms` in
-   `src/pilot_proxy/detector_contract.py`). The `chime-run` batch path also records
-   `null_power_ratio_by_channel` in `stats.json`, but the combined `chime-scan`
-   statistics do not copy that array.
+   `src/pilot_proxy/detector_contract.py`). The combined `chime-scan`
+   statistics do not record it.
 2. Over frames with `valid = 1`, compare the mean `coarse_power_ratio` with
    `null_power_ratio`, and inspect the valid-frame mask fraction. Under the
    tested white-noise model, the norm-corrected zero-excess boundary gives a

@@ -14,8 +14,6 @@ SURFACES = (
     ROOT / "src/pilot_proxy/integration/packing.py",
     ROOT / "src/pilot_proxy/integration/stream_layout.py",
     ROOT / "src/pilot_proxy/chime/frame_adapter.py",
-    ROOT / "src/pilot_proxy/testbench/evaluate_snr.py",
-    ROOT / "src/pilot_proxy/testbench/quantize.py",
     ROOT / "tests/core/test_frame_geometry_adapter.py",
     ROOT / "tests/core/test_chord_profiles.py",
     ROOT / "tests/core/test_integration_contract.py",

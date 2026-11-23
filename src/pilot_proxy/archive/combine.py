@@ -7,8 +7,8 @@ file. Pilots that processed different event sets contribute only the frames
 they have in common, and the dropped frames are recorded in the alignment
 report.
 
-The aligned arrays are then passed through the same writer functions as
-``run_chime_analysis``. This produces ``chime_detector_outputs``,
+The aligned arrays are then passed through the writer functions of
+``pilot_proxy.chime.products``. This produces ``chime_detector_outputs``,
 ``chime_spectrogram_cache``, ``chime_reductions_10s``, and ``mask_summary`` in
 the canonical formats used by plotting and ``validate-products``.
 
@@ -536,10 +536,9 @@ def _align_frames(
     The identity of a frame is ``(source event, frame position in its file)``,
     and the analyzer records it for every frame. The canonical order is the
     order of the reference (lowest-channel) product, restricted to the common
-    identities. A fully aligned set therefore passes through unchanged and is
-    byte-identical to the output of ``run_chime_analysis``. For a ragged set,
-    only the overlap is stacked, and the frames dropped by each pilot are
-    reported. Every product must carry event-keyed identities.
+    identities. A fully aligned set therefore passes through unchanged. For a
+    ragged set, only the overlap is stacked, and the frames dropped by each
+    pilot are reported. Every product must carry event-keyed identities.
     """
     identities = [_frame_identity(z) for z in products]
     for z, ids in zip(products, identities):
@@ -1235,8 +1234,7 @@ def _combine_detector_products(
     # run_config, stats, and input_manifest are written so that validate-products
     # accepts the scan output. They carry the schema-gated fields
     # (detector_contract, mask_policy, and geometry) and are labeled as
-    # chime-scan provenance, since they do not come from a single
-    # run_chime_analysis run.
+    # chime-scan provenance.
     reference_placement = _combined_reference_placement_summary(products)
     if reference_placement is not None:
         contract = dict(contract)

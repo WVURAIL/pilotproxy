@@ -201,9 +201,9 @@ completed inventories and products readable and add no runtime dependency.
 ## Verification
 
 The offline archive suite checks array layout, orchestration, resume behavior,
-product combination, selection, metadata inference, and parity against the
-single-process `chime-run` runner. The following operational gates are not
-covered by the suite:
+product combination, selection, metadata inference, and parity against an
+independent CPU computation from the file bytes. The following operational
+gates are not covered by the suite:
 
 - CUDA detector execution on a GPU node
 - authenticated streaming through `cadc-datatrail`

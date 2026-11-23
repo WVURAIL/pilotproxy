@@ -3,23 +3,20 @@
 
 ``run_chime_scan`` drives the archive engine (the local source, the per-pilot
 fan-out and ``pipeline.run``) and then combines the products. This test checks
-that its canonical detector products match a single ``run_chime_analysis`` pass
-over the same two channels. The detector, stub kernel and weights are injected
-through ``analyzer_options``, the hooks the runner exposes, so no GPU or CUDA
-is needed.
+that its canonical detector powers equal those computed directly from the
+files' bytes (``cpu_detector.reference_fine_powers``) for two channels. The
+detector, stub kernel and weights are injected through ``analyzer_options``, so
+no GPU or CUDA is needed.
 
 Files are named ``*_<freq_id>.h5`` so the local source maps each file to its
 CHIME coarse channel with its default ``_(\\d+)\\.h5$`` regex, as for a real
 CADC baseband file. The analyzer derives the ATSC channel label from the center
 frequency in the file's freq attribute. ``--select`` is therefore the freq_id
-list, and the weights and the runner reference stay keyed on ATSC channel. With
-one pilot per ATSC channel, the ATSC ordering of combine maps one to one onto
-the selected freq_ids.
+list, and the weights stay keyed on ATSC channel. With one pilot per ATSC
+channel, the ATSC ordering of combine maps one to one onto the selected
+freq_ids.
 """
 from __future__ import annotations
-
-import dataclasses
-import json
 
 import numpy as np
 import pytest
@@ -28,13 +25,11 @@ pytest.importorskip("h5py")
 
 from pilot_proxy.chime import baseband_format as fmt
 
-from pilot_proxy.chime.runner import run_chime_analysis
-from pilot_proxy.detector_geometry import MIRRORED_NYQUIST_ZONE
-from pilot_proxy.integration.receiver_profile import default_reference_receiver_profile
 from pilot_proxy.archive.scan import run_chime_scan
 from pilot_proxy.archive.chime_coarse import chime_freq_id_from_hz
+from pilot_proxy.chime.validate_products import validate_products
 
-from cpu_detector import exact_cpu_detector_fn, stub_kernel  # noqa: E402
+from cpu_detector import exact_cpu_detector_fn, reference_fine_powers, stub_kernel  # noqa: E402
 
 NFFT = 16384
 K = 128
@@ -46,23 +41,7 @@ CHANNELS = {14: 470.3125, 15: 476.171875}  # coarse-channel center (MHz) by ATSC
 FREQ_IDS = {ch: chime_freq_id_from_hz(mhz * 1e6) for ch, mhz in CHANNELS.items()}
 
 
-def _assert_npz_equal(ref_path, got_path):
-    a = np.load(ref_path)
-    b = np.load(got_path)
-    # chime-run stores the fine powers of its frame powers. A combine leaves
-    # them in the per-pilot products, so they are excluded from this check.
-    only_runner = {"fine_power_u64"} if ref_path.name == "chime_detector_outputs.npz" else set()
-    assert set(a.files) - only_runner == set(b.files), set(a.files) ^ set(b.files)
-    for key in b.files:
-        x, y = np.asarray(a[key]), np.asarray(b[key])
-        assert x.shape == y.shape, f"{key}: {x.shape} != {y.shape}"
-        if x.dtype.kind in "fc":
-            assert np.array_equal(x, y, equal_nan=True), f"{key} differs"
-        else:
-            assert np.array_equal(x, y), f"{key} differs"
-
-
-def test_chime_scan_matches_runner(tmp_path):
+def test_chime_scan_matches_cpu_reference(tmp_path):
     rng = np.random.default_rng(3)
     weights_by_channel = {
         ch: rng.integers(-120, 121, size=(3, K)).astype(np.int8) for ch in CHANNELS
@@ -82,27 +61,7 @@ def test_chime_scan_matches_runner(tmp_path):
                 seed=ch * 10 + file_index,
             )
 
-    profile = dataclasses.replace(
-        default_reference_receiver_profile(frame_size_samples=NFFT,
-                                           num_input_streams=N_FEEDS),
-        nyquist_zone=MIRRORED_NYQUIST_ZONE,
-        stream_map_required=False,
-    )
-    profile_path = tmp_path / "receiver_profile.json"
-    profile_path.write_text(json.dumps(profile.to_dict()), encoding="utf-8")
-
-    # reference: single multi-pilot runner pass
-    ref_dir = tmp_path / "ref"
-    run_chime_analysis(
-        input_dir=input_dir, output_dir=ref_dir, receiver_profile_path=profile_path,
-        stream_map_path=None, physical_channels=sorted(CHANNELS),
-        frame_size_samples=NFFT, detector_window_samples=K, frames_per_chunk=1,
-        max_frames=N_FRAMES * N_FILES, kernel=stub_kernel(K),
-        detector_fn=exact_cpu_detector_fn,
-        weights_by_channel=weights_by_channel,
-    )
-
-    # candidate: chime-scan fan-out and combine with the CPU reference detector
+    # chime-scan fan-out and combine with the CPU reference detector
     # --select is the freq_id list, and the analyzer derives the ATSC label per file
     scan_dir = tmp_path / "scan"
     freq_id_select = ",".join(str(f) for f in sorted(FREQ_IDS.values()))
@@ -118,6 +77,15 @@ def test_chime_scan_matches_runner(tmp_path):
         verbose=False,
     )
 
-    for name in ("chime_detector_outputs.npz", "chime_spectrogram_cache.npz",
-                 "chime_reductions_10s.npz"):
-        _assert_npz_equal(ref_dir / name, scan_dir / name)
+    got = np.load(scan_dir / "chime_detector_outputs.npz")
+    for pilot, ch in enumerate(sorted(CHANNELS)):
+        files = sorted(input_dir.glob(f"*_{FREQ_IDS[ch]}.h5"))
+        powers = np.concatenate(
+            [reference_fine_powers(f, weights_by_channel[ch]) for f in files]
+        ).sum(axis=-1, dtype=np.uint64)
+        for term, name in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
+            np.testing.assert_array_equal(got[name][:, pilot], powers[:, term], err_msg=f"{ch} {name}")
+    assert got["p_target_u64"].shape == (N_FRAMES * N_FILES, len(CHANNELS))
+    # the spectrogram cache and reductions must agree with the detector outputs
+    report = validate_products(run_dir=scan_dir)
+    assert report["valid"], report["errors"]

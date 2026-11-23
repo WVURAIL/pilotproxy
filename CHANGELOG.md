@@ -5,6 +5,21 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Removed code and data that neither the live system nor the dissertation uses. Every removed path is listed in
+  `tests/data/removed_paths.txt`, and tag `pre-purge-2026-11-23` (63e72e8) holds them:
+  - the LimeSDR/SDR bench: transfer sweep, live handoff, antenna controls, smoke and reference captures,
+    distribution reference, OTA protocol, the SDR upgrade adapter and streaming model, and the vendored LimeSuite
+    headers;
+  - the synthetic SNR and estimator-transfer bench: commands `evaluate-snr`, `plot-results`, `summarize-results`,
+    `quantize` and `bench`, the testbench harness, AWGN and quantize modules, `current_geometry_sensitivity.py`,
+    `audit_settled_waveform.py`, `run_estimator_transfer.sh` and `examples/quickstart.sh`. `evaluate_snr.py` and
+    `sensitivity_study.py` keep only what the pinned benchmark drivers import, whose bytes are unchanged;
+  - the survey stress and durability tests, and the estimator-transfer freezer with its test;
+  - the `chime-run` and `chime-inspect` commands, the batch runner and segmented input; `chime-scan --source
+    local` covers staged directories. The analyzer's weight-manifest and reference-placement checks moved into
+    `archive/detector.py`;
+  - seven early `docs/evidence` studies (mask/residual frontier, M scaling, fine-gain Monte Carlo and its
+    correction, SDR bench, and the first digital and OTA estimator-transfer freezes).
 - `combine_pathfinder_dtv_run.py` combines an acquisition again when recv has added files since it was combined
   (windows written after a quiet gap in the same acquisition). `combine.json` now lists the files it combined
   (`sources`). If files it combined before are gone, combining again would drop their windows, so the tool refuses

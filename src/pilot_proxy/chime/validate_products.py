@@ -196,7 +196,7 @@ def _validate_input_manifest(
     *,
     errors: list[dict[str, str]],
 ) -> _InputManifestIdentity | None:
-    """Validate a chime-run or chime-scan input manifest, which use different schemas."""
+    """Validate a chime-scan or an older chime-run input manifest, which use different schemas."""
     token = payload.get("schema_version")
     if token == CHIME_INPUT_MANIFEST_SCHEMA_TOKEN:
         if not _validate_exact_fields(
@@ -681,9 +681,9 @@ def _validate_detector_frame_powers(
 ) -> None:
     """Check the reference split and fine powers of a contract revision 2 output.
 
-    A revision-2 output carries ``p_ref_lower_u64`` and ``p_ref_upper_u64``. A
-    ``chime-run`` output also carries ``fine_power_u64``, whose all-bin sums
-    must equal the stored frame powers exactly. A ``chime-scan`` combine leaves
+    A revision-2 output carries ``p_ref_lower_u64`` and ``p_ref_upper_u64``. An
+    output of the removed ``chime-run`` also carries ``fine_power_u64``, whose
+    all-bin sums must equal the stored frame powers exactly. A ``chime-scan`` combine leaves
     the fine powers in its per-pilot products, so they are not required here,
     and when present they are checked the same way.
     """

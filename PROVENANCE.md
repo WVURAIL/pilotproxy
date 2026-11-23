@@ -15,10 +15,6 @@ of products made before the snapshot, refer to that repository unless the commit
 in this one. Readers who need them, such as the dissertation committee, can be given
 access on request.
 
-Set `PILOT_PROXY_PROVENANCE_REPOSITORY` to a local checkout or bare clone of that
-history for the archived exporter and transfer-reproduction tests. These tests
-execute the hash-verified historical sources; separate tests check that current
-readers and exporters refuse incompatible inputs or changed publication sources.
 `GIT_ALTERNATE_OBJECT_DIRECTORIES` can expose preserved object directories to the
 source-hash and cited-path checks without importing private refs into this
 repository.

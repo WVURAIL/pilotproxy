@@ -1,9 +1,9 @@
-# CHIME Staged-Data Workflow (`chime-run`)
+# CHIME Detector Workflow
 
-The purpose of `chime-run` is to process an already-staged local HDF5
-directory in one process, for staged data and regression comparisons. For
-archive-scale CADC and CANFAR work, use `pilot-proxy chime-scan` and
-`docs/CANFAR_RUNBOOK.md`.
+`pilot-proxy chime-scan` runs the detector over CHIME baseband HDF5 files:
+already-staged local files with `--source local`, or the CADC archive (see
+`docs/LOCAL_PROCESSING.md` and `docs/CANFAR_RUNBOOK.md`). This page describes
+the data contract, the weight convention and the products.
 
 The adapter connects segmented CHIME HDF5 baseband data to the
 fixed-point detector. It does not change the CUDA kernel contract:
@@ -17,8 +17,7 @@ packed complex int4 input
 uint64 power accumulation
 ```
 
-The synthetic testbench can apply an explicit shelf-SNR threshold. The CHIME
-real-data path does not use that table. It forms the validity flag and the
+The CHIME real-data path forms the validity flag and the
 norm-corrected positive-excess mask from the exact integer powers:
 
 ```text
@@ -51,15 +50,6 @@ CHIME HDF5 segments
 
 ## Data Contract
 
-The helper script `scripts/run_chime_local_detector.sh` reads
-`PILOT_PROXY_CHIME_INPUT_DIR` and otherwise uses
-`$HOME/dataset/canfar_pilots_10s` as a fallback. The `pilot-proxy chime-run`
-command does not read that variable and always requires `--input-dir`.
-
-```text
-$PILOT_PROXY_CHIME_INPUT_DIR    # for example <staged-dir>
-```
-
 The staged dataset carries 23 DTV pilot channels in directories `ch0844`
 through `ch0506`, corresponding to physical channels 14 through 36. The
 expected file layout is:
@@ -82,9 +72,9 @@ PilotProxy profile index is zero-based. The receiver profile is frame-verified
 with the metadata of the dataset being processed.
 
 The adapter converts each CHIME offset-binary int4 byte to the detector's
-two's-complement packed complex int4 representation. `chime-run` concatenates
-files in deterministic sorted segment order, ignores absolute telescope time,
-and reports the resulting position as `frame_index`.
+two's-complement packed complex int4 representation. Each frame is identified
+by its source event and its position in the file, and the combine step stacks
+the pilots on the frames they have in common.
 
 The software profile and the commands below use an analysis frame of 16384
 samples. This value is the profile for the frame of the planned CHIME engine
@@ -97,9 +87,9 @@ require it to be divisible by `K = 128`.
 ## Weight Coordinate Convention
 
 The CHIME receiver profile declares Nyquist zone 2, which mirrors the spectrum
-of each coarse channel. Before the CUDA kernel, the runner reverses each
+of each coarse channel. Before the CUDA kernel, the analyzer reverses each
 detector window to place the samples in the detector frequency coordinate.
-Thus, the runner must use weights defined in that same coordinate:
+Thus, the analyzer must use weights defined in that same coordinate:
 
 ```text
 weight_coordinate_system = post_nyquist_zone_normalization
@@ -107,80 +97,16 @@ input_nyquist_zone = 2
 input_requires_time_reversal = true
 ```
 
-Use the shipped detector-coordinate weight bank with this runner. A newly
+Use the shipped detector-coordinate weight bank. A newly
 generated CHIME bank is acceptable only when its manifest declares
 `post_nyquist_zone_normalization` and the matching time-reversal preprocessing.
-Otherwise the pilot offset can be reversed twice. The runner records the
-effective convention in `run_config.json` and `stats.json` and rejects a raw
+Otherwise the pilot offset can be reversed twice. The analyzer records the
+effective convention in the detector contract and rejects a raw
 input-coordinate manifest when time reversal is active.
-
-## Staged-data workflow
-
-For a local staged dataset, run the detector and then validate the products:
-
-```text
-chime-run
-  -> validate-products
-```
-
-The baseline remains `K = 128`, `reference_offset_bins = 2`,
-`skipped_guard_bins = 1`, and the shipped detector-coordinate weights. The mask
-is the norm-corrected positive-excess comparison shown above.
-
-Set the local input path explicitly:
-
-```bash
-export PILOT_PROXY_CHIME_INPUT_DIR="<staged-dir>"
-```
-
-The helper script uses this value. A CANFAR job should point it at the mounted or
-staged CANFAR directory.
-
-## Commands
-
-Inspect the staged files before running the detector:
-
-```bash
-PYTHONPATH=src python -m pilot_proxy.cli chime-inspect \
-  --input-dir "$PILOT_PROXY_CHIME_INPUT_DIR" \
-  --max-files 20 \
-  --dataset-path baseband
-```
-
-Check the proposed 16384-sample upgrade layout:
-
-```bash
-PYTHONPATH=src python -m pilot_proxy.cli check-layout \
-  --receiver-profile configs/receiver_profiles/chime_dtv_fengine.json \
-  --stream-map configs/stream_maps/chime_feed_pol_example.json \
-  --frame-size-samples 16384 \
-  --num-selected-channels 1
-```
-
-Run the positive-excess detector over physical channels 14 through 36. This
-command reads the staged samples once and writes the frame products and mask to
-one run directory:
-
-```bash
-PYTHONPATH=src python -m pilot_proxy.cli chime-run \
-  --input-dir "$PILOT_PROXY_CHIME_INPUT_DIR" \
-  --physical-channel-range 14:36 \
-  --frames-per-chunk 2 \
-  --output-dir generated/chime_real/canfar_pilots_10s_positive_excess_full \
-  --plot
-```
-
-Validate the combined files:
-
-```bash
-PYTHONPATH=src python -m pilot_proxy.cli validate-products \
-  --run-dir generated/chime_real/canfar_pilots_10s_positive_excess_full \
-  --output-json generated/chime_real/canfar_pilots_10s_positive_excess_full/product_validation.json
-```
 
 ## Output Products
 
-The staged-data runner writes:
+The combine step of `chime-scan` writes:
 
 ```text
 run_config.json
@@ -188,13 +114,13 @@ input_manifest.json
 stats.json
 chime_detector_outputs.npz
 chime_spectrogram_cache.npz
+chime_integrated_spectra.npz
 chime_reductions_10s.npz
-tables/
-figures/
+chime_frame_identity.npz
+tables/mask_summary_by_pilot.csv
 ```
 
-The archive-scale `chime-scan` path also writes authoritative per-pilot
-products and `chime_integrated_spectra.npz` (see
+beside the authoritative per-pilot products (see
 `docs/PER_PILOT_PRODUCT_FIELDS.md` and `docs/DATA_PRODUCTS.md`).
 
 Generated metadata can contain absolute paths for the receiver profile, stream
@@ -217,13 +143,13 @@ baseband summaries, invalid frames are excluded, and the after-mask value
 averages only frames with `mask = 0`. Rejected frames are never replaced with zeros.
 
 `chime_detector_outputs.npz` also stores the reference split
-(`p_ref_lower_u64`, `p_ref_upper_u64`) and the fine powers `fine_power_u64`,
-shape `(num_frames, num_pilots, 3, 256)`, whose all-bin sums are the frame
-powers. The runner refuses a detector result whose powers are not those sums,
-and `validate-products` checks the identity exactly (`DATA_PRODUCTS.md`). The
-fine powers take 6 KiB per frame and pilot before compression.
+(`p_ref_lower_u64`, `p_ref_upper_u64`). The fine powers `fine_power_u64`,
+whose all-bin sums are the frame powers, stay in the per-pilot products, and
+`validate-products` checks that identity exactly where they are present
+(`DATA_PRODUCTS.md`). The fine powers take 6 KiB per frame and pilot before
+compression.
 
-After `--plot`, the staged-data run contains:
+After `pilot-proxy chime-plot`, the run directory also contains:
 
 ```text
 tables/normalized_coarse_power_ratio_summary_by_channel.csv
@@ -315,7 +241,7 @@ use `reject_mask` in the authoritative per-pilot products and
 
 ## Injection recovery
 
-Three analysis commands operate on the staged files or the archive-scale
+Three analysis commands operate on the staged files or the `chime-scan`
 products:
 
 ```text

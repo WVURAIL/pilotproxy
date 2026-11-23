@@ -6,11 +6,10 @@ import math
 import numpy as np
 import pytest
 
-from pilot_proxy.testbench import evaluate_snr, sensitivity_study
+from pilot_proxy.testbench import binomial
 
 
-@pytest.fixture(params=[evaluate_snr.wilson_interval, sensitivity_study.wilson_interval],
-                ids=["snr", "sensitivity"])
+@pytest.fixture(params=[binomial.wilson_interval], ids=["binomial"])
 def interval(request):
     return request.param
 

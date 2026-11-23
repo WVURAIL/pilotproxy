@@ -54,13 +54,6 @@ HZ_PER_MHZ = 1.0e6
 DEFAULT_DETECTOR_INPUT_DIR = Path("generated/detector_input")
 DEFAULT_DETECTOR_MATRIX_FILENAME = "detector_matrix_i4.npy"
 DEFAULT_DETECTOR_BLOCKS_FILENAME = "detector_blocks_i4.npy"
-DEFAULT_CLEAN_ATSC_IQ_PATH = Path("generated/atsc/atsc_8vsb_complex64.cfile")
-DEFAULT_QUANTIZE_HINT = (
-    "python -m pilot_proxy.testbench.quantize "
-    "--input-iq generated/atsc/atsc_8vsb_complex64.cfile "
-    "--output-dir generated/detector_input "
-    "--physical-channel 14"
-)
 
 
 class KernelSpecsLike(Protocol):
@@ -86,15 +79,6 @@ def _missing_detector_input_message(path: Path) -> str:
                 "",
                 f"A batched detector-input file exists: {default_blocks}",
                 f"You can pass --input-detector-matrix {default_blocks}",
-            ]
-        )
-    elif DEFAULT_CLEAN_ATSC_IQ_PATH.exists():
-        details.extend(
-            [
-                "",
-                "A clean ATSC IQ file exists, so this usually means the quantize "
-                "step has not been run:",
-                f"  {DEFAULT_QUANTIZE_HINT}",
             ]
         )
     return "\n".join(details)
@@ -370,7 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--physical-channel", type=int, default=None,
                         help="ATSC physical channel of the packed matrix. Default: "
-                             "read from the metadata.json sidecar quantize wrote "
+                             "read from the metadata.json sidecar "
                              "next to the matrix; an explicit value must agree "
                              "with it. Without a sidecar, one of --physical-channel/"
                              "--dtv-pilot-mhz is required.")
@@ -417,7 +401,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _sidecar_pilot_hz(input_path: Path) -> tuple[float | None, Path]:
-    """Return the pilot frequency recorded by quantize in the ``metadata.json`` sidecar.
+    """Return the pilot frequency recorded in the ``metadata.json`` sidecar.
 
     The value is None when the sidecar is absent or unreadable, or when it
     has no finite ``dtv_pilot_hz``.
@@ -446,7 +430,7 @@ def _resolve_pilot_request(
 ) -> tuple[int | None, float | None]:
     """Resolve the pilot identity for a packed detector matrix.
 
-    The sidecar records what quantize actually packed, so it is
+    The sidecar records what was actually packed, so it is
     authoritative. With no flags, the pilot comes from the sidecar. An
     explicit flag must agree with the sidecar, since a mismatched channel
     would run the detector against the wrong weight row. With neither a
@@ -471,8 +455,8 @@ def _resolve_pilot_request(
         if sidecar_hz is None:
             raise SystemExit(
                 "detect: no --physical-channel/--dtv-pilot-mhz given and no readable "
-                f"metadata.json sidecar next to {input_path} (quantize writes one "
-                "with dtv_pilot_hz). Pass the pilot identity explicitly."
+                f"metadata.json sidecar with dtv_pilot_hz next to {input_path}. "
+                "Pass the pilot identity explicitly."
             )
         print(
             f"Pilot frequency from sidecar {sidecar_path}: "
@@ -490,7 +474,7 @@ def _resolve_pilot_request(
                 f"detect: requested pilot {requested_hz / HZ_PER_MHZ:.6f} MHz "
                 f"disagrees with the matrix sidecar {sidecar_path} "
                 f"({sidecar_hz / HZ_PER_MHZ:.6f} MHz). The sidecar records what "
-                f"quantize packed; fix the flag or requantize."
+                f"was packed; fix the flag."
             )
     return physical_channel, dtv_pilot_mhz
 

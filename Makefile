@@ -7,7 +7,7 @@ CUDA_LIB := cuda/libpilotproxy.so
 CACHED_CUDA_LIB := $(CUDA_CACHE_DIR)/libpilotproxy.so
 PYTHON_TEST_ENV := MPLBACKEND=Agg PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PILOT_PROXY_USE_TEX=0 PYTHONPATH=src
 
-.PHONY: build-kernel test-kernel test-python test-gpu test lint archive-integration-check generate-atsc audit-atsc quantize detect evaluate release-check commit-check code-only-cut release-clean freeze-check clean-cache clean docs docs-specs docs-specs-check
+.PHONY: build-kernel test-kernel test-python test-gpu test lint archive-integration-check generate-atsc audit-atsc detect release-check commit-check code-only-cut release-clean freeze-check clean-cache clean docs docs-specs docs-specs-check
 
 build-kernel:
 	$(MAKE) -C cuda
@@ -116,21 +116,6 @@ audit-atsc:
 	PYTHONPATH=src $(PYTHON) -m pilot_proxy.testbench.audit_atsc_signal \
 	    --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
 	    --fail-on-quality
-
-quantize:
-	PYTHONPATH=src $(PYTHON) -m pilot_proxy.testbench.quantize \
-	    --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-	    --physical-channel 14 \
-	    --frame-size-samples 16384
-
-evaluate:
-	PYTHONPATH=src $(PYTHON) -m pilot_proxy.testbench.evaluate_snr \
-	    --input-iq generated/atsc/atsc_8vsb_complex64.cfile \
-	    --physical-channel 14 \
-	    --frame-size-samples 16384 \
-	    --requested-data-shelf-snr-db -26 \
-	    --noise-trials 10 \
-	    --gnuradio-python $(GNURADIO_PYTHON)
 
 detect:
 	PYTHONPATH=src $(PYTHON) -m pilot_proxy.detect \

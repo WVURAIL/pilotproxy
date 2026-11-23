@@ -722,9 +722,9 @@ def _event_boundaries(run_dir: Path):
     """Return the frame indices where the source event changes, and the event count.
 
     Both are read from the frame-identity sidecar that event-keyed combines
-    write. None is returned when the sidecar is absent, as for chime-run
-    products and for combines of legacy products without frame identity. The
-    frame axis of a stitched product concatenates acquisitions, so its relative
+    write. None is returned when the sidecar is absent, as for products of
+    the removed chime-run and for combines of legacy products without frame
+    identity. The frame axis of a stitched product concatenates acquisitions, so its relative
     time adds up the data seconds of each acquisition. The boundaries mark the
     jumps in wall-clock time between acquisitions.
     """

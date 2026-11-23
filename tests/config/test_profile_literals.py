@@ -105,13 +105,13 @@ LITERALS = {
         "pilot-proxy tools/audit_per_pilot.py:35 PILOT_BASE_MHZ",
         "pinned", 470.309441, lambda: P.marker_hz(_screened()[0]) / 1e6),
     "quantize_default_pilot_hz": (
-        "pilot-proxy src/pilot_proxy/testbench/quantize.py:38 DEFAULT_DTV_PILOT_HZ",
-        "pinned", 470_309_441.0, lambda: P.marker_hz(_screened()[0])),
-    "quantize_channel_width": (
-        "pilot-proxy src/pilot_proxy/testbench/quantize.py:36 ATSC_CHANNEL_WIDTH_HZ",
+        "pilot-proxy src/pilot_proxy/testbench/quantize.py@63e72e8:40 DEFAULT_DTV_PILOT_HZ",
+        "deleted", 470_309_441.0, lambda: P.marker_hz(_screened()[0])),
+    "audit_atsc_channel_width": (
+        "pilot-proxy src/pilot_proxy/testbench/audit_atsc_signal.py:18 ATSC_CHANNEL_WIDTH_HZ",
         "pinned", 6.0e6, lambda: P.interference.band_width_hz),
-    "quantize_pilot_offset": (
-        "pilot-proxy src/pilot_proxy/testbench/quantize.py:37 ATSC_PILOT_OFFSET_HZ",
+    "audit_atsc_pilot_offset": (
+        "pilot-proxy src/pilot_proxy/testbench/audit_atsc_signal.py:19 ATSC_PILOT_OFFSET_HZ",
         "pinned", 309_441.0, lambda: P.interference.marker.offset_hz),
     "generator_channel_width": (
         "pilot-proxy src/pilot_proxy/testbench/generate_atsc_signal.py:17 ATSC_CHANNEL_WIDTH_HZ",
@@ -161,8 +161,8 @@ LITERALS = {
         "pilot-proxy src/pilot_proxy/archive/detector.py:504 800_000_000.0 (reset from the "
         "instrument in begin())", "pinned", 800_000_000.0, lambda: P.instrument.f0_hz),
     "runner_sample_rate": (
-        "pilot-proxy src/pilot_proxy/chime/runner.py:342 390_625.0",
-        "pinned", 390_625.0, lambda: P.instrument.sample_rate_hz),
+        "pilot-proxy src/pilot_proxy/chime/runner.py@63e72e8:354 390_625.0",
+        "deleted", 390_625.0, lambda: P.instrument.sample_rate_hz),
     "reference_bandwidth": (
         "pilot-proxy src/pilot_proxy/dtv_units.py:24 REFERENCE_BANDWIDTH_HZ (detector)",
         "pinned", 400.0e6, lambda: P.instrument.bandwidth_mhz * 1e6),
@@ -516,7 +516,7 @@ def _module_assignment(path: Path, name: str):
 def test_pinned_code_rows_are_found():
     names = {key for key, _, _ in _pinned_code_rows()}
     assert {"detector_window", "fine_bins", "reference_bandwidth", "hdf5_coarse_width",
-            "quantize_default_pilot_hz", "audit_freq_table",
+            "audit_atsc_pilot_offset", "audit_freq_table",
             "loader_default_nfft"} <= names
 
 

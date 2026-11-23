@@ -17,8 +17,7 @@ block of survey() cleans up before any test can look.
     directory.
 
 No test reaches the network or a certificate. Event enumeration,
-`datatrail ps` and cadcinfo are the three faked seams, the same three faked
-by tests/archive/test_survey_durability_stress.py.
+`datatrail ps` and cadcinfo are the three faked seams.
 
 Run:  PYTHONPATH=src python -m pytest tests/archive/test_survey_crash_window.py
 """

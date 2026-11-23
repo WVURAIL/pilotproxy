@@ -1,9 +1,7 @@
 # coding=utf-8
 """Measure the CHIME DTV local-reference power ratio as archive files arrive.
 
-This analyzer applies the detector operations of the batch runner to a stream
-of frames, with the same packing, detector, and row-accumulation helpers as
-``pilot_proxy.chime.runner.run_chime_analysis``. First, a raw
+This analyzer applies the detector to a stream of frames. First, a raw
 ``uint8 [nfft, n_feeds]`` frame in the native offset-binary 4+4-bit format is
 supplied by the ``chime-baseband-packed`` reader. The frame is then reshaped to
 ``(n_feeds, 1, nfft)`` and passed to ``pack_chime_block_for_detector`` with
@@ -27,7 +25,7 @@ import json
 import operator
 import warnings
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -61,6 +59,8 @@ from pilot_proxy.detector_geometry import (
     DEFAULT_FINE_DESIGNATED_HALF_WIDTH_BINS,
     DEFAULT_NYQUIST_ZONE,
     MIRRORED_NYQUIST_ZONE,
+    frequency_axis_nyquist_zone,
+    normalize_nyquist_zone,
     nyquist_zone_is_mirrored,
     predicted_fine_designated_bins,
     predicted_pilot_fine_bin,
@@ -476,8 +476,219 @@ def _validated_resume_axes(
     return unit_order, unit_keys
 
 
+def _manifest_receiver_nyquist_zone(manifest: Mapping[str, Any]) -> int | None:
+    """Return the Nyquist zone of the embedded receiver profile, or None.
+
+    The zone is read from ``nyquist_zone`` or from the older ``spectral_sense``
+    word.
+    """
+    receiver_profile = manifest.get("receiver_profile")
+    if not isinstance(receiver_profile, Mapping):
+        return None
+    channelizer = receiver_profile.get("channelizer")
+    candidates: list[Any] = []
+    if isinstance(channelizer, Mapping):
+        candidates += [channelizer.get("frequency_axis"), channelizer]
+    candidates.append(receiver_profile)
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            continue
+        try:
+            zone = frequency_axis_nyquist_zone(candidate)
+        except ValueError:
+            return None
+        if zone is not None:
+            return zone
+    return None
+
+
+def _weight_coordinate_metadata(
+    *,
+    weight_bank: Any,
+    input_nyquist_zone: int,
+) -> dict[str, Any]:
+    """Check a weight bank's coordinate convention against the input Nyquist zone."""
+    input_nyquist_zone = normalize_nyquist_zone(input_nyquist_zone)
+    input_requires_time_reversal = nyquist_zone_is_mirrored(input_nyquist_zone)
+    manifest = getattr(weight_bank, "manifest", {}) or {}
+    declared = manifest.get("weight_coordinate_system")
+    if declared is None:
+        raise ValueError(
+            "The current weight manifest requires weight_coordinate_system. "
+            f"Regenerate {getattr(weight_bank, 'path', '<unknown>')} with an "
+            "explicit weight coordinate convention."
+        )
+    coordinate_system = normalize_weight_coordinate_system(declared)
+    manifest_zone = _manifest_receiver_nyquist_zone(manifest)
+
+    metadata = {
+        "expected_weight_coordinate_system": WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
+        "effective_weight_coordinate_system": coordinate_system,
+        "declared_weight_coordinate_system": coordinate_system,
+        "manifest_receiver_nyquist_zone": manifest_zone,
+        "input_nyquist_zone": input_nyquist_zone,
+        "input_requires_time_reversal": bool(input_requires_time_reversal),
+        "weights_path": str(getattr(weight_bank, "path", "")),
+        "validated": True,
+    }
+    if (
+        input_requires_time_reversal
+        and coordinate_system != WEIGHT_COORDINATE_POST_NYQUIST_ZONE
+    ):
+        raise ValueError(
+            "CHIME input is time-reversed into the upright detector coordinate, "
+            "so the detector requires detector-coordinate weights. Use the shipped "
+            "reference weights or a manifest declaring "
+            f"{WEIGHT_COORDINATE_POST_NYQUIST_ZONE!r}; got {coordinate_system!r} "
+            "from "
+            f"{getattr(weight_bank, 'path', '<unknown>')}."
+        )
+    preprocessing = manifest.get("input_preprocessing")
+    if not isinstance(preprocessing, Mapping):
+        raise ValueError(
+            "The current weight manifest requires input_preprocessing."
+        )
+    if "time_reverse_detector_windows_before_kernel" not in preprocessing:
+        raise ValueError(
+            "Weight manifest input_preprocessing requires "
+            "time_reverse_detector_windows_before_kernel."
+        )
+    declared_time_reverse = bool(
+        preprocessing["time_reverse_detector_windows_before_kernel"]
+    )
+    if declared_time_reverse != bool(input_requires_time_reversal):
+        raise ValueError(
+            "Weight manifest preprocessing does not match the runtime input "
+            "Nyquist zone: declared time_reverse_detector_windows_before_kernel="
+            f"{declared_time_reverse}, runtime requires {input_requires_time_reversal}."
+        )
+    return metadata
+
+
+def _format_unique_status(values: Sequence[str]) -> str:
+    unique = sorted({str(value) for value in values if str(value)})
+    if not unique:
+        return "unknown"
+    return unique[0] if len(unique) == 1 else f"mixed:{';'.join(unique)}"
+
+
+def _optional_int(value: Any) -> int | None:
+    return None if value is None else int(value)
+
+
+def _reference_placement_summary(
+    weight_manifest: Mapping[str, Any] | None,
+    physical_channel: Sequence[int] | np.ndarray,
+) -> dict[str, Any] | None:
+    if not isinstance(weight_manifest, Mapping):
+        return None
+    layouts_raw = weight_manifest.get("target_reference_layout")
+    if not isinstance(layouts_raw, (list, tuple)):
+        return None
+    selected_channels = {
+        int(value) for value in np.asarray(physical_channel, dtype=np.int64).ravel()
+    }
+    layouts: list[Mapping[str, Any]] = []
+    for row in layouts_raw:
+        if not isinstance(row, Mapping):
+            continue
+        channel = _optional_int(row.get("physical_channel"))
+        if channel is None or channel not in selected_channels:
+            continue
+        layouts.append(row)
+    if not layouts:
+        return None
+
+    adaptive_channels = [
+        int(layout["physical_channel"])
+        for layout in layouts
+        if str(layout.get("reference_placement_status", "unknown")) != "nominal"
+    ]
+    dc_shifted_channels = [
+        int(layout["physical_channel"])
+        for layout in layouts
+        if bool(layout.get("dc_reference_shifted", False))
+    ]
+    edge_wrapped_channels = [
+        int(layout["physical_channel"])
+        for layout in layouts
+        if bool(layout.get("edge_reference_wrapped", False))
+    ]
+    skipped_guard_channels = [
+        int(layout["physical_channel"])
+        for layout in layouts
+        if bool(layout.get("forbidden_tone_in_skipped_guard", False))
+    ]
+    num_dc_shifted_references = sum(
+        int(bool(layout.get("lower_reference_dc_shifted", False)))
+        + int(bool(layout.get("upper_reference_dc_shifted", False)))
+        for layout in layouts
+    )
+    num_edge_wrapped_references = sum(
+        int(bool(layout.get("lower_reference_edge_wrapped", False)))
+        + int(bool(layout.get("upper_reference_edge_wrapped", False)))
+        for layout in layouts
+    )
+    status_values = [
+        str(layout.get("reference_placement_status", "unknown"))
+        for layout in layouts
+    ]
+    kernel_spec = weight_manifest.get("kernel_spec")
+    if not isinstance(kernel_spec, Mapping):
+        kernel_spec = {}
+    reference_offset_bins = int(kernel_spec.get("reference_offset_bins", 0))
+    skipped_guard_bins = int(
+        kernel_spec.get("skipped_guard_bins", max(0, reference_offset_bins - 1))
+    )
+    return {
+        "reference_offset_bins": int(reference_offset_bins),
+        "skipped_guard_bins": int(skipped_guard_bins),
+        "reference_placement_status": _format_unique_status(status_values),
+        "num_channels_with_adaptive_reference": int(len(adaptive_channels)),
+        "channels_with_adaptive_reference": adaptive_channels,
+        "num_dc_shifted_references": int(num_dc_shifted_references),
+        "channels_with_dc_shifted_reference": dc_shifted_channels,
+        "num_edge_wrapped_references": int(num_edge_wrapped_references),
+        "channels_with_edge_wrapped_reference": edge_wrapped_channels,
+        "num_forbidden_tone_in_skipped_guard": int(len(skipped_guard_channels)),
+        "channels_with_forbidden_tone_in_skipped_guard": skipped_guard_channels,
+        "forbidden_tone_policy": weight_manifest.get("forbidden_tone_policy"),
+        "by_channel": [
+            {
+                "physical_channel": int(layout["physical_channel"]),
+                "reference_placement_status": str(
+                    layout.get("reference_placement_status", "unknown")
+                ),
+                "placement_warnings": str(layout.get("placement_warnings", "")),
+                "lower_reference_offset_bins": int(
+                    layout.get("lower_reference_offset_bins", 0)
+                ),
+                "upper_reference_offset_bins": int(
+                    layout.get("upper_reference_offset_bins", 0)
+                ),
+                "lower_reference_relative_to_target_hz": layout.get(
+                    "lower_reference_relative_to_target_hz"
+                ),
+                "upper_reference_relative_to_target_hz": layout.get(
+                    "upper_reference_relative_to_target_hz"
+                ),
+                "edge_reference_wrapped": bool(
+                    layout.get("edge_reference_wrapped", False)
+                ),
+                "dc_reference_shifted": bool(
+                    layout.get("dc_reference_shifted", False)
+                ),
+                "forbidden_tone_in_skipped_guard": bool(
+                    layout.get("forbidden_tone_in_skipped_guard", False)
+                ),
+            }
+            for layout in layouts
+        ],
+    }
+
+
 class PilotProxyDetectorAnalyzer(Analyzer):
-    """Per-pilot CHIME local-reference power-ratio detector matching the batch runner."""
+    """Per-pilot CHIME local-reference power-ratio detector."""
 
     requires_in_order = True
 
@@ -1018,7 +1229,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
                 stacklevel=2,
             )
 
-        # detector backend, injectable as in run_chime_analysis
+        # detector backend, injectable through ctx.options
         self._fine_p_fa = float(opts.get("fine_p_fa", CFAR_DEFAULT_P_FA))
         self._fine_guard = int(
             opts.get("fine_guard_fine_bins", CFAR_DEFAULT_GUARD_FINE_BINS)
@@ -1137,11 +1348,6 @@ class PilotProxyDetectorAnalyzer(Analyzer):
             else WEIGHT_COORDINATE_RAW_INPUT
         )
         if bank is not None:
-            # same manifest and runtime coordinate validation as the standalone runner
-            from pilot_proxy.chime.runner import (
-                _reference_placement_summary,
-                _weight_coordinate_metadata,
-            )
             coordinate_metadata = _weight_coordinate_metadata(
                 weight_bank=bank,
                 input_nyquist_zone=self._nyquist_zone,
@@ -1201,7 +1407,7 @@ class PilotProxyDetectorAnalyzer(Analyzer):
 
         # The detector contract is stored so that the combine step can write a
         # run_config and stats that validate-products accepts. It is built from
-        # the kernel specs and the Nyquist zone, as in run_chime_analysis. The
+        # the kernel specs and the Nyquist zone. The
         # weight coordinate system comes from the weight manifest when a bank is
         # loaded, and otherwise from the options, with a default set by the
         # Nyquist zone.

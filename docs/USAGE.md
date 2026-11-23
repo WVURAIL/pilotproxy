@@ -104,7 +104,7 @@ the operating documentation in these paths:
   reference channelization, DTV unit conversion, CHIME adapters, and testbench
   workflows.
 - `src/pilot_proxy/testbench/` - GNU Radio ATSC generation, waveform audit,
-  AWGN generation, quantization, and SNR evaluation.
+  and the fine-detector validation campaign.
 - `src/pilot_proxy/archive/` - bounded inventory, staging, streaming, CHIME
   sources and readers, the detector analyzer, scan, and combine support.
 - `weights/` - prebuilt ATSC reference detector weights for
@@ -122,9 +122,8 @@ the operating documentation in these paths:
 - `docs/PRODUCT_SCHEMA.md` - the only supported per-pilot product contract.
 - `docs/PER_PILOT_PRODUCT_FIELDS.md` - detailed shared-field reference.
 - `docs/FINE_REDUCTION_PRODUCTS.md` - fine-measurement and diagnostic fields.
-- `docs/CHIME_RUN_WORKFLOW.md` - staged-data workflow (`chime-run`) for
-  already-staged HDF5 directories. Archive-scale `chime-scan` runs follow the
-  local or CANFAR guide below.
+- `docs/CHIME_RUN_WORKFLOW.md` - CHIME data contract, weight convention and
+  products of `chime-scan`, whose runs follow the local or CANFAR guide below.
 - `docs/DATA_PRODUCTS.md` - emitted file, array, and table definitions.
 - `docs/LOCAL_PROCESSING.md` - authoritative local WSL archive procedure.
 - `docs/CANFAR_RUNBOOK.md` - bounded CANFAR operating procedure.
@@ -132,9 +131,6 @@ the operating documentation in these paths:
 - `docs/DESIGN_DECISIONS.md` - recorded detector and integration decisions.
 - `docs/PilotProxy_DD001_Design_Document.tex` - formal design document (build to PDF).
 - `docs/PilotProxy_UG001_User_Guide.tex` - formal user guide (build to PDF).
-- `examples/quickstart.sh` - standalone release sanity-check workflow (CUDA and
-  GNU Radio, with environment-specific defaults that are overridden with `SM`,
-  `CUDA_PYTHON`, and `GNURADIO_PYTHON`).
 
 We commit the documentation sources and the small, explicitly named artifacts
 needed for reproducibility: the shipped weight banks and manifests, frozen test
@@ -272,7 +268,7 @@ each command that consumes it:
 
 ```bash
 pilot-proxy list-channels --weights-path weights/chime_dtv_weights_k128.bin
-pilot-proxy chime-run --weights-path weights/chime_dtv_weights_k128.bin --help
+pilot-proxy chime-scan --weights-path weights/chime_dtv_weights_k128.bin --help
 ```
 
 `list-channels` reports the reference placement for each physical channel.
@@ -506,27 +502,11 @@ CADC/CANFAR sequences, order constraint, and post-processing commands:
 
 ---
 
-## Standalone synthetic/testbench workflow
+## Synthetic ATSC waveform
 
-`tools/current_geometry_sensitivity.py` runs the staged, paired measurement of
-fixed-point against floating-point sensitivity at the 2048-stream geometry, and
-its module docstring describes the method. The compact commands below are smoke
-tests of the waveform and detector, and their reduced examples give no
-publication sensitivity estimate.
-
-<p align="center">
-  <img src="figures/validation_flow.svg" alt="Standalone validation flow: ATSC generation, waveform audit, AWGN injection, reference PFB, packed int4 matrix, CUDA local-reference power ratio kernel, report" width="560">
-</p>
-
-The Design Document and the User Guide carry the same diagram, and all three are
-rendered from the single source `docs/figures/validation_flow.tikz` (the header
-of that file gives the one-command SVG re-render).
-
-When GNU Radio is installed only in the system Python, the standalone workflow
-uses two interpreters:
-
-- GNU Radio Python for ATSC generation and GNU Radio AWGN;
-- CUDA Python for CuPy and the CUDA local-reference power ratio library.
+GNU Radio is often installed only in the system Python, so the generator runs
+under that interpreter (`/usr/bin/python3` below) and the audit under the
+detector environment.
 
 An ATSC waveform without injected noise is generated with:
 
@@ -547,27 +527,6 @@ that meets all configured bounds prints `quality_passed=True (5/5)` and the
 margin for each check. With `--fail-on-quality`, the command exits nonzero when
 any bound is not met. This result validates the generated waveform against those
 five checks only, and no receiver implementation is validated by it.
-
-The detector input is packed with:
-
-```bash
-PYTHONPATH=src python   -m pilot_proxy.testbench.quantize   --input-iq generated/atsc/atsc_8vsb_complex64.cfile   --physical-channel 14   --frame-size-samples 16384   --num-input-streams 1
-```
-
-A small SNR evaluation is run with:
-
-```bash
-PYTHONPATH=src python   -m pilot_proxy.testbench.evaluate_snr   --input-iq generated/atsc/atsc_8vsb_complex64.cfile   --physical-channel 14   --frame-size-samples 16384   --num-input-streams 1   --requested-data-shelf-snr-db -26   --noise-trials 10
-```
-
-This command writes `generated/dtv_snr_eval/dtv_snr_summary.csv`. The
-`snr_error_db_mean` and `snr_error_db_std` columns summarize estimated shelf SNR
-minus the injected or measured reference. For the packed fixed-point path,
-`cpu_gpu_abs_diff_max` measures agreement between the CUDA detector and the CPU
-reference and is expected to be zero. Ten noise trials make a smoke test and are
-too few for a final uncertainty estimate. A larger `--noise-trials` is needed
-when the uncertainty of the reported mean and standard deviation is part of the
-result.
 
 ---
 

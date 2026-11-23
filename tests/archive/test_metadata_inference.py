@@ -11,8 +11,8 @@ tests cover:
   * ``chime-scan --source`` is inferred from --inventory or --inventory-name,
     and conflicting pairings are raised as errors
   * ``--instrument`` must match the telescope in the inventory sidecar
-  * ``detect`` takes the pilot from the metadata.json sidecar written by
-    quantize, checks an explicit flag against it, and refuses a bare matrix
+  * ``detect`` takes the pilot from the metadata.json sidecar next to
+    the matrix, checks an explicit flag against it, and refuses a bare matrix
     instead of assuming channel 14
 """
 from __future__ import annotations
@@ -261,7 +261,7 @@ def test_scan_rejects_incompatible_inventory_metadata(
         )
 
 
-# detect, where the quantize sidecar is authoritative
+# detect, where the matrix sidecar is authoritative
 
 CH14_HZ = physical_channel_to_pilot_hz(14)
 

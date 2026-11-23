@@ -20,7 +20,7 @@ For the radiometer baseline, the detection rates of the power ratio
 (``baseband_power_linear``) are evaluated on the same frames at matched
 false-alarm rates. The thresholds are empirical quantiles of the ``a = 0``
 control, and the Wilson 95% intervals come from
-``evaluate_snr.wilson_interval``. The horizontal gap between the two detection
+``binomial.wilson_interval``. The horizontal gap between the two detection
 curves is the measured sensitivity advantage.
 
 Only stored products are read, and the detector is not run again.

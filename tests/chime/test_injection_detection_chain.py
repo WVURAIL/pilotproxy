@@ -17,7 +17,8 @@ from gpu import cupy_or_skip
 
 h5py = pytest.importorskip("h5py")
 
-from pilot_proxy.chime import injection, injection_recovery, runner
+from pilot_proxy.archive.scan import run_chime_scan
+from pilot_proxy.chime import injection, injection_recovery
 from pilot_proxy.detector_contract import DETECTOR_CONTRACT_SCHEMA_TOKEN
 from pilot_proxy.detector_reference import frame_powers_cpu_reference_packed
 from pilot_proxy.detector_weights import DetectorWeightBank
@@ -252,13 +253,11 @@ def test_native_injection_detector_recovery_chain(tmp_path, monkeypatch):
         if amplitude == 0:
             assert _digest(inputs / source.name) == protected[source]
         protected.update({path: _digest(path) for path in (inputs / source.name, manifest_path)})
-        assert runner.main([
-            "--input-dir", str(inputs), "--output-dir", str(output),
-            "--receiver-profile", str(profile_path), "--stream-map", str(stream_path),
-            "--weights-path", str(weights_path), "--lib-path", str(DEFAULT_LIB_PATH),
-            "--physical-channel", "14", "--frame-size-samples", str(FRAME),
-            "--frames-per-chunk", "7", "--max-frames", str(FRAMES),
-        ]) == 0
+        run_chime_scan(
+            input_dir=str(inputs), output_dir=str(output), source="local", select="844",
+            analyzer_options={"lib_path": str(DEFAULT_LIB_PATH), "weights_path": str(weights_path)},
+            verbose=False,
+        )
         shutil.copy2(manifest_path, output / manifest_path.name)
         powers, target_norm, reference_norm, ratio, rho, power = _frame_expectations(re, im, weights)
         with np.load(output / "chime_detector_outputs.npz") as detector, np.load(output / "chime_spectrogram_cache.npz") as cache:
@@ -271,7 +270,8 @@ def test_native_injection_detector_recovery_chain(tmp_path, monkeypatch):
                 assert product["valid"].all()
             for column, name in enumerate(("p_target_u64", "p_ref_lower_u64", "p_ref_upper_u64")):
                 np.testing.assert_array_equal(detector[name][:, 0], powers[:, column])
-            np.testing.assert_array_equal(detector["fine_power_u64"].sum(axis=-1)[:, 0], powers)
+            with np.load(output / "_per_pilot" / "844.npz") as per_pilot:
+                np.testing.assert_array_equal(per_pilot["fine_power_u64"].sum(axis=-1), powers)
             assert detector["target_norm_sq"].tolist() == [target_norm]
             assert detector["reference_norm_sum_sq"].tolist() == [reference_norm]
             np.testing.assert_allclose(detector["coarse_power_ratio"][:, 0], ratio, rtol=1e-15)

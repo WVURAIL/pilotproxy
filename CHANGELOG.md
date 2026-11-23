@@ -5,6 +5,13 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- The archive frame-health gate is `pilotproxy_archive_frame_health_gate_v2`. It adds the reason
+  `fill_samples_above_one_percent`, which excludes a frame whose `fill_sample_count` is more than 1% of
+  `railed_sample_total`, so a frame that only partly overlaps absent baseband is no longer counted as healthy. The
+  rule applies to per-pilot v5/v6 products and refuses one that lacks the fill count; archived products store no fill
+  count and are unaffected. The histogram and fine-histogram exporters refuse ledgers, preflights and coarse exports
+  written under the v1 gate, which must be regenerated, and a partly filled valid frame makes the exact spectrum
+  correction unavailable.
 - `test-bundle` accepts a masked fraction when `|bias| <= std`, the criterion of the dissertation's BAO test. Frames are
   grouped by the UTC hour of their time. The bias is the test's mean masked fraction less the calibration's, both
   weighted by frames, and `std` is the standard deviation of the calibration's hourly fractions at the same word.

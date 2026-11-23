@@ -22,20 +22,23 @@ def write_vis(path, first_frame, mask, streams):
 def test_good_inputs_follow_the_mask_of_each_stream(tmp_path):
     streams = [[2531, 2547], [2715, 3115]]
     mask = np.ones((6, 2, 2, 4), np.int8)
-    mask[:2] = -1                 # before the first bad-input update: summed, as in the detector
+    mask[:2, 0] = -1              # stream 0's mask frame had not reached the writer: dropped
     mask[4:, 0, 1, 3] = 0         # one input of stream 0 flagged from frame 4
-    first = write_vis(tmp_path / "vis_1.h5", 0, mask, streams)
-    # the next file repeats the last two frames, which are kept once
+    # the next file repeats the last two frames, which are kept once; the first file's copy of frame 5 is -1
     second = write_vis(tmp_path / "vis_2.h5", 4, mask[4:].repeat(2, axis=0)[:3], streams)
+    mask[5, 0] = -1
+    first = write_vis(tmp_path / "vis_1.h5", 0, mask, streams)
     (tmp_path / "vis_3.h5").write_bytes(b"not hdf5")      # a partial file is skipped
-    counts = read_good_inputs([str(tmp_path / "vis_*.h5")], [2531, 3115, 9999])
+    # a stream with no mask frame in any file gives no counts
+    write_vis(tmp_path / "vis_0.h5", 0, np.full((2, 1, 2, 4), -1), [[2869]])
+    counts = read_good_inputs([str(tmp_path / "vis_*.h5")], [2531, 2869, 3115, 9999])
     assert sorted(counts) == [2531, 3115]
     times, good = counts[2531]
-    assert list(good) == [8, 8, 8, 8, 7, 7, 7]
-    assert list(times) == [FRAME0 + i * FRAME * SEQ_NS for i in range(7)]
+    assert list(good) == [8, 8, 7, 7, 7]
+    assert list(times) == [FRAME0 + i * FRAME * SEQ_NS for i in range(2, 7)]
     assert list(counts[3115][1]) == [8] * 7
     assert changes(times, good) == [(FRAME0 + 4 * FRAME * SEQ_NS, 8, 7)]
-    assert span_counts(times, good, times[3], times[5]) == (7, 7, 8)
+    assert span_counts(times, good, times[1], times[3]) == (7, 7, 8)
     assert span_counts(times, good, times[-1] + 1, times[-1] + 2) is None
     save_good_inputs(counts, tmp_path / "inputs.npz")
     loaded = load_good_inputs(tmp_path / "inputs.npz")

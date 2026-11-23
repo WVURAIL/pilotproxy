@@ -25,6 +25,7 @@ from pilot_proxy.bundle_calibration import (
     capture_weights,
     control_words_at,
     default_rank,
+    iter_blocks,
     iter_run_frames,
     knee_word,
     nominal_fine_bin,
@@ -357,6 +358,68 @@ def test_run_frames_skip_untested_and_missing_blocks(tmp_path):
     assert not list(iter_run_frames(tmp_path / "idle.h5", 521))
 
 
+def write_chord_capture(path, voltages, coarse_freq, fpga_seq_num, dish_label=None):
+    """Write a Pathfinder baseband file: uint8 [time, coarse channel, polarization, dish] in baseband_subset."""
+    with h5py.File(path, "w") as handle:
+        handle["baseband_subset"] = voltages
+        handle["baseband_subset"].attrs["coarse_freq"] = coarse_freq
+        handle["baseband_subset"].attrs["fpga_seq_num"] = fpga_seq_num
+        if dish_label is not None:
+            handle["baseband_subset"].attrs["dish_label"] = dish_label
+    return str(path)
+
+
+def test_chord_blocks_start_on_the_block_grid_and_leave_out_rfi_dishes(tmp_path):
+    block = 8
+    voltages = np.random.default_rng(4).integers(0, 256, size=(5 * block + 3, 2, 2, 3), dtype=np.uint8)
+    # 3 samples before a block edge
+    path = write_chord_capture(tmp_path / "pf.h5", voltages, [2531, 3115], 1000 * block - 3, ["D1", "RFI1", "D2"])
+    blocks = list(iter_blocks(path, "chord_baseband", 3115, block))
+    # stream = polarization * dishes + dish, over the dishes that are not RFI antennas
+    expected = voltages[3:, 1][:, :, [0, 2]].reshape(5, block, 4)
+    assert len(blocks) == 5 and all(np.array_equal(b, e) for b, e in zip(blocks, expected))
+    assert len(list(iter_blocks(path, "chord_baseband", 3115, block, max_frames=2))) == 2
+    # a file with no labels sums every dish
+    path = write_chord_capture(tmp_path / "unlabelled.h5", voltages, [2531, 3115], 0)
+    blocks = list(iter_blocks(path, "chord_baseband", 2531, block))
+    assert len(blocks) == 5 and np.array_equal(blocks[0], voltages[:block, 0].reshape(block, 6))
+    with pytest.raises(ValueError, match="does not hold coarse_freq 2869"):
+        list(iter_blocks(path, "chord_baseband", 2869, block))
+
+
+def test_chime_capture_of_another_channel_or_format_is_refused(tmp_path):
+    path = write_capture(tmp_path / "c35.h5", 35, 1, 0)
+    assert len(list(iter_blocks(path, "chime_baseband", 521, BLOCK))) == 1
+    with pytest.raises(ValueError, match="holds freq_id 521, not 614"):
+        list(iter_blocks(path, "chime_baseband", 614, BLOCK))
+    with pytest.raises(ValueError, match="unknown capture_format 'chime'"):
+        list(iter_blocks(path, "chime", 521, BLOCK))
+
+
+def test_chord_capture_gives_the_fine_powers_of_the_same_voltages_from_chime(plans, tmp_path):
+    bundle = json.loads((plans["bundle"] / "pilot_profiles.json").read_text())
+    bank = (plans["bundle"] / "weights.bin").read_bytes()
+    reverse = bool(bundle["input_preprocessing"]["time_reverse_detector_windows_before_kernel"])
+    row = next(p for p in bundle["profiles"] if p["physical_channel"] == 35)
+    # the capture with the tone, its 16 inputs as 2 polarizations of 8 dishes
+    chime = plans["calibrate"]["channels"]["35"][1]
+    with h5py.File(chime, "r") as handle:
+        inputs = handle["baseband"][()].reshape(-1, 2, 8)
+    # an RFI antenna at full scale (+7 + 7j) between the dishes, and another channel beside this one
+    rfi = np.full(inputs.shape[:2] + (1,), 0xFF, dtype=np.uint8)
+    dishes = np.concatenate([inputs[:, :, :4], rfi, inputs[:, :, 4:]], axis=2)
+    voltages = np.stack([np.full_like(dishes, 0x88), dishes], axis=1)
+    labels = ["D0", "D1", "D2", "D3", "RFI0", "D4", "D5", "D6", "D7"]
+    labelled = write_chord_capture(tmp_path / "pf.h5", voltages, [600, row["receiver_channel_id"]], 0, labels)
+    unlabelled = write_chord_capture(tmp_path / "pf_all.h5", voltages, [600, row["receiver_channel_id"]], 0)
+    expected, _ = _load_fines([chime], "chime_baseband", row, bank, 128, reverse, None)
+    fines, _ = _load_fines([labelled], "chord_baseband", row, bank, 128, reverse, None)
+    assert len(fines) == 2 and np.array_equal(fines, expected)
+    # summed in, the RFI antenna changes the powers
+    fines, _ = _load_fines([unlabelled], "chord_baseband", row, bank, 128, reverse, None)
+    assert not np.array_equal(fines, expected)
+
+
 def test_run_files_keep_recording_order_across_restarts(tmp_path):
     """An F-engine restart resets fpga_seq_num; the files stay in order by their first frame's time."""
     frames = np.ones((2, 3, 256), dtype=np.uint64)
@@ -655,6 +718,31 @@ def test_first_bundle_needs_no_captures(plans, tmp_path, decision, floor):
     assert report["channels"]["37"]["word_source"] == "floor, no captures"
     rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
     assert {row["fine_calibration"]["decision_version"] for row in rows} == {version}
+
+
+def test_v3_first_bundle_scales_the_simulated_control_word(plans, tmp_path):
+    plan = dict(plans["calibrate"], channels={"29": [], "35": [], "37": []}, control=None, num_inputs=32,
+                null_quantile=0.99, decision_version="fine_decision_v3")
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    # the control word is the quantile of white noise through ideal weights, whose null level is 1
+    q = float(np.quantile(simulated_null_scores(32, decision_version="fine_decision_v3"), 0.99))
+    assert report["control_quantile_q16"] == q and report["reference_level"] == 1.0
+    assert report["floor_word_q16"] == report["measured_floor_q16"] == int(np.ceil(q))
+    assert 1.8 < report["floor_eta"] < 1.95
+    assert report["floor_source"] == "white noise, 32 inputs" and report["control"] is None
+    # one independent null score in each simulated frame
+    assert report["null_scores"] == 2000
+    rows = {r["physical_channel"]: r["fine_calibration"]
+            for r in json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]}
+    for channel in (29, 35, 37):
+        r = report["channels"][str(channel)]
+        assert r["word_source"] == "control word x scale" and r["frames"] == 0
+        assert r["scale"] == r["mu0"] != 1.0 and r["passband_factor_source"] == "not given"
+        assert r["word_q16"] == scaled_word(q, r["mu0"]) == rows[channel]["cfar_multiplier_q16"]
+        assert rows[channel]["decision_version"] == "fine_decision_v3"
+        assert rows[channel]["provenance"]["summed_inputs"] == 32
 
 
 def test_unknown_decision_version_is_refused(plans, tmp_path):
@@ -979,6 +1067,60 @@ def test_v3_bundle_names_no_reference_bins(v3_plans):
 def test_v3_bundle_passes_on_other_captures(plans, v3_plans):
     result = run_bundle_test(bundle_dir=v3_plans["bundle"], plan_path=plans["test_path"])
     assert result["passed"], result
+
+
+def _qualify_as_tested(bundle, test_path, tmp_path):
+    """Test a bundle, qualify it on the passing report, check the copy holds the rows that were tested, and
+    return the summary and the qualified rows."""
+    report = tmp_path / "test_report.json"
+    result = run_bundle_test(bundle_dir=bundle, plan_path=test_path, output_json=report)
+    assert result["passed"], result
+    qualified = tmp_path / "qualified"
+    summary = qualify_bundle(bundle_dir=bundle, test_report=report, reviewer="A. Reviewer", output_dir=qualified)
+    assert summary["qualified_channels"] == [29, 35]
+    assert not validate_runtime_weight_bundle(bundle_dir=qualified).get("errors")
+    for name in ("detector_contract.json", "weights.bin", "weights.manifest.json"):
+        assert (qualified / name).read_bytes() == (bundle / name).read_bytes()
+    before = {p["physical_channel"]: p for p in json.loads((bundle / "pilot_profiles.json").read_text())["profiles"]}
+    after = {p["physical_channel"]: p for p in json.loads((qualified / "pilot_profiles.json").read_text())["profiles"]}
+    assert sorted(after) == sorted(before)
+    for channel, row in after.items():
+        unqualified = json.loads(json.dumps(row))
+        record = unqualified["fine_calibration"]["provenance"].pop("mask_qualification", None)
+        expected = dict(test_report_sha256=summary["test_report_sha256"], reviewer="A. Reviewer")
+        assert record == (None if channel == 37 else expected)
+        # the words and the rest of the row are those that were tested
+        assert unqualified == before[channel]
+    return summary, after
+
+
+def test_v3_bundle_is_qualified_at_its_tested_words(plans, tmp_path):
+    # the control is bound, as in the bundle of a run, and qualification leaves its row as it was
+    channels = dict(plans["calibrate"]["channels"], **{"37": plans["calibrate"]["control"]["captures"]})
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], channels=channels, decision_version="fine_decision_v3")))
+    calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    _, rows = _qualify_as_tested(tmp_path / "bundle", plans["test_path"], tmp_path)
+    assert sorted(rows) == [29, 35, 37] and rows[37]["fine_calibration"]["status"] == "control"
+    assert {row["fine_calibration"]["decision_version"] for row in rows.values()} == {"fine_decision_v3"}
+    assert not any("power_limit_multiplier_q16" in row["fine_calibration"] for row in rows.values())
+
+
+def test_v3_power_limit_bundle_is_qualified_with_its_power_limit_word(plans, tmp_path):
+    path = limit_plan(plans, tmp_path, 1e-3)
+    # 36 frames of channel 35, so its pilot is seen, as in test_v3_power_limit_word_is_the_power_limit_word
+    mixed = [write_capture(tmp_path / f"c35_{i}.h5", 35, 6, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    plan = json.loads(path.read_text())
+    plan["channels"] = dict(plan["channels"], **{"35": mixed})
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    word = report["channels"]["35"]["power_limit_word_q16"]
+    assert word not in (None, REJECT_WORD_Q16) and report["channels"]["29"]["power_limit_word_q16"] == REJECT_WORD_Q16
+    _, rows = _qualify_as_tested(tmp_path / "bundle", plans["test_path"], tmp_path)
+    # the stage applies the power-limit word of channel 35 and the reject word of channel 29, the words tested
+    fine = {channel: row["fine_calibration"] for channel, row in rows.items()}
+    assert fine[35]["power_limit_multiplier_q16"] == v3_word(fine[35]) == word != fine[35]["cfar_multiplier_q16"]
+    assert fine[29]["power_limit_multiplier_q16"] == v3_word(fine[29]) == REJECT_WORD_Q16
 
 
 def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):

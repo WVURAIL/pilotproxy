@@ -240,6 +240,16 @@ def test_temperature_amplitude_is_squared():
     assert t.decide(s, 1, power_scale=1, power_limit=1)["deployed_word"] == 1000
     assert t.decide(s, 1, power_scale=2, power_limit=1)["deployed_word"] is None
 
+def test_response_scales_the_linear_bound():
+    s = sweep_of([.8], [.5])  # (x + 2 se)^2 = .64
+    d = t.decide(s, 1.5, power_scale=1, power_limit=10)
+    assert d["deployed_word"] == 1000
+    assert d["deployed"]["r_hi"] == pytest.approx(.64 * 1.5)
+    assert t.decide(s, 1.6, power_scale=1, power_limit=10)["deployed_word"] is None
+    s = sweep_of([1.2], [.5])  # (x + 2 se)^2 = 1.44
+    assert t.decide(s, .5, power_scale=1, power_limit=10)["deployed_word"] == 1000
+    assert t.decide(s, 1, power_scale=1, power_limit=10)["deployed_word"] is None
+
 def test_exclusion_and_insufficient_clusters():
     s = sweep_of([.2], [.5])
     assert t.decide(s, 1, power_scale=1, power_limit=1, exclude="no matching pilot")["deployed_word"] is None

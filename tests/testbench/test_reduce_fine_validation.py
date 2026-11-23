@@ -145,13 +145,32 @@ def test_engineering_power_files_end_to_end_complete_frozen_grid(tmp_path):
         REDUCER.score_stage(out, "null_calibration")
 
 
-def test_invalid_null_frame_refuses_instead_of_trimming(tmp_path):
-    out = fixture(tmp_path, invalid_null=True)
+def fine_refusals(stages, reason):
+    return {(anchor, stage, int(rank), reason(stage)) for anchor in ANCHORS + [NOMINAL]
+            for stage in stages for rank in REDUCER.construct_geometry(anchor).ranks}
+
+
+@pytest.mark.parametrize("damage", ["invalid_null", "invalid_fine_rank"])
+def test_invalid_null_frame_refuses_instead_of_trimming(tmp_path, damage):
+    out = fixture(tmp_path, **{damage: True})
     REDUCER.score_stage(out, "null_calibration")
     with pytest.raises(ValueError, match="Calibration refused"):
         REDUCER.calibrate(out)
     report = REDUCER.read_json(out / "calibration-refused.json")
-    assert report["null_trials"] == 2 and report["refusals"]
+    assert report["null_trials"] == 2
+    fine = {(r["anchor"], r["stage"], r["rank"], r["reason"]) for r in report["refusals"] if "coarse" not in r}
+    coarse = {(r["stage"], r["reason"]) for r in report["refusals"] if "coarse" in r}
+    assert len(fine) + len(coarse) == len(report["refusals"])
+    if damage == "invalid_null":
+        # Every reference of trial 1 is zero, so every path refuses.
+        assert fine == fine_refusals((*REDUCER.FLOAT_STAGES, REDUCER.Q16_STAGE), lambda stage: (
+            "invalid fine ranks must be reported before calibration; no rows are dropped"
+            if stage == REDUCER.Q16_STAGE else "Invalid fine rank"))
+        assert coarse == {(stage, "Invalid coarse reference") for stage in REDUCER.FLOAT_STAGES}
+    else:
+        # Only the floating fine ranks of trial 1 are invalid.
+        assert fine == fine_refusals(REDUCER.FLOAT_STAGES[:5], lambda stage: "Invalid fine rank")
+        assert not coarse
     assert not (out / "calibration.json").exists()
     assert not (out / "calibration.sha256").exists()
 

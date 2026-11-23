@@ -12,7 +12,8 @@ calibration part, the failed test checks, and the share of captures to give proc
 power-limit word or the floor. Under fine decision v3 the table has no floor or anchor. Each channel's word is
 its default word, the control's 1% word scaled to the channel, and the masked fraction is at that word. With
 --power-limit the table also gives its power-limit word. The calibration length is the shortest L whose words
-still pass. --night takes the control word over the night frames at a site, as for process-run.
+still pass. --night takes the control word over the night frames at a site, as for process-run, and skips
+a calibration part with no control capture at night.
 With --block-hours, consecutive blocks of that length are calibrated on their own, which shows how each
 word follows the time of day.
 
@@ -42,6 +43,7 @@ from pilot_proxy.bundle_calibration import MIN_KNEE_CAPTURES, Q16, _rows, calibr
 from pilot_proxy.fine_decision import CALIBRATION_DECISION_VERSION, FINE_DECISION_V3_VERSION, FINE_DECISION_VERSIONS
 from pilot_proxy.input_counts import load_good_inputs, span_counts
 from pilot_proxy.run_plans import ordered_run_files, write_run_plans
+from pilot_proxy.sun import is_night
 
 CAPTURE_SECONDS = 1024 * 8192 * 5.12e-6     # 1024 detector blocks; the same on CHIME (16384 x 2.56 us)
 # the fewest kept captures the archive rule accepts, which a v1 or v2 knee needs
@@ -101,6 +103,16 @@ def gaps(hours, capture=CAPTURE_SECONDS / 3600):
 def select(files, hours, start, stop):
     """Return each channel's files whose captures start in [start, stop) hours."""
     return {ch: [path for path, h in zip(paths, hours[ch]) if start <= h < stop] for ch, paths in files.items()}
+
+
+def no_night(template, hours, first_ns, start, stop):
+    """Return True when the plan takes the control word at night and no control capture in [start, stop) hours
+    starts at night, so the calibration would find no night frame."""
+    night = template.get("default_word", {}).get("night")
+    if night is None or first_ns is None:
+        return False
+    times = np.array([first_ns / 1e9 + 3600 * h for h in hours if start <= h < stop])
+    return not is_night(times, night["latitude_deg"], night["longitude_deg_east"]).any()
 
 
 def input_ranges(hours, first_ns, counts, freq_of, start, stop):
@@ -242,6 +254,9 @@ def main():
                 print(f"{length:g} h: {k} captures to calibrate and {m} to test, each needs {fewest}"
                       + ("" if knee else f" ({rule})") + "; skipped")
                 continue
+            if no_night(template, hours[control], first_ns, 0, length):
+                print(f"{length:g} h: no night control capture; skipped")
+                continue
             out = args.output_dir / f"{length:g}h"
             report = calibrate_on(template, chosen, control, out)
             record = test_on(template, rest, control, out)
@@ -270,6 +285,10 @@ def main():
             if k < fewest:
                 rows.append(dict(row, skipped=f"{k} captures, {rule}"))
                 print(f"block {b} from {start:g} h: {k} captures; skipped")
+                continue
+            if no_night(template, hours[control], first_ns, start, start + size):
+                rows.append(dict(row, skipped="no night control capture"))
+                print(f"block {b} from {start:g} h: no night control capture; skipped")
                 continue
             report = calibrate_on(template, chosen, control, args.output_dir / f"block{b}")
             inputs = input_ranges(hours, first_ns, counts, freq_of, start, start + size)

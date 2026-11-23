@@ -1551,34 +1551,53 @@ def test_calibration_length_takes_the_night_control_word(plans, tmp_path, monkey
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": captures})))
     calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
-    # 64 captures from 0.2 h before sunset at DRAO, so the 0.4 h calibration holds about 17 day and 17 night captures
     minutes = DAY_CTIME + 60 * np.arange(12 * 60)
     sunset = minutes[np.argmax(is_night(minutes, DRAO["latitude_deg"], DRAO["longitude_deg_east"]))]
-    times = sunset - 720 + tool.CAPTURE_SECONDS * np.arange(64)
-    day = ~is_night(times, DRAO["latitude_deg"], DRAO["longitude_deg_east"])
-    rng = np.random.default_rng(3)
-    (tmp_path / "run").mkdir()
-    for index in range(64):
-        data = rng.gamma(44, 1e6 / 44, size=(8, 2, 3, 256))
-        data[:, 1, 0] *= 1 + 0.5 * day[index]        # the Sun raises the control's target in the day
-        with h5py.File(tmp_path / "run" / f"run_{index:02d}.h5", "w") as handle:
-            handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
-            handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
-            handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 8 * 8192
-            handle["dtv_fine_powers_n0"].attrs["fpga_seq_time_nsec"] = int(times[index] * 1e9)
+    site = (str(DRAO["latitude_deg"]), str(DRAO["longitude_deg_east"]))
 
-    def control(name, *extra):
+    def write_run(run, before_sunset_s):
+        """Write 64 captures starting before_sunset_s before sunset at DRAO, and return which are in the day."""
+        times = sunset - before_sunset_s + tool.CAPTURE_SECONDS * np.arange(64)
+        day = ~is_night(times, DRAO["latitude_deg"], DRAO["longitude_deg_east"])
+        rng = np.random.default_rng(3)
+        (tmp_path / run).mkdir()
+        for index in range(64):
+            data = rng.gamma(44, 1e6 / 44, size=(8, 2, 3, 256))
+            data[:, 1, 0] *= 1 + 0.5 * day[index]        # the Sun raises the control's target in the day
+            with h5py.File(tmp_path / run / f"run_{index:02d}.h5", "w") as handle:
+                handle["dtv_fine_powers_n0"] = data.astype(np.uint64)
+                handle["dtv_fine_powers_n0"].attrs["coarse_freq"] = [521, 491]
+                handle["dtv_fine_powers_n0"].attrs["fpga_seq_num"] = index * 8 * 8192
+                handle["dtv_fine_powers_n0"].attrs["fpga_seq_time_nsec"] = int(times[index] * 1e9)
+        return day
+
+    def study(name, run, *extra):
         monkeypatch.setattr(sys, "argv", ["calibration_length.py", "--bundle-dir", str(tmp_path / "bundle"), "--run",
-                                          str(tmp_path / "run" / "run_*.h5"), "--hours", "0.4", "--decision-version",
+                                          str(tmp_path / run / "run_*.h5"), "--decision-version",
                                           "fine_decision_v3", "--output-dir", str(tmp_path / name), *extra])
         tool.main()
-        capsys.readouterr()
-        return json.loads((tmp_path / name / "0.4h" / "bundle.report.json").read_text())
+        return capsys.readouterr().out
 
-    night = control("night", "--night", str(DRAO["latitude_deg"]), str(DRAO["longitude_deg_east"]))
-    all_frames = control("all")
+    # from 0.2 h before sunset, the 0.4 h calibration holds about 17 day and 17 night captures
+    day = write_run("run", 720)
+    study("night", "run", "--hours", "0.4", "--night", *site)
+    study("all", "run", "--hours", "0.4")
+    night, all_frames = (json.loads((tmp_path / name / "0.4h" / "bundle.report.json").read_text())
+                         for name in ("night", "all"))
     assert night["control"]["night"] == dict(DRAO, frames=8 * int((~day[:34]).sum()))
     assert night["control_quantile_q16"] < all_frames["control_quantile_q16"]
+
+    # from 1400 s before sunset, the first 0.38 h is all day: it is skipped, and the night after it calibrates
+    day = write_run("dusk", 1400)
+    assert day[:32].all()
+    out = study("dusk-hours", "dusk", "--hours", "0.38", "--night", *site)
+    assert "0.38 h: no night control capture; skipped" in out
+    assert json.loads((tmp_path / "dusk-hours" / "length.json").read_text()) == []
+    study("dusk-blocks", "dusk", "--block-hours", "0.38", "--night", *site)
+    rows = json.loads((tmp_path / "dusk-blocks" / "blocks.json").read_text())
+    assert rows[0]["skipped"] == "no night control capture" and "channels" in rows[1]
+    report = json.loads((tmp_path / "dusk-blocks" / "block1" / "bundle.report.json").read_text())
+    assert report["control"]["night"] == dict(DRAO, frames=8 * int((~day[32:]).sum()))
 
 
 def test_v3_rows_need_a_receiver_namespace():

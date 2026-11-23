@@ -82,7 +82,7 @@ V=/mnt/cs00/data/kotekan_vis_files/subset
 ```
 
 The study takes the same `--night` and `--decision-version` as process-run in step 4, so it tests the words
-that step deploys.
+that step deploys. With `--night`, a length or block with no control capture at night is skipped.
 
 The bad-input mask changes as the operators' script flags feeds: on 2026-11-20 it moved between 111 and
 113 good inputs of 128 about every 14 minutes. `pathfinder_input_counts.py` reads it from the visibility

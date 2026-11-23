@@ -699,6 +699,10 @@ def _add_threshold_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--decision-version", choices=FINE_DECISION_VERSIONS, default=None,
                         help="Test the words are set for (default: the calibration default). "
                              "fine_decision_v1 for a Kotekan stage that runs only that test.")
+    parser.add_argument("--night", type=float, nargs=2, default=None, metavar=("LATITUDE_DEG", "LONGITUDE_DEG_EAST"),
+                        help="Take the control quantile of the default word over the control frames recorded with the "
+                             "Sun below the horizon at this site, as CHIME's 21 cm analyses use the data. "
+                             "DRAO is 49.3208 -119.6236.")
 
 
 def _cmd_plan_run(args: argparse.Namespace) -> None:
@@ -706,7 +710,7 @@ def _cmd_plan_run(args: argparse.Namespace) -> None:
                             receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
                             null_quantile=args.null_quantile, calibration_share=args.calibration_share,
                             threshold=args.threshold, power_limit=args.power_limit,
-                            decision_version=args.decision_version)
+                            decision_version=args.decision_version, night_site=args.night)
     for channel, paths in plans["calibrate"]["channels"].items():
         print(f"channel {channel}: {len(paths)} files to calibrate, {len(plans['test']['channels'][channel])} to test")
 
@@ -716,7 +720,8 @@ def _cmd_process_run(args: argparse.Namespace) -> None:
                           calibration_share=args.calibration_share, null_quantile=args.null_quantile,
                           receiver_profile=args.receiver_profile, detector_core_profile=args.detector_core_profile,
                           chunk_seconds=args.chunk_seconds, threshold=args.threshold, power_limit=args.power_limit,
-                          decision_version=args.decision_version, log=lambda line: print(line, flush=True))
+                          decision_version=args.decision_version, night_site=args.night,
+                          log=lambda line: print(line, flush=True))
     print((args.output_dir / "summary.md").read_text(), end="")
     if not summary["passed"]:
         raise SystemExit(1)

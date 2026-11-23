@@ -49,7 +49,7 @@ CELL = 3051.7578125
 CHANNELS = {35: (521, 596484375.0, 596309441.0), 29: (614, 560156250.0, 560309441.0), 37: (491, 608203125.0, 608309441.0)}
 
 
-def write_capture(path, channel, frames, seed, tone=0.0):
+def write_capture(path, channel, frames, seed, tone=0.0, ctime=None):
     freq_id, centre, pilot = CHANNELS[channel]
     rng = np.random.default_rng(seed)
     n = frames * BLOCK
@@ -64,6 +64,8 @@ def write_capture(path, channel, frames, seed, tone=0.0):
     with h5py.File(path, "w") as handle:
         handle.attrs["freq_id"] = freq_id
         handle.attrs["time0_fpga_count"] = 0
+        if ctime is not None:
+            handle.attrs["time0_ctime"] = ctime
         handle["baseband"] = ((real << 4) | imag).astype(np.uint8)
     return str(path)
 
@@ -513,6 +515,12 @@ def test_run_plans_split_each_channel_in_time(plans, tmp_path):
                            epoch="synthetic", receiver_profile=Path(plans["calibrate"]["receiver_profile"]),
                            calibration_share=0.5)
     assert len(half["calibrate"]["channels"]["37"]) == len(half["test"]["channels"]["37"]) == 3
+    # the night option goes into the default_word block of the calibration plan only
+    assert "default_word" not in result["calibrate"]
+    night = write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "night",
+                            epoch="synthetic", receiver_profile=Path(plans["calibrate"]["receiver_profile"]),
+                            night_site=(49.3208, -119.6236))
+    assert night["calibrate"]["default_word"] == dict(night=DRAO) and "default_word" not in night["test"]
     with pytest.raises(ValueError, match="between 0 and 1"):
         write_run_plans(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], output_dir=tmp_path / "bad",
                         epoch="synthetic", calibration_share=1.0)
@@ -1013,10 +1021,91 @@ def test_v3_default_word_needs_no_captures_of_the_channel(plans, tmp_path):
 
 
 @pytest.mark.parametrize("block, match", [(dict(passband_factor={"29": 0.0}), "positive"),
-                                          (dict(offsets={"29": 1.0}), "unknown default_word")])
+                                          (dict(offsets={"29": 1.0}), "unknown default_word"),
+                                          (dict(night=dict(latitude_deg=49.3)), "night takes"),
+                                          (dict(night=dict(latitude_deg=95.0, longitude_deg_east=0.0)), "latitude"),
+                                          (dict(night=dict(latitude_deg=49.3, longitude_deg_east=400.0)), "longitude")])
 def test_v3_default_word_plan_errors(plans, tmp_path, block, match):
     with pytest.raises(ValueError, match=match):
         calibrate_bundle(plan_path=_v3_plan(plans, tmp_path, default_word=block), output_dir=tmp_path / "bundle")
+
+
+DRAO = dict(latitude_deg=49.3208, longitude_deg_east=-119.6236)
+NIGHT_CTIME = 1782028800.0      # 2026-06-21 08:00 UTC, near local midnight at DRAO
+DAY_CTIME = 1782072000.0        # 2026-06-21 20:00 UTC, near local noon
+
+
+def test_sun_elevation_at_drao():
+    from pilot_proxy.sun import elevation_deg, is_night
+
+    site = (DRAO["latitude_deg"], DRAO["longitude_deg_east"])
+    # 90 - 49.32 +/- 23.44 at the June solstice: about 64.1 at noon, -17.2 at midnight
+    assert elevation_deg(DAY_CTIME - 6 * 60, *site) == pytest.approx(64.1, abs=0.2)
+    assert elevation_deg(NIGHT_CTIME - 6 * 60, *site) == pytest.approx(-17.2, abs=0.2)
+    assert list(is_night([NIGHT_CTIME, DAY_CTIME], *site)) == [True, False]
+
+
+def _night_calibration(plans, tmp_path, name, captures, **extra):
+    plan = dict(plans["calibrate"], decision_version="fine_decision_v3", control=dict(channel=37, captures=captures),
+                **extra)
+    path = tmp_path / f"{name}.json"
+    path.write_text(json.dumps(plan))
+    return calibrate_bundle(plan_path=path, output_dir=tmp_path / name)
+
+
+def test_v3_night_default_word_takes_the_night_control(plans, tmp_path):
+    night = write_capture(tmp_path / "n37.h5", 37, 26, 3, ctime=NIGHT_CTIME)
+    # in the day a tone stands for the Sun, which raises the scores of the control
+    day = write_capture(tmp_path / "d37.h5", 37, 10, 7, tone=0.8, ctime=DAY_CTIME)
+    only_night = _night_calibration(plans, tmp_path, "only_night", [night])
+    with_night = _night_calibration(plans, tmp_path, "with_night", [night, day], default_word=dict(night=DRAO))
+    all_frames = _night_calibration(plans, tmp_path, "all_frames", [night, day])
+    assert with_night["control_quantile_q16"] == only_night["control_quantile_q16"]
+    assert all_frames["control_quantile_q16"] > with_night["control_quantile_q16"]
+    assert with_night["control"]["night"] == dict(DRAO, frames=only_night["control"]["frames"])
+    # the corrections of the power-limit test still read every control frame
+    assert with_night["control"]["frames"] == all_frames["control"]["frames"]
+    assert with_night["floor_source"] == "control channel, night frames"
+    assert "night" not in all_frames["control"]
+
+
+def test_v3_night_needs_frame_times_and_a_night_frame(plans, tmp_path):
+    # the control of the fixture records no time0_ctime
+    with pytest.raises(ValueError, match="time0_ctime"):
+        calibrate_bundle(plan_path=_v3_plan(plans, tmp_path, default_word=dict(night=DRAO)), output_dir=tmp_path / "b")
+    day = write_capture(tmp_path / "d37.h5", 37, 26, 3, ctime=DAY_CTIME)
+    with pytest.raises(ValueError, match="below the horizon"):
+        _night_calibration(plans, tmp_path, "day_only", [day], default_word=dict(night=DRAO))
+
+
+def test_frame_times_of_run_windows_and_refused_formats(tmp_path):
+    from pilot_proxy.bundle_calibration import _frame_times
+
+    frames = np.ones((3, 3, 256), dtype=np.uint64)
+    path = write_run_file(tmp_path / "run.h5", [491], frames)
+    with h5py.File(path, "a") as handle:
+        handle["dtv_fine_powers_n0"].attrs["fpga_seq_time_nsec"] = int(NIGHT_CTIME * 1e9)
+    assert list(_frame_times([path], "dtv_fine_powers", BLOCK, np.array([3]))) == [NIGHT_CTIME] * 3
+    with pytest.raises(ValueError, match="no frame time"):
+        _frame_times([path], "chord_baseband", BLOCK, np.array([3]))
+
+
+def test_bundle_test_counts_the_night_control(plans, tmp_path):
+    night = write_capture(tmp_path / "n37.h5", 37, 26, 3, ctime=NIGHT_CTIME)
+    day = write_capture(tmp_path / "d37.h5", 37, 10, 7, tone=0.8, ctime=DAY_CTIME)
+    _night_calibration(plans, tmp_path, "bundle", [night, day], default_word=dict(night=DRAO))
+    test = dict(plans["test"], control=[write_capture(tmp_path / "tn37.h5", 37, 12, 6, ctime=NIGHT_CTIME),
+                                        write_capture(tmp_path / "td37.h5", 37, 6, 8, tone=0.8, ctime=DAY_CTIME)])
+    path = tmp_path / "test.json"
+    path.write_text(json.dumps(test))
+    result = run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=path)
+    check = next(c for c in result["checks"] if c["check"] == "false alarms on the control channel")
+    assert "of 12 night frames" in check["detail"]
+    # a test control recorded only in the day cannot test a night calibration
+    path.write_text(json.dumps(dict(test, control=[test["control"][1]])))
+    check = next(c for c in run_bundle_test(bundle_dir=tmp_path / "bundle", plan_path=path)["checks"]
+                 if c["check"] == "false alarms on the control channel")
+    assert not check["passed"] and "no frame recorded with the Sun below the horizon" in check["detail"]
 
 
 def test_weight_norms_are_the_squared_norms_of_the_terms():

@@ -738,3 +738,5 @@ docs/evidence/sdr_ota_transfer_2026-08-25/run/sessions/pass_28.json	63e72e8
 docs/evidence/sdr_ota_transfer_2026-08-25/run/sessions/pass_29.json	63e72e8
 docs/evidence/sdr_ota_transfer_2026-08-25/run/sessions/pass_30.json	63e72e8
 docs/evidence/sdr_ota_transfer_2026-08-25/run/source_provenance.json	63e72e8
+tools/fused_real_receipt.py	63e72e8
+tests/core/test_fused_real_receipt.py	63e72e8

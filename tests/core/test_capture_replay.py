@@ -468,6 +468,27 @@ def test_v3_nonzero_mask_row_fails(tmp_path):
     assert all(row["stat_matches"] for row in report["comparisons"])
 
 
+def test_v3_default_word_flags_with_zero_masks(tmp_path):
+    # no power-limit word, so the stage applies the default word, which flags the random block
+    plan = make_plan(tmp_path, decision_version=V3, v3_words={"cfar_multiplier_q16": 196608})
+    artifacts = replay.replay_capture(plan)
+    assert artifacts["replay.json"]["product_agreement"] is True
+    rows = artifacts["scores_CH14.json"]["scores"]
+    assert [(row["recorded_mask"], row["expected_decision"]) for row in rows] == [(0, 1), (0, 1)]
+    assert int(rows[0]["required_multiplier_q16"]) > 196608
+    assert [row["bundle_multiplier_q16"] for row in rows] == ["196608", "196608"]
+
+
+def test_v3_stat_frames_are_validated(tmp_path):
+    plan = make_plan(tmp_path, decision_version=V3)
+    update_raw(plan, "stat", lambda data: struct.pack_into("<q", data, STAT_FRAME + 4 + 32, 12345))
+    with pytest.raises(ValueError, match="stat frame 1"):
+        replay.replay_capture(plan)
+    update_raw(plan, "stat", lambda data: data.__delitem__(slice(STAT_FRAME, None)))
+    with pytest.raises(ValueError, match="stat frame count"):
+        replay.replay_capture(plan)
+
+
 def test_v3_capture_without_stat_refused(tmp_path):
     path = make_plan(tmp_path, decision_version=V3)
     plan = read(path)

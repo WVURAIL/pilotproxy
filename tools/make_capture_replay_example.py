@@ -109,13 +109,17 @@ def make_example(
     weight_coordinate_system=WEIGHT_COORDINATE_POST_NYQUIST_ZONE,
     decision_version=FINE_DECISION_VERSION,
     stat=None,
+    v3_words=None,
 ):
     """Write a new example directory and return its replay plan path.
 
     The dtv_stat frames are written when ``stat`` is true. By default they are written for fine_decision_v3 only.
+    ``v3_words`` replaces the Q16 words of a fine_decision_v3 calibration.
     """
     if decision_version not in FINE_DECISION_VERSIONS:
         raise ValueError(f"unknown decision version {decision_version!r}")
+    if v3_words is not None and decision_version != FINE_DECISION_V3_VERSION:
+        raise ValueError("v3_words needs fine_decision_v3")
     if stat is None:
         stat = decision_version == FINE_DECISION_V3_VERSION
     output = Path(output_dir).resolve()
@@ -165,6 +169,8 @@ def make_example(
         # v3 has no search geometry. The stage applies the power-limit word, which flags the first
         # random block and keeps the second of --valid-only. The default word keeps both.
         fields = {"cfar_multiplier_q16": 393216, "power_limit_multiplier_q16": 278528}
+        if v3_words is not None:
+            fields = dict(v3_words)
     else:
         bulk = independent_bin_mask(256, designated_bins=list(range(60, 65)))
         fields = {

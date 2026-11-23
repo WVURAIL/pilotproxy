@@ -222,8 +222,9 @@ def test_stat_frames_are_checked_like_the_products(tmp_path, geometry):
     assert validate_frames(*frames, 2, geometry=geometry, stats=stats) == 1
     with pytest.raises(ValueError, match="stat frame count"):
         validate_frames(*frames, 2, geometry=geometry, stats=stats * 2)
-    for field, value in (("array_name", "dtv_powers"), ("dimensions", (2, 3)), ("dimension_names", ("F", "W")),
-                         ("fpga_seq_num", 101), ("frequency_ids", (1600, 2408))):
+    for field, value in (("array_name", "dtv_powers"), ("data_type", 9), ("dimensions", (2, 3)),
+                         ("dimension_names", ("F", "W")), ("dimension_scaling", (1, 2)), ("fpga_seq_num", 101),
+                         ("time_downsampling_fpga", 4), ("frequency_ids", (1600, 2408))):
         with pytest.raises(ValueError, match="stat frame 0"):
             validate_frames(*frames, 2, geometry=geometry, stats=[dataclasses.replace(stats[0], **{field: value})])
 
@@ -322,6 +323,10 @@ def test_v3_reference_is_the_stat_and_the_decision_at_the_applied_word(geometry)
     flagged = expected_products(raw, strict, weights, geometry=geometry)
     assert flagged.stat_decisions == (1, None)
     assert flagged.masks.tolist() == [0, 0]
+    # without a power-limit word the default word is applied, and a frame it flags still has mask 0
+    default = expected_products(raw, v3_bundle(64, cfar_multiplier_q16=keep - 1), weights, geometry=geometry)
+    assert default.stat_decisions == (1, None)
+    assert default.masks.tolist() == [0, 0]
 
 
 def test_v3_zero_reference_is_masked(geometry):

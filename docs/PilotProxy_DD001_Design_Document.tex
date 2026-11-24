@@ -1430,7 +1430,8 @@ kotekan\#1914 & Merged 2026-11-20. Fine decision v2 where the bundle names it; c
 kotekan\#1915 & Merged 2026-11-20. \code{mask_control}: the control channel masked like a pilot. \#1919 removed its Pathfinder render variable \code{dtv_mask_control}, and \#1924 restores it for the detector and \code{DtvRfiMask}.\\ \hline
 kotekan\#1919 & Merged 2026-11-23. Pathfinder DTV values in \code{telescope.j2}; \code{dtv_enabled}; both switches off at start; the bundle path fixed in \code{dtv.j2}. Removes the Pathfinder render variables \code{dtv_runtime_bundle_dir}, \code{dtv_apply_mask}, \code{dtv_write_enabled} and \code{dtv_mask_control}; \#1924 restores the first and the last.\\ \hline
 kotekan\#1924 & Merged 2026-11-23. Fine decision v3: core 4.2.1, \code{dtv_stat} always written, and \code{DtvRfiMask} applying the words.\\ \hline
-kotekan\#1925 & Open. Recv files of many frames with \code{frame_metadata}, which PilotProxy reads.\\ \hline
+kotekan\#1925 & Merged 2026-11-23. Recv files of many frames with \code{frame_metadata}, which PilotProxy reads.\\ \hline
+kotekan\#1930 & Merged 2026-11-23. An unused fine-power row is labelled $-2$, not $-1$, so a half that binds no channel keeps its \code{coarse_freq}.\\ \hline
 \end{longtable}
 
 \subsection{Dissertation}

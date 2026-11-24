@@ -13,7 +13,7 @@ def write_window(path, coarse, seq, time_ns, fill):
     data = np.full((4, len(coarse), 3, 256), fill, dtype=np.uint64)
     with h5py.File(path, "w") as handle:
         handle["dtv_fine_powers"] = data
-        if any(c >= 0 for c in coarse):           # Kotekan drops an all -1 label
+        if any(c >= 0 for c in coarse):           # Kotekan before #1930 drops an all -1 label
             handle["dtv_fine_powers"].attrs["coarse_freq"] = np.array(coarse, np.int32)
         handle["dtv_fine_powers"].attrs["fpga_seq_num"] = seq
         if time_ns is not None:
@@ -47,6 +47,22 @@ def test_combined_windows_read_as_their_sources(tmp_path):
         assert np.array_equal(run_rows(spec, 3115), run_rows(source, 3115))
     assert [int(a["fpga_seq_num"]) for a, _ in iter_windows(path)] == [s for s, _ in layout]
     assert read_attrs(specs[0])["seq_length_nsec"] == 5120
+
+
+def test_combine_groups_halves_by_their_bound_channels(tmp_path):
+    # kotekan#1930 labels an unused row -2 where earlier builds wrote -1, and keeps an all-unused label
+    acq = tmp_path / "acq_1"
+    acq.mkdir()
+    labels = [[2531, -1], [2531, -2], [-2, -2]]
+    for index, coarse in enumerate(labels):
+        write_window(acq / f"dtv_fine_powers.{index:08d}.h5", coarse, index, index * 10**9, index + 1)
+        with h5py.File(acq / f"dtv_fine_powers.{index:08d}.h5", "a") as handle:
+            handle["dtv_fine_powers"].attrs["coarse_freq"] = np.array(coarse, np.int32)
+    summary = combine(acq, tmp_path / "out", "fine_powers")
+    files = [r for r in summary if "file" in r]
+    assert len(files) == 1 and files[0]["windows"] == 2
+    assert files[0]["file"].endswith("dtv_fine_powers.2531.combined.h5")
+    assert summary[-1] == {"product": "fine_powers", "skipped_without_coarse_freq": 1}
 
 
 def test_combine_refuses_a_window_of_another_shape(tmp_path):

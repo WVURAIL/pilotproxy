@@ -184,7 +184,7 @@ def read_attrs(spec: str | Path) -> dict[str, Any]:
         # -1 marks a window whose source recorded no such value
         if int(values[index]) >= 0:
             attrs[name] = int(values[index])
-    # as in a one-frame file, a frame whose rows are all unused (-1) has no coarse_freq
+    # as in a one-frame file, a frame whose rows are all unused (negative) has no coarse_freq
     if coarse is not None and (coarse[index] >= 0).any():
         attrs["coarse_freq"] = coarse[index].astype(np.int32)
     return attrs
@@ -197,7 +197,7 @@ def read_rows(spec: str | Path, channel_id: int, max_frames: int | None = None) 
     """
     path, index = split(spec)
     attrs = read_attrs(spec)
-    # the attribute is dropped when every row is unused (-1)
+    # the attribute is dropped, or every label negative, when no row is bound
     coarse = [int(c) for c in attrs.get("coarse_freq", [])]
     if channel_id not in coarse:
         return None, attrs
@@ -265,9 +265,11 @@ def combine(acq_dir: str | Path, out_dir: str | Path, product: str, verify: bool
     """Stack the per-window files of one product of one acquisition into one combined file per half.
 
     Windows are ordered by fpga_seq_time_nsec, or fpga_seq_num where no time is recorded, and keep their
-    attributes as datasets. A half with no bound channel (no coarse_freq) is left out, as it holds no rows. A
-    several-frame file (kotekan#1925) needs no combining and is left out. With verify, every window is read back
-    and compared with its source. Returns one summary per file written, and a count of each kind left out.
+    attributes as datasets. Halves are grouped by their bound channels, since kotekan#1930 labels an unused row -2
+    where earlier builds wrote -1. A half with no bound channel (no coarse_freq, or only negative labels) is left
+    out, as it holds no rows. A several-frame file (kotekan#1925) needs no combining and is left out. With verify,
+    every window is read back and compared with its source. Returns one summary per file written, and a count of
+    each kind left out.
     """
     h5py = _h5py()
     acq_dir, out_dir = Path(acq_dir), Path(out_dir)
@@ -279,8 +281,8 @@ def combine(acq_dir: str | Path, out_dir: str | Path, product: str, verify: bool
         if attrs is None:
             several += 1
             continue
-        coarse = tuple(int(c) for c in attrs.get("coarse_freq", []))
-        if not coarse:
+        coarse = tuple(int(c) if int(c) >= 0 else -1 for c in attrs.get("coarse_freq", []))
+        if not any(c >= 0 for c in coarse):
             skipped += 1
             continue
         seq = int(attrs.get("fpga_seq_num", -1))

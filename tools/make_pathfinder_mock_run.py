@@ -10,7 +10,7 @@ dataset dtv_<product>, attributes fpga_seq_num, fpga_seq_time_nsec and coarse_fr
 windows FIRST to FIRST+COUNT-1, an interruption after which Kotekan restarts into a new acq_ directory;
 with --reset-seq the F-engines restart too, so fpga_seq_num starts again while the times run on. Bound halves follow the Pathfinder map
 of 2026-11-19 (cx47: 2531 in stream 3, 2715 and 3115 in stream 11; cx42: 2869 in stream 5). A fourth
-half binds no pilot, so its fine powers carry no coarse_freq, as Kotekan drops an all -1 label.
+half binds no pilot, so its fine powers carry no coarse_freq, as Kotekan before #1930 drops an all -1 label.
 DTV comes and goes on 2531, 2715 and 2869 at the anchors of pathfinder-commissioning-e2e90219;
 3115, the control, has noise only. Synthetic data, for exercising the code only.
 """
@@ -107,7 +107,7 @@ for name, (stream, rows) in HALVES.items():
                 d = f.create_dataset(f"dtv_{product}", data=data, **compress)
                 d.attrs["fpga_seq_num"] = seq
                 d.attrs["fpga_seq_time_nsec"] = time_ns
-                if any(c >= 0 for c in label):              # Kotekan drops an all -1 label
+                if any(c >= 0 for c in label):              # Kotekan before #1930 drops an all -1 label
                     d.attrs["coarse_freq"] = np.array(label, np.int32)
         index += 1
 print(f"wrote {index} windows per product under {args.out}; DTV on",

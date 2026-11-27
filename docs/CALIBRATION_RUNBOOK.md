@@ -111,9 +111,11 @@ sha256sum calib/bundle-qualified/sha256sums.txt | cut -c1-8
 ```
 
 The command refuses a failed report, one with no passing control check, or one of another bundle. It writes
-`mask_qualification` (report and reviewer) into each calibrated channel and gives the bundle a new name. Mask
-only with a qualified bundle. Kotekan does not check the qualification record itself (kotekan#1906 was closed
-unmerged); it refuses only `archive_review_only` and uncalibrated bound channels.
+`mask_qualification` (report and reviewer) into each calibrated channel and gives the bundle a new name. Kotekan
+enforces this: since kotekan#1924, `DtvRfiMask` will not start with the mask on, and refuses a
+`/dtv_mask_enabled` request that turns it on, unless every calibrated channel carries `mask_qualification`
+(`mask_unqualified_reason` in `lib/stages/DtvRfiMask.cpp`). A detect-only bundle can still run with the mask off.
+The control needs no qualification; it is masked only with `mask_control`.
 
 ## 4. Deploy
 

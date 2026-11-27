@@ -12,6 +12,7 @@ import pytest
 from pilot_proxy.power_limit_word import control_corrections, limit_test, ratio_excess
 from pilot_proxy.bundle_calibration import (
     BUNDLE_FILES,
+    MASKS_NOTHING_WORD_Q16,
     NO_PILOT_REASON,
     REJECT_WORD_Q16,
     _bulk,
@@ -59,6 +60,19 @@ FS = 390625.0
 CELL = 3051.7578125
 # channel: (freq_id, centre, pilot)
 CHANNELS = {35: (521, 596484375.0, 596309441.0), 29: (614, 560156250.0, 560309441.0), 37: (491, 608203125.0, 608309441.0)}
+
+
+# the earlier rule of the v3 default word, the control's 1% word scaled to the channel: these synthetic controls hold
+# too few frames for the tail fit of the false-discovery-rate rule
+QUANTILE_RULE = dict(rule="control_quantile")
+
+
+V3_QUANTILE = ("--decision-version", "fine_decision_v3", "--default-word-rule", "control_quantile")
+
+
+def _quantile_rule(block=None):
+    """Return a default_word block with the earlier rule, unless it names its own."""
+    return dict(QUANTILE_RULE, **(block or {}))
 
 
 # 2026-06-21 00:00 UTC, on the hour
@@ -792,7 +806,10 @@ def test_a_plan_without_a_decision_version_calibrates_v3(plans, tmp_path):
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     assert report["decision_version"] == "fine_decision_v3"
-    assert {r["word_source"] for r in report["channels"].values()} == {"control word x scale"}
+    # the false-discovery-rate rule, which masks nothing on a channel without captures
+    assert report["default_word_rule"].startswith("false discovery rate") and report["fdr_level"] == 0.01
+    assert {r["word_source"] for r in report["channels"].values()} == {"fdr, no captures: masks nothing"}
+    assert {r["word_q16"] for r in report["channels"].values()} == {MASKS_NOTHING_WORD_Q16}
     rows = json.loads((tmp_path / "bundle" / "pilot_profiles.json").read_text())["profiles"]
     assert {row["fine_calibration"]["decision_version"] for row in rows} == {"fine_decision_v3"}
     assert validate_runtime_weight_bundle(bundle_dir=tmp_path / "bundle")["valid"]
@@ -800,7 +817,7 @@ def test_a_plan_without_a_decision_version_calibrates_v3(plans, tmp_path):
 
 def test_v3_first_bundle_scales_the_simulated_control_word(plans, tmp_path):
     plan = dict(plans["calibrate"], channels={"29": [], "35": [], "37": []}, control=None, num_inputs=32,
-                null_quantile=0.99, decision_version="fine_decision_v3")
+                null_quantile=0.99, decision_version="fine_decision_v3", default_word=QUANTILE_RULE)
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
@@ -825,6 +842,82 @@ def test_v3_first_bundle_scales_the_simulated_control_word(plans, tmp_path):
         assert r["word_q16"] == scaled_word(q, r["mu0"]) == rows[channel]["cfar_multiplier_q16"]
         assert rows[channel]["decision_version"] == "fine_decision_v3"
         assert rows[channel]["provenance"]["summed_inputs"] == 32
+
+
+def _simulated_null_plan(plans, tmp_path, name, **default_word):
+    plan = dict(plans["calibrate"], channels={"35": plans["calibrate"]["channels"]["35"], "37": []}, control=None,
+                num_inputs=32, null_quantile=0.99, decision_version="fine_decision_v3",
+                **({"default_word": default_word} if default_word else {}))
+    path = tmp_path / f"{name}.json"
+    path.write_text(json.dumps(plan))
+    return calibrate_bundle(plan_path=path, output_dir=tmp_path / name)
+
+
+def test_v3_fdr_default_word_masks_the_pilot_frames(plans, tmp_path):
+    # channel 35 has its pilot in every other capture; the null is simulated white noise, 2000 frames
+    report = _simulated_null_plan(plans, tmp_path, "fdr")
+    r = report["channels"]["35"]
+    found = r["fdr"]
+    assert r["word_source"] == "fdr" and r["word_q16"] == found["word"] and found["frames_used"] == "all"
+    assert found["fdr"] <= 0.01 and found["fdr"] == pytest.approx(found["control_share"] / found["channel_share"])
+    assert r["masked_fraction"] == pytest.approx(0.5)
+    assert report["fdr_null"]["frames"] == 2000 and report["fdr_null"]["k"] >= 20
+    fine = {p["physical_channel"]: p["fine_calibration"]
+            for p in json.loads((tmp_path / "fdr" / "pilot_profiles.json").read_text())["profiles"]}
+    assert fine[35]["cfar_multiplier_q16"] == found["word"]
+    # the pilot-seen gate stays the scaled control word, so the anchor is that of the earlier rule
+    earlier = _simulated_null_plan(plans, tmp_path, "quantile", rule="control_quantile")["channels"]["35"]
+    assert earlier["word_source"] == "control word x scale" and "fdr" not in earlier
+    assert (r["anchor_bin"], r["anchor_source"]) == (earlier["anchor_bin"], earlier["anchor_source"])
+
+
+def test_v3_fdr_level_moves_the_word(plans, tmp_path):
+    loose = _simulated_null_plan(plans, tmp_path, "loose", fdr_level=0.2)["channels"]["35"]
+    strict = _simulated_null_plan(plans, tmp_path, "strict", fdr_level=1e-6)["channels"]["35"]
+    assert loose["fdr"]["fdr"] <= 0.2 and strict["fdr"]["fdr"] <= 1e-6
+    assert loose["word_q16"] <= strict["word_q16"] and loose["masked_fraction"] >= strict["masked_fraction"]
+
+
+def test_v3_fdr_does_not_mask_the_control(plans, tmp_path, monkeypatch):
+    from pilot_proxy import false_discovery
+
+    # the synthetic control holds 26 frames, so the tail fit is allowed one excess here
+    monkeypatch.setattr(false_discovery, "N_EMPIRICAL", 1)
+    captures = plans["calibrate"]["control"]["captures"]
+    plan = dict(plans["calibrate"], channels={**plans["calibrate"]["channels"], "37": captures},
+                decision_version="fine_decision_v3")
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    r = report["channels"]["37"]
+    assert r["word_q16"] == MASKS_NOTHING_WORD_Q16 and r["word_source"] == "fdr, the control is not masked by default"
+    assert "fdr" not in r and report["fdr_null"]["frames"] == report["control"]["frames"]
+    # the control's false-alarm check of test-bundle still reads the floor, the control's 1% word
+    assert report["floor_word_q16"] == int(np.ceil(report["control_quantile_q16"]))
+
+
+def test_v3_fdr_needs_enough_control_frames(plans, tmp_path):
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3")))
+    with pytest.raises(ValueError, match="control_quantile"):
+        calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+
+
+@pytest.mark.parametrize("block, match", [(dict(rule="median"), "rule must be one of"),
+                                          (dict(rule="control_quantile", fdr_level=0.01), "fdr_level is of the rule"),
+                                          (dict(fdr_level=1.5), "between 0 and 1")])
+def test_v3_default_word_rule_errors(plans, tmp_path, block, match):
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3", default_word=block)))
+    with pytest.raises(ValueError, match=match):
+        calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+
+
+def test_the_default_word_rule_is_of_v3(plans, tmp_path):
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], default_word=QUANTILE_RULE)))
+    with pytest.raises(ValueError, match="of fine decision v3"):
+        calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
 
 
 def test_unknown_decision_version_is_refused(plans, tmp_path):
@@ -1202,7 +1295,8 @@ def _power_limit_run(plans, tmp_path, decision, min_captures=2):
     common = dict(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
                   calibration_share=0.5, receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
     summary = process_run(output_dir=tmp_path / "out", threshold="power_limit", power_limit=tmp_path / "inputs.json",
-                          decision_version=decision, **common)
+                          decision_version=decision, **common,
+                          default_word_rule=None if decision == "fine_decision_v2" else "control_quantile")
     return summary, json.loads((tmp_path / "out" / "bundle.report.json").read_text()), common
 
 
@@ -1253,7 +1347,7 @@ def test_v3_process_run_names_the_reject_word_where_no_power_limit_word_passes(p
 @pytest.fixture(scope="module")
 def v3_plans(plans):
     path = plans["tmp"] / "calibrate_v3.json"
-    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3")))
+    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3", default_word=QUANTILE_RULE)))
     bundle = plans["tmp"] / "bundle_v3"
     return dict(bundle=bundle, report=calibrate_bundle(plan_path=path, output_dir=bundle))
 
@@ -1305,7 +1399,7 @@ def test_v3_bundle_is_qualified_at_its_tested_words(plans, tmp_path):
     # the control is bound, as in the bundle of a run, and qualification leaves its row as it was
     channels = dict(plans["calibrate"]["channels"], **{"37": plans["calibrate"]["control"]["captures"]})
     path = tmp_path / "plan.json"
-    path.write_text(json.dumps(dict(plans["calibrate"], channels=channels, decision_version="fine_decision_v3")))
+    path.write_text(json.dumps(dict(plans["calibrate"], channels=channels, decision_version="fine_decision_v3", default_word=QUANTILE_RULE)))
     calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     _, rows = _qualify_as_tested(tmp_path / "bundle", plans["test_path"], tmp_path)
     assert sorted(rows) == [29, 35, 37] and rows[37]["fine_calibration"]["status"] == "control"
@@ -1319,7 +1413,7 @@ def test_v3_power_limit_bundle_is_qualified_with_its_power_limit_word(plans, tmp
     mixed = [write_capture(tmp_path / f"c35_{i}.h5", 35, 6, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
     plan = json.loads(path.read_text())
     plan["channels"] = dict(plan["channels"], **{"35": mixed})
-    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3", default_word=QUANTILE_RULE)))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     word = report["channels"]["35"]["power_limit_word_q16"]
     assert word not in (None, REJECT_WORD_Q16) and report["channels"]["29"]["power_limit_word_q16"] == REJECT_WORD_Q16
@@ -1337,7 +1431,7 @@ def test_v3_power_limit_word_is_the_power_limit_word(plans, tmp_path):
     mixed = [write_capture(tmp_path / f"c35_{i}.h5", 35, 6, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
     plan = json.loads(path.read_text())
     plan["channels"] = dict(plan["channels"], **{"35": mixed})
-    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3", default_word=QUANTILE_RULE)))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     channel = report["channels"]["35"]
     tested = channel["power_limit"]
@@ -1396,7 +1490,7 @@ def test_v3_power_limit_estimate_is_the_ratio_at_each_null_level(plans, tmp_path
     from pilot_proxy.detector_contract import null_power_ratio_from_weight_norms
 
     path = limit_plan(plans, tmp_path, 1e-3)
-    plan = dict(json.loads(path.read_text()), decision_version="fine_decision_v3")
+    plan = dict(json.loads(path.read_text()), decision_version="fine_decision_v3", default_word=QUANTILE_RULE)
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     weights = bytes.fromhex(report["control"]["weights_hex"])
@@ -1441,7 +1535,7 @@ def test_v3_channel_with_no_passing_word_carries_the_reject_word(plans, tmp_path
     mixed = [write_capture(tmp_path / f"c35_{i}.h5", 35, 6, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
     plan = json.loads(path.read_text())
     plan["channels"] = dict(plan["channels"], **{"35": mixed})
-    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3", default_word=QUANTILE_RULE)))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     channel = report["channels"]["35"]
     assert channel["power_limit"]["outcome"] == "not useful"
@@ -1471,6 +1565,7 @@ def test_v3_channel_with_no_passing_word_carries_the_reject_word(plans, tmp_path
 
 
 def _v3_plan(plans, tmp_path, **extra):
+    extra["default_word"] = _quantile_rule(extra.get("default_word"))
     plan = dict(plans["calibrate"], decision_version="fine_decision_v3", **extra)
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan))
@@ -1492,7 +1587,7 @@ def test_v3_no_capture_channel_in_a_power_limit_plan_is_masked_whole(plans, tmp_
     path = limit_plan(plans, tmp_path, 1e-3)
     plan = json.loads(path.read_text())
     plan["channels"] = dict(plan["channels"], **{"29": []})
-    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3")))
+    path.write_text(json.dumps(dict(plan, decision_version="fine_decision_v3", default_word=QUANTILE_RULE)))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     channel = report["channels"]["29"]
     assert channel["power_limit"]["reason"] == "no captures" and channel["power_limit_word_q16"] == REJECT_WORD_Q16
@@ -1561,6 +1656,7 @@ def test_sun_elevation_at_drao():
 
 
 def _night_calibration(plans, tmp_path, name, captures, **extra):
+    extra["default_word"] = _quantile_rule(extra.get("default_word"))
     plan = dict(plans["calibrate"], decision_version="fine_decision_v3", control=dict(channel=37, captures=captures),
                 **extra)
     path = tmp_path / f"{name}.json"
@@ -1650,7 +1746,7 @@ def test_v3_power_limit_reads_the_control_at_the_scaled_word(plans, tmp_path, mo
     monkeypatch.setattr(calibration, "control_corrections", lambda w, e, c, at: read.append(at) or corrections(w, e, c, at))
     path = limit_plan(plans, tmp_path, 1e-3)
     plan = dict(json.loads(path.read_text()), decision_version="fine_decision_v3",
-                default_word=dict(passband_factor={"35": 1.03, "29": 0.97, "37": 1.0}))
+                default_word=_quantile_rule(dict(passband_factor={"35": 1.03, "29": 0.97, "37": 1.0})))
     path.write_text(json.dumps(plan))
     report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
     scale = report["channels"]["35"]["scale"]
@@ -1678,6 +1774,7 @@ def test_v3_process_run_summary_reports_the_control_word(plans, tmp_path):
     out = tmp_path / "processed"
     summary = process_run(bundle_dir=tmp_path / "bundle", runs=[str(tmp_path / "run_*.h5")], epoch="synthetic",
                           output_dir=out, calibration_share=0.5, decision_version="fine_decision_v3",
+                          default_word_rule="control_quantile",
                           receiver_profile=Path(plans["calibrate"]["receiver_profile"]), log=lambda line: None)
     rows = {row["channel"]: row for row in summary["channels"]}
     assert rows[35]["word_source"] == "control word x scale" and rows[35]["scale"] > 0
@@ -1731,7 +1828,7 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
     assert f"floor {rows[0]['floor_eta']};" in out and all("anchor" in c for c in rows[0]["channels"].values())
 
     # v3 gives the default word and the power-limit word, with no floor or anchor
-    rows, out = study("v3", "--decision-version", "fine_decision_v3", "--power-limit", str(tmp_path / "limit.json"))
+    rows, out = study("v3", *V3_QUANTILE, "--power-limit", str(tmp_path / "limit.json"))
     report = json.loads((tmp_path / "v3" / "0.4h" / "bundle.report.json").read_text())["channels"]
     assert [r["hours"] for r in rows] == [0.4] and "floor_eta" not in rows[0] and "floor" not in out
     assert "each needs 30 (a power-limit word keeps at least 30); skipped" in out
@@ -1744,19 +1841,19 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
     assert "power_limit_eta" not in channels["37"]
 
     # the gate is the power-limit plan's min_captures, under v1 as well
-    rows, out = study("v3-10", "--decision-version", "fine_decision_v3", "--power-limit", str(tmp_path / "limit10.json"))
+    rows, out = study("v3-10", *V3_QUANTILE, "--power-limit", str(tmp_path / "limit10.json"))
     assert [r["hours"] for r in rows] == [0.2, 0.4] and "skipped" not in out
     assert tool.fewest_captures(dict(decision_version="fine_decision_v1", power_limit=dict(min_captures=10))) == (
         10, "a power-limit word keeps at least 10")
 
     # blocks under v3 have no floor, and with no power limit the tool sets 30 captures for the masked fractions
     blocks = ("--block-hours", "0.2")
-    rows, out = study("v3-blocks", "--decision-version", "fine_decision_v3", "--power-limit",
+    rows, out = study("v3-blocks", *V3_QUANTILE, "--power-limit",
                       str(tmp_path / "limit10.json"), mode=blocks, output="blocks.json")
     assert [r["captures"] for r in rows] == [17, 17, 17] and "floor" not in out
     assert not any("floor_eta" in r for r in rows) and all("power_limit_eta" in r["channels"]["35"] for r in rows)
     with pytest.raises(SystemExit, match="fewer than 30 captures, and the tool sets 30 for the masked fractions"):
-        study("v3-blocks-30", "--decision-version", "fine_decision_v3", mode=blocks, output="blocks.json")
+        study("v3-blocks-30", *V3_QUANTILE, mode=blocks, output="blocks.json")
 
     # a channel with no passing word carries the reject word; a report from before the reject word has none
     reject = tool.summary(dict(decision_version="fine_decision_v3", channels={"29": dict(
@@ -1800,7 +1897,8 @@ def test_calibration_length_takes_the_night_control_word(plans, tmp_path, monkey
     def study(name, run, *extra):
         monkeypatch.setattr(sys, "argv", ["calibration_length.py", "--bundle-dir", str(tmp_path / "bundle"), "--run",
                                           str(tmp_path / run / "run_*.h5"), "--decision-version",
-                                          "fine_decision_v3", "--output-dir", str(tmp_path / name), *extra])
+                                          "fine_decision_v3", "--default-word-rule", "control_quantile",
+                                          "--output-dir", str(tmp_path / name), *extra])
         tool.main()
         return capsys.readouterr().out
 

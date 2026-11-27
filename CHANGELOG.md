@@ -7,6 +7,17 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 - Handover docs: `docs/CALIBRATION_RUNBOOK.md`, the manual calibration from recording to post-deployment checks,
   and `docs/AUTOMATIC_RECALIBRATION.md`, the design of a running recalibration (not built).
+- The v3 default word of `calibrate-bundle` is now the dissertation's false-discovery-rate word: the smallest
+  score of the channel at which the share of control frames above `eta / lambda_c` over the share of the channel's
+  frames above `eta` is at most 1% (`pi0 = 1`), with the control share empirical while 20 control frames exceed and a
+  generalized Pareto tail beyond (`false_discovery.py`). A channel with no qualifying score, a channel without captures
+  and the control get the word `2^64 - 1`, which masks nothing. The tail fit needs at least 1000 control frames with a
+  decision. On the archive score cache the words equal the dissertation's `default_words.json` on all 23 channels.
+  The earlier rule, the control's 1% word scaled by `lambda_c`, stays as `"default_word": {"rule":
+  "control_quantile"}` (`--default-word-rule` of `plan-run`, `process-run` and `tools/calibration_length.py`), so the
+  Pathfinder runs and earlier bundles are reproduced with it; a plan without the key now gets the new rule.
+  `default_word.fdr_level` sets the rate. The pilot-seen gate and the control's false-alarm check still use the
+  control's 1% word. The rule needs scipy (`pilot-proxy[calibration]`).
 - `combine` groups a run's one-window files by their bound channels and leaves out a half whose labels are all
   negative. kotekan#1930 labels an unused fine-power row -2 where earlier builds wrote -1, so one acquisition can hold
   both. DD001 lists kotekan#1925 and #1930 as merged.

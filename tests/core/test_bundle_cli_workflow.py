@@ -21,6 +21,8 @@ from test_bundle_calibration import ROOT, T0, write_capture, write_hours
 RECEIVER = ROOT / "configs/receiver_profiles/chime_dtv_fengine.json"
 CORE = ROOT / "configs/detector_core/pilotproxy_cuda_local_reference_power_ratio.json"
 DRAO = ["49.3208", "-119.6236"]
+# the synthetic runs hold too few control frames for the tail fit of the false-discovery-rate default word
+QUANTILE_RULE = ["--default-word-rule", "control_quantile"]
 
 
 def run_cli(argv):
@@ -155,7 +157,7 @@ def option_arguments(directory):
                                       pilot_passband={"35": 1.0, "37": 1.0})))
     return ["--receiver-profile", receiver, "--detector-core-profile", core, "--null-quantile", "0.9",
             "--threshold", "power_limit", "--power-limit", inputs, "--decision-version", "fine_decision_v3",
-            "--night", *DRAO]
+            "--night", *DRAO, "--default-word-rule", "control_quantile"]
 
 
 def assert_plan_options(calibrate, directory):
@@ -165,7 +167,8 @@ def assert_plan_options(calibrate, directory):
     assert calibrate["null_quantile"] == 0.9 and calibrate["decision_version"] == "fine_decision_v3"
     assert calibrate["threshold"] == "power_limit"
     assert calibrate["power_limit"]["limits"] == str((directory / "limits.json").resolve())
-    assert calibrate["default_word"] == dict(night=dict(latitude_deg=49.3208, longitude_deg_east=-119.6236))
+    assert calibrate["default_word"] == dict(night=dict(latitude_deg=49.3208, longitude_deg_east=-119.6236),
+                                             rule="control_quantile")
 
 
 def test_plan_run_splits_each_channel_and_passes_its_options(run_bundle, tmp_path):
@@ -209,7 +212,7 @@ def test_process_run_prints_the_summary_of_a_passing_run(run_bundle, tmp_path):
     out_dir = tmp_path / "processed"
     code, out = run_cli(["process-run", "--bundle-dir", run_bundle["bundle"], "--run", runs, "--epoch", "synthetic",
                          "--output-dir", out_dir, "--calibration-share", "0.5", "--receiver-profile", RECEIVER,
-                         "--chunk-seconds", 16 * FRAME_SECONDS])
+                         "--chunk-seconds", 16 * FRAME_SECONDS, *QUANTILE_RULE])
     assert code == 0
     summary = json.loads((out_dir / "summary.json").read_text())
     assert summary["passed"] and summary["calibration_share"] == 0.5
@@ -233,7 +236,8 @@ def test_process_run_exits_1_when_the_test_fails(run_bundle, tmp_path):
     runs = write_process_run(tmp_path / "run", run_bundle["anchor"], lambda index: index < 4)
     out_dir = tmp_path / "processed"
     code, out = run_cli(["process-run", "--bundle-dir", run_bundle["bundle"], "--run", runs, "--epoch", "synthetic",
-                         "--output-dir", out_dir, "--calibration-share", "0.5", "--receiver-profile", RECEIVER])
+                         "--output-dir", out_dir, "--calibration-share", "0.5", "--receiver-profile", RECEIVER,
+                         *QUANTILE_RULE])
     assert code == 1
     assert "bundle test FAILED" in out and "Test FAILED." in out
     summary = json.loads((out_dir / "summary.json").read_text())

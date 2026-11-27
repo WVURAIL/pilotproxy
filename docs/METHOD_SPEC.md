@@ -233,11 +233,16 @@ The decision paths in the repository have different operational status:
   `develop` runs v1, v2 and, since kotekan#1924, v3 bundles. `calibrate-bundle`
   writes v3 unless the plan names a version, so a v2 bundle is chosen with
   `decision_version` `fine_decision_v2`.
-- Under v3, `calibrate-bundle` writes the default word of each channel. It is
-  the control's 1% word (`null_quantile` 0.99 by default), over the night
-  frames when the plan asks for them, scaled by the channel's
-  `null_power_ratio * g` over the control's. `g` is a passband factor of the
-  plan, 1 when the plan gives none. With the power-limit threshold,
+- Under v3, `calibrate-bundle` writes the default word of each channel. By
+  default it is the smallest word at which the channel's false discovery rate
+  against the control, scaled by the channel's `null_power_ratio * g` over the
+  control's, is at most 1% (`pi0 = 1`; the control share is empirical while
+  20 control frames exceed, a generalized Pareto tail beyond), over the night
+  frames when the plan asks for them. `g` is a passband factor of the plan, 1
+  when the plan gives none. A channel with no qualifying word, and the
+  control, get the largest word `2^64 - 1`, which masks nothing. The plan key
+  `default_word.rule` `control_quantile` keeps the earlier rule: the control's
+  1% word (`null_quantile` 0.99 by default) times the same scale. With the power-limit threshold,
   `calibrate-bundle` also writes a power-limit word: the passing word, or the
   reject word 1 where no word passes, which masks the channel whole. Kotekan's
   `DtvRfiMask` applies the power-limit word where the bundle has one, and the

@@ -608,7 +608,19 @@ and \code{--output-dir}. Under v3:
         longitude), only the control frames recorded with the Sun below the horizon
         there enter, as CHIME's 21~cm analyses use the data; in the day the Sun
         raises the scores of the control.
-  \item \textbf{Default word.} The control word times the channel scale
+  \item \textbf{Default word.} By default (\code{"default_word": {"rule": "fdr"}}),
+        the smallest score \(\eta_c\) of the channel's frames at which the false
+        discovery rate \(E_{0,c}(\eta)/E_c(\eta)\) is at most 1\%
+        (\code{fdr_level}), rounded up to Q16. \(E_c\) is the share of the
+        channel's frames above \(\eta\), and \(E_{0,c}\) the share of control
+        frames above \(\eta/\lambda_c\): empirical while 20 control frames lie
+        above, a generalized Pareto tail fitted above the control's 98th
+        percentile beyond (\code{false_discovery.py}). A channel with no
+        qualifying score, a channel without captures and the control get the
+        word \(2^{64}-1\), which masks nothing. This is the dissertation's rule,
+        and it gives its words on the archive exactly. With the rule
+        \code{control_quantile}, the earlier one, the default word is the
+        control word times the channel scale
         \(\lambda_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16, written
         as \code{cfar_multiplier_q16}. \(\mu_0\) comes from the stored weight
         norms (\code{weight_norms}). \(g=1+o/C\) is the passband factor of the
@@ -857,24 +869,32 @@ integers, so every consumer reaches the same keep bit.}
 of one mask byte. Kotekan \code{develop} reads the pair since
 kotekan\#1924.}
 
-\subsection{The default word is the control's 1\% word}
-\choice{Under v3, the default word is the word of the control channel (37)
-at \code{null_quantile} (0.99) of its exact keep words, times the channel
-scale \(\lambda_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), rounded up to Q16
-(Section~\ref{ssec:calibration}). It replaces the knee, a rule on the shape
+\subsection{The default word is set by a false discovery rate}
+\choice{Under v3, the default word of a channel is the smallest word at which
+the false discovery rate of its frames against the control, scaled by
+\(\lambda_c=\mu_{0,c}\,g_c/(\mu_{0,37}\,g_{37})\), is at most 1\%
+(Benjamini--Hochberg step-up, \(\pi_0=1\); Section~\ref{ssec:calibration}).
+The earlier rule, the word of the control channel (37) at \code{null_quantile}
+(0.99) of its exact keep words times \(\lambda_c\), stays selectable as
+\code{default_word.rule} \code{control_quantile}; the Pathfinder runs of
+November 2026 used it. It replaces the knee, a rule on the shape
 of the kept-fraction curve with a floor and a switch at a 90\% pilot share.
 v1 and v2 bundles keep the knee and floor.}
-{A false-alarm rate on pilot-free control frames is easier to defend than a
-curve-shape rule, and one rule covers every channel. The word needs no
-captures of the channel. On the archive it reproduces the dissertation's v3
-default words exactly.}
+{A rate on pilot-free control frames is easier to defend than a
+curve-shape rule, and one rule covers every channel. The false discovery rate
+moves the word down where a channel holds much DTV and masks nothing on a clean
+channel, where the control quantile masks 1\% of its frames. On the archive it
+reproduces the dissertation's default words exactly.}
 {The scale assumes that the null of each channel is that of the control,
 moved by its weight-norm ratio and passband factor. The passband factor is 1
 where the plan gives none, and it moves the archive words by under 2\%. The
 word depends on the number of inputs summed and on the real array, so each
 telescope needs a control record of its own. A word from simulated white
 noise is the lowest value and only a first guess. The default word is a
-generic threshold; the BAO word is the threshold the system is built for.}
+generic threshold; the BAO word is the threshold the system is built for.
+The false-discovery-rate word needs captures of the channel and at least
+1000 control frames for the tail fit; without captures a channel masks
+nothing at its default.}
 
 \subsection{One fused kernel}
 \choice{\code{PilotProxy_Compute_FineStatV3_U64} goes from packed samples to

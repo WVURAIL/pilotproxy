@@ -63,15 +63,19 @@ The bundle of the run must bind the control, or `plan-run` stops.
 
 Each channel gets two words.
 
-**Default word.** The generic threshold, for a consumer with no word of its own. Today it is the 1% rule: the
-99% quantile of the control's keep words (plan key `null_quantile`, default 0.99; `--null-quantile` on
-`plan-run`/`process-run`), over the control's night frames when `--night` is given (plan key
-`"default_word": {"night": {...}}`), scaled to each channel by `mu0_c g_c / (mu0_37 g_37)`. The report gives
-it as `word_source` `control word x scale`.
+**Default word.** The generic threshold, for a consumer with no word of its own. For v3 it is a per-channel
+false discovery rate of 1% (plan key `"default_word": {"rule": "fdr"}`, the default; `default_word.fdr_level`
+sets the rate). The word is the smallest score of the channel at which the share of control frames above
+`eta / lambda_c` over the share of the channel's frames above `eta` is at most 1%, with
+`lambda_c = mu0_c g_c / (mu0_37 g_37)`. The control share is empirical while 20 control frames exceed and a
+generalized Pareto tail beyond, so the plan needs at least 1000 control frames with a decision. Use night frames
+(`--night`, plan key `"default_word": {"night": {...}}`), as the dissertation does. A channel with no qualifying
+score, and the control, get `2^64 - 1`, which masks nothing.
 
-*Pending a parallel PR (not merged when this page was written):* the default rule moves to a per-channel false
-discovery rate of 1%. That PR adds the plan key that chooses between the two rules, with the FDR rule as the
-new default. Check the CHANGELOG and update this paragraph with the key name once it merges.
+The earlier rule, the 99% quantile of the control's keep words scaled by `lambda_c`, stays as
+`"default_word": {"rule": "control_quantile"}` (`--default-word-rule control_quantile`; `null_quantile` sets
+the quantile). Use it to reproduce the Pathfinder runs of November 2026 and bundles made before the change: a
+plan without the key now gets the FDR rule.
 
 **BAO word.** The word that keeps the most frames while the kept DTV shelf power meets the checked power limit
 of the channel (`--threshold power_limit`, plan key `"threshold": "power_limit"`). `power_limit.json` holds the

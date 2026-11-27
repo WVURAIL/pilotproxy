@@ -23,6 +23,12 @@ from pilot_proxy.detector_contract import (
     weight_term_norms_sq,
 )
 from pilot_proxy.detectors.narrowband_marker.anchors import WINDOW_HALF_WIDTH, bulk_mask
+from pilot_proxy.false_discovery import (
+    FDR_LEVEL,
+    MASKS_NOTHING_WORD_Q16,
+    ControlNull,
+    fdr_threshold,
+)
 from pilot_proxy.fine_decision import (
     CALIBRATION_DECISION_VERSION,
     FINE_DECISION_V2_VERSION,
@@ -75,7 +81,15 @@ NULL_CHUNK = 4096
 # relative float gap below which a frame is scored exactly, far above the 1e-15 error of the float word
 FLOAT_MARGIN = 1e-12
 BUNDLE_FILES = ("detector_contract.json", "pilot_profiles.json", "weights.bin", "weights.manifest.json")
-# the knee (v1, v2) or the scaled control word (v3) is the default word of a channel, and the power-limit word keeps
+# the rules of the v3 default word: the false discovery rate against the scaled control (false_discovery.py), or the
+# earlier control quantile scaled to the channel (the Pathfinder runs of November 2026)
+DEFAULT_WORD_RULES = ("fdr", "control_quantile")
+DEFAULT_WORD_RULE_TEXT = dict(
+    fdr="false discovery rate (Benjamini-Hochberg step-up, pi0 = 1) of the channel's frames against the control scaled "
+        "by mu0_c g_c / (mu0_ref g_ref); null share empirical while 20 control frames exceed, GPD tail beyond; "
+        "word = ceil(eta_c 2^16); the control and a channel with no qualifying word mask nothing",
+    control_quantile="control quantile x mu0_c g_c / (mu0_ref g_ref), rounded up to Q16")
+# the knee (v1, v2) or the default word (v3) is the default word of a channel, and the power-limit word keeps
 # the most frames under a checked residual power
 THRESHOLDS = ("knee", "power_limit")
 DECISIONS_SCHEMA = "pilotproxy-power-decisions-v4"
@@ -485,13 +499,32 @@ def control_words_at(words: np.ndarray, scale: float) -> np.ndarray:
 def _passband_factors(plan: dict[str, Any]) -> dict[int, float]:
     """Return the passband factors g = 1 + o/C of the plan's "default_word" block, by physical channel."""
     given = plan.get("default_word", {})
-    unknown = set(given) - {"passband_factor", "night"}
+    unknown = set(given) - {"passband_factor", "night", "rule", "fdr_level"}
     if unknown:
         raise ValueError(f"unknown default_word keys {sorted(unknown)}")
     factors = {int(c): float(v) for c, v in given.get("passband_factor", {}).items()}
     if any(not np.isfinite(v) or v <= 0 for v in factors.values()):
         raise ValueError("every passband factor must be finite and positive")
     return factors
+
+
+def _default_rule(plan: dict[str, Any], v3: bool) -> tuple[str, float]:
+    """Return the rule of the v3 default word, "fdr" unless the plan's default_word.rule names another, and its level.
+
+    The level is the false discovery rate of the "fdr" rule (default_word.fdr_level, FDR_LEVEL by default).
+    """
+    given = plan.get("default_word", {})
+    if not v3 and {"rule", "fdr_level"} & set(given):
+        raise ValueError("default_word rule and fdr_level are of fine decision v3")
+    rule = given.get("rule", "fdr")
+    if rule not in DEFAULT_WORD_RULES:
+        raise ValueError(f"default_word rule must be one of {DEFAULT_WORD_RULES}, got {rule!r}")
+    if "fdr_level" in given and rule != "fdr":
+        raise ValueError("default_word fdr_level is of the rule fdr")
+    level = float(given.get("fdr_level", FDR_LEVEL))
+    if not 0.0 < level < 1.0:
+        raise ValueError("default_word fdr_level must lie between 0 and 1")
+    return rule, level
 
 
 # the coarse-channel sample of the CHIME F-engine, 1/390625 s, which steps the frames of a baseband capture
@@ -883,6 +916,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             raise ValueError(f"{independent} independent null scores are too few for quantile {quantile}")
         v3 = decision == FINE_DECISION_V3_VERSION
         factors = _passband_factors(plan) if v3 else {}
+        rule, fdr_level = _default_rule(plan, v3)
+        null = None
         if v3:
             # the quantile of the exact keep words of the null frames that have a word
             words = control_words if control else required_words(quiet, anchor_bin=anchor, bulk=bulk, rank=control_rank,
@@ -892,6 +927,9 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             reference_level = (null_power_ratio_from_weight_norms(*control_norms) * factors.get(int(control["channel"]), 1.0)
                                if control else 1.0)
             measured_word = int(math.ceil(quantile_q16))
+            if rule == "fdr" and "word_q16" not in plan:
+                # the null of the false discovery rate: the control frames with a decision, at night when asked
+                null = ControlNull(words[words >= 0].astype(np.float64) / Q16)
         else:
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
@@ -917,14 +955,23 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             paths = plan["channels"][str(channel)]
             excluded = plan.get("exclude_bins", {}).get(str(channel), [])
             scaling = {}
+            is_control = bool(control) and channel == int(control["channel"])
             if v3:
-                # v3's default word: the control's 1% word scaled to the null level of this channel
+                # the control's 1% word scaled to the null level of this channel: the default word of the rule
+                # control_quantile, and under either rule the gate of the pilot-seen test
                 level = null_power_ratio_from_weight_norms(*norms)
                 factor = factors.get(channel, 1.0)
                 scale = level * factor / reference_level
                 default = floor if "word_q16" in plan else scaled_word(quantile_q16, scale)
                 scaling = dict(mu0=level, passband_factor=factor,
                                passband_factor_source="plan" if channel in factors else "not given", scale=scale)
+                default_source = "plan" if "word_q16" in plan else "control word x scale"
+                gate_word, fdr_record = default, None
+                if null is not None:
+                    # the rule fdr: the control is not masked by default, and without captures nothing is masked
+                    default, default_source = (MASKS_NOTHING_WORD_Q16,
+                                               "fdr, the control is not masked by default" if is_control
+                                               else "fdr, no captures: masks nothing")
             if not paths:
                 # a first bundle, so the detector can record the data for the next one
                 anchor = int(plan.get("anchors", {}).get(str(channel), nominal))
@@ -933,12 +980,11 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 if v3:
                     # the v3 default word needs no captures of the channel
                     word = int(default if given_word is None else given_word)
-                    word_source = "plan" if given_word is not None or "word_q16" in plan else "control word x scale"
+                    word_source = "plan" if given_word is not None else default_source
                 else:
                     word, word_source = floor, "floor, no captures"
                 note = (f"Word from {word_source}, control word from {source}." if v3
                         else f"Word from the floor, no captures, floor from {source}.")
-                is_control = bool(control) and channel == int(control["channel"])
                 # no captures, so no passing word: the decision masks the channel whole, and under v3 so does the
                 # bundle, through the reject word
                 masked_whole = bool(inputs) and not is_control and channel in inputs["rows"] and channel in inputs["limits"]
@@ -971,7 +1017,16 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             # the pilot is seen when more frames than the null allows pass the channel's own null word: the floor,
             # or under v3 the default word, the control word scaled to this channel. A v3 keep word takes every bin,
             # so a line anywhere in the channel counts as well.
-            gate = default if v3 else floor
+            gate = gate_word if v3 else floor
+            if null is not None and not is_control:
+                # the frames of the false discovery rate: those with a decision, at night when the plan asks
+                night_c = (_night_frames(paths, fmt, k * WINDOWS, captures, night_site) if night_site is not None
+                           else np.ones(len(seen), dtype=bool))
+                found = fdr_threshold(seen[(seen >= 0) & night_c], scale, null, fdr_level)
+                fdr_record = dict(found._asdict(), masks_nothing=found.word is None,
+                                  frames_used="night" if night_site is not None else "all")
+                default, default_source = ((MASKS_NOTHING_WORD_Q16, "fdr: masks nothing") if found.word is None
+                                           else (found.word, "fdr"))
             hits = int(np.count_nonzero(seen > gate))
             fraction = hits / seen.size
             measured = binomial_upper_tail(hits, seen.size, 1.0 - quantile) < MAX_LINE_TAIL
@@ -996,7 +1051,6 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             share = (at_gate - (1.0 - quantile)) / quantile
             given_word = plan.get("words", {}).get(str(channel))
             count = int(np.unique(captures).size)
-            is_control = bool(control) and channel == int(control["channel"])
             tested = None
             if inputs and (not is_control or (channel in inputs["rows"] and channel in inputs["limits"])):
                 tested = _limit_channel(channel, fines, captures, seen, None if is_control else control_frames,
@@ -1015,7 +1069,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             if given_word is not None or "word_q16" in plan:
                 word, word_source = int(floor if given_word is None else given_word), "plan"
             elif v3:
-                word, word_source = default, "control word x scale"
+                word, word_source = default, default_source
             elif tested is not None and not is_control and limited is None:
                 # a channel with no passing word is masked whole by the operating policy, and holds the floor here
                 word, word_source = (tested["word"], "power limit") if tested["outcome"] == "useful" else (floor, f"floor, power limit: {tested['reason']}")
@@ -1049,6 +1103,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
                 anchor_bin=anchor, anchor_source=origin, nominal_bin=nominal, frames=len(fines), captures=count,
                 word_q16=word, eta=word / Q16, word_source=word_source, **scaling,
                 **({} if v3 else {"knee_word_q16": knee}),
+                **({"fdr": fdr_record} if v3 and fdr_record is not None else {}),
                 **({"power_limit_word_q16": limited[0], "power_limit_word_source": limited[1]} if limited else {}),
                 masked_fraction=masked, masked_at_floor=at_floor, pilot_share=share,
                 pilot_in_nearly_every_frame=bool(share > ALWAYS_ON_SHARE),
@@ -1069,8 +1124,10 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         raise ValueError(f"bundle failed validation: {validation['errors']}")
 
     report = dict(threshold=threshold, decision_version=decision, floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
-                  **(dict(default_word_rule="control quantile x mu0_c g_c / (mu0_ref g_ref), rounded up to Q16",
+                  **(dict(default_word_rule=DEFAULT_WORD_RULE_TEXT[rule],
                           control_quantile_q16=quantile_q16, reference_level=reference_level) if v3 else {}),
+                  **(dict(fdr_level=fdr_level, fdr_null=dict(frames=null.n, tail_from=null.tail_from, **null.fit))
+                     if null is not None else {}),
                   null_quantile=quantile, floor_source=source, search_half_width=SEARCH_HALF_WIDTH,
                   null_scores=int(independent), channels=report_channels, control=control_record,
                   calibration_captures=sorted(str(Path(p).resolve()) for ps in plan["channels"].values()

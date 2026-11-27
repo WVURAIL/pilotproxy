@@ -10,7 +10,8 @@ words on the rest. The table gives the floor, each channel's word and its source
 calibration part, the failed test checks, and the share of captures to give process-run as
 --calibration-share for the same split. Under v1 and v2, --power-limit sets each word but the control's to its
 power-limit word or the floor. Under fine decision v3 the table has no floor or anchor. Each channel's word is
-its default word, the control's 1% word scaled to the channel, and the masked fraction is at that word. With
+its default word (--default-word-rule: the false-discovery-rate word, or the control's 1% word scaled to the
+channel), and the masked fraction is at that word. With
 --power-limit the table also gives its power-limit word. The calibration length is the shortest L whose words
 still pass. --night takes the control word over the night frames at a site, as for process-run, and skips
 a calibration part with no control capture at night.
@@ -39,7 +40,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pilot_proxy.bundle_calibration import MIN_KNEE_CAPTURES, Q16, _rows, calibrate_bundle, test_bundle
+from pilot_proxy.bundle_calibration import DEFAULT_WORD_RULES, MIN_KNEE_CAPTURES, Q16, _rows, calibrate_bundle, test_bundle
 from pilot_proxy.fine_decision import CALIBRATION_DECISION_VERSION, FINE_DECISION_V3_VERSION, FINE_DECISION_VERSIONS
 from pilot_proxy.input_counts import load_good_inputs, span_counts
 from pilot_proxy.run_plans import ordered_run_files, write_run_plans
@@ -57,7 +58,8 @@ def ordered_files(args, work):
         plans = write_run_plans(bundle_dir=args.bundle_dir, runs=args.run, output_dir=work, epoch=args.epoch,
                                 calibration_share=0.5, decision_version=args.decision_version,
                                 threshold="knee" if args.power_limit is None else "power_limit",
-                                power_limit=args.power_limit, night_site=args.night)
+                                power_limit=args.power_limit, night_site=args.night,
+                                default_word_rule=args.default_word_rule)
     calibrate, test = plans["calibrate"], plans["test"]
     files = {ch: calibrate["channels"][ch] + test["channels"][ch] for ch in calibrate["channels"]}
     return calibrate, files, str(calibrate["control"]["channel"])
@@ -218,6 +220,8 @@ def main():
                              "power limits, with the curvature of each channel and the margin, as for process-run.")
     parser.add_argument("--night", type=float, nargs=2, default=None, metavar=("LATITUDE_DEG", "LONGITUDE_DEG_EAST"),
                         help="Take the control word over the night frames at this site, as for process-run.")
+    parser.add_argument("--default-word-rule", choices=DEFAULT_WORD_RULES, default=None,
+                        help="Rule of the v3 default word, as for process-run (default: fdr).")
     parser.add_argument("--epoch", default="calibration length study")
     parser.add_argument("--input-counts", type=Path, help="Good-input counts from pathfinder_input_counts.py.")
     parser.add_argument("--output-dir", type=Path, required=True)

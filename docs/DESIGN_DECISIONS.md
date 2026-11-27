@@ -260,8 +260,20 @@ set one. Kotekan's `DtvRfiMask` applies the power-limit word, or the default
 word when there is none. A backend can set its own word from its own residual
 analysis.
 
-The v3 default word is a CFAR word set on the control, not the knee of a
-channel's own kept fraction. With the plan block `default_word.night` (a site's
+The v3 default word is set against the control, not by the knee of a
+channel's own kept fraction. By default (`default_word.rule` `fdr`) it is the
+dissertation's rule: the smallest word of the channel at which the false
+discovery rate `E_0,c(eta) / E_c(eta)` is at most 1% (`default_word.fdr_level`),
+`E_c` the share of the channel's frames above `eta` and `E_0,c` the share of
+control frames above `eta / lambda_c`, empirical while 20 control frames lie
+above and a generalized Pareto tail (fitted above the control's 98th
+percentile, `false_discovery.py`) beyond. A clean channel, where no word
+qualifies, and the control mask nothing at the default (word `2^64 - 1`). On the
+archive score cache this gives the dissertation's `default_words.json` words on
+all 23 channels. The rest of this section describes the earlier rule,
+`default_word.rule` `control_quantile`, a CFAR word set on the control, which the
+Pathfinder runs of November 2026 used; the night option and the scale apply to
+both rules. With the plan block `default_word.night` (a site's
 latitude and east longitude; `--night` of `plan-run` and `process-run`), the
 quantile reads only the control frames recorded with the Sun below the horizon
 there, as CHIME's 21 cm analyses use the data. In the day the Sun is common to

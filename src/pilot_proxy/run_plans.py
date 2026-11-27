@@ -62,13 +62,15 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
                     detector_core_profile: Path = Path(CORE_PROFILE), null_quantile: float = 0.99,
                     calibration_share: float = CALIBRATION_SHARE, threshold: str = "knee",
                     power_limit: Path | None = None, decision_version: str | None = None,
-                    night_site: Sequence[float] | None = None) -> dict[str, Any]:
+                    night_site: Sequence[float] | None = None,
+                    default_word_rule: str | None = None) -> dict[str, Any]:
     """Split the files of each bound channel in time, and write calibrate.json and test.json.
 
     decision_version, when given, names the test the words are set for, in place of the calibration
     default fine_decision_v3: fine_decision_v2 for a Kotekan stage without kotekan#1924, and fine_decision_v1 for
     one that runs only that test. night_site, when given as (latitude,
-    east longitude) in degrees, takes the control quantile of the default word over the night frames there.
+    east longitude) in degrees, takes the default word over the night frames there. default_word_rule, when given,
+    names the rule of the v3 default word (fdr, the calibration default, or control_quantile).
     """
     if not 0.0 < calibration_share < 1.0:
         raise ValueError("calibration_share must lie between 0 and 1")
@@ -98,6 +100,8 @@ def write_run_plans(*, bundle_dir: Path, runs: list[str], output_dir: Path, epoc
     if night_site is not None:
         latitude, longitude = (float(v) for v in night_site)
         calibrate["default_word"] = dict(night=dict(latitude_deg=latitude, longitude_deg_east=longitude))
+    if default_word_rule is not None:
+        calibrate.setdefault("default_word", {})["rule"] = default_word_rule
     test = dict(capture_format="dtv_fine_powers", channels=last, control=last[str(control)])
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

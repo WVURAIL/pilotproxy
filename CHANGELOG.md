@@ -5,6 +5,8 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- Handover docs: `docs/CALIBRATION_RUNBOOK.md`, the manual calibration from recording to post-deployment checks,
+  and `docs/AUTOMATIC_RECALIBRATION.md`, the design of a running recalibration (not built).
 - `combine` groups a run's one-window files by their bound channels and leaves out a half whose labels are all
   negative. kotekan#1930 labels an unused fine-power row -2 where earlier builds wrote -1, so one acquisition can hold
   both. DD001 lists kotekan#1925 and #1930 as merged.

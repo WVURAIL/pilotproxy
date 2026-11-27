@@ -23,6 +23,7 @@ the rank-based detection score, and the conditional forecast quantities.
 | Compile a receiver policy | [Operating policy](docs/CHANNEL_OPERATING_POLICY.md) |
 | Calibrate, test and run the detector on a telescope | [Running the detector](docs/RUNNING_THE_DETECTOR.md), [user guide](docs/pdf/PilotProxy_UG001_User_Guide.pdf) |
 | Recalibrate Pathfinder | [Pathfinder recalibration](docs/PATHFINDER_RECALIBRATION.md) |
+| Take over the DTV mask: calibrate, deploy, check, recalibrate | [Calibration runbook](docs/CALIBRATION_RUNBOOK.md), [automatic recalibration design](docs/AUTOMATIC_RECALIBRATION.md) |
 | Commission the kotekan integration | [Operator handoff](docs/OPERATOR_HANDOFF.md) |
 | Read the detector's design and its decisions | [Design document](docs/pdf/PilotProxy_DD001_Design_Document.pdf), [design decisions](docs/DESIGN_DECISIONS.md) |
 | Find an analysis or development utility | [Tools catalog](tools/README.md) |

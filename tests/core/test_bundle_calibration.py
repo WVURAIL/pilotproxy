@@ -903,6 +903,69 @@ def test_v3_fdr_needs_enough_control_frames(plans, tmp_path):
         calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
 
 
+def _fdr_night_calibration(plans, tmp_path, monkeypatch, name, channel_captures):
+    from pilot_proxy import false_discovery
+
+    # the synthetic night control holds 26 frames, so the tail fit is allowed one excess here
+    monkeypatch.setattr(false_discovery, "N_EMPIRICAL", 1)
+    night = write_capture(tmp_path / f"{name}_n37.h5", 37, 26, 3, ctime=NIGHT_CTIME)
+    plan = dict(plans["calibrate"], decision_version="fine_decision_v3", channels={"35": channel_captures, "37": [night]},
+                control=dict(channel=37, captures=[night]), default_word=dict(night=DRAO))
+    path = tmp_path / f"{name}.json"
+    path.write_text(json.dumps(plan))
+    return calibrate_bundle(plan_path=path, output_dir=tmp_path / name)
+
+
+def test_v3_fdr_night_takes_all_frames_of_a_channel_without_frame_times(plans, tmp_path, monkeypatch):
+    timeless = [write_capture(tmp_path / f"u35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2)) for i in range(6)]
+    with pytest.warns(UserWarning, match="time0_ctime"):
+        report = _fdr_night_calibration(plans, tmp_path, monkeypatch, "timeless", timeless)
+    found = report["channels"]["35"]["fdr"]
+    assert found["frames_used"] == "all (no frame time)" and found["frames"] > 0
+
+
+def test_v3_fdr_channel_with_no_night_frames_says_so(plans, tmp_path, monkeypatch):
+    day = [write_capture(tmp_path / f"d35_{i}.h5", 35, 2, 10 + i, tone=0.8 * (i % 2), ctime=DAY_CTIME + 60 * i)
+           for i in range(6)]
+    r = _fdr_night_calibration(plans, tmp_path, monkeypatch, "day", day)["channels"]["35"]
+    assert r["word_q16"] == MASKS_NOTHING_WORD_Q16 and r["word_source"] == "fdr, no night frames: masks nothing"
+    assert r["fdr"]["frames"] == 0 and r["fdr"]["frames_used"] == "night"
+
+
+def test_v3_fdr_leaves_out_saturated_frames(plans, tmp_path, monkeypatch):
+    from pilot_proxy import bundle_calibration, false_discovery
+
+    monkeypatch.setattr(false_discovery, "N_EMPIRICAL", 1)
+    exact = bundle_calibration.required_words
+
+    def calibrate(name, first):
+        # the first frame of the control and of each channel gets the word `first`
+        def words(*args, **kwargs):
+            out = exact(*args, **kwargs).copy()
+            out[0] = first
+            return out
+
+        monkeypatch.setattr(bundle_calibration, "required_words", words)
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3")))
+        return calibrate_bundle(plan_path=path, output_dir=tmp_path / name)
+
+    saturated = calibrate("saturated", bundle_calibration.MAX_SCORE)
+    undecided = calibrate("undecided", -1)
+    # a saturated frame is left out of the null and of the channel, as a frame with no decision is
+    assert saturated["fdr_null"] == undecided["fdr_null"]
+    assert saturated["fdr_null"]["frames"] < saturated["control"]["frames"]
+    assert saturated["channels"]["35"]["fdr"] == undecided["channels"]["35"]["fdr"]
+
+
+def test_v3_given_word_is_named_in_the_report(plans, tmp_path):
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(plans["calibrate"], decision_version="fine_decision_v3", word_q16=100000)))
+    report = calibrate_bundle(plan_path=path, output_dir=tmp_path / "bundle")
+    assert report["default_word_rule"] == "given: the plan's word_q16" and "fdr_null" not in report
+    assert {r["word_q16"] for r in report["channels"].values()} == {100000}
+
+
 @pytest.mark.parametrize("block, match", [(dict(rule="median"), "rule must be one of"),
                                           (dict(rule="control_quantile", fdr_level=0.01), "fdr_level is of the rule"),
                                           (dict(fdr_level=1.5), "between 0 and 1")])
@@ -1854,6 +1917,19 @@ def test_calibration_length_gives_the_v3_words_and_no_floor(plans, tmp_path, mon
     assert not any("floor_eta" in r for r in rows) and all("power_limit_eta" in r["channels"]["35"] for r in rows)
     with pytest.raises(SystemExit, match="fewer than 30 captures, and the tool sets 30 for the masked fractions"):
         study("v3-blocks-30", *V3_QUANTILE, mode=blocks, output="blocks.json")
+
+    # under the fdr rule a part with too few control frames for the tail fit is skipped, not the study
+    rows, out = study("v3-fdr", "--decision-version", "fine_decision_v3")
+    assert rows == [] and "\n0.4 h: " in out and "or take the rule control_quantile; skipped" in out
+    rows, out = study("v3-fdr-blocks", "--decision-version", "fine_decision_v3", "--power-limit",
+                      str(tmp_path / "limit10.json"), mode=blocks, output="blocks.json")
+    assert len(rows) == 3 and all(r["skipped"].startswith("too few control frames") for r in rows)
+
+    # the word 2^64 - 1 of a channel that masks nothing stays out of the correlation with the inputs
+    sentinel = round(MASKS_NOTHING_WORD_Q16 / 65536, 4)
+    tool.follow([dict(channels={"35": dict(inputs=[0, n, 0], eta=eta)})
+                 for n, eta in [(10, 1.0), (11, 1.1), (12, 1.2), (13, sentinel)]])
+    assert "eta 1-1.2, correlation +1.00 over 3 blocks" in capsys.readouterr().out
 
     # a channel with no passing word carries the reject word; a report from before the reject word has none
     reject = tool.summary(dict(decision_version="fine_decision_v3", channels={"29": dict(

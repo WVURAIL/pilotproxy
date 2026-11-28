@@ -5,14 +5,22 @@ All notable changes to PilotProxy are recorded here. The project follows
 
 ## Unreleased
 
+- FDR default word follow-ups: with `--night`, a channel whose captures record no frame time uses all its frames
+  (`frames_used` `all (no frame time)`, with a warning) instead of stopping the calibration; a channel with no night
+  or no decided frames says so in `word_source`; saturated frames are left out of the control null and the channel's
+  frames, as in the dissertation; a plan's `word_q16` is named in the report's `default_word_rule`;
+  `tools/calibration_length.py` skips a part with too few control frames for the tail fit, and leaves the word
+  `2^64 - 1` out of its correlation with the inputs. Plans from `plan-run` carry no passband factor, so `g = 1`.
 - Handover docs: `docs/CALIBRATION_RUNBOOK.md`, the manual calibration from recording to post-deployment checks,
   and `docs/AUTOMATIC_RECALIBRATION.md`, the design of a running recalibration (not built).
 - The v3 default word of `calibrate-bundle` is now the dissertation's false-discovery-rate word: the smallest
   score of the channel at which the share of control frames above `eta / lambda_c` over the share of the channel's
   frames above `eta` is at most 1% (`pi0 = 1`), with the control share empirical while 20 control frames exceed and a
   generalized Pareto tail beyond (`false_discovery.py`). A channel with no qualifying score, a channel without captures
-  and the control get the word `2^64 - 1`, which masks nothing. The tail fit needs at least 1000 control frames with a
-  decision. On the archive score cache the words equal the dissertation's `default_words.json` on all 23 channels.
+  and the control get the word `2^64 - 1`, which masks nothing more (frames with `d_rho = 0` or a word above it are
+  still rejected). The tail fit needs 20 control frames strictly above the 98th percentile (about 1000 with a
+  decision). Applied to the archive score cache, the rule gives the dissertation's `default_words.json` words on all
+  23 channels; the test checks the rule, not `calibrate-bundle` end to end.
   The earlier rule, the control's 1% word scaled by `lambda_c`, stays as `"default_word": {"rule":
   "control_quantile"}` (`--default-word-rule` of `plan-run`, `process-run` and `tools/calibration_length.py`), so the
   Pathfinder runs and earlier bundles are reproduced with it; a plan without the key now gets the new rule.

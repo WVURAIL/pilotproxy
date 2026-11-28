@@ -12,6 +12,7 @@ import json
 import math
 import shutil
 import tempfile
+import warnings
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
@@ -87,7 +88,8 @@ DEFAULT_WORD_RULES = ("fdr", "control_quantile")
 DEFAULT_WORD_RULE_TEXT = dict(
     fdr="false discovery rate (Benjamini-Hochberg step-up, pi0 = 1) of the channel's frames against the control scaled "
         "by mu0_c g_c / (mu0_ref g_ref); null share empirical while 20 control frames exceed, GPD tail beyond; "
-        "word = ceil(eta_c 2^16); the control and a channel with no qualifying word mask nothing",
+        "word = ceil(eta_c 2^16); the control and a channel with no qualifying word get 2^64 - 1, which "
+        "masks only the frames with d_rho = 0 or a word above 2^64 - 1",
     control_quantile="control quantile x mu0_c g_c / (mu0_ref g_ref), rounded up to Q16")
 # the knee (v1, v2) or the default word (v3) is the default word of a channel, and the power-limit word keeps
 # the most frames under a checked residual power
@@ -929,7 +931,8 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             measured_word = int(math.ceil(quantile_q16))
             if rule == "fdr" and "word_q16" not in plan:
                 # the null of the false discovery rate: the control frames with a decision, at night when asked
-                null = ControlNull(words[words >= 0].astype(np.float64) / Q16)
+                # decided frames only, as in the dissertation: a word at MAX_SCORE (masked at every word) is left out
+                null = ControlNull(words[(words >= 0) & (words < MAX_SCORE)].astype(np.float64) / Q16)
         else:
             # in chunks, so the float ratios of a long control never sit in memory at once
             scores = np.concatenate([
@@ -1020,13 +1023,26 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
             gate = gate_word if v3 else floor
             if null is not None and not is_control:
                 # the frames of the false discovery rate: those with a decision, at night when the plan asks
-                night_c = (_night_frames(paths, fmt, k * WINDOWS, captures, night_site) if night_site is not None
-                           else np.ones(len(seen), dtype=bool))
-                found = fdr_threshold(seen[(seen >= 0) & night_c], scale, null, fdr_level)
-                fdr_record = dict(found._asdict(), masks_nothing=found.word is None,
-                                  frames_used="night" if night_site is not None else "all")
-                default, default_source = ((MASKS_NOTHING_WORD_Q16, "fdr: masks nothing") if found.word is None
-                                           else (found.word, "fdr"))
+                night_c, frames_used = np.ones(len(seen), dtype=bool), "all"
+                if night_site is not None:
+                    try:
+                        night_c, frames_used = _night_frames(paths, fmt, k * WINDOWS, captures, night_site), "night"
+                    except _NoFrameTime as missing:
+                        # a channel whose captures record no time uses all its frames
+                        frames_used = "all (no frame time)"
+                        warnings.warn(f"channel {channel}: {missing}; its default word uses all its frames",
+                                      stacklevel=2)
+                usable = (seen >= 0) & (seen < MAX_SCORE)
+                found = fdr_threshold(seen[usable & night_c], scale, null, fdr_level)
+                fdr_record = dict(found._asdict(), masks_nothing=found.word is None, frames_used=frames_used)
+                if found.word is not None:
+                    default, default_source = found.word, "fdr"
+                elif not usable.any():
+                    default, default_source = MASKS_NOTHING_WORD_Q16, "fdr, no decided frames: masks nothing"
+                elif not (usable & night_c).any():
+                    default, default_source = MASKS_NOTHING_WORD_Q16, "fdr, no night frames: masks nothing"
+                else:
+                    default, default_source = MASKS_NOTHING_WORD_Q16, "fdr: masks nothing"
             hits = int(np.count_nonzero(seen > gate))
             fraction = hits / seen.size
             measured = binomial_upper_tail(hits, seen.size, 1.0 - quantile) < MAX_LINE_TAIL
@@ -1124,7 +1140,7 @@ def calibrate_bundle(*, plan_path: Path, output_dir: Path) -> dict[str, Any]:
         raise ValueError(f"bundle failed validation: {validation['errors']}")
 
     report = dict(threshold=threshold, decision_version=decision, floor_word_q16=floor, floor_eta=floor / Q16, measured_floor_q16=measured_word,
-                  **(dict(default_word_rule=DEFAULT_WORD_RULE_TEXT[rule],
+                  **(dict(default_word_rule="given: the plan's word_q16" if "word_q16" in plan else DEFAULT_WORD_RULE_TEXT[rule],
                           control_quantile_q16=quantile_q16, reference_level=reference_level) if v3 else {}),
                   **(dict(fdr_level=fdr_level, fdr_null=dict(frames=null.n, tail_from=null.tail_from, **null.fit))
                      if null is not None else {}),

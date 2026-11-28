@@ -9,7 +9,8 @@ by lambda_c = mu0_c g_c / (mu0_ref g_ref). For a threshold eta,
   E_c(eta)    the share of the channel's frames with score above eta;
   FDR_c(eta)  pi0 E_0,c / E_c with pi0 = 1.
 The threshold eta_c is the smallest score of the channel with FDR_c <= q, the step-up rule, and the word is
-ceil(eta_c 2^16), the Q16 word of that frame. A channel with no such score masks nothing at its default.
+ceil(eta_c 2^16), the Q16 word of that frame. A channel with no such score gets the largest word, 2^64 - 1, which
+masks nothing more: the detector still rejects a frame with d_rho = 0 (no decision) or a word above 2^64 - 1.
 
 This is the rule of the dissertation (scripts/assemble_default_word.py and scripts/evt.py, Sec. 2.3), which takes
 the frames recorded with the Sun below the horizon at DRAO, counted without capture weights. The GPD is fitted by
@@ -30,8 +31,13 @@ PI0 = 1.0
 N_EMPIRICAL = 20
 # the GPD is fitted to the control frames above this empirical quantile
 Q_U = 0.98
-# the default word of a channel that masks nothing: the largest word of the bundle format (uint64)
+# the default word of a channel that masks nothing: the largest word of the bundle format (uint64). Frames with
+# d_rho = 0 or a word above it are still rejected.
 MASKS_NOTHING_WORD_Q16 = (1 << 64) - 1
+
+
+class TooFewNullFrames(ValueError):
+    """Too few null frames lie above the tail quantile for the GPD fit."""
 
 
 def _profile(theta: float, y: np.ndarray) -> float:
@@ -85,10 +91,10 @@ def pot(x: np.ndarray, q_u: float = Q_U) -> dict[str, float]:
     u = np.quantile(x, q_u)
     y = x[x > u] - u
     if y.size < N_EMPIRICAL:
-        raise ValueError(f"{y.size} null frames lie above the {q_u} quantile of {x.size}, and the tail fit needs "
-                         f"{N_EMPIRICAL}: the false-discovery-rate default word needs at least "
-                         f"{int(np.ceil(N_EMPIRICAL / (1 - q_u)))} null frames with a decision, or the rule "
-                         "control_quantile")
+        raise TooFewNullFrames(f"{y.size} null frames lie above the {q_u} quantile of {x.size}, and the tail fit "
+                               f"needs {N_EMPIRICAL} strictly above it (about {int(np.ceil(N_EMPIRICAL / (1 - q_u)))} "
+                               "null frames with a decision, more where scores tie): record more control frames, "
+                               "or take the rule control_quantile")
     xi, sigma = gpd_fit(y)
     return dict(u=float(u), k=int(y.size), zeta=y.size / x.size, xi=xi, sigma=sigma)
 

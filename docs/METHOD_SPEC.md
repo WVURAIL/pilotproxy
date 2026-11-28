@@ -240,7 +240,8 @@ The decision paths in the repository have different operational status:
   20 control frames exceed, a generalized Pareto tail beyond), over the night
   frames when the plan asks for them. `g` is a passband factor of the plan, 1
   when the plan gives none. A channel with no qualifying word, and the
-  control, get the largest word `2^64 - 1`, which masks nothing. The plan key
+  control, get the largest word `2^64 - 1`, which masks nothing more: frames
+  with `d_rho = 0` or a word above `2^64 - 1` are still rejected. The plan key
   `default_word.rule` `control_quantile` keeps the earlier rule: the control's
   1% word (`null_quantile` 0.99 by default) times the same scale. With the power-limit threshold,
   `calibrate-bundle` also writes a power-limit word: the passing word, or the

@@ -68,9 +68,16 @@ false discovery rate of 1% (plan key `"default_word": {"rule": "fdr"}`, the defa
 sets the rate). The word is the smallest score of the channel at which the share of control frames above
 `eta / lambda_c` over the share of the channel's frames above `eta` is at most 1%, with
 `lambda_c = mu0_c g_c / (mu0_37 g_37)`. The control share is empirical while 20 control frames exceed and a
-generalized Pareto tail beyond, so the plan needs at least 1000 control frames with a decision. Use night frames
-(`--night`, plan key `"default_word": {"night": {...}}`), as the dissertation does. A channel with no qualifying
-score, and the control, get `2^64 - 1`, which masks nothing.
+generalized Pareto tail beyond, fitted to the control frames strictly above its 98th percentile, so the tail needs
+20 of them (about 1000 control frames with a decision). Use night frames (`--night`, plan key
+`"default_word": {"night": {...}}`), as the dissertation does; a channel whose captures record no frame time then
+uses all its frames, with a warning. A channel with no qualifying score, and the control, get `2^64 - 1`, which
+masks nothing more: frames with `d_rho = 0` or a word above `2^64 - 1` are still rejected. Frames at the saturated
+score are left out of both frame sets, as in the dissertation.
+
+The plans that `plan-run` and `process-run` write carry no `passband_factor`, so `g = 1` on every channel and the
+words differ from the dissertation's g-corrected words. Add `"default_word": {"passband_factor": {...}}` to
+`plans/calibrate.json` to apply the factors.
 
 The earlier rule, the 99% quantile of the control's keep words scaled by `lambda_c`, stays as
 `"default_word": {"rule": "control_quantile"}` (`--default-word-rule control_quantile`; `null_quantile` sets

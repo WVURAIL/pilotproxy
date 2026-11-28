@@ -14,7 +14,8 @@ its default word (--default-word-rule: the false-discovery-rate word, or the con
 channel), and the masked fraction is at that word. With
 --power-limit the table also gives its power-limit word. The calibration length is the shortest L whose words
 still pass. --night takes the control word over the night frames at a site, as for process-run, and skips
-a calibration part with no control capture at night.
+a calibration part with no control capture at night. Under the fdr rule, a part with too few control frames for
+the tail fit is skipped as well.
 With --block-hours, consecutive blocks of that length are calibrated on their own, which shows how each
 word follows the time of day.
 
@@ -41,6 +42,7 @@ from pathlib import Path
 import numpy as np
 
 from pilot_proxy.bundle_calibration import DEFAULT_WORD_RULES, MIN_KNEE_CAPTURES, Q16, _rows, calibrate_bundle, test_bundle
+from pilot_proxy.false_discovery import MASKS_NOTHING_WORD_Q16, TooFewNullFrames
 from pilot_proxy.fine_decision import CALIBRATION_DECISION_VERSION, FINE_DECISION_V3_VERSION, FINE_DECISION_VERSIONS
 from pilot_proxy.input_counts import load_good_inputs, span_counts
 from pilot_proxy.run_plans import ordered_run_files, write_run_plans
@@ -158,8 +160,10 @@ def describe(channels):
 def follow(rows):
     """Print how each channel's word follows its median good inputs over the blocks."""
     for ch in sorted({ch for r in rows for ch in r.get("channels", {})}, key=int):
+        # the word 2^64 - 1 of a channel that masks nothing is no measured word
         pairs = [(r["channels"][ch]["inputs"][1], r["channels"][ch]["eta"]) for r in rows
-                 if ch in r.get("channels", {}) and "inputs" in r["channels"][ch]]
+                 if ch in r.get("channels", {}) and "inputs" in r["channels"][ch]
+                 and r["channels"][ch]["eta"] < MASKS_NOTHING_WORD_Q16 / Q16 / 2]
         if len(pairs) < 3:
             continue
         inputs, eta = np.array(pairs, dtype=float).T
@@ -262,7 +266,11 @@ def main():
                 print(f"{length:g} h: no night control capture; skipped")
                 continue
             out = args.output_dir / f"{length:g}h"
-            report = calibrate_on(template, chosen, control, out)
+            try:
+                report = calibrate_on(template, chosen, control, out)
+            except TooFewNullFrames as few:
+                print(f"{length:g} h: {few}; skipped")
+                continue
             record = test_on(template, rest, control, out)
             failed = [c["check"] + (f": {c['detail']}" if c.get("detail") else "")
                       for c in record["checks"] if not c["passed"]]
@@ -294,7 +302,12 @@ def main():
                 rows.append(dict(row, skipped="no night control capture"))
                 print(f"block {b} from {start:g} h: no night control capture; skipped")
                 continue
-            report = calibrate_on(template, chosen, control, args.output_dir / f"block{b}")
+            try:
+                report = calibrate_on(template, chosen, control, args.output_dir / f"block{b}")
+            except TooFewNullFrames as few:
+                rows.append(dict(row, skipped=f"too few control frames for the tail fit: {few}"))
+                print(f"block {b} from {start:g} h: {few}; skipped")
+                continue
             inputs = input_ranges(hours, first_ns, counts, freq_of, start, start + size)
             floor = {} if v3 else dict(floor_eta=round(report["floor_eta"], 4))
             rows.append(dict(row, **floor, channels=with_inputs(summary(report), inputs)))

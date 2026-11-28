@@ -268,9 +268,10 @@ discovery rate `E_0,c(eta) / E_c(eta)` is at most 1% (`default_word.fdr_level`),
 control frames above `eta / lambda_c`, empirical while 20 control frames lie
 above and a generalized Pareto tail (fitted above the control's 98th
 percentile, `false_discovery.py`) beyond. A clean channel, where no word
-qualifies, and the control mask nothing at the default (word `2^64 - 1`). On the
-archive score cache this gives the dissertation's `default_words.json` words on
-all 23 channels. The rest of this section describes the earlier rule,
+qualifies, and the control get the word `2^64 - 1`, which masks nothing beyond
+the frames with `d_rho = 0` or a word above it. Applied to the archive score
+cache, the rule gives the dissertation's `default_words.json` words on all 23
+channels (a check of the rule, not of `calibrate-bundle` end to end). The rest of this section describes the earlier rule,
 `default_word.rule` `control_quantile`, a CFAR word set on the control, which the
 Pathfinder runs of November 2026 used; the night option and the scale apply to
 both rules. With the plan block `default_word.night` (a site's

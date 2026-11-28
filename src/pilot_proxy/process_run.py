@@ -52,7 +52,8 @@ def _summary_rows(report: dict[str, Any], tested: dict[str, Any], masked: dict[s
 
 def _markdown(epoch: str, report: dict[str, Any], tested: dict[str, Any], rows: list[dict]) -> str:
     control = next((c for c in tested["checks"] if c["check"].startswith("false alarms")), None)
-    # fine decision v3 has no search geometry, and its default word is the control word scaled to each channel
+    # fine decision v3 has no search geometry; its floor_eta is the control's 1% word, which the pilot-seen gate and
+    # the control check use, and its default word is set by the plan's rule (fdr by default)
     v3 = report.get("decision_version") == "fine_decision_v3"
     word = "Control word" if v3 else "Floor"
     # the first line names the decision version, since the summary's columns and words depend on it

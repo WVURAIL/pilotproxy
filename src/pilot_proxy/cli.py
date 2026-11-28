@@ -375,7 +375,8 @@ def _add_threshold_arguments(parser: argparse.ArgumentParser) -> None:
                              "site, as CHIME's 21 cm analyses use the data. DRAO is 49.3208 -119.6236.")
     parser.add_argument("--default-word-rule", choices=DEFAULT_WORD_RULES, default=None,
                         help="Rule of the v3 default word (default: fdr). fdr: the smallest word at which the channel's "
-                             "false discovery rate against the scaled control is at most 1%%. control_quantile: the "
+                             "false discovery rate against the scaled control is at most the plan's fdr_level (1%% by default). "
+                             "control_quantile: the "
                              "control's 1%% word scaled to the channel, the rule of the Pathfinder runs.")
 
 
